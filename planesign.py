@@ -13,9 +13,7 @@ from datetime import datetime
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
 
-from flask import Flask
-from flask import Response
-from flask import render_template
+from flask import Flask, request
 
 # <Config>
 DEFAULT_BRIGHTNESS = 100
@@ -31,94 +29,13 @@ WEATHER_ENDPOINT = 'https://api.weather.gov/gridpoints/LWX/111,80/forecast/hourl
 code_to_airport = {}
 app = Flask(__name__)
 
-da_html = """
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>D-Money Enterprises</title>
-</head>
-
-<script type="application/javascript">
-
-  window.onload = function(){
-    update_sign_status();
-    update_brightness();
-
-    document.getElementById("myRange").oninput = function() {
-        console.log(this.value);
-        document.getElementById("brightness_value").innerHTML = this.value;
-        call_endpoint("/set_brightness/" + this.value);
-    }
-  }
-
-  function call_endpoint(endpoint, callback) {
-    var request = new XMLHttpRequest();
-    request.onreadystatechange = function () {
-        if (request.status == 200 && callback) {
-            callback(request.responseText);
-        }
-    }
-    request.open('GET', endpoint, true);
-    request.send();
-  }
-
-  function update_brightness() {
-    call_endpoint("/get_brightness", function(value) {
-        console.log("I was told the brightness is: " + value);
-        document.getElementById("myRange").value = value;
-        document.getElementById("brightness_value").innerHTML = value;
-    });
-  }
-
-  function update_sign_status() {
-    console.log("In sign status update...");
-    call_endpoint("/status", function(actual_text) {
-        var html_to_send;
-        if (actual_text === "1"){
-            html_to_send = "<b style='color: green'>ON</b>";
-        } else {
-            html_to_send = "<b style='color: red'>LITERALLY NOT ON</b>";
-        }
-        document.getElementById("sign_status").innerHTML = html_to_send;
-    });
-  }
-</script>
-
-<style>
-    button {
-        background-color: #4CAF50;
-        width: 100%;
-        height: 20vh;
-        color: white;
-        font-size: xx-large;
-        margin-top: 20px;
-        text-shadow: 0 0 11px black;
-        text-align: center;
-        text-decoration: none;
-    }
-</style>
-
-<body>
-  <div style="text-align: center;">Current sign status: <div id="sign_status">Unknown?</div></div>
-  <button onclick="call_endpoint('/turn_on'); update_sign_status();">Turn Sign On</button>
-  <button onclick="call_endpoint('/turn_off'); update_sign_status();">Turn Sign Off</button>
-  <div style="text-align: center;">
-    Brightness: <div id="brightness_value"></div>
-  </div>
-  <div style="text-align: center;">
-    <input id="myRange" type="range" min="1" max="100" value="100" class="slider">
-  </div>
-</body>
-</html>
-"""
-
 shared_flag_global = None
 shared_current_brightness = 100
 
 @app.route("/")
-def da_index():
-    return da_html
+def root():
+    print("MEH?")
+    return app.send_static_file('index.html')
 
 @app.route("/status")
 def get_status():
