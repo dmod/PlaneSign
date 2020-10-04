@@ -1,15 +1,13 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-# wget https://ourairports.com/data/airports.csv
-
 import time
 import math
 import sys, traceback
 import requests
 import subprocess
 from datetime import datetime
-
+from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
 
@@ -17,7 +15,6 @@ from flask import Flask, request
 
 # <Config>
 DEFAULT_BRIGHTNESS = 100
-NUM_STEPS = 50
 SENSOR_LOC = { "lat":39.288, "lon": -76.841 }
 ALTITUDE_IGNORE_LIMIT = 100 # Ignore returns below this altitude in feet
 ON_THE_MAP_RADIUS = 15.62 # Adds to the counter in scan mode in miles
@@ -34,37 +31,29 @@ shared_current_brightness = 100
 
 @app.route("/")
 def root():
-    print("MEH?")
     return app.send_static_file('index.html')
 
 @app.route("/status")
 def get_status():
-    print("In get status...")
     return str(shared_flag_global.value)
 
 @app.route("/turn_on")
 def turn_on():
-    print("TURNING ONNNNNNNNNN")
     shared_flag_global.value = 1
     return ""
 
 @app.route("/turn_off")
 def turn_off():
-    print("TURNING OFFFFFFFFF")
     shared_flag_global.value = 0
     return ""
 
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
-    print("IN flask set_brightness")
-    print("With: " + brightness)
     shared_current_brightness.value = int(brightness)
     return ""
 
 @app.route("/get_brightness")
 def get_brightness():
-    print("IN flask get_brightness")
-    print("shared_current_brightness: " + str(shared_current_brightness.value))
     return str(shared_current_brightness.value)
 
 def server(shared_flag, shared_brightness):
@@ -90,23 +79,6 @@ def get_data_worker(d, shared_flag):
             traceback.print_exc()
         time.sleep(7.5)
 
-def interpolate(num1, num2):
-    if (num1 == 0):
-        num1 = num2
-
-    if num2 > num1:
-        thing = float((num2 - num1)) / NUM_STEPS
-        interpolated = [num1]
-        for _ in range(NUM_STEPS):
-            interpolated.append(interpolated[-1] + thing)
-    else:
-        thing = float((num1 - num2)) / NUM_STEPS
-        interpolated = [num1]
-        for _ in range(NUM_STEPS):
-            interpolated.append(interpolated[-1] - thing)
-
-    return interpolated
-
 def get_weather_temp():
     try:
         weather_result = requests.get(WEATHER_ENDPOINT).json()
@@ -115,19 +87,6 @@ def get_weather_temp():
         print("WEATHER ERROR")
         traceback.print_exc()
         return -1
-    
-def get_distance(coord1, coord2):
-    R = 3958.8  # Earth radius in meters
-    lat1, lon1 = coord1
-    lat2, lon2 = coord2
-    
-    phi1, phi2 = math.radians(lat1), math.radians(lat2) 
-    dphi       = math.radians(lat2 - lat1)
-    dlambda    = math.radians(lon2 - lon1)
-    
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    
-    return (2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
 def get_data():
     current_temp = get_weather_temp()
@@ -146,7 +105,6 @@ def get_data():
     for key in results:
         if key != "full_count" and key != "stats" and key != "version":
             result = results[key]
-            #print result
 
             newguy = {}
             newguy["altitude"] = result[4]
@@ -175,129 +133,132 @@ def read_airport_data():
 
     print(str(len(code_to_airport)) + " airports added.")
 
-def sign_loop():
+class PlaneSign:
+    def __init__(self):
 
-    options = RGBMatrixOptions()
-    options.cols = 64
-    options.gpio_slowdown = 2
-    options.chain_length = 2
+        options = RGBMatrixOptions()
+        options.cols = 64
+        options.gpio_slowdown = 2
+        options.chain_length = 2
 
-    matrix = RGBMatrix(options = options)
+        self.matrix = RGBMatrix(options = options)
+        self.canvas = self.matrix.CreateFrameCanvas()
 
-    canvas = matrix.CreateFrameCanvas()
+        manager = Manager()
+        self.data = manager.dict()
 
-    font57 = graphics.Font()
-    font46 = graphics.Font()
-    fontbig = graphics.Font()
-    fontreallybig = graphics.Font()
-    font57.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/5x7.bdf")
-    font46.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/4x6.bdf")
-    fontbig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/6x13.bdf")
-    fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
+        self.shared_flag = Value('i', 1)
+        global shared_current_brightness
+        shared_current_brightness = Value('i', DEFAULT_BRIGHTNESS)
+        get_data_proc = Process(target=get_data_worker, args=(self.data,self.shared_flag, ))
+        get_data_proc.start()
 
-    manager = Manager()
-    d = manager.dict()
+        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,))
+        pServer.start()
 
-    shared_flag = Value('i', 1)
-    shared_current_brightness = Value('i', DEFAULT_BRIGHTNESS)
-    
-    get_data_proc = Process(target=get_data_worker, args=(d,shared_flag, ))
-    get_data_proc.start()
+        self.matrix.brightness = shared_current_brightness.value
 
-    pServer = Process(target=server, args=(shared_flag,shared_current_brightness,))
-    pServer.start()
+    def wait_loop(self, seconds):
+        exit_loop_time = time.perf_counter() + seconds
+        while time.perf_counter() < exit_loop_time:
+            self.matrix.brightness = shared_current_brightness.value
+            self.matrix.SwapOnVSync(self.canvas)
 
-    prev_thing = {}
-    prev_thing["distance"] = 0
-    prev_thing["altitude"] = 0
-    prev_thing["speed"] = 0
-    prev_thing["flight"] = None
+    def sign_loop(self):
 
-    # graphics.DrawText(canvas, fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
-    # matrix.SwapOnVSync(canvas)
-    # time.sleep(2)
-    # graphics.DrawText(canvas, fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
-    # matrix.SwapOnVSync(canvas)
-    # time.sleep(2)
-    # graphics.DrawText(canvas, fontbig, 66, 10, graphics.Color(200, 10, 10), "The")
-    # graphics.DrawText(canvas, fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
-    # graphics.DrawText(canvas, fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
-    # matrix.SwapOnVSync(canvas)
-    # time.sleep(2)
+        prev_thing = {}
+        prev_thing["distance"] = 0
+        prev_thing["altitude"] = 0
+        prev_thing["speed"] = 0
+        prev_thing["flight"] = None
 
-    while True:
+        font57 = graphics.Font()
+        font46 = graphics.Font()
+        fontbig = graphics.Font()
+        fontreallybig = graphics.Font()
+        font57.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/5x7.bdf")
+        font46.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/4x6.bdf")
+        fontbig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/6x13.bdf")
+        fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
 
-        if shared_flag.value is 0:
-            canvas.Clear()
-            matrix.SwapOnVSync(canvas)
-            time.sleep(0.5)
-            continue
+        # graphics.DrawText(canvas, fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
+        # matrix.SwapOnVSync(canvas)
+        # wait_loop(2)
+        # graphics.DrawText(canvas, fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
+        # matrix.SwapOnVSync(canvas)
+        # wait_loop(2)
+        # graphics.DrawText(canvas, fontbig, 66, 10, graphics.Color(200, 10, 10), "The")
+        # graphics.DrawText(canvas, fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
+        # graphics.DrawText(canvas, fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
+        # matrix.SwapOnVSync(canvas)
+        # wait_loop(2)
 
-        if "allstuff" not in d:
-            print("no data found, waiting...")
-            time.sleep(3)
-            continue
-        
-        allstuff = d["allstuff"]
+        while True:
+            if self.shared_flag.value is 0:
+                self.canvas.Clear()
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(0.5)
+                continue
 
-        closest = allstuff[0] if len(allstuff) > 0 else None
-        print("CLOSEST: " + str(closest))
-
-        print("current shared brightness: " + str(shared_current_brightness.value))
-        matrix.brightness = shared_current_brightness.value
-
-        if closest and closest["distance"] <= ALERT_RADIUS:
-
-            interpol_distance = interpolate(prev_thing["distance"], closest["distance"])
-            interpol_alt = interpolate(prev_thing["altitude"], closest["altitude"])
-            interpol_speed = interpolate(prev_thing["speed"], closest["speed"])
-
-            code_to_resolve = closest["origin"] if closest["origin"] != "BWI" else closest["destination"] if closest["destination"] != "BWI" else ""
-
-            friendly_name = code_to_airport.get(str(code_to_resolve), "")
-
-            for i in range(NUM_STEPS):
-                canvas.Clear()
-                graphics.DrawText(canvas, fontreallybig, 1, 12, graphics.Color(20, 200, 20), closest["origin"] + "->" + closest["destination"])
-                graphics.DrawText(canvas, font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-                graphics.DrawText(canvas, font57, 37, 30, graphics.Color(0, 0, 255), closest["flight"])
-                graphics.DrawText(canvas, font57, 2, 30, graphics.Color(245, 245, 245), closest["typecode"])
-
-                graphics.DrawText(canvas, font57, 79, 8, graphics.Color(255, 140, 140), "Dst: {0:.1f}".format(interpol_distance[i]))
-                graphics.DrawText(canvas, font57, 79, 19, graphics.Color(255, 255, 0), "Alt: {0:.0f}".format(interpol_alt[i]))
-                graphics.DrawText(canvas, font57, 79, 30, graphics.Color(140, 140, 140), "Vel: {0:.0f}".format(interpol_speed[i]))
-
-                time.sleep(0.065)
-                matrix.SwapOnVSync(canvas)
-
-            prev_thing = closest
-        else:
-            # NOT ALERT RADIUS
-            prev_thing = {}
-            prev_thing["distance"] = 0
-            prev_thing["altitude"] = 0
-            prev_thing["speed"] = 0
-
-            cur_temp = get_weather_temp()
-
-            print_time = datetime.now().strftime('%I:%M%p')
-
-            time_canvus = matrix.CreateFrameCanvas()
-
-            graphics.DrawText(time_canvus, fontreallybig, 6, 21, graphics.Color(0, 150, 0), print_time)
-            graphics.DrawText(time_canvus, fontreallybig, 84, 21, graphics.Color(20, 20, 240), cur_temp + "°F")
+            if "allstuff" not in self.data:
+                print("no data found, waiting...")
+                self.wait_loop(3)
+                continue
             
-            matrix.SwapOnVSync(time_canvus)
+            allstuff = self.data["allstuff"]
 
-        # Wait before doing anything
-        time.sleep(3)
+            closest = allstuff[0] if len(allstuff) > 0 else None
+            print("CLOSEST: " + str(closest))
+
+            if closest and closest["distance"] <= ALERT_RADIUS:
+
+                interpol_distance = interpolate(prev_thing["distance"], closest["distance"])
+                interpol_alt = interpolate(prev_thing["altitude"], closest["altitude"])
+                interpol_speed = interpolate(prev_thing["speed"], closest["speed"])
+
+                code_to_resolve = closest["origin"] if closest["origin"] != "BWI" else closest["destination"] if closest["destination"] != "BWI" else ""
+
+                friendly_name = code_to_airport.get(str(code_to_resolve), "")
+
+                for i in range(NUM_STEPS):
+                    self.canvas.Clear()
+                    graphics.DrawText(self.canvas, fontreallybig, 1, 12, graphics.Color(20, 200, 20), closest["origin"] + "->" + closest["destination"])
+                    graphics.DrawText(self.canvas, font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
+                    graphics.DrawText(self.canvas, font57, 37, 30, graphics.Color(0, 0, 255), closest["flight"])
+                    graphics.DrawText(self.canvas, font57, 2, 30, graphics.Color(245, 245, 245), closest["typecode"])
+
+                    graphics.DrawText(self.canvas, font57, 79, 8, graphics.Color(255, 140, 140), "Dst: {0:.1f}".format(interpol_distance[i]))
+                    graphics.DrawText(self.canvas, font57, 79, 19, graphics.Color(255, 255, 0), "Alt: {0:.0f}".format(interpol_alt[i]))
+                    graphics.DrawText(self.canvas, font57, 79, 30, graphics.Color(140, 140, 140), "Vel: {0:.0f}".format(interpol_speed[i]))
+
+                    self.wait_loop(0.065)
+                    self.matrix.SwapOnVSync(self.canvas)
+
+                prev_thing = closest
+            else:
+                # NOT ALERT RADIUS
+                prev_thing = {}
+                prev_thing["distance"] = 0
+                prev_thing["altitude"] = 0
+                prev_thing["speed"] = 0
+
+                cur_temp = get_weather_temp()
+
+                print_time = datetime.now().strftime('%I:%M%p')
+
+                time_canvus = self.matrix.CreateFrameCanvas()
+
+                graphics.DrawText(time_canvus, fontreallybig, 6, 21, graphics.Color(0, 150, 0), print_time)
+                graphics.DrawText(time_canvus, fontreallybig, 84, 21, graphics.Color(20, 20, 240), cur_temp + "°F")
+                
+                self.matrix.SwapOnVSync(time_canvus)
+
+            # Wait before doing anything
+            print("waiting......")
+            self.wait_loop(3)
+            print("DONE waiting......")
 
 # Main function
 if __name__ == "__main__":
-    print('Starting......')
-    print('Number of arguments:', len(sys.argv), 'arguments.')
-    print('Argument List:', str(sys.argv))
-
     read_airport_data()
-
-    sign_loop()
+    PlaneSign().sign_loop()
