@@ -10,13 +10,23 @@
 
   window.onload = function () {
     update_sign_status();
-    update_brightness();
+    update_brightness_slider();
 
-    document.getElementById("myRange").oninput = function () {
-      console.log(this.value);
-      document.getElementById("brightness_value").innerHTML = this.value;
+    document.getElementById("brightness_slider").oninput = function () {
       call_endpoint("/set_brightness/" + this.value);
     }
+
+    var toggle_switch = document.getElementById("toggle_switch");
+
+    toggle_switch.onchange = function () {
+      console.log("toggle_switch.checked?" + toggle_switch.checked)
+      if (toggle_switch.checked) {
+        call_endpoint('/turn_on')
+      } else {
+        call_endpoint('/turn_off')
+      }
+    }
+
   }
 
   function call_endpoint(endpoint, callback) {
@@ -30,11 +40,9 @@
     request.send();
   }
 
-  function update_brightness() {
+  function update_brightness_slider() {
     call_endpoint("/get_brightness", function (value) {
-      console.log("I was told the brightness is: " + value);
-      document.getElementById("myRange").value = value;
-      document.getElementById("brightness_value").innerHTML = value;
+      document.getElementById("brightness_slider").value = value;
     });
   }
 
@@ -43,11 +51,10 @@
     call_endpoint("/status", function (actual_text) {
       var html_to_send;
       if (actual_text === "1") {
-        html_to_send = "<b style='color: green'>ON</b>";
+        document.getElementById("toggle_switch").checked = true;
       } else {
-        html_to_send = "<b style='color: red'>LITERALLY NOT ON</b>";
+        document.getElementById("toggle_switch").checked = false;
       }
-      document.getElementById("sign_status").innerHTML = html_to_send;
     });
   }
 </script>
@@ -65,11 +72,11 @@
     text-decoration: none;
   }
 
-  .slidecontainer {
+  #brightness_slider_container {
     width: 100%;
   }
 
-  .slider {
+  #brightness_slider {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
@@ -81,11 +88,11 @@
     transition: opacity .2s;
   }
 
-  .slider:hover {
+  #brightness_slider:hover {
     opacity: 1;
   }
 
-  .slider::-webkit-slider-thumb {
+  #brightness_slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 150px;
@@ -94,24 +101,78 @@
     cursor: pointer;
   }
 
-  .slider::-moz-range-thumb {
-    width: 50px;
-    height: 50px;
-    background: #4CAF50;
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
     cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+  }
+
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+  }
+
+  input:checked+.slider {
+    background-color: #2196F3;
+  }
+
+  input:focus+.slider {
+    box-shadow: 0 0 1px #2196F3;
+  }
+
+  input:checked+.slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+  }
+
+  /* Rounded sliders */
+  .slider.round {
+    border-radius: 34px;
+  }
+
+  .slider.round:before {
+    border-radius: 50%;
   }
 </style>
 
 <body>
-  <div style="text-align: center;">Current sign status: <div id="sign_status">Unknown?</div>
-  </div>
-  <button onclick="call_endpoint('/turn_on'); update_sign_status();">Turn Sign On</button>
-  <button onclick="call_endpoint('/turn_off'); update_sign_status();">Turn Sign Off</button>
   <div style="text-align: center;">
-    Brightness: <div id="brightness_value"></div>
-  </div>
-  <div class="slidecontainer" style="text-align: center;">
-    <input id="myRange" type="range" min="1" max="100" value="100" class="slider">
+  Sign On?
+  <label class="switch" style="margin: auto;">
+    <input id="toggle_switch" type="checkbox">
+    <span class="slider round"></span>
+  </label>
+</div>
+
+  <div id="brightness_slider_container">
+    <input id="brightness_slider" type="range" min="1" max="100" value="100">
   </div>
 </body>
 

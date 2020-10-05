@@ -164,6 +164,10 @@ class PlaneSign:
             self.matrix.brightness = shared_current_brightness.value
             self.matrix.SwapOnVSync(self.canvas)
 
+            if self.shared_flag.value is 0:
+                self.canvas.Clear()
+                self.matrix.SwapOnVSync(self.canvas)
+
     def sign_loop(self):
 
         prev_thing = {}
@@ -227,9 +231,9 @@ class PlaneSign:
                     graphics.DrawText(self.canvas, font57, 37, 30, graphics.Color(0, 0, 255), closest["flight"])
                     graphics.DrawText(self.canvas, font57, 2, 30, graphics.Color(245, 245, 245), closest["typecode"])
 
-                    graphics.DrawText(self.canvas, font57, 79, 8, graphics.Color(255, 140, 140), "Dst: {0:.1f}".format(interpol_distance[i]))
+                    graphics.DrawText(self.canvas, font57, 79, 8, graphics.Color(255, 165, 0), "Dst: {0:.1f}".format(interpol_distance[i]))
                     graphics.DrawText(self.canvas, font57, 79, 19, graphics.Color(255, 255, 0), "Alt: {0:.0f}".format(interpol_alt[i]))
-                    graphics.DrawText(self.canvas, font57, 79, 30, graphics.Color(140, 140, 140), "Vel: {0:.0f}".format(interpol_speed[i]))
+                    graphics.DrawText(self.canvas, font57, 79, 30, graphics.Color(255, 0, 255), "Vel: {0:.0f}".format(interpol_speed[i]))
 
                     self.wait_loop(0.065)
                     self.matrix.SwapOnVSync(self.canvas)
@@ -254,9 +258,7 @@ class PlaneSign:
                 self.matrix.SwapOnVSync(time_canvus)
 
             # Wait before doing anything
-            print("waiting......")
             self.wait_loop(3)
-            print("DONE waiting......")
 
 # Main function
 if __name__ == "__main__":
