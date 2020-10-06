@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
   <title>D-Money Enterprises</title>
 </head>
 
@@ -79,6 +80,10 @@
   #brightness_slider {
     -webkit-appearance: none;
     appearance: none;
+    margin-top: 50px;
+    margin-bottom: 50px;
+    margin-right: 10px;
+    margin-left: 10px;
     width: 100%;
     height: 50px;
     background: #d3d3d3;
@@ -160,16 +165,31 @@
   .slider.round:before {
     border-radius: 50%;
   }
+
+  #title_header {
+    font-family: 'Permanent Marker', cursive;
+    font-size: 150px;
+    text-align: center;
+  }
+
+  #header_switch {
+    margin-top: 50px;
+    margin-bottom: 50px;
+  }
+  
 </style>
 
 <body>
-  <div style="text-align: center;">
-  Sign On?
-  <label class="switch" style="margin: auto;">
-    <input id="toggle_switch" type="checkbox">
-    <span class="slider round"></span>
-  </label>
-</div>
+  <div id="title_header">
+    Plane Sign
+  </div>
+  <div id="header_switch" style="text-align: center; font-family: Consolas; font-size: 28px;">
+    Sign On?
+    <label class="switch" style="margin: auto;">
+      <input id="toggle_switch" type="checkbox">
+      <span class="slider round"></span>
+    </label>
+  </div>
 
   <div id="brightness_slider_container">
     <input id="brightness_slider" type="range" min="1" max="100" value="100">
