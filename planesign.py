@@ -10,7 +10,7 @@ from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
-
+from enum import Enum
 from flask import Flask, request
 
 # <Config>
@@ -18,20 +18,22 @@ DEFAULT_BRIGHTNESS = 100
 SENSOR_LOC = { "lat":39.288, "lon": -76.841 }
 ALTITUDE_IGNORE_LIMIT = 100 # Ignore returns below this altitude in feet
 ON_THE_MAP_RADIUS = 15.62 # Adds to the counter in scan mode in miles
-ALERT_RADIUS = 12 # Will alert in miles
+ALERT_RADIUS = 3 # Will alert in miles
 ENDPOINT = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
 WEATHER_ENDPOINT = 'https://api.weather.gov/gridpoints/LWX/111,80/forecast/hourly'
 # </Config>
+
+class SignMode(Enum):
+    CLOSEALERT = 1
+    ALWAYSCLOSEST = 2
+    CLOCKONLY = 3
 
 code_to_airport = {}
 app = Flask(__name__)
 
 shared_flag_global = None
 shared_current_brightness = 100
-
-@app.route("/")
-def root():
-    return app.send_static_file('index.html')
+shared_current_sign_mode = 1
 
 @app.route("/status")
 def get_status():
@@ -47,6 +49,15 @@ def turn_off():
     shared_flag_global.value = 0
     return ""
 
+@app.route("/set_mode/<mode>")
+def set_mode(mode):
+    shared_current_sign_mode.value = int(mode)
+    return ""
+
+@app.route("/get_mode")
+def get_mode():
+    return str(shared_current_sign_mode.value)
+
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_current_brightness.value = int(brightness)
@@ -56,12 +67,15 @@ def set_brightness(brightness):
 def get_brightness():
     return str(shared_current_brightness.value)
 
-def server(shared_flag, shared_brightness):
+def server(shared_flag, shared_brightness, shared_mode):
     global shared_flag_global
     shared_flag_global = shared_flag
 
     global shared_current_brightness
     shared_current_brightness = shared_brightness
+
+    global shared_current_sign_mode
+    shared_current_sign_mode = shared_mode
 
     app.run(host='0.0.0.0')
 
@@ -86,11 +100,11 @@ def get_weather_temp():
     except:
         print("WEATHER ERROR")
         traceback.print_exc()
-        return -1
+        return ":("
 
 def get_data():
     current_temp = get_weather_temp()
-    print("The current temp is: " + current_temp)
+    print("The current temp is: " + str(current_temp))
 
     r = requests.get(ENDPOINT, headers={'user-agent': 'my-app/1.0.0'})
 
@@ -153,20 +167,26 @@ class PlaneSign:
         get_data_proc = Process(target=get_data_worker, args=(self.data,self.shared_flag, ))
         get_data_proc.start()
 
-        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,))
+        self.shared_mode = Value('i', 1)
+
+        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,))
         pServer.start()
 
-        self.matrix.brightness = shared_current_brightness.value
+        self.canvas.brightness = shared_current_brightness.value
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
         while time.perf_counter() < exit_loop_time:
-            self.matrix.brightness = shared_current_brightness.value
-            self.matrix.SwapOnVSync(self.canvas)
-
             if self.shared_flag.value is 0:
                 self.canvas.Clear()
                 self.matrix.SwapOnVSync(self.canvas)
+                while self.shared_flag.value is 0:
+                    pass
+                return
+
+            #print("Setting it to: " + str(shared_current_brightness.value))
+            self.canvas.brightness = shared_current_brightness.value
+            self.matrix.SwapOnVSync(self.canvas)
 
     def sign_loop(self):
 
@@ -198,6 +218,10 @@ class PlaneSign:
         # wait_loop(2)
 
         while True:
+            mode = self.shared_mode.value
+
+            print("Current mode: " + str(mode))
+
             if self.shared_flag.value is 0:
                 self.canvas.Clear()
                 self.matrix.SwapOnVSync(self.canvas)
@@ -214,7 +238,7 @@ class PlaneSign:
             closest = allstuff[0] if len(allstuff) > 0 else None
             print("CLOSEST: " + str(closest))
 
-            if closest and closest["distance"] <= ALERT_RADIUS:
+            if closest and (mode == 2 or (mode != 3 and closest["distance"] <= ALERT_RADIUS)):
 
                 interpol_distance = interpolate(prev_thing["distance"], closest["distance"])
                 interpol_alt = interpolate(prev_thing["altitude"], closest["altitude"])
@@ -250,12 +274,12 @@ class PlaneSign:
 
                 print_time = datetime.now().strftime('%I:%M%p')
 
-                time_canvus = self.matrix.CreateFrameCanvas()
+                self.canvas.Clear()
 
-                graphics.DrawText(time_canvus, fontreallybig, 6, 21, graphics.Color(0, 150, 0), print_time)
-                graphics.DrawText(time_canvus, fontreallybig, 84, 21, graphics.Color(20, 20, 240), cur_temp + "°F")
+                graphics.DrawText(self.canvas, fontreallybig, 6, 21, graphics.Color(0, 150, 0), print_time)
+                graphics.DrawText(self.canvas, fontreallybig, 84, 21, graphics.Color(20, 20, 240), cur_temp + "°F")
                 
-                self.matrix.SwapOnVSync(time_canvus)
+                self.matrix.SwapOnVSync(self.canvas)
 
             # Wait before doing anything
             self.wait_loop(3)
