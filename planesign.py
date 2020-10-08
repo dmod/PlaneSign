@@ -203,6 +203,7 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
         graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
         self.matrix.SwapOnVSync(self.canvas)
+        self.shared_mode.value = 1
         self.wait_loop(2)
 
     def sign_loop(self):
@@ -233,7 +234,6 @@ class PlaneSign:
 
             if mode == 4:
                 self.welcome()
-                self.shared_mode.value = 1
 
             if closest and (mode == 2 or (mode != 3 and closest["distance"] <= ALERT_RADIUS)):
 
