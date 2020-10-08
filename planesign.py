@@ -12,6 +12,7 @@ from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
 from enum import Enum
 from flask import Flask, request
+from flask_cors import CORS
 
 # <Config>
 DEFAULT_BRIGHTNESS = 100
@@ -23,13 +24,13 @@ ENDPOINT = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,3
 WEATHER_ENDPOINT = 'https://api.weather.gov/gridpoints/LWX/111,80/forecast/hourly'
 # </Config>
 
-class SignMode(Enum):
-    CLOSEALERT = 1
-    ALWAYSCLOSEST = 2
-    CLOCKONLY = 3
+#CLOSEALERT = 1
+#ALWAYSCLOSEST = 2
+#CLOCKONLY = 3
 
 code_to_airport = {}
 app = Flask(__name__)
+CORS(app)
 
 shared_flag_global = None
 shared_current_brightness = 100
@@ -205,22 +206,20 @@ class PlaneSign:
         fontbig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/6x13.bdf")
         fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
 
-        # graphics.DrawText(canvas, fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
-        # matrix.SwapOnVSync(canvas)
-        # wait_loop(2)
-        # graphics.DrawText(canvas, fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
-        # matrix.SwapOnVSync(canvas)
-        # wait_loop(2)
-        # graphics.DrawText(canvas, fontbig, 66, 10, graphics.Color(200, 10, 10), "The")
-        # graphics.DrawText(canvas, fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
-        # graphics.DrawText(canvas, fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
-        # matrix.SwapOnVSync(canvas)
-        # wait_loop(2)
+        graphics.DrawText(self.canvas, fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
+        self.matrix.SwapOnVSync(self.canvas)
+        self.wait_loop(2)
+        graphics.DrawText(self.canvas, fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
+        self.matrix.SwapOnVSync(self.canvas)
+        self.wait_loop(2)
+        graphics.DrawText(self.canvas, fontbig, 66, 10, graphics.Color(200, 10, 10), "The")
+        graphics.DrawText(self.canvas, fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
+        graphics.DrawText(self.canvas, fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
+        self.matrix.SwapOnVSync(self.canvas)
+        self.wait_loop(2)
 
         while True:
             mode = self.shared_mode.value
-
-            print("Current mode: " + str(mode))
 
             if self.shared_flag.value is 0:
                 self.canvas.Clear()
@@ -282,7 +281,7 @@ class PlaneSign:
                 self.matrix.SwapOnVSync(self.canvas)
 
             # Wait before doing anything
-            self.wait_loop(3)
+            self.wait_loop(0.5)
 
 # Main function
 if __name__ == "__main__":

@@ -1,17 +1,13 @@
 button {
   background-color: #4CAF50;
-  width: 100%;
-  height: 20vh;
+  width: 80%;
+  height: 10vh;
   color: white;
-  font-size: xx-large;
-  margin-top: 20px;
+  font-size: 60px;
+  margin-top: 10px;
   text-shadow: 0 0 11px black;
   text-align: center;
   text-decoration: none;
-}
-
-#brightness_slider_container {
-  width: 100%;
 }
 
 #brightness_slider {
@@ -21,7 +17,7 @@ button {
   margin-bottom: 50px;
   margin-right: 10px;
   margin-left: 10px;
-  width: 100%;
+  width: 90%;
   height: 50px;
   background: #d3d3d3;
   outline: none;
@@ -118,6 +114,7 @@ input:checked+.slider:before {
 }
 
 .plane-switch {
+  filter: none;
   --dot: #fff;
   --street: #6B6D76;
   --street-line: #A8AAB4;
@@ -290,6 +287,7 @@ html {
 
 * {
   box-sizing: inherit;
+  align-items: center;
 }
 
 *:before, *:after {
