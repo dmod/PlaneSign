@@ -73,19 +73,6 @@ def server(shared_flag, shared_brightness, shared_mode):
 
     app.run(host='0.0.0.0')
 
-def get_data_worker(d, shared_flag):
-    while True:
-        try:
-            if shared_flag.value is 0:
-                print("off, skipping request...")
-            else:
-                closest = get_data()
-                d["closest"] = closest
-        except:
-            print("FR24: HEY MAN BAD THING HAPPENED")
-            traceback.print_exc()
-        time.sleep(7.5)
-
 def get_weather_temp():
     try:
         weather_result = requests.get(WEATHER_ENDPOINT).json()
@@ -95,10 +82,26 @@ def get_weather_temp():
         traceback.print_exc()
         return ":("
 
-def get_data():
-    current_temp = get_weather_temp()
-    print("The current temp is: " + str(current_temp))
+def get_data_worker(d, shared_flag):
+    while True:
+        try:
+            if shared_flag.value is 0:
+                print("off, skipping request...")
+            else:
+                closest = get_closest_plane()
+                print(str(closest))
+                d["closest"] = closest
 
+                current_temp = get_weather_temp()
+                print("The current temp is: " + str(current_temp))
+                d["temp"] = current_temp
+        except:
+            print("Error getting data...")
+            traceback.print_exc()
+
+        time.sleep(10)
+
+def get_closest_plane():
     r = requests.get(ENDPOINT, headers={'user-agent': 'my-app/1.0.0'})
 
     if r.status_code is not 200:
@@ -126,10 +129,9 @@ def get_data():
             if (newguy["altitude"] > ALTITUDE_IGNORE_LIMIT and (closest is None or int(newguy["distance"]) < int(closest["distance"]))):
                 closest = newguy
 
-    print(str(closest))
     return closest
 
-def read_airport_data():
+def read_static_airport_data():
     with open("airports.csv") as f:
         lines = f.readlines()
         for line in lines[1:]:
@@ -162,13 +164,13 @@ class PlaneSign:
 
         manager = Manager()
 
-        self.closest = manager.dict()
+        self.shared_data = manager.dict()
 
         self.shared_flag = Value('i', 1)
         global shared_current_brightness
         shared_current_brightness = Value('i', DEFAULT_BRIGHTNESS)
 
-        get_data_proc = Process(target=get_data_worker, args=(self.closest,self.shared_flag, ))
+        get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag, ))
         get_data_proc.start()
 
         self.shared_mode = Value('i', 1)
@@ -225,12 +227,13 @@ class PlaneSign:
                 self.wait_loop(0.5)
                 continue
 
-            if not self.closest:
+            if not self.shared_data:
                 print("no data found, waiting...")
                 self.wait_loop(3)
                 continue
 
-            closest = self.closest["closest"]
+            closest = self.shared_data["closest"]
+            temp = self.shared_data["temp"]
 
             if mode == 4:
                 self.welcome()
@@ -267,14 +270,12 @@ class PlaneSign:
                 prev_thing["altitude"] = 0
                 prev_thing["speed"] = 0
 
-                cur_temp = get_weather_temp()
-
                 print_time = datetime.now().strftime('%I:%M%p')
 
                 self.canvas.Clear()
 
                 graphics.DrawText(self.canvas, self.fontreallybig, 6, 21, graphics.Color(0, 150, 0), print_time)
-                graphics.DrawText(self.canvas, self.fontreallybig, 84, 21, graphics.Color(20, 20, 240), cur_temp + "°F")
+                graphics.DrawText(self.canvas, self.fontreallybig, 84, 21, graphics.Color(20, 20, 240), temp + "°F")
                 
                 self.matrix.SwapOnVSync(self.canvas)
 
@@ -283,5 +284,5 @@ class PlaneSign:
 
 # Main function
 if __name__ == "__main__":
-    read_airport_data()
+    read_static_airport_data()
     PlaneSign().sign_loop()

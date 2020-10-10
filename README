@@ -1,3 +1,5 @@
 # wget https://ourairports.com/data/airports.csv
 
 2x https://www.adafruit.com/product/2277
+
+@reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign.py>/dev/null 2>&1
