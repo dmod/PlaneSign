@@ -149,6 +149,7 @@ class PlaneSign:
         options.cols = 64
         options.gpio_slowdown = 2
         options.chain_length = 2
+        options.limit_refresh_rate_hz = 200
 
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
@@ -248,11 +249,14 @@ class PlaneSign:
 
                 friendly_name = code_to_airport.get(str(code_to_resolve), "")
 
+                # Front pad the flight number to a max of 7 for spacing
+                formatted_flight = closest["flight"].rjust(7, ' ')
+
                 for i in range(NUM_STEPS):
                     self.canvas.Clear()
                     graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), closest["origin"] + "->" + closest["destination"])
                     graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-                    graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 255), closest["flight"])
+                    graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 255), formatted_flight)
                     graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(245, 245, 245), closest["typecode"])
 
                     graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(255, 165, 0), "Dst: {0:.1f}".format(interpol_distance[i]))
