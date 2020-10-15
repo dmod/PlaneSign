@@ -9,6 +9,8 @@ from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
 from flask import Flask, request
+from PIL import Image
+import xml.etree.ElementTree as ET
 from flask_cors import CORS
 
 # <Config>
@@ -17,8 +19,10 @@ SENSOR_LOC = { "lat":39.288, "lon": -76.841 }
 ALTITUDE_IGNORE_LIMIT = 100 # Ignore returns below this altitude in feet
 ALERT_RADIUS = 3 # Will alert in miles
 ENDPOINT = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
-WEATHER_ENDPOINT = 'https://api.weather.gov/gridpoints/LWX/111,80/forecast/hourly'
+WEATHER_ENDPOINT = f'http://api.openweathermap.org/data/2.5/weather?lat={SENSOR_LOC["lat"]}&lon={SENSOR_LOC["lon"]}&appid=79a9587cd0dabf75868f84ec0782f67b&units=imperial'
 # </Config>
+
+print("Using: " + WEATHER_ENDPOINT)
 
 code_to_airport = {}
 
@@ -76,7 +80,7 @@ def server(shared_flag, shared_brightness, shared_mode):
 def get_weather_temp():
     try:
         weather_result = requests.get(WEATHER_ENDPOINT).json()
-        return str(weather_result["properties"]["periods"][0]["temperature"])
+        return str(round(weather_result["main"]["temp"]))
     except:
         print("WEATHER ERROR")
         traceback.print_exc()
@@ -158,10 +162,12 @@ class PlaneSign:
         self.font46 = graphics.Font()
         self.fontbig = graphics.Font()
         self.fontreallybig = graphics.Font()
+        self.fontplanesign = graphics.Font()
         self.font57.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/5x7.bdf")
         self.font46.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/4x6.bdf")
         self.fontbig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/6x13.bdf")
         self.fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
+        self.fontplanesign.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/helvR12.bdf")
 
         manager = Manager()
 
@@ -195,6 +201,22 @@ class PlaneSign:
             self.matrix.SwapOnVSync(self.canvas)
 
     def welcome(self):
+        #self.canvas.Clear()
+        #self.matrix.SwapOnVSync(self.canvas)
+        #image = Image.open("/home/pi/logo.png")
+        #image.thumbnail((self.matrix.width, self.matrix.height), Image.ANTIALIAS)
+        #self.matrix.SetImage(image.convert('RGB'), 0, 6)
+        #time.sleep(3)
+
+        self.canvas.Clear()
+        graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
+        self.matrix.SwapOnVSync(self.canvas)
+        time.sleep(2)
+
+        self.canvas.Clear()
+        graphics.DrawText(self.canvas, self.fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
+        self.matrix.SwapOnVSync(self.canvas)
+
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
         self.matrix.SwapOnVSync(self.canvas)
@@ -206,6 +228,11 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
         graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
         self.matrix.SwapOnVSync(self.canvas)
+
+        #image = Image.open("/home/pi/home.png")
+        #image.thumbnail((self.matrix.width, self.matrix.height), Image.ANTIALIAS)
+        #self.matrix.SetImage(image.convert('RGB'), 0, 0)
+
         self.shared_mode.value = 1
         self.wait_loop(2)
 
@@ -247,7 +274,7 @@ class PlaneSign:
 
                 code_to_resolve = closest["origin"] if closest["origin"] != "BWI" else closest["destination"] if closest["destination"] != "BWI" else ""
 
-                friendly_name = code_to_airport.get(str(code_to_resolve), "")
+                friendly_name = code_to_airport.get(str(code_to_resolve), "  ¯\_(°_°)_/¯")
 
                 # Front pad the flight number to a max of 7 for spacing
                 formatted_flight = closest["flight"].rjust(7, ' ')
