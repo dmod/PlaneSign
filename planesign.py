@@ -33,12 +33,6 @@ shared_flag_global = None
 shared_current_brightness = 100
 shared_current_sign_mode = 1
 
-# 1 = default
-# 2 = always
-# 3 = weather
-# 4 = clock
-# 5 = welcome
-
 @app.route("/status")
 def get_status():
     return str(shared_flag_global.value)
@@ -193,20 +187,27 @@ class PlaneSign:
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
-        while time.perf_counter() < exit_loop_time:
+        original_mode = self.shared_mode.value
+
+        stay_in_loop = True
+
+        while stay_in_loop:
+            stay_in_loop = time.perf_counter() < exit_loop_time
+
             if self.shared_flag.value is 0:
                 self.canvas.Clear()
                 self.matrix.SwapOnVSync(self.canvas)
-                while self.shared_flag.value is 0:
-                    pass
-                return
+                stay_in_loop = False
+
+            if self.shared_mode.value != original_mode:
+                stay_in_loop = False
 
             self.canvas.brightness = shared_current_brightness.value
             self.matrix.SwapOnVSync(self.canvas)
 
     def show_time(self):
-        print_time = datetime.now().strftime('%I:%M%p')
-        temp = str(round(self.shared_data["weather"]["main"]["temp"]))
+        print_time = datetime.now().strftime('%-I:%M%p')
+        temp = str(round(self.shared_data["weather"]["current"]["temp"]))
 
         self.canvas.Clear()
 
@@ -216,7 +217,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_weather(self):
-        self.canvas.Clear()
+        self.canvas = self.matrix.CreateFrameCanvas()
 
         day_0_xoffset = 2
         day_1_xoffset = 45
@@ -224,15 +225,15 @@ class PlaneSign:
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][0]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
-        self.matrix.SetImage(image.convert('RGB'), day_0_xoffset + 14, 5)
+        self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 14, 5)
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][1]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
-        self.matrix.SetImage(image.convert('RGB'), day_1_xoffset + 14, 5)
+        self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 14, 5)
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][2]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
-        self.matrix.SetImage(image.convert('RGB'), day_2_xoffset + 14, 5)
+        self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 14, 5)
 
         graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(60, 60, 160), "Ellicott City")
 
@@ -269,8 +270,7 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.font46, day_2_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         self.matrix.SwapOnVSync(self.canvas)
-        self.wait_loop(333)
-    
+
     def welcome(self):
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
@@ -298,7 +298,7 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        #self.welcome()
+        self.welcome()
 
         while True:
             mode = self.shared_mode.value
@@ -314,14 +314,28 @@ class PlaneSign:
                 self.wait_loop(3)
                 continue
 
-            self.show_weather()
+            # 1 = default
+            # 2 = always
+            # 3 = weather
+            # 4 = clock
+            # 5 = welcome
 
-            closest = self.shared_data["closest"]
-            
+            if mode == 3:
+                self.show_weather()
+                self.wait_loop(20)
+                continue
+
             if mode == 4:
+                self.show_time()
+                self.wait_loop(0.5)
+                continue
+
+            if mode == 5:
                 self.welcome()
 
-            if closest and (mode == 2 or (mode != 3 and closest["distance"] <= ALERT_RADIUS)):
+            closest = self.shared_data["closest"]
+
+            if closest and (mode == 2 or closest["distance"] <= ALERT_RADIUS):
 
                 interpol_distance = interpolate(prev_thing["distance"], closest["distance"])
                 interpol_alt = interpolate(prev_thing["altitude"], closest["altitude"])
@@ -329,7 +343,8 @@ class PlaneSign:
 
                 code_to_resolve = closest["origin"] if closest["origin"] != "BWI" else closest["destination"] if closest["destination"] != "BWI" else ""
 
-                friendly_name = code_to_airport.get(str(code_to_resolve), "  ¯\_(°_°)_/¯")
+                #   ¯\_(°_°)_/¯
+                friendly_name = code_to_airport.get(str(code_to_resolve), "")
 
                 # Front pad the flight number to a max of 7 for spacing
                 formatted_flight = closest["flight"].rjust(7, ' ')
@@ -359,7 +374,7 @@ class PlaneSign:
                 self.show_time()
 
             # Wait before doing anything
-            self.wait_loop(0.1)
+            self.wait_loop(0.3)
 
 # Main function
 if __name__ == "__main__":
