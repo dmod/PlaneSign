@@ -3,7 +3,6 @@
 
 import time
 import traceback
-import logging
 import requests
 from datetime import datetime
 from utilities import *
@@ -15,12 +14,12 @@ import xml.etree.ElementTree as ET
 from flask_cors import CORS
 
 # <Config>
-DEFAULT_BRIGHTNESS = 100
+DEFAULT_BRIGHTNESS = 80
 SENSOR_LOC = { "lat":39.288, "lon": -76.841 }
 ALTITUDE_IGNORE_LIMIT = 100 # Ignore returns below this altitude in feet
 ALERT_RADIUS = 3 # Will alert in miles
 ENDPOINT = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
-WEATHER_ENDPOINT = f'http://api.openweathermap.org/data/2.5/weather?lat={SENSOR_LOC["lat"]}&lon={SENSOR_LOC["lon"]}&appid=79a9587cd0dabf75868f84ec0782f67b&units=imperial'
+WEATHER_ENDPOINT = f'http://api.openweathermap.org/data/2.5/onecall?lat={SENSOR_LOC["lat"]}&lon={SENSOR_LOC["lon"]}&appid=79a9587cd0dabf75868f84ec0782f67b&units=imperial'
 # </Config>
 
 print("Using: " + WEATHER_ENDPOINT)
@@ -33,6 +32,12 @@ CORS(app)
 shared_flag_global = None
 shared_current_brightness = 100
 shared_current_sign_mode = 1
+
+# 1 = default
+# 2 = always
+# 3 = weather
+# 4 = clock
+# 5 = welcome
 
 @app.route("/status")
 def get_status():
@@ -78,10 +83,9 @@ def server(shared_flag, shared_brightness, shared_mode):
 
     app.run(host='0.0.0.0')
 
-def get_weather_temp():
+def get_weather():
     try:
-        weather_result = requests.get(WEATHER_ENDPOINT).json()
-        return str(round(weather_result["main"]["temp"]))
+        return requests.get(WEATHER_ENDPOINT).json()
     except:
         print("WEATHER ERROR")
         traceback.print_exc()
@@ -97,9 +101,8 @@ def get_data_worker(d, shared_flag):
                 print(str(closest))
                 d["closest"] = closest
 
-                current_temp = get_weather_temp()
-                print("The current temp is: " + str(current_temp))
-                d["temp"] = current_temp
+                current_weather = get_weather()
+                d["weather"] = current_weather
         except:
             print("Error getting data...")
             traceback.print_exc()
@@ -201,14 +204,74 @@ class PlaneSign:
             self.canvas.brightness = shared_current_brightness.value
             self.matrix.SwapOnVSync(self.canvas)
 
-    def welcome(self):
-        #self.canvas.Clear()
-        #self.matrix.SwapOnVSync(self.canvas)
-        #image = Image.open("/home/pi/logo.png")
-        #image.thumbnail((self.matrix.width, self.matrix.height), Image.ANTIALIAS)
-        #self.matrix.SetImage(image.convert('RGB'), 0, 6)
-        #time.sleep(3)
+    def show_time(self):
+        print_time = datetime.now().strftime('%I:%M%p')
+        temp = str(round(self.shared_data["weather"]["main"]["temp"]))
 
+        self.canvas.Clear()
+
+        graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
+        graphics.DrawText(self.canvas, self.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
+        
+        self.matrix.SwapOnVSync(self.canvas)
+
+    def show_weather(self):
+        self.canvas.Clear()
+
+        day_0_xoffset = 2
+        day_1_xoffset = 45
+        day_2_xoffset = 86
+
+        image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][0]['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.ANTIALIAS)
+        self.matrix.SetImage(image.convert('RGB'), day_0_xoffset + 14, 5)
+
+        image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][1]['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.ANTIALIAS)
+        self.matrix.SetImage(image.convert('RGB'), day_1_xoffset + 14, 5)
+
+        image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][2]['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.ANTIALIAS)
+        self.matrix.SetImage(image.convert('RGB'), day_2_xoffset + 14, 5)
+
+        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(60, 60, 160), "Ellicott City")
+
+        for x in range(52):
+            self.canvas.SetPixel(x, 6, 100, 100, 100)
+
+        for y in range(7):
+            self.canvas.SetPixel(52, y, 100, 100, 100)
+
+        graphics.DrawText(self.canvas, self.font57, 66, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunrise']).strftime('%-I:%M'))
+        graphics.DrawText(self.canvas, self.font57, 97, 6, graphics.Color(210, 150, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
+
+        daily = self.shared_data['weather']['daily']
+
+        # Day 0
+        day = daily[0]
+        graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 14, graphics.Color(210, 150, 0), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
+        graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
+        graphics.DrawText(self.canvas, self.font46, day_0_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
+
+        # Day 1 
+        day = daily[1]
+        graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 14, graphics.Color(210, 150, 0), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
+        graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
+        graphics.DrawText(self.canvas, self.font46, day_1_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
+
+        # Day 2 
+        day = daily[2]
+        graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 14, graphics.Color(210, 150, 0), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
+        graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
+        graphics.DrawText(self.canvas, self.font46, day_2_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
+
+        self.matrix.SwapOnVSync(self.canvas)
+        self.wait_loop(333)
+    
+    def welcome(self):
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
         self.matrix.SwapOnVSync(self.canvas)
@@ -235,7 +298,7 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        self.welcome()
+        #self.welcome()
 
         while True:
             mode = self.shared_mode.value
@@ -251,9 +314,10 @@ class PlaneSign:
                 self.wait_loop(3)
                 continue
 
-            closest = self.shared_data["closest"]
-            temp = self.shared_data["temp"]
+            self.show_weather()
 
+            closest = self.shared_data["closest"]
+            
             if mode == 4:
                 self.welcome()
 
@@ -280,9 +344,6 @@ class PlaneSign:
                     graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
                     graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
                     graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
-                    #graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(255, 165, 0), "Dst: {0:.1f}".format(interpol_distance[i]))
-                    #graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(3, 252, 165), "Alt: {0:.0f}".format(interpol_alt[i]))
-                    #graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(252, 3, 227), "Vel: {0:.0f}".format(interpol_speed[i]))
 
                     self.wait_loop(0.065)
                     self.matrix.SwapOnVSync(self.canvas)
@@ -295,14 +356,7 @@ class PlaneSign:
                 prev_thing["altitude"] = 0
                 prev_thing["speed"] = 0
 
-                print_time = datetime.now().strftime('%I:%M%p')
-
-                self.canvas.Clear()
-
-                graphics.DrawText(self.canvas, self.fontreallybig, 6, 21, graphics.Color(0, 150, 0), print_time)
-                graphics.DrawText(self.canvas, self.fontreallybig, 84, 21, graphics.Color(20, 20, 240), temp + "°F")
-                
-                self.matrix.SwapOnVSync(self.canvas)
+                self.show_time()
 
             # Wait before doing anything
             self.wait_loop(0.1)

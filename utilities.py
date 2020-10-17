@@ -1,7 +1,10 @@
 import math
+from datetime import tzinfo, timedelta, datetime
+import pytz
 
 NUM_STEPS = 50
 
+local_tz = pytz.timezone('America/New_York')
 
 def get_distance(coord1, coord2):
     R = 3958.8  # Earth radius in meters
@@ -17,6 +20,10 @@ def get_distance(coord1, coord2):
 
     return (2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
+def convert_unix_to_local_time(unix_timestamp):
+    utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
+    local_time = utc_time.astimezone(local_tz)
+    return local_time
 
 def interpolate(num1, num2):
     if (num1 == 0):

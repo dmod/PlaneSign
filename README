@@ -2,6 +2,11 @@
 
 2x https://www.adafruit.com/product/2277
 
+pip3 install pytz
+
+make build-python
+sudo make install-python
+
 @reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign.py>/dev/null 2>&1
 
 {
