@@ -212,12 +212,7 @@ class PlaneSign:
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
         self.matrix.SwapOnVSync(self.canvas)
-        time.sleep(2)
-
-        self.canvas.Clear()
-        graphics.DrawText(self.canvas, self.fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
-        self.matrix.SwapOnVSync(self.canvas)
-
+        self.wait_loop(2)
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
         self.matrix.SwapOnVSync(self.canvas)
@@ -225,17 +220,12 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
         self.matrix.SwapOnVSync(self.canvas)
         self.wait_loop(2)
-        graphics.DrawText(self.canvas, self.fontbig, 66, 10, graphics.Color(200, 10, 10), "The")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(200, 10, 10), "Sterners's")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(200, 10, 10), "Home")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 10, graphics.Color(60, 60, 160), "The")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(160, 160, 200), "Sterners's")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(20, 160, 60), "Home")
         self.matrix.SwapOnVSync(self.canvas)
-
-        #image = Image.open("/home/pi/home.png")
-        #image.thumbnail((self.matrix.width, self.matrix.height), Image.ANTIALIAS)
-        #self.matrix.SetImage(image.convert('RGB'), 0, 0)
-
         self.shared_mode.value = 1
-        self.wait_loop(2)
+        self.wait_loop(3)
 
     def sign_loop(self):
 
