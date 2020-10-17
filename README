@@ -3,3 +3,15 @@
 2x https://www.adafruit.com/product/2277
 
 @reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign.py>/dev/null 2>&1
+
+{
+    daily
+    copytruncate
+    rotate 1
+    missingok
+    sharedscripts
+    postrotate
+            day=$(date +%Y-%m-%d)
+            mv blabla.csv.1 /var/www/gamelogs/dir/blabla$day.csv
+    endscript
+}

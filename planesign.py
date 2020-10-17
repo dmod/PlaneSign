@@ -3,12 +3,13 @@
 
 import time
 import traceback
+import logging
 import requests
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
-from flask import Flask, request
+from flask import Flask
 from PIL import Image
 import xml.etree.ElementTree as ET
 from flask_cors import CORS
@@ -283,12 +284,15 @@ class PlaneSign:
                     self.canvas.Clear()
                     graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), closest["origin"] + "->" + closest["destination"])
                     graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-                    graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 255), formatted_flight)
-                    graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(245, 245, 245), closest["typecode"])
+                    graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
+                    graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), closest["typecode"])
 
-                    graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(255, 165, 0), "Dst: {0:.1f}".format(interpol_distance[i]))
-                    graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(255, 255, 0), "Alt: {0:.0f}".format(interpol_alt[i]))
-                    graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(255, 0, 255), "Vel: {0:.0f}".format(interpol_speed[i]))
+                    graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
+                    graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
+                    graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
+                    #graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(255, 165, 0), "Dst: {0:.1f}".format(interpol_distance[i]))
+                    #graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(3, 252, 165), "Alt: {0:.0f}".format(interpol_alt[i]))
+                    #graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(252, 3, 227), "Vel: {0:.0f}".format(interpol_speed[i]))
 
                     self.wait_loop(0.065)
                     self.matrix.SwapOnVSync(self.canvas)
