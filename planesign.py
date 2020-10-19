@@ -10,7 +10,6 @@ from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value
 from flask import Flask
 from PIL import Image
-import xml.etree.ElementTree as ET
 from flask_cors import CORS
 
 # <Config>
@@ -203,6 +202,7 @@ class PlaneSign:
                 stay_in_loop = False
 
             self.canvas.brightness = shared_current_brightness.value
+            self.matrix.brightness = shared_current_brightness.value
             self.matrix.SwapOnVSync(self.canvas)
 
     def show_time(self):
@@ -221,19 +221,19 @@ class PlaneSign:
 
         day_0_xoffset = 2
         day_1_xoffset = 45
-        day_2_xoffset = 86
+        day_2_xoffset = 88
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][0]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
-        self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 14, 5)
+        self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][1]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
-        self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 14, 5)
+        self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][2]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
-        self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 14, 5)
+        self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
         graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(60, 60, 160), "Ellicott City")
 
@@ -244,30 +244,30 @@ class PlaneSign:
             self.canvas.SetPixel(52, y, 100, 100, 100)
 
         graphics.DrawText(self.canvas, self.font57, 66, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunrise']).strftime('%-I:%M'))
-        graphics.DrawText(self.canvas, self.font57, 97, 6, graphics.Color(210, 150, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
+        graphics.DrawText(self.canvas, self.font57, 97, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
 
         daily = self.shared_data['weather']['daily']
 
         # Day 0
         day = daily[0]
-        graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 14, graphics.Color(210, 150, 0), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
-        graphics.DrawText(self.canvas, self.font46, day_0_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
+        graphics.DrawText(self.canvas, self.font46, day_0_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         # Day 1 
         day = daily[1]
-        graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 14, graphics.Color(210, 150, 0), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
-        graphics.DrawText(self.canvas, self.font46, day_1_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
+        graphics.DrawText(self.canvas, self.font46, day_1_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         # Day 2 
         day = daily[2]
-        graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 14, graphics.Color(210, 150, 0), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
-        graphics.DrawText(self.canvas, self.font46, day_2_xoffset + 14, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
+        graphics.DrawText(self.canvas, self.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         self.matrix.SwapOnVSync(self.canvas)
 
@@ -322,7 +322,7 @@ class PlaneSign:
 
             if mode == 3:
                 self.show_weather()
-                self.wait_loop(20)
+                self.wait_loop(0.5)
                 continue
 
             if mode == 4:
