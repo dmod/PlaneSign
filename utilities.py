@@ -40,4 +40,4 @@ def interpolate(num1, num2):
         for _ in range(NUM_STEPS):
             interpolated.append(interpolated[-1] - thing)
 
-    return interpolated
+    return interpolated[1:]

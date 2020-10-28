@@ -18,7 +18,7 @@ SENSOR_LOC = { "lat":39.288, "lon": -76.841 }
 ALTITUDE_IGNORE_LIMIT = 100 # Ignore returns below this altitude in feet
 ALERT_RADIUS = 3 # Will alert in miles
 ENDPOINT = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
-WEATHER_ENDPOINT = f'http://api.openweathermap.org/data/2.5/onecall?lat={SENSOR_LOC["lat"]}&lon={SENSOR_LOC["lon"]}&appid=79a9587cd0dabf75868f84ec0782f67b&units=imperial'
+WEATHER_ENDPOINT = f'http://api.openweathermap.org/data/2.5/onecall?lat={SENSOR_LOC["lat"]}&lon={SENSOR_LOC["lon"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 # </Config>
 
 print("Using: " + WEATHER_ENDPOINT)
@@ -84,6 +84,20 @@ def get_weather():
         traceback.print_exc()
         return ":("
 
+def get_weather_data_worker(d, shared_flag):
+    while True:
+        try:
+            if shared_flag.value is 0:
+                print("off, skipping request...")
+            else:
+                current_weather = get_weather()
+                d["weather"] = current_weather
+        except:
+            print("Error getting weather data...")
+            traceback.print_exc()
+
+        time.sleep(600)
+
 def get_data_worker(d, shared_flag):
     while True:
         try:
@@ -93,14 +107,11 @@ def get_data_worker(d, shared_flag):
                 closest = get_closest_plane()
                 print(str(closest))
                 d["closest"] = closest
-
-                current_weather = get_weather()
-                d["weather"] = current_weather
         except:
             print("Error getting data...")
             traceback.print_exc()
 
-        time.sleep(10)
+        time.sleep(7)
 
 def get_closest_plane():
     r = requests.get(ENDPOINT, headers={'user-agent': 'my-app/1.0.0'})
@@ -150,7 +161,7 @@ class PlaneSign:
         options.cols = 64
         options.gpio_slowdown = 2
         options.chain_length = 2
-        options.limit_refresh_rate_hz = 200
+        options.limit_refresh_rate_hz = 160
 
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
@@ -174,8 +185,11 @@ class PlaneSign:
         global shared_current_brightness
         shared_current_brightness = Value('i', DEFAULT_BRIGHTNESS)
 
-        get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag, ))
+        get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag))
         get_data_proc.start()
+
+        get_weather_data_proc = Process(target=get_weather_data_worker, args=(self.shared_data,self.shared_flag))
+        get_weather_data_proc.start()
 
         self.shared_mode = Value('i', 1)
 
@@ -374,7 +388,7 @@ class PlaneSign:
                 self.show_time()
 
             # Wait before doing anything
-            self.wait_loop(0.3)
+            self.wait_loop(1)
 
 # Main function
 if __name__ == "__main__":
