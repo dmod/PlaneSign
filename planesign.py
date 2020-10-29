@@ -203,6 +203,7 @@ class PlaneSign:
         original_mode = self.shared_mode.value
 
         stay_in_loop = True
+        breakout = False
 
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time
@@ -214,10 +215,13 @@ class PlaneSign:
 
             if self.shared_mode.value != original_mode:
                 stay_in_loop = False
+                breakout = True
 
             self.canvas.brightness = shared_current_brightness.value
             self.matrix.brightness = shared_current_brightness.value
             self.matrix.SwapOnVSync(self.canvas)
+
+        return breakout
 
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
@@ -231,6 +235,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_weather(self):
+        print("showingweather")
         self.canvas = self.matrix.CreateFrameCanvas()
 
         day_0_xoffset = 2
@@ -374,7 +379,10 @@ class PlaneSign:
                     graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
                     graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
 
-                    self.wait_loop(0.065)
+                    breakout = self.wait_loop(0.065)
+                    if breakout:
+                        break
+
                     self.matrix.SwapOnVSync(self.canvas)
 
                 prev_thing = closest
