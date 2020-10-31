@@ -2,7 +2,7 @@ import math
 from datetime import tzinfo, timedelta, datetime
 import pytz
 
-NUM_STEPS = 50
+NUM_STEPS = 40
 
 local_tz = pytz.timezone('America/New_York')
 

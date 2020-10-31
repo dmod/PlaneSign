@@ -241,7 +241,6 @@ class PlaneSign:
             if self.shared_mode.value != original_mode:
                 stay_in_loop = False
                 breakout = True
-                print("MODE CHANGE DETECTED, BREAKING EARLY")
 
         return breakout
 
@@ -257,7 +256,6 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_weather(self):
-        print("showingweather")
         self.canvas = self.matrix.CreateFrameCanvas()
 
         day_0_xoffset = 2
@@ -343,6 +341,7 @@ class PlaneSign:
 
         while True:
             mode = self.shared_mode.value
+            breakout = False
 
             if self.shared_flag.value is 0:
                 self.canvas.Clear()
@@ -396,7 +395,6 @@ class PlaneSign:
                 plane_to_show = self.shared_data["slowest"]
 
             if plane_to_show:
-
                 interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
                 interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
                 interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
@@ -434,6 +432,9 @@ class PlaneSign:
                 prev_thing["speed"] = 0
 
                 self.show_time()
+
+            if breakout:
+                continue
 
             # Wait before doing anything
             self.wait_loop(1)
