@@ -9,14 +9,19 @@ sudo make install-python
 
 @reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign.py>/dev/null 2>&1
 
-{
-    daily
-    copytruncate
-    rotate 1
-    missingok
-    sharedscripts
-    postrotate
-            day=$(date +%Y-%m-%d)
-            mv blabla.csv.1 /var/www/gamelogs/dir/blabla$day.csv
-    endscript
+NGINX Contents of /etc/nginx/sites-available/default:
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+
+        root /home/pi/PlaneSign/web;
+
+        index index.html index.htm index.nginx-debian.html;
+
+        server_name _;
+
+        location / {
+                add_header 'Access-Control-Allow-Origin' '*';
+                try_files $uri $uri/ =404;
+        }
 }

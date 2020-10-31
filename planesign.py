@@ -88,7 +88,7 @@ def get_weather_data_worker(d, shared_flag):
     while True:
         try:
             if shared_flag.value is 0:
-                print("off, skipping request...")
+                print("off, skipping weather request...")
             else:
                 current_weather = get_weather()
                 d["weather"] = current_weather
@@ -102,46 +102,67 @@ def get_data_worker(d, shared_flag):
     while True:
         try:
             if shared_flag.value is 0:
-                print("off, skipping request...")
+                print("off, skipping FR24 request...")
             else:
-                closest = get_closest_plane()
+
+                r = requests.get(ENDPOINT, headers={'user-agent': 'your-app/1.4.2'})
+
+                if r.status_code is not 200:
+                    print("FR REQUEST WAS BAD")
+                    print("STATUS CODE: " + str(r.status_code))
+
+                results = r.json()
+
+                closest = None
+                highest = None
+                fastest = None
+                slowest = None
+
+                for key in results:
+
+                    if key != "full_count" and key != "stats" and key != "version":
+                        result = results[key]
+
+                        newguy = {}
+                        newguy["altitude"] = result[4]
+                        newguy["speed"] = result[5]
+                        newguy["flight"] = result[16] if result[16] else "UNK69"
+                        newguy["typecode"] = result[8]
+                        newguy["origin"] = result[11] if result[11] else "???"
+                        newguy["destination"] = result[12] if result[12] else "???"
+                        newguy["distance"] = get_distance((SENSOR_LOC["lat"], SENSOR_LOC["lon"]), (result[1], result[2]))
+
+                        if newguy["altitude"] < ALTITUDE_IGNORE_LIMIT:
+                            continue
+
+                        if (closest is None or int(newguy["distance"]) < int(closest["distance"])):
+                            closest = newguy
+
+                        # The rest of these are for fun, filter out ??? planes
+                        if newguy["origin"] == "???":
+                            continue
+
+                        if (highest is None or int(newguy["altitude"]) > int(highest["altitude"])):
+                            highest = newguy
+
+                        if (fastest is None or int(newguy["speed"]) > int(fastest["speed"])):
+                            fastest = newguy
+
+                        if (slowest is None or int(newguy["speed"]) < int(slowest["speed"])):
+                            slowest = newguy
+
                 print(str(closest))
+
                 d["closest"] = closest
+                d["highest"] = highest
+                d["fastest"] = fastest
+                d["slowest"] = slowest
+
         except:
-            print("Error getting data...")
+            print("Error getting FR24 data...")
             traceback.print_exc()
 
         time.sleep(7)
-
-def get_closest_plane():
-    r = requests.get(ENDPOINT, headers={'user-agent': 'my-app/1.0.0'})
-
-    if r.status_code is not 200:
-        print("FR REQUEST WAS BAD")
-        print("STATUS CODE: " + str(r.status_code))
-
-    results = r.json()
-
-    closest = None
-
-    for key in results:
-
-        if key != "full_count" and key != "stats" and key != "version":
-            result = results[key]
-
-            newguy = {}
-            newguy["altitude"] = result[4]
-            newguy["speed"] = result[5]
-            newguy["flight"] = result[16] if result[16] else "UNK69"
-            newguy["typecode"] = result[8]
-            newguy["origin"] = result[11] if result[11] else "???"
-            newguy["destination"] = result[12] if result[12] else "???"
-            newguy["distance"] = get_distance((SENSOR_LOC["lat"], SENSOR_LOC["lon"]), (result[1], result[2]))
-
-            if (newguy["altitude"] > ALTITUDE_IGNORE_LIMIT and (closest is None or int(newguy["distance"]) < int(closest["distance"]))):
-                closest = newguy
-
-    return closest
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -208,6 +229,10 @@ class PlaneSign:
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time
 
+            self.canvas.brightness = shared_current_brightness.value
+            self.matrix.brightness = shared_current_brightness.value
+            self.matrix.SwapOnVSync(self.canvas)
+
             if self.shared_flag.value is 0:
                 self.canvas.Clear()
                 self.matrix.SwapOnVSync(self.canvas)
@@ -216,10 +241,7 @@ class PlaneSign:
             if self.shared_mode.value != original_mode:
                 stay_in_loop = False
                 breakout = True
-
-            self.canvas.brightness = shared_current_brightness.value
-            self.matrix.brightness = shared_current_brightness.value
-            self.matrix.SwapOnVSync(self.canvas)
+                print("MODE CHANGE DETECTED, BREAKING EARLY")
 
         return breakout
 
@@ -334,46 +356,64 @@ class PlaneSign:
                 continue
 
             # 1 = default
-            # 2 = always
-            # 3 = weather
-            # 4 = clock
-            # 5 = welcome
+            # 2 = always alert closest
+            # 3 = always alert highest
+            # 4 = always alert fastest
+            # 5 = always alert slowest
+            # 6 = weather
+            # 7 = clock
+            # 8 = welcome
 
-            if mode == 3:
+            if mode == 6:
                 self.show_weather()
                 self.wait_loop(0.5)
                 continue
 
-            if mode == 4:
+            if mode == 7:
                 self.show_time()
                 self.wait_loop(0.5)
                 continue
 
-            if mode == 5:
+            if mode == 8:
                 self.welcome()
 
-            closest = self.shared_data["closest"]
+            plane_to_show = None
 
-            if closest and (mode == 2 or closest["distance"] <= ALERT_RADIUS):
+            if mode == 1:
+                if self.shared_data["closest"]["distance"] <= ALERT_RADIUS:
+                    plane_to_show = self.shared_data["closest"]
 
-                interpol_distance = interpolate(prev_thing["distance"], closest["distance"])
-                interpol_alt = interpolate(prev_thing["altitude"], closest["altitude"])
-                interpol_speed = interpolate(prev_thing["speed"], closest["speed"])
+            if mode == 2:
+                plane_to_show = self.shared_data["closest"]
 
-                code_to_resolve = closest["origin"] if closest["origin"] != "BWI" else closest["destination"] if closest["destination"] != "BWI" else ""
+            if mode == 3:
+                plane_to_show = self.shared_data["highest"]
 
-                #   ¯\_(°_°)_/¯
+            if mode == 4:
+                plane_to_show = self.shared_data["fastest"]
+
+            if mode == 5:
+                plane_to_show = self.shared_data["slowest"]
+
+            if plane_to_show:
+
+                interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
+                interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
+                interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
+
+                code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] != "BWI" else plane_to_show["destination"] if plane_to_show["destination"] != "BWI" else ""
+
                 friendly_name = code_to_airport.get(str(code_to_resolve), "")
 
                 # Front pad the flight number to a max of 7 for spacing
-                formatted_flight = closest["flight"].rjust(7, ' ')
+                formatted_flight = plane_to_show["flight"].rjust(7, ' ')
 
                 for i in range(NUM_STEPS):
                     self.canvas.Clear()
-                    graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), closest["origin"] + "->" + closest["destination"])
+                    graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
                     graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
                     graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
-                    graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), closest["typecode"])
+                    graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
 
                     graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
                     graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
@@ -385,7 +425,7 @@ class PlaneSign:
 
                     self.matrix.SwapOnVSync(self.canvas)
 
-                prev_thing = closest
+                prev_thing = plane_to_show
             else:
                 # NOT ALERT RADIUS
                 prev_thing = {}
