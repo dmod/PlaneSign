@@ -76,22 +76,10 @@ def server(shared_flag, shared_brightness, shared_mode):
 
     app.run(host='0.0.0.0')
 
-def get_weather():
-    try:
-        return requests.get(WEATHER_ENDPOINT).json()
-    except:
-        print("WEATHER ERROR")
-        traceback.print_exc()
-        return ":("
-
-def get_weather_data_worker(d, shared_flag):
+def get_weather_data_worker(d):
     while True:
         try:
-            if shared_flag.value is 0:
-                print("off, skipping weather request...")
-            else:
-                current_weather = get_weather()
-                d["weather"] = current_weather
+            d["weather"] = requests.get(WEATHER_ENDPOINT).json()
         except:
             print("Error getting weather data...")
             traceback.print_exc()
@@ -209,7 +197,7 @@ class PlaneSign:
         get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag))
         get_data_proc.start()
 
-        get_weather_data_proc = Process(target=get_weather_data_worker, args=(self.shared_data,self.shared_flag))
+        get_weather_data_proc = Process(target=get_weather_data_worker, args=(self.shared_data))
         get_weather_data_proc.start()
 
         self.shared_mode = Value('i', 1)
