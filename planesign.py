@@ -197,7 +197,7 @@ class PlaneSign:
         get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag))
         get_data_proc.start()
 
-        get_weather_data_proc = Process(target=get_weather_data_worker, args=(self.shared_data))
+        get_weather_data_proc = Process(target=get_weather_data_worker, args=(self.shared_data,))
         get_weather_data_proc.start()
 
         self.shared_mode = Value('i', 1)
@@ -262,13 +262,13 @@ class PlaneSign:
         image.thumbnail((22, 22), Image.ANTIALIAS)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
-        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(60, 60, 160), "Ellicott City")
+        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), "Ellicott City")
 
         for x in range(52):
-            self.canvas.SetPixel(x, 6, 100, 100, 100)
+            self.canvas.SetPixel(x, 6, 140, 140, 140)
 
         for y in range(7):
-            self.canvas.SetPixel(52, y, 100, 100, 100)
+            self.canvas.SetPixel(52, y, 140, 140, 140)
 
         graphics.DrawText(self.canvas, self.font57, 66, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunrise']).strftime('%-I:%M'))
         graphics.DrawText(self.canvas, self.font57, 97, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
