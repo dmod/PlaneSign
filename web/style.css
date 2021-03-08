@@ -30,6 +30,14 @@ button {
   opacity: 1;
 }
 
+#custom_message {
+  margin-top: 20px;
+  margin-bottom: 20px;
+  width: 200px;
+  height: 20px;
+  font-size:25px;
+}
+
 #brightness_slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;

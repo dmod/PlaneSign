@@ -4,6 +4,7 @@
 import time
 import traceback
 import requests
+import random
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
@@ -54,9 +55,9 @@ def set_brightness(brightness):
 def get_brightness():
     return str(shared_current_brightness.value)
 
+@app.route("/set_custom_message/", defaults={"message": ""})
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
-    print("set_custom_message was called. It was: " + message)
     shared_current_data["custom_message"] = message
     return ""
 
@@ -265,8 +266,16 @@ class PlaneSign:
 
         self.canvas.Clear()
 
-        graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(0, 0, 140), message)
-        
+        r = random.randrange(0, 255)
+        g = random.randrange(0, 255)
+        b = random.randrange(0, 255)
+
+        if (len(message) < 13):
+            graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(r, g, b), message)
+        else:
+            graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(r, g, b), message[0:13].strip())
+            graphics.DrawText(self.canvas, self.fontreallybig, 7, 27, graphics.Color(r, g, b), message[13:].strip())
+
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_weather(self):
