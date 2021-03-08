@@ -7,21 +7,11 @@ import requests
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from multiprocessing import Process, Manager, Value
+from multiprocessing import Process, Manager, Value, Array
 from flask import Flask
 from PIL import Image
+import ctypes
 from flask_cors import CORS
-
-# <Config>
-DEFAULT_BRIGHTNESS = 80
-SENSOR_LOC = { "lat":39.288, "lon": -76.841 }
-ALTITUDE_IGNORE_LIMIT = 100 # Ignore returns below this altitude in feet
-ALERT_RADIUS = 3 # Will alert in miles
-ENDPOINT = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
-WEATHER_ENDPOINT = f'http://api.openweathermap.org/data/2.5/onecall?lat={SENSOR_LOC["lat"]}&lon={SENSOR_LOC["lon"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
-# </Config>
-
-print("Using: " + WEATHER_ENDPOINT)
 
 code_to_airport = {}
 
@@ -64,7 +54,13 @@ def set_brightness(brightness):
 def get_brightness():
     return str(shared_current_brightness.value)
 
-def server(shared_flag, shared_brightness, shared_mode):
+@app.route("/set_custom_message/<message>")
+def set_custom_message(message):
+    print("set_custom_message was called. It was: " + message)
+    shared_current_data["custom_message"] = message
+    return ""
+
+def server(shared_flag, shared_brightness, shared_mode, shared_data):
     global shared_flag_global
     shared_flag_global = shared_flag
 
@@ -74,12 +70,15 @@ def server(shared_flag, shared_brightness, shared_mode):
     global shared_current_sign_mode
     shared_current_sign_mode = shared_mode
 
+    global shared_current_data
+    shared_current_data = shared_data
+
     app.run(host='0.0.0.0')
 
 def get_weather_data_worker(d):
     while True:
         try:
-            d["weather"] = requests.get(WEATHER_ENDPOINT).json()
+            d["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
         except:
             print("Error getting weather data...")
             traceback.print_exc()
@@ -93,7 +92,7 @@ def get_data_worker(d, shared_flag):
                 print("off, skipping FR24 request...")
             else:
 
-                r = requests.get(ENDPOINT, headers={'user-agent': 'your-app/1.4.2'})
+                r = requests.get(CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.2'})
 
                 if r.status_code is not 200:
                     print("FR REQUEST WAS BAD")
@@ -118,9 +117,9 @@ def get_data_worker(d, shared_flag):
                         newguy["typecode"] = result[8]
                         newguy["origin"] = result[11] if result[11] else "???"
                         newguy["destination"] = result[12] if result[12] else "???"
-                        newguy["distance"] = get_distance((SENSOR_LOC["lat"], SENSOR_LOC["lon"]), (result[1], result[2]))
+                        newguy["distance"] = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (result[1], result[2]))
 
-                        if newguy["altitude"] < ALTITUDE_IGNORE_LIMIT:
+                        if newguy["altitude"] < 100:
                             continue
 
                         if (closest is None or int(newguy["distance"]) < int(closest["distance"])):
@@ -152,6 +151,23 @@ def get_data_worker(d, shared_flag):
 
         time.sleep(7)
 
+def read_config():
+    global CONF
+    CONF = {}
+    with open("sign.conf") as f:
+        lines = f.readlines()
+        print("reading  config...")
+        for line in lines:
+            parts = line.split('=')
+            CONF[parts[0]] = parts[1].rstrip()
+
+    print("Config loaded: " + str(CONF))
+
+    CONF["ENDPOINT"] = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
+    CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={CONF["SENSOR_LAT"]}&lon={CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
+
+    print("Using: " + CONF["WEATHER_ENDPOINT"])
+
 def read_static_airport_data():
     with open("airports.csv") as f:
         lines = f.readlines()
@@ -168,7 +184,7 @@ class PlaneSign:
 
         options = RGBMatrixOptions()
         options.cols = 64
-        options.gpio_slowdown = 2
+        options.gpio_slowdown = 3
         options.chain_length = 2
         options.limit_refresh_rate_hz = 160
 
@@ -189,10 +205,11 @@ class PlaneSign:
         manager = Manager()
 
         self.shared_data = manager.dict()
+        self.shared_data["custom_message"] = ""
 
         self.shared_flag = Value('i', 1)
         global shared_current_brightness
-        shared_current_brightness = Value('i', DEFAULT_BRIGHTNESS)
+        shared_current_brightness = Value('i', int(CONF["DEFAULT_BRIGHTNESS"]))
 
         get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag))
         get_data_proc.start()
@@ -202,7 +219,7 @@ class PlaneSign:
 
         self.shared_mode = Value('i', 1)
 
-        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,))
+        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,self.shared_data,))
         pServer.start()
 
         self.canvas.brightness = shared_current_brightness.value
@@ -243,6 +260,15 @@ class PlaneSign:
         
         self.matrix.SwapOnVSync(self.canvas)
 
+    def show_custom_message(self):
+        message = self.shared_data["custom_message"]
+
+        self.canvas.Clear()
+
+        graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(0, 0, 140), message)
+        
+        self.matrix.SwapOnVSync(self.canvas)
+
     def show_weather(self):
         self.canvas = self.matrix.CreateFrameCanvas()
 
@@ -262,16 +288,21 @@ class PlaneSign:
         image.thumbnail((22, 22), Image.ANTIALIAS)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
-        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), "Ellicott City")
+        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), CONF["WEATHER_CITY_NAME"])
 
-        for x in range(52):
+        # Calculate and draw the horizontal boarder around the WEATHER_CITY_NAME
+        num_horizontal_pixels = (len(CONF["WEATHER_CITY_NAME"]) * 4)
+        for x in range(num_horizontal_pixels):
             self.canvas.SetPixel(x, 6, 140, 140, 140)
 
+        # Draw the vertical boarder around the WEATHER_CITY_NAME
         for y in range(7):
-            self.canvas.SetPixel(52, y, 140, 140, 140)
+            self.canvas.SetPixel(num_horizontal_pixels, y, 140, 140, 140)
 
-        graphics.DrawText(self.canvas, self.font57, 66, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunrise']).strftime('%-I:%M'))
-        graphics.DrawText(self.canvas, self.font57, 97, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
+        sunrise_sunset_start_x = num_horizontal_pixels + 20
+
+        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunrise']).strftime('%-I:%M'))
+        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
 
         daily = self.shared_data['weather']['daily']
 
@@ -349,7 +380,8 @@ class PlaneSign:
             # 5 = always alert slowest
             # 6 = weather
             # 7 = clock
-            # 8 = welcome
+            # 8 = custom message
+            # 9 = welcome
 
             if mode == 6:
                 self.show_weather()
@@ -362,12 +394,17 @@ class PlaneSign:
                 continue
 
             if mode == 8:
+                self.show_custom_message()
+                self.wait_loop(0.1)
+                continue
+
+            if mode == 9:
                 self.welcome()
 
             plane_to_show = None
 
             if mode == 1:
-                if self.shared_data["closest"]["distance"] <= ALERT_RADIUS:
+                if self.shared_data["closest"]["distance"] <= 3:
                     plane_to_show = self.shared_data["closest"]
 
             if mode == 2:
@@ -429,5 +466,6 @@ class PlaneSign:
 
 # Main function
 if __name__ == "__main__":
+    read_config()
     read_static_airport_data()
     PlaneSign().sign_loop()

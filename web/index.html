@@ -18,6 +18,10 @@
       call_endpoint("/set_brightness/" + this.value);
     }
 
+    document.getElementById("custom_message").oninput = function () {
+      call_endpoint("/set_custom_message/" + this.value);
+    }
+
     toggle_switch.onchange = function () {
       if (document.getElementById("toggle_switch").checked) {
         call_endpoint('/turn_on')
@@ -88,7 +92,9 @@
   <button onclick="set_mode(5)">Show Slowest</button>
   <button onclick="set_mode(6)">Weather</button>
   <button onclick="set_mode(7)">Clock Only</button>
-  <button onclick="set_mode(8)">Welcome Intro</button>
+  <button onclick="set_mode(8); document.getElementById('custom_message').hidden = false">Custom Message</button>
+  <input type="text" id="custom_message" hidden></input>
+  <button onclick="set_mode(9)">Welcome Intro</button>
 </body>
 
 </html>
