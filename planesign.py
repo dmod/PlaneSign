@@ -289,17 +289,17 @@ class PlaneSign:
         # Starting at X index 1 allows you to fit in 14 characters of 9x18B with 2 blank cols either side
         # X: 0 - 127
         # MUST BE 9 WIDTH
+        # WIP
+        # if len(message) % 2 == 0:
+        #     starting_x_index = 64 - ((len(message) / 2) * 9)
+        # else:
+        #     starting_x_index = 64 - (len(message) * 4)
 
         if (len(message) <= 14):
-            if len(message) % 2 == 0:
-                starting_x_index = 64 - ((len(message) / 2) * 9)
-            else:
-                starting_x_index = 64 - (len(message) * 4)
-            
-            graphics.DrawText(self.canvas, self.fontreallybig, starting_x_index, 21, graphics.Color(r, g, b), message)
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 21, graphics.Color(r, g, b), message[0:14])
         else:
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 21, graphics.Color(r, g, b), message[0:13])
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 21, graphics.Color(r, g, b), message[13:])
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(r, g, b), message[0:14])
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 28, graphics.Color(r, g, b), message[14:])
 
         self.matrix.SwapOnVSync(self.canvas)
 
