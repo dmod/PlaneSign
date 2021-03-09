@@ -22,6 +22,7 @@ CORS(app)
 shared_flag_global = None
 shared_current_brightness = 100
 shared_current_sign_mode = 1
+shared_current_rainbow_mode = 0
 
 @app.route("/status")
 def get_status():
@@ -35,6 +36,11 @@ def turn_on():
 @app.route("/turn_off")
 def turn_off():
     shared_flag_global.value = 0
+    return ""
+
+@app.route("/set_rainbow_mode/<onoff>")
+def set_rainbow_mode(onoff):
+    shared_current_rainbow_mode.value = int(onoff)
     return ""
 
 @app.route("/set_mode/<mode>")
@@ -61,7 +67,7 @@ def set_custom_message(message):
     shared_current_data["custom_message"] = message
     return ""
 
-def server(shared_flag, shared_brightness, shared_mode, shared_data):
+def server(shared_flag, shared_brightness, shared_mode, shared_data, shared_rainbow_mode):
     global shared_flag_global
     shared_flag_global = shared_flag
 
@@ -70,6 +76,9 @@ def server(shared_flag, shared_brightness, shared_mode, shared_data):
 
     global shared_current_sign_mode
     shared_current_sign_mode = shared_mode
+
+    global shared_current_rainbow_mode
+    shared_current_rainbow_mode = shared_rainbow_mode
 
     global shared_current_data
     shared_current_data = shared_data
@@ -209,6 +218,7 @@ class PlaneSign:
         self.shared_data["custom_message"] = ""
 
         self.shared_flag = Value('i', 1)
+
         global shared_current_brightness
         shared_current_brightness = Value('i', int(CONF["DEFAULT_BRIGHTNESS"]))
 
@@ -219,8 +229,9 @@ class PlaneSign:
         get_weather_data_proc.start()
 
         self.shared_mode = Value('i', 1)
+        self.shared_rainbow_mode = Value('i', 0)
 
-        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,self.shared_data,))
+        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,self.shared_data,self.shared_rainbow_mode,))
         pServer.start()
 
         self.canvas.brightness = shared_current_brightness.value
@@ -262,19 +273,33 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_custom_message(self):
-        message = self.shared_data["custom_message"]
+        message = self.shared_data["custom_message"].strip()
 
         self.canvas.Clear()
 
-        r = random.randrange(0, 255)
-        g = random.randrange(0, 255)
-        b = random.randrange(0, 255)
+        if (self.shared_rainbow_mode.value == 1):
+            r = random.randrange(10, 255)
+            g = random.randrange(10, 255)
+            b = random.randrange(10, 255)
+        else: 
+            r = 3
+            g = 194
+            b = 255
 
-        if (len(message) < 13):
-            graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(r, g, b), message)
+        # Starting at X index 1 allows you to fit in 14 characters of 9x18B with 2 blank cols either side
+        # X: 0 - 127
+        # MUST BE 9 WIDTH
+
+        if (len(message) <= 14):
+            if len(message) % 2 == 0:
+                starting_x_index = 64 - ((len(message) / 2) * 9)
+            else:
+                starting_x_index = 64 - (len(message) * 4)
+            
+            graphics.DrawText(self.canvas, self.fontreallybig, starting_x_index, 21, graphics.Color(r, g, b), message)
         else:
-            graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(r, g, b), message[0:13].strip())
-            graphics.DrawText(self.canvas, self.fontreallybig, 7, 27, graphics.Color(r, g, b), message[13:].strip())
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 21, graphics.Color(r, g, b), message[0:13])
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 21, graphics.Color(r, g, b), message[13:])
 
         self.matrix.SwapOnVSync(self.canvas)
 

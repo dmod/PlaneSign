@@ -22,6 +22,14 @@
       call_endpoint("/set_custom_message/" + this.value);
     }
 
+    document.getElementById("checkbox_rainbow_mode").onclick = function () {
+      if (document.getElementById("checkbox_rainbow_mode").checked) {
+        call_endpoint("/set_rainbow_mode/1")
+      } else {
+        call_endpoint("/set_rainbow_mode/0")
+      }
+    }
+
     toggle_switch.onchange = function () {
       if (document.getElementById("toggle_switch").checked) {
         call_endpoint('/turn_on')
@@ -82,7 +90,7 @@
       <span class="cloud two"></span>
     </div>
   </label>
-  
+
   <input id="brightness_slider" type="range" min="0" max="100" step="10" value="100">
 
   <button onclick="set_mode(1)">Default Mode</button>
@@ -92,8 +100,13 @@
   <button onclick="set_mode(5)">Show Slowest</button>
   <button onclick="set_mode(6)">Weather</button>
   <button onclick="set_mode(7)">Clock Only</button>
-  <button onclick="set_mode(8); document.getElementById('custom_message').hidden = false">Custom Message</button>
-  <input type="text" id="custom_message" hidden></input>
+  <button onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
+  <div id="custom_message_div" hidden>
+    <input type="checkbox" id="checkbox_rainbow_mode">
+    <label for="checkbox_rainbow_mode">Rainbow mode?</label>
+    <br>
+    <input type="text" id="custom_message"></input>
+  </div>
   <button onclick="set_mode(9)">Welcome Intro</button>
 </body>
 

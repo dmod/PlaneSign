@@ -30,12 +30,26 @@ button {
   opacity: 1;
 }
 
-#custom_message {
+#rainbow_mode_checkbox {
+  text-align: center;
   margin-top: 20px;
   margin-bottom: 20px;
-  width: 200px;
-  height: 20px;
-  font-size:25px;
+}
+
+#custom_message_div {
+  margin-left: auto;
+  text-align: center;
+  margin-right: auto;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+#custom_message {
+  width: 90%;
+  text-align: center;
+  font-size:50px;
+  display: inline;
+  float: none;
 }
 
 #brightness_slider::-webkit-slider-thumb {
