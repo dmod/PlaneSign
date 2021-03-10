@@ -263,6 +263,9 @@ class PlaneSign:
 
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
+
+        print("Time: " + print_time)
+
         temp = str(round(self.shared_data["weather"]["current"]["temp"]))
 
         self.canvas.Clear()
@@ -286,20 +289,24 @@ class PlaneSign:
             g = 194
             b = 255
 
-        # Starting at X index 1 allows you to fit in 14 characters of 9x18B with 2 blank cols either side
-        # X: 0 - 127
-        # MUST BE 9 WIDTH
-        # WIP
-        # if len(message) % 2 == 0:
-        #     starting_x_index = 64 - ((len(message) / 2) * 9)
-        # else:
-        #     starting_x_index = 64 - (len(message) * 4)
+        line_1 = message[0:14].strip()
+        line_2 = message[14:28].strip()
 
         if (len(message) <= 14):
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 21, graphics.Color(r, g, b), message[0:14])
+            if len(message) % 2 == 0:
+                starting_x_index = 64 - ((len(message) / 2) * 9)
+            else:
+                starting_x_index = 59 - (((len(message) - 1) / 2) * 9)
+
+            graphics.DrawText(self.canvas, self.fontreallybig, starting_x_index, 21, graphics.Color(r, g, b), message[0:14])
         else:
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(r, g, b), message[0:14])
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 28, graphics.Color(r, g, b), message[14:])
+            if len(line_2) % 2 == 0:
+                starting_x_index = 64 - ((len(line_2) / 2) * 9)
+            else:
+                starting_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
+
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(r, g, b), line_1)
+            graphics.DrawText(self.canvas, self.fontreallybig, starting_x_index, 28, graphics.Color(r, g, b), line_2)
 
         self.matrix.SwapOnVSync(self.canvas)
 
@@ -340,22 +347,29 @@ class PlaneSign:
 
         daily = self.shared_data['weather']['daily']
 
+        # Default to the actual "today"
+        start_index_day = 0
+
+        # After 6PM today? Get the next days forecast
+        if (datetime.now().hour >= 18):
+            start_index_day = 1
+
         # Day 0
-        day = daily[0]
+        day = daily[start_index_day]
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
         graphics.DrawText(self.canvas, self.font46, day_0_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         # Day 1 
-        day = daily[1]
+        day = daily[start_index_day + 1]
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
         graphics.DrawText(self.canvas, self.font46, day_1_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         # Day 2 
-        day = daily[2]
+        day = daily[start_index_day + 2]
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
