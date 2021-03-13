@@ -22,8 +22,8 @@
       call_endpoint("/set_custom_message/" + this.value);
     }
 
-    document.getElementById("checkbox_rainbow_mode").onclick = function () {
-      if (document.getElementById("checkbox_rainbow_mode").checked) {
+    document.getElementById("rainbow_mode_checkbox").onclick = function () {
+      if (document.getElementById("rainbow_mode_checkbox").checked) {
         call_endpoint("/set_rainbow_mode/1")
       } else {
         call_endpoint("/set_rainbow_mode/0")
@@ -102,8 +102,8 @@
   <button onclick="set_mode(7)">Clock Only</button>
   <button onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
   <div id="custom_message_div" hidden>
-    <input type="checkbox" id="checkbox_rainbow_mode">
-    <label for="checkbox_rainbow_mode">Rainbow mode?</label>
+    <input type="checkbox" id="rainbow_mode_checkbox">
+    <label id="checkbox_rainbow_mode_label" for="checkbox_rainbow_mode">Rainbow mode?</label>
     <br>
     <input type="text" id="custom_message"></input>
   </div>

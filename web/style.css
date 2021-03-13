@@ -34,6 +34,11 @@ button {
   text-align: center;
   margin-top: 20px;
   margin-bottom: 20px;
+  transform: scale(1.5);
+}
+
+#checkbox_rainbow_mode_label {
+  font-size: 30px;
 }
 
 #custom_message_div {

@@ -45,6 +45,7 @@ def set_rainbow_mode(onoff):
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
+    shared_current_data["custom_message"] = ""
     shared_current_sign_mode.value = int(mode)
     return ""
 
@@ -276,7 +277,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_custom_message(self):
-        message = self.shared_data["custom_message"].strip()
+        raw_message = self.shared_data["custom_message"]
 
         self.canvas.Clear()
 
@@ -289,24 +290,24 @@ class PlaneSign:
             g = 194
             b = 255
 
-        line_1 = message[0:14].strip()
-        line_2 = message[14:28].strip()
+        line_1 = raw_message[0:14].strip()
+        line_2 = raw_message[14:].strip()
 
-        if (len(message) <= 14):
-            if len(message) % 2 == 0:
-                starting_x_index = 64 - ((len(message) / 2) * 9)
-            else:
-                starting_x_index = 59 - (((len(message) - 1) / 2) * 9)
-
-            graphics.DrawText(self.canvas, self.fontreallybig, starting_x_index, 21, graphics.Color(r, g, b), message[0:14])
+        if len(line_1) % 2 == 0:
+            starting_line_1_x_index = 64 - ((len(line_1) / 2) * 9)
         else:
-            if len(line_2) % 2 == 0:
-                starting_x_index = 64 - ((len(line_2) / 2) * 9)
-            else:
-                starting_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
+            starting_line_1_x_index = 59 - (((len(line_1) - 1) / 2) * 9)
 
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(r, g, b), line_1)
-            graphics.DrawText(self.canvas, self.fontreallybig, starting_x_index, 28, graphics.Color(r, g, b), line_2)
+        if len(line_2) % 2 == 0:
+            starting_line_2_x_index = 64 - ((len(line_2) / 2) * 9)
+        else:
+            starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
+
+        if (len(line_2) == 0):
+            graphics.DrawText(self.canvas, self.fontreallybig, starting_line_1_x_index, 21, graphics.Color(r, g, b), line_1)
+        else:
+            graphics.DrawText(self.canvas, self.fontreallybig, starting_line_1_x_index, 14, graphics.Color(r, g, b), line_1)
+            graphics.DrawText(self.canvas, self.fontreallybig, starting_line_2_x_index, 28, graphics.Color(r, g, b), line_2)
 
         self.matrix.SwapOnVSync(self.canvas)
 
@@ -472,9 +473,15 @@ class PlaneSign:
                 interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
                 interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
 
-                code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] != "BWI" else plane_to_show["destination"] if plane_to_show["destination"] != "BWI" else ""
+                ignore_these_codes = ("BWI", "IAD", "DCA")
+
+                code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] not in ignore_these_codes else plane_to_show["destination"] if plane_to_show["destination"] not in ignore_these_codes else ""
+
+                print("Resolving code: "  + code_to_resolve)
 
                 friendly_name = code_to_airport.get(str(code_to_resolve), "")
+
+                print("Full airport name from code: "  + friendly_name)
 
                 # Front pad the flight number to a max of 7 for spacing
                 formatted_flight = plane_to_show["flight"].rjust(7, ' ')
