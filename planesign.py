@@ -151,17 +151,6 @@ def get_data_worker(d, shared_flag):
 
                 print(str(closest))
 
-                if closest is None:
-                    closest = {}
-                    closest["altitude"] = 0
-                    closest["speed"] = 0
-                    closest["flight"] = "0"
-                    closest["typecode"] = "0"
-                    closest["origin"] = "0"
-                    closest["destination"] = "0"
-                    closest["distance"] = 0
-                    slowest = fastest = highest = closest
-
                 d["closest"] = closest
                 d["highest"] = highest
                 d["fastest"] = fastest
@@ -464,7 +453,7 @@ class PlaneSign:
             plane_to_show = None
 
             if mode == 1:
-                if self.shared_data["closest"]["distance"] <= 3:
+                if self.shared_data["closest"] and self.shared_data["closest"]["distance"] <= 3:
                     plane_to_show = self.shared_data["closest"]
 
             if mode == 2:
