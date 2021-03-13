@@ -151,6 +151,17 @@ def get_data_worker(d, shared_flag):
 
                 print(str(closest))
 
+                if closest is None:
+                    closest = {}
+                    closest["altitude"] = 0
+                    closest["speed"] = 0
+                    closest["flight"] = "0"
+                    closest["typecode"] = "0"
+                    closest["origin"] = "0"
+                    closest["destination"] = "0"
+                    closest["distance"] = 0
+                    slowest = fastest = highest = closest
+
                 d["closest"] = closest
                 d["highest"] = highest
                 d["fastest"] = fastest
