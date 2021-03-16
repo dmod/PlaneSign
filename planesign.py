@@ -391,7 +391,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
         self.wait_loop(2)
         graphics.DrawText(self.canvas, self.fontbig, 66, 10, graphics.Color(60, 60, 160), "The")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(160, 160, 200), "Sterners's")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(160, 160, 200), "Sterner's")
         graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(20, 160, 60), "Home")
         self.matrix.SwapOnVSync(self.canvas)
         self.shared_mode.value = 1
