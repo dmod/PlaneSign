@@ -265,8 +265,6 @@ class PlaneSign:
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
 
-        print("Time: " + print_time)
-
         temp = str(round(self.shared_data["weather"]["current"]["temp"]))
 
         self.canvas.Clear()

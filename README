@@ -16,7 +16,7 @@ Wire it up: https://github.com/hzeller/rpi-rgb-led-matrix/blob/master/wiring.md
 Software:
 Flash SD card with Raspberry PI OS Lite - https://peppe8o.com/install-raspberry-pi-os-lite-in-your-raspberry-pi/
 Switch off on-board sound (dtparam=audio=off in /boot/config.txt)
-sudo apt install git nginx python3-venv python3-pip python3-dev python3-pillow
+sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pillow
 git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
 cd rpi-rgb-led-matrix
 make build-python PYTHON=$(which python3)
