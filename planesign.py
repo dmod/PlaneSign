@@ -19,11 +19,6 @@ code_to_airport = {}
 app = Flask(__name__)
 CORS(app)
 
-shared_flag_global = None
-shared_current_brightness = 100
-shared_current_sign_mode = 1
-shared_current_rainbow_mode = 0
-
 @app.route("/status")
 def get_status():
     return str(shared_flag_global.value)
@@ -158,7 +153,7 @@ def get_data_worker(d, shared_flag):
 
         except:
             print("Error getting FR24 data...")
-            traceback.print_exc()
+            #traceback.print_exc()
 
         time.sleep(7)
 
@@ -217,6 +212,8 @@ class PlaneSign:
 
         self.shared_data = manager.dict()
         self.shared_data["custom_message"] = ""
+
+        self.shared_data["weather"] = {"current": {"temp" : "---"}}
 
         self.shared_flag = Value('i', 1)
 
@@ -406,116 +403,121 @@ class PlaneSign:
         self.welcome()
 
         while True:
-            mode = self.shared_mode.value
-            breakout = False
+            try:
+                mode = self.shared_mode.value
+                breakout = False
 
-            if self.shared_flag.value is 0:
-                self.canvas.Clear()
-                self.matrix.SwapOnVSync(self.canvas)
-                self.wait_loop(0.5)
-                continue
+                if self.shared_flag.value is 0:
+                    self.canvas.Clear()
+                    self.matrix.SwapOnVSync(self.canvas)
+                    self.wait_loop(0.5)
+                    continue
 
-            if not self.shared_data:
-                print("no data found, waiting...")
-                self.wait_loop(3)
-                continue
+                if not self.shared_data or "closest" not in self.shared_data:
+                    print("no data found, waiting...")
+                    self.wait_loop(3)
+                    continue
 
-            # 1 = default
-            # 2 = always alert closest
-            # 3 = always alert highest
-            # 4 = always alert fastest
-            # 5 = always alert slowest
-            # 6 = weather
-            # 7 = clock
-            # 8 = custom message
-            # 9 = welcome
+                # 1 = default
+                # 2 = always alert closest
+                # 3 = always alert highest
+                # 4 = always alert fastest
+                # 5 = always alert slowest
+                # 6 = weather
+                # 7 = clock
+                # 8 = custom message
+                # 9 = welcome
 
-            if mode == 6:
-                self.show_weather()
-                self.wait_loop(0.5)
-                continue
+                if mode == 6:
+                    self.show_weather()
+                    self.wait_loop(0.5)
+                    continue
 
-            if mode == 7:
-                self.show_time()
-                self.wait_loop(0.5)
-                continue
+                if mode == 7:
+                    self.show_time()
+                    self.wait_loop(0.5)
+                    continue
 
-            if mode == 8:
-                self.show_custom_message()
-                self.wait_loop(0.1)
-                continue
+                if mode == 8:
+                    self.show_custom_message()
+                    self.wait_loop(0.1)
+                    continue
 
-            if mode == 9:
-                self.welcome()
+                if mode == 9:
+                    self.welcome()
 
-            plane_to_show = None
+                plane_to_show = None
 
-            if mode == 1:
-                if self.shared_data["closest"] and self.shared_data["closest"]["distance"] <= 3:
+                if mode == 1:
+                    if self.shared_data["closest"] and self.shared_data["closest"]["distance"] <= 2:
+                        plane_to_show = self.shared_data["closest"]
+
+                if mode == 2:
                     plane_to_show = self.shared_data["closest"]
 
-            if mode == 2:
-                plane_to_show = self.shared_data["closest"]
+                if mode == 3:
+                    plane_to_show = self.shared_data["highest"]
 
-            if mode == 3:
-                plane_to_show = self.shared_data["highest"]
+                if mode == 4:
+                    plane_to_show = self.shared_data["fastest"]
 
-            if mode == 4:
-                plane_to_show = self.shared_data["fastest"]
+                if mode == 5:
+                    plane_to_show = self.shared_data["slowest"]
 
-            if mode == 5:
-                plane_to_show = self.shared_data["slowest"]
+                if plane_to_show:
+                    interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
+                    interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
+                    interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
 
-            if plane_to_show:
-                interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
-                interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
-                interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
+                    ignore_these_codes = ("BWI", "IAD", "DCA")
 
-                ignore_these_codes = ("BWI", "IAD", "DCA")
+                    code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] not in ignore_these_codes else plane_to_show["destination"] if plane_to_show["destination"] not in ignore_these_codes else ""
 
-                code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] not in ignore_these_codes else plane_to_show["destination"] if plane_to_show["destination"] not in ignore_these_codes else ""
+                    print("Resolving code: "  + code_to_resolve)
 
-                print("Resolving code: "  + code_to_resolve)
+                    friendly_name = code_to_airport.get(str(code_to_resolve), "")
 
-                friendly_name = code_to_airport.get(str(code_to_resolve), "")
+                    print("Full airport name from code: "  + friendly_name)
 
-                print("Full airport name from code: "  + friendly_name)
+                    # Front pad the flight number to a max of 7 for spacing
+                    formatted_flight = plane_to_show["flight"].rjust(7, ' ')
 
-                # Front pad the flight number to a max of 7 for spacing
-                formatted_flight = plane_to_show["flight"].rjust(7, ' ')
+                    for i in range(NUM_STEPS):
+                        self.canvas.Clear()
+                        graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
+                        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
+                        graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
+                        graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
 
-                for i in range(NUM_STEPS):
-                    self.canvas.Clear()
-                    graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
-                    graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-                    graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
-                    graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
+                        graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
+                        graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
+                        graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
 
-                    graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
-                    graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
-                    graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
+                        breakout = self.wait_loop(0.065)
+                        if breakout:
+                            break
 
-                    breakout = self.wait_loop(0.065)
-                    if breakout:
-                        break
+                        self.matrix.SwapOnVSync(self.canvas)
 
-                    self.matrix.SwapOnVSync(self.canvas)
+                    prev_thing = plane_to_show
+                else:
+                    # NOT ALERT RADIUS
+                    prev_thing = {}
+                    prev_thing["distance"] = 0
+                    prev_thing["altitude"] = 0
+                    prev_thing["speed"] = 0
 
-                prev_thing = plane_to_show
-            else:
-                # NOT ALERT RADIUS
-                prev_thing = {}
-                prev_thing["distance"] = 0
-                prev_thing["altitude"] = 0
-                prev_thing["speed"] = 0
+                    self.show_time()
 
-                self.show_time()
+                if breakout:
+                    continue
 
-            if breakout:
-                continue
-
-            # Wait before doing anything
-            self.wait_loop(1)
+                # Wait before doing anything
+                self.wait_loop(1)
+            except:
+                print("General error in main loop, waiting...")
+                traceback.print_exc()
+                time.sleep(5)
 
 # Main function
 if __name__ == "__main__":

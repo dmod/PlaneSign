@@ -58,11 +58,13 @@
   }
 
   function set_mode(mode) {
+    if (mode !== 8){
+      document.getElementById('custom_message_div').hidden = true;
+    }
     call_endpoint("/set_mode/" + mode);
   }
 
   function update_sign_status() {
-    console.log("In sign status update...");
     call_endpoint("/status", function (actual_text) {
       var html_to_send;
       if (actual_text === "1") {
@@ -93,21 +95,25 @@
 
   <input id="brightness_slider" type="range" min="0" max="100" step="10" value="100">
 
-  <button onclick="set_mode(1)">Default Mode</button>
-  <button onclick="set_mode(2)">Show Closest</button>
-  <button onclick="set_mode(3)">Show Highest</button>
-  <button onclick="set_mode(4)">Show Fastest</button>
-  <button onclick="set_mode(5)">Show Slowest</button>
-  <button onclick="set_mode(6)">Weather</button>
-  <button onclick="set_mode(7)">Clock Only</button>
-  <button onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
+  <button class="mode_button" onclick="set_mode(1)">Default Mode</button>
+  <button class="mode_button" onclick="set_mode(2)">Show Closest</button>
+  <button class="mode_button" onclick="set_mode(3)">Show Highest</button>
+  <button class="mode_button" onclick="set_mode(4)">Show Fastest</button>
+  <button class="mode_button" onclick="set_mode(5)">Show Slowest</button>
+  <button class="mode_button" onclick="set_mode(6)">Weather</button>
+  <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
+  <button class="mode_button" onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
   <div id="custom_message_div" hidden>
+    <div>
+      <button class="custom_colors_button">🎄</button><button class="custom_colors_button">🇺🇸</button><button class="custom_colors_button">🌈</button>
+    </div>
     <input type="checkbox" id="rainbow_mode_checkbox">
     <label id="checkbox_rainbow_mode_label" for="checkbox_rainbow_mode">Rainbow mode?</label>
     <br>
     <input type="text" id="custom_message"></input>
+
   </div>
-  <button onclick="set_mode(9)">Welcome Intro</button>
+  <button class="mode_button" onclick="set_mode(9)">Welcome Intro</button>
 </body>
 
 </html>

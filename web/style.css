@@ -1,4 +1,4 @@
-button {
+.mode_button {
   background-color: #4CAF50;
   width: 80%;
   height: 10vh;
@@ -35,6 +35,10 @@ button {
   margin-top: 20px;
   margin-bottom: 20px;
   transform: scale(1.5);
+}
+
+.custom_colors_button {
+  border: 5px 20px 5px 20px;
 }
 
 #checkbox_rainbow_mode_label {
