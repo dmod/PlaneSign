@@ -344,23 +344,34 @@ class PlaneSign:
         else:
             starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
 
-        if (len(line_2) == 0):
-            print_the_char_at_this_x_index = starting_line_1_x_index
-            e_or_o = self.even_or_odd
-            for letter in line_1:
-                if e_or_o:
-                    graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 21, graphics.Color(r_even, g_even, b_even), letter)
-                else:
-                    graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 21, graphics.Color(r_odd, g_odd, b_odd), letter)
+        print_the_char_at_this_x_index = starting_line_1_x_index
+        e_or_o = self.even_or_odd
+        lines = line_1 + line_2
 
-                print_the_char_at_this_x_index += 9
-                if e_or_o:
-                    e_or_o = False
-                else:
-                    e_or_o = True
+        if len(lines) <= 14:
+            print_at_y_index = 21
         else:
-            graphics.DrawText(self.canvas, self.fontreallybig, starting_line_1_x_index, 14, graphics.Color(r, g, b), line_1)
-            graphics.DrawText(self.canvas, self.fontreallybig, starting_line_2_x_index, 28, graphics.Color(r, g, b), line_2)
+            print_at_y_index = 14
+
+        for char_index in range(0, len(lines)):
+            letter = lines[char_index]
+
+            if char_index == 14:
+                # Start printing on next line
+                print_the_char_at_this_x_index = starting_line_2_x_index
+                print_at_y_index = 28
+
+            if e_or_o:
+                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_even, g_even, b_even), letter)
+            else:
+                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_odd, g_odd, b_odd), letter)
+
+            print_the_char_at_this_x_index += 9
+
+            if e_or_o:
+                e_or_o = False
+            else:
+                e_or_o = True
 
         self.matrix.SwapOnVSync(self.canvas)
 
