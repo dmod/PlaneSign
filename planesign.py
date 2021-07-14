@@ -96,6 +96,8 @@ def get_weather_data_worker(d):
         except:
             print("Error getting weather data...")
             traceback.print_exc()
+            time.sleep(5)
+            d["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
 
         time.sleep(600)
 
@@ -223,7 +225,7 @@ class PlaneSign:
         self.shared_data = manager.dict()
         self.shared_data["custom_message"] = ""
 
-        self.shared_data["weather"] = {"current": {"temp" : "---"}}
+        self.shared_data["weather"] = {"current": {"temp" : 0}}
 
         self.shared_flag = Value('i', 1)
 
