@@ -13,6 +13,14 @@ from flask import Flask
 from PIL import Image
 import ctypes
 from flask_cors import CORS
+from enum import Enum
+
+class Color(Enum):
+    PLAIN = 0
+    RAINBOW = 1
+    CHRISTMAS = 2
+    FOURTH_OF_JULY = 3
+    HALLOWEEN = 4
 
 code_to_airport = {}
 
@@ -33,9 +41,9 @@ def turn_off():
     shared_flag_global.value = 0
     return ""
 
-@app.route("/set_rainbow_mode/<onoff>")
-def set_rainbow_mode(onoff):
-    shared_current_rainbow_mode.value = int(onoff)
+@app.route("/set_color_mode/<color>")
+def set_color_mode(color):
+    shared_current_color_mode.value = int(color)
     return ""
 
 @app.route("/set_mode/<mode>")
@@ -63,7 +71,7 @@ def set_custom_message(message):
     shared_current_data["custom_message"] = message
     return ""
 
-def server(shared_flag, shared_brightness, shared_mode, shared_data, shared_rainbow_mode):
+def server(shared_flag, shared_brightness, shared_mode, shared_data, shared_color_mode):
     global shared_flag_global
     shared_flag_global = shared_flag
 
@@ -73,8 +81,8 @@ def server(shared_flag, shared_brightness, shared_mode, shared_data, shared_rain
     global shared_current_sign_mode
     shared_current_sign_mode = shared_mode
 
-    global shared_current_rainbow_mode
-    shared_current_rainbow_mode = shared_rainbow_mode
+    global shared_current_color_mode
+    shared_current_color_mode = shared_color_mode
 
     global shared_current_data
     shared_current_data = shared_data
@@ -197,6 +205,8 @@ class PlaneSign:
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
 
+        self.even_or_odd = True
+
         self.font57 = graphics.Font()
         self.font46 = graphics.Font()
         self.fontbig = graphics.Font()
@@ -227,9 +237,9 @@ class PlaneSign:
         get_weather_data_proc.start()
 
         self.shared_mode = Value('i', 1)
-        self.shared_rainbow_mode = Value('i', 0)
+        self.shared_color_mode = Value('i', 0)
 
-        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,self.shared_data,self.shared_rainbow_mode,))
+        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,self.shared_data,self.shared_color_mode,))
         pServer.start()
 
         self.canvas.brightness = shared_current_brightness.value
@@ -276,14 +286,50 @@ class PlaneSign:
 
         self.canvas.Clear()
 
-        if (self.shared_rainbow_mode.value == 1):
-            r = random.randrange(10, 255)
-            g = random.randrange(10, 255)
-            b = random.randrange(10, 255)
-        else: 
-            r = 3
-            g = 194
-            b = 255
+        if self.even_or_odd:
+            self.even_or_odd = False
+        else:
+            self.even_or_odd = True
+
+        if self.shared_color_mode.value == Color.PLAIN.value:
+            r_even = r_odd = 3
+            g_even = g_odd = 194
+            b_even = b_odd = 255
+            
+        elif self.shared_color_mode.value == Color.RAINBOW.value:
+            r_even = r_odd = random.randrange(10, 255)
+            g_even = g_odd = random.randrange(10, 255)
+            b_even = b_odd = random.randrange(10, 255)
+
+        elif self.shared_color_mode.value == Color.CHRISTMAS.value:
+            r_even = 12
+            g_even = 169
+            b_even = 12
+            r_odd = 206
+            g_odd = 13
+            b_odd = 13
+
+        elif self.shared_color_mode.value == Color.FOURTH_OF_JULY.value:
+            r_even = 255
+            g_even = 0
+            b_even = 0
+            r_odd = 0
+            g_odd = 0
+            b_odd = 255
+
+        elif self.shared_color_mode.value == Color.HALLOWEEN.value:
+            r_even = 20
+            g_even = 20
+            b_even = 20
+            r_odd = 247
+            g_odd = 95
+            b_odd = 28
+
+        #PLAIN = 0
+        #RAINBOW = 1
+        #CHRISTMAS = 2
+        #FOURTH_OF_JULY = 3
+        #HALLOWEEN = 4
 
         line_1 = raw_message[0:14].strip()
         line_2 = raw_message[14:].strip()
@@ -299,7 +345,19 @@ class PlaneSign:
             starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
 
         if (len(line_2) == 0):
-            graphics.DrawText(self.canvas, self.fontreallybig, starting_line_1_x_index, 21, graphics.Color(r, g, b), line_1)
+            print_the_char_at_this_x_index = starting_line_1_x_index
+            e_or_o = self.even_or_odd
+            for letter in line_1:
+                if e_or_o:
+                    graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 21, graphics.Color(r_even, g_even, b_even), letter)
+                else:
+                    graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 21, graphics.Color(r_odd, g_odd, b_odd), letter)
+
+                print_the_char_at_this_x_index += 9
+                if e_or_o:
+                    e_or_o = False
+                else:
+                    e_or_o = True
         else:
             graphics.DrawText(self.canvas, self.fontreallybig, starting_line_1_x_index, 14, graphics.Color(r, g, b), line_1)
             graphics.DrawText(self.canvas, self.fontreallybig, starting_line_2_x_index, 28, graphics.Color(r, g, b), line_2)
@@ -440,7 +498,11 @@ class PlaneSign:
 
                 if mode == 8:
                     self.show_custom_message()
-                    self.wait_loop(0.1)
+                    if self.shared_color_mode.value == Color.RAINBOW.value:
+                        self.wait_loop(0.1)
+                    else:
+                        self.wait_loop(1.1)
+                    
                     continue
 
                 if mode == 9:

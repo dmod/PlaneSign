@@ -23,14 +23,6 @@
       call_endpoint("/set_custom_message/" + this.value);
     }
 
-    document.getElementById("rainbow_mode_checkbox").onclick = function () {
-      if (document.getElementById("rainbow_mode_checkbox").checked) {
-        call_endpoint("/set_rainbow_mode/1")
-      } else {
-        call_endpoint("/set_rainbow_mode/0")
-      }
-    }
-
     toggle_switch.onchange = function () {
       if (document.getElementById("toggle_switch").checked) {
         call_endpoint('/turn_on')
@@ -63,6 +55,10 @@
       document.getElementById('custom_message_div').hidden = true;
     }
     call_endpoint("/set_mode/" + mode);
+  }
+
+  function set_color_mode(color) {
+    call_endpoint("/set_color_mode/" + color);
   }
 
   function update_sign_status() {
@@ -106,10 +102,12 @@
   <button class="mode_button" onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
   <div id="custom_message_div" hidden>
     <div>
-      <button class="custom_colors_button">🎄</button><button class="custom_colors_button">🇺🇸</button><button class="custom_colors_button">🌈</button>
+      <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
+      <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
+      <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
+      <button class="custom_colors_button" onclick="set_color_mode(3)">USA</button>
+      <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
     </div>
-    <input type="checkbox" id="rainbow_mode_checkbox">
-    <label id="checkbox_rainbow_mode_label" for="checkbox_rainbow_mode">Rainbow mode?</label>
     <br>
     <input type="text" id="custom_message"></input>
 
