@@ -2,6 +2,8 @@ FONTS ARE MEASURED FROM BOTTOM LEFT?
 
 sudo rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=3 --led-cols=64 --led-chain=2 -D4
 
+5mm spacing: approx 26 3/4 inches X 8 overall
+
 Hardware:
 Raspberry Pi 4
 2x 64x32 RGB LED Matrix - 5mm pitch https://www.adafruit.com/product/2277
