@@ -315,9 +315,16 @@ class PlaneSign:
         #FOURTH_OF_JULY = 3
         #HALLOWEEN = 4
 
-        line_1 = raw_message[0:14].strip()
-        line_2 = raw_message[14:].strip()
+        # Get rid of multiple spaces
+        clean_message = raw_message.strip()
 
+        line_1 = clean_message[0:14]
+        line_2 = clean_message[14:]
+
+        line_1 = line_1.strip()
+        line_2 = line_2.strip()
+
+        # Figure out odd/even # of chars spacing
         if len(line_1) % 2 == 0:
             starting_line_1_x_index = 64 - ((len(line_1) / 2) * 9)
         else:
@@ -328,27 +335,36 @@ class PlaneSign:
         else:
             starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
 
-        print_the_char_at_this_x_index = starting_line_1_x_index
         e_or_o = self.even_or_odd
+
+        print_the_char_at_this_x_index = starting_line_1_x_index
         lines = line_1 + line_2
 
-        if len(lines) <= 14:
+        if len(line_2) == 0:
             print_at_y_index = 21
         else:
             print_at_y_index = 14
 
-        for char_index in range(0, len(lines)):
-            letter = lines[char_index]
+        for line_1_char in line_1:
+            if e_or_o:
+                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_even, g_even, b_even), line_1_char)
+            else:
+                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_odd, g_odd, b_odd), line_1_char)
 
-            if char_index == 14:
-                # Start printing on next line
-                print_the_char_at_this_x_index = starting_line_2_x_index
-                print_at_y_index = 28
+            print_the_char_at_this_x_index += 9
 
             if e_or_o:
-                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_even, g_even, b_even), letter)
+                e_or_o = False
             else:
-                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_odd, g_odd, b_odd), letter)
+                e_or_o = True
+
+        print_the_char_at_this_x_index = starting_line_2_x_index
+
+        for line_2_char in line_2:
+            if e_or_o:
+                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, graphics.Color(r_even, g_even, b_even), line_2_char)
+            else:
+                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, graphics.Color(r_odd, g_odd, b_odd), line_2_char)
 
             print_the_char_at_this_x_index += 9
 
