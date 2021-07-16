@@ -20,7 +20,7 @@
     }
 
     document.getElementById("custom_message").oninput = function () {
-      call_endpoint("/set_custom_message/" + this.value);
+      call_endpoint("/set_custom_message/" + encodeURIComponent(this.value));
     }
 
     toggle_switch.onchange = function () {
