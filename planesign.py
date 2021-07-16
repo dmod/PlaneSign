@@ -5,6 +5,7 @@ import time
 import traceback
 import requests
 import random
+import json
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
@@ -27,34 +28,40 @@ code_to_airport = {}
 app = Flask(__name__)
 CORS(app)
 
+shared_flag = Value('i', 1)
+shared_current_brightness = Value('i', 80)
+shared_mode = Value('i', 1)
+shared_color_mode = Value('i', 0)
+shared_forced_sign_update = Value('i', 0)
+
 @app.route("/status")
 def get_status():
-    return str(shared_flag_global.value)
+    return str(shared_flag.value)
 
 @app.route("/turn_on")
 def turn_on():
-    shared_flag_global.value = 1
+    shared_flag.value = 1
     return ""
 
 @app.route("/turn_off")
 def turn_off():
-    shared_flag_global.value = 0
+    shared_flag.value = 0
     return ""
 
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
-    shared_current_color_mode.value = int(color)
+    shared_color_mode.value = int(color)
     return ""
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
-    shared_current_data["custom_message"] = ""
-    shared_current_sign_mode.value = int(mode)
+    data_dict["custom_message"] = ""
+    shared_mode.value = int(mode)
     return ""
 
 @app.route("/get_mode")
 def get_mode():
-    return str(shared_current_sign_mode.value)
+    return str(shared_mode.value)
 
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
@@ -68,40 +75,26 @@ def get_brightness():
 @app.route("/set_custom_message/", defaults={"message": ""})
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
-    shared_current_data["custom_message"] = message
+    data_dict["custom_message"] = message
+    shared_forced_sign_update.value = 1
     return ""
 
-def server(shared_flag, shared_brightness, shared_mode, shared_data, shared_color_mode):
-    global shared_flag_global
-    shared_flag_global = shared_flag
-
-    global shared_current_brightness
-    shared_current_brightness = shared_brightness
-
-    global shared_current_sign_mode
-    shared_current_sign_mode = shared_mode
-
-    global shared_current_color_mode
-    shared_current_color_mode = shared_color_mode
-
-    global shared_current_data
-    shared_current_data = shared_data
-
+def server():
     app.run(host='0.0.0.0')
 
-def get_weather_data_worker(d):
+def get_weather_data_worker(data_dict):
     while True:
         try:
-            d["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
+            data_dict["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
         except:
             print("Error getting weather data...")
             traceback.print_exc()
             time.sleep(5)
-            d["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
+            data_dict["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
 
         time.sleep(600)
 
-def get_data_worker(d, shared_flag):
+def get_data_worker(data_dict):
     while True:
         try:
             if shared_flag.value is 0:
@@ -156,14 +149,14 @@ def get_data_worker(d, shared_flag):
 
                 print(str(closest))
 
-                d["closest"] = closest
-                d["highest"] = highest
-                d["fastest"] = fastest
-                d["slowest"] = slowest
+                data_dict["closest"] = closest
+                data_dict["highest"] = highest
+                data_dict["fastest"] = fastest
+                data_dict["slowest"] = slowest
 
         except:
             print("Error getting FR24 data...")
-            #traceback.print_exc()
+            traceback.print_exc()
 
         time.sleep(7)
 
@@ -220,35 +213,19 @@ class PlaneSign:
         self.fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
         self.fontplanesign.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/helvR12.bdf")
 
-        manager = Manager()
-
-        self.shared_data = manager.dict()
-        self.shared_data["custom_message"] = ""
-
-        self.shared_data["weather"] = {"current": {"temp" : 0}}
-
-        self.shared_flag = Value('i', 1)
-
-        global shared_current_brightness
-        shared_current_brightness = Value('i', int(CONF["DEFAULT_BRIGHTNESS"]))
-
-        get_data_proc = Process(target=get_data_worker, args=(self.shared_data,self.shared_flag))
-        get_data_proc.start()
-
-        get_weather_data_proc = Process(target=get_weather_data_worker, args=(self.shared_data,))
-        get_weather_data_proc.start()
-
-        self.shared_mode = Value('i', 1)
-        self.shared_color_mode = Value('i', 0)
-
-        pServer = Process(target=server, args=(self.shared_flag,shared_current_brightness,self.shared_mode,self.shared_data,self.shared_color_mode,))
-        pServer.start()
-
         self.canvas.brightness = shared_current_brightness.value
+
+        manager = Manager()
+        global data_dict
+        data_dict = manager.dict()
+
+        Process(target=get_data_worker, args=(data_dict,)).start()
+        Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        Process(target=server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
-        original_mode = self.shared_mode.value
+        original_mode = shared_mode.value
 
         stay_in_loop = True
         breakout = False
@@ -260,21 +237,26 @@ class PlaneSign:
             self.matrix.brightness = shared_current_brightness.value
             self.matrix.SwapOnVSync(self.canvas)
 
-            if self.shared_flag.value is 0:
+            if shared_forced_sign_update.value == 1:
+                stay_in_loop = False
+
+            if shared_flag.value is 0:
                 self.canvas.Clear()
                 self.matrix.SwapOnVSync(self.canvas)
                 stay_in_loop = False
 
-            if self.shared_mode.value != original_mode:
+            if shared_mode.value != original_mode:
                 stay_in_loop = False
                 breakout = True
 
+
+        shared_forced_sign_update.value = 0
         return breakout
 
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
 
-        temp = str(round(self.shared_data["weather"]["current"]["temp"]))
+        temp = str(round(data_dict["weather"]["current"]["temp"]))
 
         self.canvas.Clear()
 
@@ -284,7 +266,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_custom_message(self):
-        raw_message = self.shared_data["custom_message"]
+        raw_message = data_dict["custom_message"]
 
         self.canvas.Clear()
 
@@ -293,17 +275,17 @@ class PlaneSign:
         else:
             self.even_or_odd = True
 
-        if self.shared_color_mode.value == Color.PLAIN.value:
+        if shared_color_mode.value == Color.PLAIN.value:
             r_even = r_odd = 3
             g_even = g_odd = 194
             b_even = b_odd = 255
             
-        elif self.shared_color_mode.value == Color.RAINBOW.value:
+        elif shared_color_mode.value == Color.RAINBOW.value:
             r_even = r_odd = random.randrange(10, 255)
             g_even = g_odd = random.randrange(10, 255)
             b_even = b_odd = random.randrange(10, 255)
 
-        elif self.shared_color_mode.value == Color.CHRISTMAS.value:
+        elif shared_color_mode.value == Color.CHRISTMAS.value:
             r_even = 12
             g_even = 169
             b_even = 12
@@ -311,7 +293,7 @@ class PlaneSign:
             g_odd = 13
             b_odd = 13
 
-        elif self.shared_color_mode.value == Color.FOURTH_OF_JULY.value:
+        elif shared_color_mode.value == Color.FOURTH_OF_JULY.value:
             r_even = 255
             g_even = 0
             b_even = 0
@@ -319,7 +301,7 @@ class PlaneSign:
             g_odd = 0
             b_odd = 255
 
-        elif self.shared_color_mode.value == Color.HALLOWEEN.value:
+        elif shared_color_mode.value == Color.HALLOWEEN.value:
             r_even = 20
             g_even = 20
             b_even = 20
@@ -384,15 +366,15 @@ class PlaneSign:
         day_1_xoffset = 45
         day_2_xoffset = 88
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][0]['weather'][0]['icon']}.png")
+        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][0]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
         self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][1]['weather'][0]['icon']}.png")
+        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][1]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
         self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{self.shared_data['weather']['daily'][2]['weather'][0]['icon']}.png")
+        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][2]['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.ANTIALIAS)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
@@ -409,10 +391,10 @@ class PlaneSign:
 
         sunrise_sunset_start_x = num_horizontal_pixels + 20
 
-        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(self.shared_data['weather']['current']['sunrise']).strftime('%-I:%M'))
-        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(self.shared_data['weather']['current']['sunset']).strftime('%-I:%M'))
+        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
+        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
 
-        daily = self.shared_data['weather']['daily']
+        daily = data_dict['weather']['daily']
 
         # Default to the actual "today"
         start_index_day = 0
@@ -460,7 +442,7 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(160, 160, 200), "Sterner's")
         graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(20, 160, 60), "Home")
         self.matrix.SwapOnVSync(self.canvas)
-        self.shared_mode.value = 1
+        shared_mode.value = 1
         self.wait_loop(3)
 
     def sign_loop(self):
@@ -475,16 +457,16 @@ class PlaneSign:
 
         while True:
             try:
-                mode = self.shared_mode.value
+                mode = shared_mode.value
                 breakout = False
 
-                if self.shared_flag.value is 0:
+                if shared_flag.value is 0:
                     self.canvas.Clear()
                     self.matrix.SwapOnVSync(self.canvas)
                     self.wait_loop(0.5)
                     continue
 
-                if not self.shared_data or "closest" not in self.shared_data:
+                if not data_dict or "closest" not in data_dict:
                     print("no data found, waiting...")
                     self.wait_loop(3)
                     continue
@@ -511,7 +493,7 @@ class PlaneSign:
 
                 if mode == 8:
                     self.show_custom_message()
-                    if self.shared_color_mode.value == Color.RAINBOW.value:
+                    if shared_color_mode.value == Color.RAINBOW.value:
                         self.wait_loop(0.1)
                     else:
                         self.wait_loop(1.1)
@@ -524,20 +506,20 @@ class PlaneSign:
                 plane_to_show = None
 
                 if mode == 1:
-                    if self.shared_data["closest"] and self.shared_data["closest"]["distance"] <= 2:
-                        plane_to_show = self.shared_data["closest"]
+                    if data_dict["closest"] and data_dict["closest"]["distance"] <= 2:
+                        plane_to_show = data_dict["closest"]
 
                 if mode == 2:
-                    plane_to_show = self.shared_data["closest"]
+                    plane_to_show = data_dict["closest"]
 
                 if mode == 3:
-                    plane_to_show = self.shared_data["highest"]
+                    plane_to_show = data_dict["highest"]
 
                 if mode == 4:
-                    plane_to_show = self.shared_data["fastest"]
+                    plane_to_show = data_dict["fastest"]
 
                 if mode == 5:
-                    plane_to_show = self.shared_data["slowest"]
+                    plane_to_show = data_dict["slowest"]
 
                 if plane_to_show:
                     interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
@@ -596,6 +578,8 @@ class PlaneSign:
 
 # Main function
 if __name__ == "__main__":
+
     read_config()
     read_static_airport_data()
+
     PlaneSign().sign_loop()
