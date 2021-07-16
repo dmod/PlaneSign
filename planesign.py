@@ -15,13 +15,16 @@ from PIL import Image
 import ctypes
 from flask_cors import CORS
 from enum import Enum
+from collections import namedtuple
 
-class Color(Enum):
-    PLAIN = 0
-    RAINBOW = 1
-    CHRISTMAS = 2
-    FOURTH_OF_JULY = 3
-    HALLOWEEN = 4
+RGB = namedtuple('RGB', 'r g b')
+
+COLORS = {}
+COLORS[0] = [RGB(3, 194, 255)] #Plain
+COLORS[1] = [RGB(0, 0, 0)] #RAINBOW
+COLORS[2] = [RGB(12, 169, 12), RGB(206, 13, 13)] #CHRISTMAS
+COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)] #FOURTH_OF_JULY
+COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)] #HALLOWEEN
 
 code_to_airport = {}
 
@@ -41,22 +44,26 @@ def get_status():
 @app.route("/turn_on")
 def turn_on():
     shared_flag.value = 1
+    shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/turn_off")
 def turn_off():
     shared_flag.value = 0
+    shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
     shared_color_mode.value = int(color)
+    shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
     data_dict["custom_message"] = ""
     shared_mode.value = int(mode)
+    shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/get_mode")
@@ -200,7 +207,7 @@ class PlaneSign:
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
 
-        self.even_or_odd = True
+        self.starting_color_index = 0
 
         self.font57 = graphics.Font()
         self.font46 = graphics.Font()
@@ -228,7 +235,7 @@ class PlaneSign:
         original_mode = shared_mode.value
 
         stay_in_loop = True
-        breakout = False
+        forced_breakout = False
 
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time
@@ -239,19 +246,10 @@ class PlaneSign:
 
             if shared_forced_sign_update.value == 1:
                 stay_in_loop = False
-
-            if shared_flag.value is 0:
-                self.canvas.Clear()
-                self.matrix.SwapOnVSync(self.canvas)
-                stay_in_loop = False
-
-            if shared_mode.value != original_mode:
-                stay_in_loop = False
-                breakout = True
-
+                forced_breakout = True
 
         shared_forced_sign_update.value = 0
-        return breakout
+        return forced_breakout
 
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
@@ -270,52 +268,6 @@ class PlaneSign:
 
         self.canvas.Clear()
 
-        if self.even_or_odd:
-            self.even_or_odd = False
-        else:
-            self.even_or_odd = True
-
-        if shared_color_mode.value == Color.PLAIN.value:
-            r_even = r_odd = 3
-            g_even = g_odd = 194
-            b_even = b_odd = 255
-            
-        elif shared_color_mode.value == Color.RAINBOW.value:
-            r_even = r_odd = random.randrange(10, 255)
-            g_even = g_odd = random.randrange(10, 255)
-            b_even = b_odd = random.randrange(10, 255)
-
-        elif shared_color_mode.value == Color.CHRISTMAS.value:
-            r_even = 12
-            g_even = 169
-            b_even = 12
-            r_odd = 206
-            g_odd = 13
-            b_odd = 13
-
-        elif shared_color_mode.value == Color.FOURTH_OF_JULY.value:
-            r_even = 255
-            g_even = 0
-            b_even = 0
-            r_odd = 0
-            g_odd = 0
-            b_odd = 255
-
-        elif shared_color_mode.value == Color.HALLOWEEN.value:
-            r_even = 20
-            g_even = 20
-            b_even = 20
-            r_odd = 247
-            g_odd = 95
-            b_odd = 28
-
-        #PLAIN = 0
-        #RAINBOW = 1
-        #CHRISTMAS = 2
-        #FOURTH_OF_JULY = 3
-        #HALLOWEEN = 4
-
-        # Get rid of multiple spaces
         clean_message = raw_message.strip()
 
         line_1 = clean_message[0:14]
@@ -335,8 +287,6 @@ class PlaneSign:
         else:
             starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
 
-        e_or_o = self.even_or_odd
-
         print_the_char_at_this_x_index = starting_line_1_x_index
         lines = line_1 + line_2
 
@@ -345,33 +295,35 @@ class PlaneSign:
         else:
             print_at_y_index = 14
 
+        if shared_color_mode.value == 1:
+            selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
+        else:
+            selected_color_list = COLORS[shared_color_mode.value]
+
+        if self.starting_color_index >= len(selected_color_list):
+            self.starting_color_index = 0
+
+        color_index = self.starting_color_index
+
         for line_1_char in line_1:
-            if e_or_o:
-                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_even, g_even, b_even), line_1_char)
-            else:
-                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, graphics.Color(r_odd, g_odd, b_odd), line_1_char)
-
+            char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
+            graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, char_color, line_1_char)
             print_the_char_at_this_x_index += 9
+            color_index += 1
 
-            if e_or_o:
-                e_or_o = False
-            else:
-                e_or_o = True
+            if color_index >= len(selected_color_list):
+                color_index = 0
 
         print_the_char_at_this_x_index = starting_line_2_x_index
 
         for line_2_char in line_2:
-            if e_or_o:
-                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, graphics.Color(r_even, g_even, b_even), line_2_char)
-            else:
-                graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, graphics.Color(r_odd, g_odd, b_odd), line_2_char)
-
+            char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
+            graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, char_color, line_2_char)
             print_the_char_at_this_x_index += 9
+            color_index += 1
 
-            if e_or_o:
-                e_or_o = False
-            else:
-                e_or_o = True
+            if color_index >= len(selected_color_list):
+                color_index = 0
 
         self.matrix.SwapOnVSync(self.canvas)
 
@@ -474,7 +426,8 @@ class PlaneSign:
         while True:
             try:
                 mode = shared_mode.value
-                breakout = False
+
+                forced_breakout = False
 
                 if shared_flag.value is 0:
                     self.canvas.Clear()
@@ -509,7 +462,10 @@ class PlaneSign:
 
                 if mode == 8:
                     self.show_custom_message()
-                    if shared_color_mode.value == Color.RAINBOW.value:
+
+                    self.starting_color_index += 1
+
+                    if shared_color_mode.value == 1:
                         self.wait_loop(0.1)
                     else:
                         self.wait_loop(1.1)
@@ -566,8 +522,8 @@ class PlaneSign:
                         graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
                         graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
 
-                        breakout = self.wait_loop(0.065)
-                        if breakout:
+                        forced_breakout = self.wait_loop(0.065)
+                        if forced_breakout:
                             break
 
                         self.matrix.SwapOnVSync(self.canvas)
@@ -582,7 +538,7 @@ class PlaneSign:
 
                     self.show_time()
 
-                if breakout:
+                if forced_breakout:
                     continue
 
                 # Wait before doing anything
