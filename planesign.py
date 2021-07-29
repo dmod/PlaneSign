@@ -309,7 +309,8 @@ class PlaneSign:
             char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
             graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, char_color, line_1_char)
             print_the_char_at_this_x_index += 9
-            color_index += 1
+
+            color_index = color_index + 1 if line_1_char is not  ' ' else color_index
 
             if color_index >= len(selected_color_list):
                 color_index = 0
@@ -320,7 +321,8 @@ class PlaneSign:
             char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
             graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, char_color, line_2_char)
             print_the_char_at_this_x_index += 9
-            color_index += 1
+
+            color_index = color_index + 1 if line_2_char is not  ' ' else color_index
 
             if color_index >= len(selected_color_list):
                 color_index = 0
