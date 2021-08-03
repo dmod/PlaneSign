@@ -399,20 +399,29 @@ class PlaneSign:
 
 
     def cgol(self):
-        current_state = [[False for x in range(128)] for x in range(32)]
-        next_state = [[False for x in range(128)] for x in range(32)]
+        self.canvas.Clear()
 
-        current_state[3][3] = True
-        current_state[4][3] = True
-        current_state[5][3] = True
+        current_state = []
+        for i in range(0, 128):
+            current_state.append([])
+            for j in range(0, 32):
+                if (random.randrange(0,5) == 4):
+                    current_state[i].append(True)
+                else:
+                    current_state[i].append(False)
+
+        next_state = []
+        for i in range(0, 128):
+            next_state.append([False for j in range(0, 32)])
 
         while True:
-            self.canvas.Clear()
 
-            next_state = [[0 for x in range(128)] for x in range(32)]
-            
-            for col in range(128):
-                for row in range(32):
+            next_state = []
+            for i in range(0, 128):
+                next_state.append([False for j in range(0, 32)])
+
+            for col in range(0, 128):
+                for row in range(0, 32):
                     candidate = self.check_life(col, row, current_state)
                     next_state[col][row] = candidate
                     if candidate:
@@ -422,7 +431,7 @@ class PlaneSign:
             
             current_state = next_state
             self.matrix.SwapOnVSync(self.canvas)
-            self.wait_loop(2)
+            #self.wait_loop(.01)
 
     def check_life(self, x, y, matrix):
         num_neighbors_alive = 0
