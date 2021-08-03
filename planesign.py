@@ -5,14 +5,12 @@ import time
 import traceback
 import requests
 import random
-import json
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
 from flask import Flask
 from PIL import Image
-import ctypes
 from flask_cors import CORS
 from enum import Enum
 from collections import namedtuple
@@ -33,6 +31,8 @@ CORS(app)
 
 shared_flag = Value('i', 1)
 shared_current_brightness = Value('i', 80)
+shared_pong_player1 = Value('i', 0)
+shared_pong_player2 = Value('i', 0)
 shared_mode = Value('i', 1)
 shared_color_mode = Value('i', 0)
 shared_forced_sign_update = Value('i', 0)
@@ -73,6 +73,16 @@ def get_mode():
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_current_brightness.value = int(brightness)
+    return ""
+
+@app.route("/set_pong_player_1/<spot>")
+def set_pong_player1(spot):
+    shared_pong_player1.value = int(spot)
+    return ""
+
+@app.route("/set_pong_player_2/<spot>")
+def set_pong_player2(spot):
+    shared_pong_player2.value = int(spot)
     return ""
 
 @app.route("/get_brightness")
@@ -203,7 +213,6 @@ class PlaneSign:
         options.gpio_slowdown = 4
         options.chain_length = 2
         options.limit_refresh_rate_hz = 200
-        #options.pwm_lsb_nanoseconds = 50
 
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
@@ -396,14 +405,13 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
-
     def cgol(self):
         self.canvas.Clear()
 
         current_state = []
         for i in range(0, 128):
             current_state.append([])
-            for j in range(0, 32):
+            for _ in range(0, 32):
                 if (random.randrange(0,2) == 1):
                     current_state[i].append(True)
                 else:
@@ -413,7 +421,10 @@ class PlaneSign:
         for i in range(0, 128):
             next_state.append([False for j in range(0, 32)])
 
+        firstgen = True
         while True:
+
+            detect2cycle = True
 
             next_state = []
             for i in range(0, 128):
@@ -423,14 +434,29 @@ class PlaneSign:
                 for row in range(0, 32):
                     candidate = self.check_life(col, row, current_state)
                     next_state[col][row] = candidate
+                    if not firstgen and candidate != prev_state[col][row]:
+                        detect2cycle = False
                     if candidate:
                         self.canvas.SetPixel(col, row, 255, 255, 255)
                     else:
                         self.canvas.SetPixel(col, row, 0, 0, 0)
-            
+
+            if firstgen:
+                detect2cycle = False
+                firstgen = False
+             
+            if detect2cycle:
+                for i in range(0, 128):
+                    for j in range(0, 32):
+                        if (random.randrange(0,2) == 1):
+                            next_state[i][j]=True
+                        else:
+                            next_state[i][j]=False
+
+            prev_state = current_state
             current_state = next_state
             self.matrix.SwapOnVSync(self.canvas)
-            breakout = self.wait_loop(.001)
+            breakout = self.wait_loop(0)
             if breakout:
                 return
 
@@ -481,6 +507,95 @@ class PlaneSign:
         return matrix[x][y]
 
 
+    def pong(self):
+
+        xball = 64
+        yball = 16
+
+        xvel = random.randint(0,1)*2-1
+        yvel = random.randint(0,1)*2-1
+
+
+        
+
+        framecount = 0
+
+        player1_score = 0
+        player2_score = 0
+
+        while True:
+            framecount += 1
+            self.canvas.Clear()
+
+            starting_y_value = shared_pong_player1.value
+            starting_y_value_2 = shared_pong_player2.value
+
+            if (starting_y_value <= yball and starting_y_value+6 >= yball and xball <= 4) or (starting_y_value_2 <= yball and starting_y_value_2+6 >= yball and xball >= 123):
+                xvel *= -1
+                yvel *= -1
+
+            #print("yball" + str(yball))
+            #print("yvel" + str(yvel))
+
+            if yball <= 0 or yball >= 31:
+                yvel *= -1
+
+            if xball <= 0:
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(0.5)
+                self.canvas.Clear()
+                player2_score += 1
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(3)
+                self.canvas.Clear()
+                xball = 64
+                yball = random.randint(2,30)
+                xvel = random.randint(0,1)*2-1
+                yvel = random.randint(0,1)*2-1
+
+            if xball >= 127:
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(0.5)
+                self.canvas.Clear()
+                player1_score += 1
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(3)
+                self.canvas.Clear()
+                xball = 64
+                yball = random.randint(2,30)
+                xvel = random.randint(0,1)*2-1
+                yvel = random.randint(0,1)*2-1
+
+            if framecount % 5 == 0:
+                xball += xvel
+                yball += yvel
+
+            #player 1 paddle
+            for width in range(0, 3):
+                for height in range(starting_y_value, starting_y_value + 6):
+                    self.canvas.SetPixel(width, height, 255, 20, 20)
+
+            #player 2 paddle
+            for width in range(125, 128):
+                for height in range(starting_y_value_2, starting_y_value_2 + 6):
+                    self.canvas.SetPixel(width, height, 20, 20, 255)
+
+            for width in range(xball-1, xball+2):
+                for height in range(yball-1, yball+2):
+                    self.canvas.SetPixel(width, height, 255, 255, 255)
+
+            self.matrix.SwapOnVSync(self.canvas)
+            
+
+
     def welcome(self):
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
@@ -507,7 +622,7 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        self.welcome()
+        self.pong()
 
         while True:
             try:

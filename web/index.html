@@ -23,6 +23,14 @@
       call_endpoint("/set_custom_message/" + encodeURIComponent(this.value));
     }
 
+    document.getElementById("pong_player1_slider").oninput = function () {
+      call_endpoint("/set_pong_player_1/" + encodeURIComponent(this.value));
+    }
+
+    document.getElementById("pong_player2_slider").oninput = function () {
+      call_endpoint("/set_pong_player_2/" + encodeURIComponent(this.value));
+    }
+
     toggle_switch.onchange = function () {
       if (document.getElementById("toggle_switch").checked) {
         call_endpoint('/turn_on')
@@ -114,6 +122,11 @@
   </div>
   <button class="mode_button" onclick="set_mode(9)">Welcome Intro</button>
   <button class="mode_button" onclick="set_mode(10)">CGOL</button>
+  <button class="mode_button" onclick="set_mode(11); document.getElementById('pong_div').hidden = false">PONG!</button>
+  <div id="pong_div" hidden>
+    <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
+    <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
+  </div>
 </body>
 
 </html>
