@@ -233,7 +233,6 @@ class PlaneSign:
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
-        original_mode = shared_mode.value
 
         stay_in_loop = True
         forced_breakout = False
@@ -405,7 +404,7 @@ class PlaneSign:
         for i in range(0, 128):
             current_state.append([])
             for j in range(0, 32):
-                if (random.randrange(0,5) == 4):
+                if (random.randrange(0,2) == 1):
                     current_state[i].append(True)
                 else:
                     current_state[i].append(False)
@@ -431,7 +430,9 @@ class PlaneSign:
             
             current_state = next_state
             self.matrix.SwapOnVSync(self.canvas)
-            #self.wait_loop(.01)
+            breakout = self.wait_loop(.001)
+            if breakout:
+                return
 
     def check_life(self, x, y, matrix):
         num_neighbors_alive = 0
@@ -506,7 +507,7 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        self.cgol()
+        self.welcome()
 
         while True:
             try:
@@ -534,6 +535,7 @@ class PlaneSign:
                 # 7 = clock
                 # 8 = custom message
                 # 9 = welcome
+                # 10 = CGOL
 
                 if mode == 6:
                     self.show_weather()
@@ -559,6 +561,9 @@ class PlaneSign:
 
                 if mode == 9:
                     self.welcome()
+
+                if mode == 10:
+                    self.cgol()
 
                 plane_to_show = None
 
