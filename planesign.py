@@ -129,7 +129,7 @@ def get_data_worker(data_dict):
                         newguy = {}
                         newguy["altitude"] = result[4]
                         newguy["speed"] = result[5]
-                        newguy["flight"] = result[16] if result[16] else "UNK69"
+                        newguy["flight"] = result[16] if result[16] else ""
                         newguy["typecode"] = result[8]
                         newguy["origin"] = result[11] if result[11] else "???"
                         newguy["destination"] = result[12] if result[12] else "???"
@@ -179,7 +179,7 @@ def read_config():
 
     print("Config loaded: " + str(CONF))
 
-    CONF["ENDPOINT"] = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
+    CONF["ENDPOINT"] = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,30.1,-80.90,-75.10'
     CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={CONF["SENSOR_LAT"]}&lon={CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 
     print("Using: " + CONF["WEATHER_ENDPOINT"])
@@ -200,9 +200,10 @@ class PlaneSign:
 
         options = RGBMatrixOptions()
         options.cols = 64
-        options.gpio_slowdown = 3
+        options.gpio_slowdown = 4
         options.chain_length = 2
-        options.limit_refresh_rate_hz = 160
+        options.limit_refresh_rate_hz = 200
+        #options.pwm_lsb_nanoseconds = 50
 
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
@@ -396,6 +397,80 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
+
+    def cgol(self):
+        current_state = [[False for x in range(128)] for x in range(32)]
+        next_state = [[False for x in range(128)] for x in range(32)]
+
+        current_state[3][3] = True
+        current_state[4][3] = True
+        current_state[5][3] = True
+
+        while True:
+            self.canvas.Clear()
+
+            next_state = [[0 for x in range(128)] for x in range(32)]
+            
+            for col in range(128):
+                for row in range(32):
+                    candidate = self.check_life(col, row, current_state)
+                    next_state[col][row] = candidate
+                    if candidate:
+                        self.canvas.SetPixel(col, row, 255, 255, 255)
+                    else:
+                        self.canvas.SetPixel(col, row, 0, 0, 0)
+            
+            current_state = next_state
+            self.matrix.SwapOnVSync(self.canvas)
+            self.wait_loop(2)
+
+    def check_life(self, x, y, matrix):
+        num_neighbors_alive = 0
+
+
+        # Check neighbors above
+        if self.check_matrix(x-1, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y-1, matrix): num_neighbors_alive += 1
+    
+        # Check neighbors aside
+        if self.check_matrix(x-1, y, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y, matrix): num_neighbors_alive += 1
+
+        # Check neighbors below
+        if self.check_matrix(x-1, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y+1, matrix): num_neighbors_alive += 1
+
+        # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+        # Any live cell with two or three live neighbours lives on to the next generation.
+        # Any live cell with more than three live neighbours dies, as if by overpopulation.
+        # Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+
+        if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
+            return True
+        
+        if not matrix[x][y] and num_neighbors_alive == 3:
+            return True
+
+        return False
+
+    def check_matrix(self, x, y, matrix):
+        if x == -1:
+            x = 127
+        
+        if x == 128:
+            x = 0
+
+        if y == -1:
+            y = 31
+
+        if y == 32:
+            y = 0
+
+        return matrix[x][y]
+
+
     def welcome(self):
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
@@ -408,9 +483,8 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
         self.matrix.SwapOnVSync(self.canvas)
         self.wait_loop(2)
-        graphics.DrawText(self.canvas, self.fontbig, 66, 10, graphics.Color(60, 60, 160), "The")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(160, 160, 200), "Sterner's")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(20, 160, 60), "Home")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 14, graphics.Color(60, 60, 160), "Casa")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 27, graphics.Color(160, 160, 200), "Darmody")
         self.matrix.SwapOnVSync(self.canvas)
         shared_mode.value = 1
         self.wait_loop(3)
@@ -423,7 +497,7 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        self.welcome()
+        self.cgol()
 
         while True:
             try:
