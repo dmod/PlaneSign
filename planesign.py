@@ -423,22 +423,56 @@ class PlaneSign:
             next_state.append([False for j in range(0, 32)])
 
         firstgen = True
+
+        gen_index = 0
+
+
+        r = 255
+        g = 150
+        b = 30
+
+        r_delta = -9
+        g_delta = -6
+        b_delta = -3
+
+
         while True:
 
             detect2cycle = True
+            gen_index += 1
 
             next_state = []
             for i in range(0, 128):
                 next_state.append([False for j in range(0, 32)])
 
+            if gen_index % 3 == 0:
+                r += r_delta
+                g += g_delta
+                b += b_delta
+
+                if r <= 30:
+                    r_delta = 9
+                if g <= 30:
+                    g_delta = 6
+                if b <= 30:
+                    b_delta = 3
+
+                if r >= 230:
+                    r_delta = -9
+                if g >= 230:
+                    g_delta = -6
+                if b >= 230:
+                    b_delta = -3
+
             for col in range(0, 128):
                 for row in range(0, 32):
+
                     candidate = self.check_life(col, row, current_state)
                     next_state[col][row] = candidate
                     if not firstgen and candidate != prev_state[col][row]:
                         detect2cycle = False
                     if candidate:
-                        self.canvas.SetPixel(col, row, 255, 255, 255)
+                        self.canvas.SetPixel(col, row, r, g, b)
                     else:
                         self.canvas.SetPixel(col, row, 0, 0, 0)
 
