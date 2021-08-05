@@ -189,10 +189,11 @@ def read_config():
 
     print("Config loaded: " + str(CONF))
 
-    CONF["ENDPOINT"] = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,30.1,-80.90,-75.10'
+    CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(CONF["SENSOR_LAT"]) + 2},{float(CONF["SENSOR_LAT"]) - 2},{float(CONF["SENSOR_LON"]) - 2},{float(CONF["SENSOR_LON"]) + 2}'
     CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={CONF["SENSOR_LAT"]}&lon={CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 
-    print("Using: " + CONF["WEATHER_ENDPOINT"])
+    print("Plane Endpoint: " + CONF["ENDPOINT"])
+    print("Weather Endpoint: " + CONF["WEATHER_ENDPOINT"])
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -515,29 +516,92 @@ class PlaneSign:
         xvel = random.randint(0,1)*2-1
         yvel = random.randint(0,1)*2-1
 
-
-        
-
         framecount = 0
 
         player1_score = 0
         player2_score = 0
 
+        starting_y_value = shared_pong_player1.value
+        starting_y_value_2 = shared_pong_player2.value
+
+        #player 1 paddle
+        for width in range(0, 3):
+            for height in range(starting_y_value, starting_y_value + 6):
+                self.canvas.SetPixel(width, height, 255, 20, 20)
+
+        #player 2 paddle
+        for width in range(125, 128):
+            for height in range(starting_y_value_2, starting_y_value_2 + 6):
+                self.canvas.SetPixel(width, height, 20, 20, 255)
+
         while True:
             framecount += 1
             self.canvas.Clear()
 
-            starting_y_value = shared_pong_player1.value
-            starting_y_value_2 = shared_pong_player2.value
+            setyval = shared_pong_player1.value
+            setyval2 = shared_pong_player2.value
 
-            if (starting_y_value <= yball and starting_y_value+6 >= yball and xball <= 4) or (starting_y_value_2 <= yball and starting_y_value_2+6 >= yball and xball >= 123):
-                xvel *= -1
+
+            if framecount % 20 == 0 and self.wait_loop(0):
+                return
+
+            #starting_y_value = shared_pong_player1.value
+            #starting_y_value_2 = shared_pong_player2.value
+
+            #limit paddle move speed to 1 per frame - continuous motion, no teleporting
+            if framecount == 1:
+                starting_y_value = setyval
+                starting_y_value_2 = setyval2
+            else:
+                if framecount % 3 == 0: #limit paddle update (move speed)
+                    if starting_y_value < setyval:
+                        starting_y_value += 1
+                    if starting_y_value > setyval:
+                        starting_y_value -= 1
+                    if starting_y_value_2 < setyval2:
+                        starting_y_value_2 += 1
+                    if starting_y_value_2 > setyval2:
+                        starting_y_value_2 -= 1
+
+            ##paddle face reflection
+            #if (starting_y_value <= yball and starting_y_value+6 >= yball and xball <= 4 and xvel < 0) or (starting_y_value_2 <= yball and starting_y_value_2+6 >= yball and xball >= 123 and xvel > 0):
+            #    xvel *= -1
+            #    yvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '1' for default gameplay
+
+            ##paddle top and bottom reflection
+            #if (yball >= starting_y_value and yball <= starting_y_value+6+2 and yvel < 0 and xball <= 3) or (yball >= starting_y_value-2 and yball <= starting_y_value+6 and yvel > 0 and xball <= 3) or (yball >= starting_y_value_2 and yball <= starting_y_value_2+6+2 and yvel < 0 and xball >= 124) or (yball >= starting_y_value_2-2 and yball <= starting_y_value_2+6 and yvel > 0 and xball >= 124):
+            #    xvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '-1' for default gameplay
+            #    yvel *= -1
+
+            #left paddle face reflection
+            if (starting_y_value-1 <= yball and starting_y_value+6 >= yball and xball <= 4 and xvel < 0):
+                xvel = 1
+                if (starting_y_value-1 <= yball and starting_y_value+1 >= yball):
+                    yvel = -1
+                elif (starting_y_value+2 <= yball and starting_y_value+3 >= yball):
+                    yvel = 0
+                    #xvel = 2
+                else:
+                    yvel = 1
+
+            #right paddle face reflection
+            if (starting_y_value_2-1 <= yball and starting_y_value_2+6 >= yball and xball >= 123 and xvel > 0):
+                xvel = -1
+                if (starting_y_value_2-1 <= yball and starting_y_value_2+1 >= yball):
+                    yvel = -1
+                elif (starting_y_value_2+2 <= yball and starting_y_value_2+3 >= yball):
+                    yvel = 0
+                    #xvel = 2
+                else:
+                    yvel = 1        
+
+            #paddle top and bottom reflection
+            if (yball >= starting_y_value and yball <= starting_y_value+5+2 and yvel < 0 and xball <= 3) or (yball >= starting_y_value-2 and yball <= starting_y_value+5 and yvel > 0 and xball <= 3) or (yball >= starting_y_value_2 and yball <= starting_y_value_2+5+2 and yvel < 0 and xball >= 124) or (yball >= starting_y_value_2-2 and yball <= starting_y_value_2+5 and yvel > 0 and xball >= 124):
+                xvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '-1' for default gameplay
                 yvel *= -1
 
-            #print("yball" + str(yball))
-            #print("yvel" + str(yvel))
-
-            if yball <= 0 or yball >= 31:
+            #top and bottom bounce
+            if (yball <= 0 and yvel <0) or (yball >= 31 and yvel >0):
                 yvel *= -1
 
             if xball <= 0:
@@ -622,7 +686,7 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        self.pong()
+        self.welcome()
 
         while True:
             try:
@@ -679,6 +743,9 @@ class PlaneSign:
 
                 if mode == 10:
                     self.cgol()
+
+                if mode == 11:
+                    self.pong()
 
                 plane_to_show = None
 
