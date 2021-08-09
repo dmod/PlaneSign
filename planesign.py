@@ -5,14 +5,12 @@ import time
 import traceback
 import requests
 import random
-import json
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
 from flask import Flask
 from PIL import Image
-import ctypes
 from flask_cors import CORS
 from enum import Enum
 from collections import namedtuple
@@ -33,6 +31,8 @@ CORS(app)
 
 shared_flag = Value('i', 1)
 shared_current_brightness = Value('i', 80)
+shared_pong_player1 = Value('i', 0)
+shared_pong_player2 = Value('i', 0)
 shared_mode = Value('i', 1)
 shared_color_mode = Value('i', 0)
 shared_forced_sign_update = Value('i', 0)
@@ -73,6 +73,16 @@ def get_mode():
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_current_brightness.value = int(brightness)
+    return ""
+
+@app.route("/set_pong_player_1/<spot>")
+def set_pong_player1(spot):
+    shared_pong_player1.value = int(spot)
+    return ""
+
+@app.route("/set_pong_player_2/<spot>")
+def set_pong_player2(spot):
+    shared_pong_player2.value = int(spot)
     return ""
 
 @app.route("/get_brightness")
@@ -129,7 +139,7 @@ def get_data_worker(data_dict):
                         newguy = {}
                         newguy["altitude"] = result[4]
                         newguy["speed"] = result[5]
-                        newguy["flight"] = result[16] if result[16] else "UNK69"
+                        newguy["flight"] = result[16] if result[16] else ""
                         newguy["typecode"] = result[8]
                         newguy["origin"] = result[11] if result[11] else "???"
                         newguy["destination"] = result[12] if result[12] else "???"
@@ -179,10 +189,11 @@ def read_config():
 
     print("Config loaded: " + str(CONF))
 
-    CONF["ENDPOINT"] = 'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=40.1,38.1,-78.90,-75.10'
+    CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(CONF["SENSOR_LAT"]) + 2},{float(CONF["SENSOR_LAT"]) - 2},{float(CONF["SENSOR_LON"]) - 2},{float(CONF["SENSOR_LON"]) + 2}'
     CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={CONF["SENSOR_LAT"]}&lon={CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 
-    print("Using: " + CONF["WEATHER_ENDPOINT"])
+    print("Plane Endpoint: " + CONF["ENDPOINT"])
+    print("Weather Endpoint: " + CONF["WEATHER_ENDPOINT"])
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -200,9 +211,9 @@ class PlaneSign:
 
         options = RGBMatrixOptions()
         options.cols = 64
-        options.gpio_slowdown = 3
+        options.gpio_slowdown = 4
         options.chain_length = 2
-        options.limit_refresh_rate_hz = 160
+        options.limit_refresh_rate_hz = 200
 
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
@@ -232,7 +243,6 @@ class PlaneSign:
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
-        original_mode = shared_mode.value
 
         stay_in_loop = True
         forced_breakout = False
@@ -396,6 +406,294 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
+    def cgol(self):
+        self.canvas.Clear()
+
+        current_state = []
+        for i in range(0, 128):
+            current_state.append([])
+            for _ in range(0, 32):
+                if (random.randrange(0,2) == 1):
+                    current_state[i].append(True)
+                else:
+                    current_state[i].append(False)
+
+        next_state = []
+        for i in range(0, 128):
+            next_state.append([False for j in range(0, 32)])
+
+        firstgen = True
+
+        gen_index = 0
+
+
+        r = 255
+        g = 150
+        b = 30
+
+        r_delta = -9
+        g_delta = -6
+        b_delta = -3
+
+
+        while True:
+
+            detect2cycle = True
+            gen_index += 1
+
+            next_state = []
+            for i in range(0, 128):
+                next_state.append([False for j in range(0, 32)])
+
+            if gen_index % 3 == 0:
+                r += r_delta
+                g += g_delta
+                b += b_delta
+
+                if r <= 30:
+                    r_delta = 9
+                if g <= 30:
+                    g_delta = 6
+                if b <= 30:
+                    b_delta = 3
+
+                if r >= 230:
+                    r_delta = -9
+                if g >= 230:
+                    g_delta = -6
+                if b >= 230:
+                    b_delta = -3
+
+            for col in range(0, 128):
+                for row in range(0, 32):
+
+                    candidate = self.check_life(col, row, current_state)
+                    next_state[col][row] = candidate
+                    if not firstgen and candidate != prev_state[col][row]:
+                        detect2cycle = False
+                    if candidate:
+                        self.canvas.SetPixel(col, row, r, g, b)
+                    else:
+                        self.canvas.SetPixel(col, row, 0, 0, 0)
+
+            if firstgen:
+                detect2cycle = False
+                firstgen = False
+             
+            if detect2cycle:
+                for i in range(0, 128):
+                    for j in range(0, 32):
+                        if (random.randrange(0,2) == 1):
+                            next_state[i][j]=True
+                        else:
+                            next_state[i][j]=False
+
+            prev_state = current_state
+            current_state = next_state
+            self.matrix.SwapOnVSync(self.canvas)
+            breakout = self.wait_loop(0)
+            if breakout:
+                return
+
+    def check_life(self, x, y, matrix):
+        num_neighbors_alive = 0
+
+
+        # Check neighbors above
+        if self.check_matrix(x-1, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y-1, matrix): num_neighbors_alive += 1
+    
+        # Check neighbors aside
+        if self.check_matrix(x-1, y, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y, matrix): num_neighbors_alive += 1
+
+        # Check neighbors below
+        if self.check_matrix(x-1, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y+1, matrix): num_neighbors_alive += 1
+
+        # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+        # Any live cell with two or three live neighbours lives on to the next generation.
+        # Any live cell with more than three live neighbours dies, as if by overpopulation.
+        # Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+
+        if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
+            return True
+        
+        if not matrix[x][y] and num_neighbors_alive == 3:
+            return True
+
+        return False
+
+    def check_matrix(self, x, y, matrix):
+        if x == -1:
+            x = 127
+        
+        if x == 128:
+            x = 0
+
+        if y == -1:
+            y = 31
+
+        if y == 32:
+            y = 0
+
+        return matrix[x][y]
+
+
+    def pong(self):
+
+        xball = 64
+        yball = 16
+
+        xvel = random.randint(0,1)*2-1
+        yvel = random.randint(0,1)*2-1
+
+        framecount = 0
+
+        player1_score = 0
+        player2_score = 0
+
+        starting_y_value = shared_pong_player1.value
+        starting_y_value_2 = shared_pong_player2.value
+
+        #player 1 paddle
+        for width in range(0, 3):
+            for height in range(starting_y_value, starting_y_value + 6):
+                self.canvas.SetPixel(width, height, 255, 20, 20)
+
+        #player 2 paddle
+        for width in range(125, 128):
+            for height in range(starting_y_value_2, starting_y_value_2 + 6):
+                self.canvas.SetPixel(width, height, 20, 20, 255)
+
+        while True:
+            framecount += 1
+            self.canvas.Clear()
+
+            setyval = shared_pong_player1.value
+            setyval2 = shared_pong_player2.value
+
+
+            if framecount % 20 == 0 and self.wait_loop(0):
+                return
+
+            #starting_y_value = shared_pong_player1.value
+            #starting_y_value_2 = shared_pong_player2.value
+
+            #limit paddle move speed to 1 per frame - continuous motion, no teleporting
+            if framecount == 1:
+                starting_y_value = setyval
+                starting_y_value_2 = setyval2
+            else:
+                if framecount % 3 == 0: #limit paddle update (move speed)
+                    if starting_y_value < setyval:
+                        starting_y_value += 1
+                    if starting_y_value > setyval:
+                        starting_y_value -= 1
+                    if starting_y_value_2 < setyval2:
+                        starting_y_value_2 += 1
+                    if starting_y_value_2 > setyval2:
+                        starting_y_value_2 -= 1
+
+            ##paddle face reflection
+            #if (starting_y_value <= yball and starting_y_value+6 >= yball and xball <= 4 and xvel < 0) or (starting_y_value_2 <= yball and starting_y_value_2+6 >= yball and xball >= 123 and xvel > 0):
+            #    xvel *= -1
+            #    yvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '1' for default gameplay
+
+            ##paddle top and bottom reflection
+            #if (yball >= starting_y_value and yball <= starting_y_value+6+2 and yvel < 0 and xball <= 3) or (yball >= starting_y_value-2 and yball <= starting_y_value+6 and yvel > 0 and xball <= 3) or (yball >= starting_y_value_2 and yball <= starting_y_value_2+6+2 and yvel < 0 and xball >= 124) or (yball >= starting_y_value_2-2 and yball <= starting_y_value_2+6 and yvel > 0 and xball >= 124):
+            #    xvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '-1' for default gameplay
+            #    yvel *= -1
+
+            #left paddle face reflection
+            if (starting_y_value-1 <= yball and starting_y_value+6 >= yball and xball <= 4 and xvel < 0):
+                xvel = 1
+                if (starting_y_value-1 <= yball and starting_y_value+1 >= yball):
+                    yvel = -1
+                elif (starting_y_value+2 <= yball and starting_y_value+3 >= yball):
+                    yvel = 0
+                    #xvel = 2
+                else:
+                    yvel = 1
+
+            #right paddle face reflection
+            if (starting_y_value_2-1 <= yball and starting_y_value_2+6 >= yball and xball >= 123 and xvel > 0):
+                xvel = -1
+                if (starting_y_value_2-1 <= yball and starting_y_value_2+1 >= yball):
+                    yvel = -1
+                elif (starting_y_value_2+2 <= yball and starting_y_value_2+3 >= yball):
+                    yvel = 0
+                    #xvel = 2
+                else:
+                    yvel = 1        
+
+            #paddle top and bottom reflection
+            if (yball >= starting_y_value and yball <= starting_y_value+5+2 and yvel < 0 and xball <= 3) or (yball >= starting_y_value-2 and yball <= starting_y_value+5 and yvel > 0 and xball <= 3) or (yball >= starting_y_value_2 and yball <= starting_y_value_2+5+2 and yvel < 0 and xball >= 124) or (yball >= starting_y_value_2-2 and yball <= starting_y_value_2+5 and yvel > 0 and xball >= 124):
+                xvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '-1' for default gameplay
+                yvel *= -1
+
+            #top and bottom bounce
+            if (yball <= 0 and yvel <0) or (yball >= 31 and yvel >0):
+                yvel *= -1
+
+            if xball <= 0:
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(0.5)
+                self.canvas.Clear()
+                player2_score += 1
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(3)
+                self.canvas.Clear()
+                xball = 64
+                yball = random.randint(2,30)
+                xvel = random.randint(0,1)*2-1
+                yvel = random.randint(0,1)*2-1
+
+            if xball >= 127:
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(0.5)
+                self.canvas.Clear()
+                player1_score += 1
+                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
+                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
+                self.matrix.SwapOnVSync(self.canvas)
+                self.wait_loop(3)
+                self.canvas.Clear()
+                xball = 64
+                yball = random.randint(2,30)
+                xvel = random.randint(0,1)*2-1
+                yvel = random.randint(0,1)*2-1
+
+            if framecount % 5 == 0:
+                xball += xvel
+                yball += yvel
+
+            #player 1 paddle
+            for width in range(0, 3):
+                for height in range(starting_y_value, starting_y_value + 6):
+                    self.canvas.SetPixel(width, height, 255, 20, 20)
+
+            #player 2 paddle
+            for width in range(125, 128):
+                for height in range(starting_y_value_2, starting_y_value_2 + 6):
+                    self.canvas.SetPixel(width, height, 20, 20, 255)
+
+            for width in range(xball-1, xball+2):
+                for height in range(yball-1, yball+2):
+                    self.canvas.SetPixel(width, height, 255, 255, 255)
+
+            self.matrix.SwapOnVSync(self.canvas)
+            
+
+
     def welcome(self):
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
@@ -408,9 +706,8 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
         self.matrix.SwapOnVSync(self.canvas)
         self.wait_loop(2)
-        graphics.DrawText(self.canvas, self.fontbig, 66, 10, graphics.Color(60, 60, 160), "The")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 21, graphics.Color(160, 160, 200), "Sterner's")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 32, graphics.Color(20, 160, 60), "Home")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 14, graphics.Color(60, 60, 160), "Casa")
+        graphics.DrawText(self.canvas, self.fontbig, 66, 27, graphics.Color(160, 160, 200), "Darmody")
         self.matrix.SwapOnVSync(self.canvas)
         shared_mode.value = 1
         self.wait_loop(3)
@@ -451,6 +748,7 @@ class PlaneSign:
                 # 7 = clock
                 # 8 = custom message
                 # 9 = welcome
+                # 10 = CGOL
 
                 if mode == 6:
                     self.show_weather()
@@ -476,6 +774,12 @@ class PlaneSign:
 
                 if mode == 9:
                     self.welcome()
+
+                if mode == 10:
+                    self.cgol()
+
+                if mode == 11:
+                    self.pong()
 
                 plane_to_show = None
 

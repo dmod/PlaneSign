@@ -30,6 +30,51 @@
   opacity: 1;
 }
 
+#brightness_slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 150px;
+  height: 50px;
+  background: #4CAF50;
+  cursor: pointer;
+}
+
+.pong_slider {
+  -webkit-appearance: none;
+  appearance: none;
+  transform: rotate(90deg);
+  margin-top: 50px;
+  margin-bottom: 50px;
+  margin-right: 10px;
+  margin-left: 10px;
+  height: 50px;
+  background: #d3d3d3;
+  outline: none;
+}
+
+.pong_slider:hover {
+  opacity: 1;
+}
+
+.pong_slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 50px;
+  height: 50px;
+  background: #4CAF50;
+  cursor: pointer;
+}
+
+
+#pong_player1_slider::-webkit-slider-thumb {
+  background: #ff2222;
+}
+
+#pong_player2_slider::-webkit-slider-thumb {
+  background: #2222ff
+}
+
+
 #rainbow_mode_checkbox {
   text-align: center;
   margin-top: 20px;
@@ -59,15 +104,6 @@
   font-size:50px;
   display: inline;
   float: none;
-}
-
-#brightness_slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 150px;
-  height: 50px;
-  background: #4CAF50;
-  cursor: pointer;
 }
 
 .switch {
