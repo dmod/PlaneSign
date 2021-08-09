@@ -1,8 +1,6 @@
-FONTS ARE MEASURED FROM BOTTOM LEFT?
-
-sudo rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=3 --led-cols=64 --led-chain=2 -D4
-
-5mm spacing: approx 26 3/4 inches X 8 overall
+/*
+SETUPPPPPPP
+*/
 
 Hardware:
 Raspberry Pi 4
@@ -22,15 +20,16 @@ touch ssh
 Set up wpa_supplicant.conf: https://www.raspberrypi.org/documentation/configuration/wireless/headless.md
 *** Now put it in the actual pi ***
 (RECOMMENDED): Change hostname with: sudo raspi-config -> System Options -> Hostname
-Switch off on-board sound (dtparam=audio=off in /boot/config.txt)
+Switch off on-board sound dtparam=audio=off in /boot/config.txt
 sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pillow
 git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
 cd rpi-rgb-led-matrix
 make build-python PYTHON=$(which python3)
 sudo make install-python PYTHON=$(which python3)
-
+cd
 sudo -H pip3 install pytz flask flask_cors
-wget https://ourairports.com/data/airports.csv
+git clone https://github.com/dmod/PlaneSign.git
+sudo ./planesign.py
 
 @reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign.py>/dev/null 2>&1
 
@@ -50,3 +49,12 @@ server {
                 try_files $uri $uri/ =404;
         }
 }
+
+/*
+RANDOM NOTES
+*/
+
+wget https://ourairports.com/data/airports.csv
+FONTS ARE MEASURED FROM BOTTOM LEFT?
+DEMO TEST: sudo rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=3 --led-cols=64 --led-chain=2 -D4
+5mm spacing: approx 26 3/4 inches X 8 overall
