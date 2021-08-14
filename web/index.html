@@ -59,7 +59,7 @@
   }
 
   function set_mode(mode) {
-    if (mode !== 8){
+    if (mode !== 8) {
       document.getElementById('custom_message_div').hidden = true;
     }
     call_endpoint("/set_mode/" + mode);
