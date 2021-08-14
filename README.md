@@ -20,6 +20,7 @@
 - Set up wpa_supplicant.conf: <https://www.raspberrypi.org/documentation/configuration/wireless/headless.md>
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname with: sudo raspi-config -> System Options -> Hostname
+- (RECOMMENDED): Change timezone with: sudo raspi-config -> Localisation Options -> Timezone
 - Switch off on-board sound `dtparam=audio=off` in /boot/config.txt
 
 ```sh

@@ -213,7 +213,7 @@ class PlaneSign:
         options.cols = 64
         options.gpio_slowdown = 4
         options.chain_length = 2
-        options.limit_refresh_rate_hz = 200
+        #options.limit_refresh_rate_hz = 200
 
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
