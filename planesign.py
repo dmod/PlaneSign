@@ -199,9 +199,9 @@ def read_static_airport_data():
     with open("airports.csv") as f:
         lines = f.readlines()
         for line in lines[1:]:
-            parts = line.split(',')
-            name = parts[3].strip("\"")
-            code = parts[13].strip("\"")
+            parts = csv_superparser(line)
+            name = parts[3]
+            code = parts[13]
             code_to_airport[code] = name
 
     print(str(len(code_to_airport)) + " airports added.")
@@ -749,6 +749,7 @@ class PlaneSign:
                 # 8 = custom message
                 # 9 = welcome
                 # 10 = CGOL
+                # 11 = PONG
 
                 if mode == 6:
                     self.show_weather()
@@ -804,6 +805,7 @@ class PlaneSign:
                     interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
                     interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
 
+                    # Don't look up the names of these airports, we already know what they are
                     ignore_these_codes = ("BWI", "IAD", "DCA")
 
                     code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] not in ignore_these_codes else plane_to_show["destination"] if plane_to_show["destination"] not in ignore_these_codes else ""
