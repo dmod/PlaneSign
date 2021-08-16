@@ -62,6 +62,9 @@
     if (mode !== 8) {
       document.getElementById('custom_message_div').hidden = true;
     }
+    if (mode !== 11) {
+      document.getElementById('pong_div').hidden = true;
+    }
     call_endpoint("/set_mode/" + mode);
   }
 
