@@ -16,12 +16,14 @@
 ## Software Setup Steps
 
 - Flash SD card with Raspberry PI OS Lite - <https://peppe8o.com/install-raspberry-pi-os-lite-in-your-raspberry-pi/>
+- **In 'boot' folder on the SD card:** 
 - touch ssh
+- Switch off on-board sound `dtparam=audio=off` in /boot/config.txt
 - Set up wpa_supplicant.conf: <https://www.raspberrypi.org/documentation/configuration/wireless/headless.md>
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname with: sudo raspi-config -> System Options -> Hostname
 - (RECOMMENDED): Change timezone with: sudo raspi-config -> Localisation Options -> Timezone
-- Switch off on-board sound `dtparam=audio=off` in /boot/config.txt
+
 
 ```sh
 sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pillow
