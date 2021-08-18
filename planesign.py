@@ -272,6 +272,24 @@ class PlaneSign:
         
         self.matrix.SwapOnVSync(self.canvas)
 
+    def track_a_flight(self):
+        # https://www.flightradar24.com/v1/search/web/find?query=jbu1186&limit=10
+        # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=28c9c1e7
+
+        self.canvas.Clear()
+        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), "- UA001 -")
+
+        graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
+        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
+        graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
+        graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
+
+        graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
+        graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
+        graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
+
+        self.matrix.SwapOnVSync(self.canvas)
+
     def show_custom_message(self):
         raw_message = data_dict["custom_message"]
 
