@@ -12,7 +12,6 @@ from multiprocessing import Process, Manager, Value, Array
 from flask import Flask
 from PIL import Image
 from flask_cors import CORS
-from enum import Enum
 from collections import namedtuple
 
 RGB = namedtuple('RGB', 'r g b')
@@ -277,15 +276,23 @@ class PlaneSign:
         # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=A0F427
 
         blip_count = 0
-        hex_to_track = "28d50299"
-
-        flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={hex_to_track}").json()
-
+        hex_to_track = "28d6e5b7"
+        requests_limiter = 0
 
         while True:
+
+            if (requests_limiter % 16 == 0):
+                flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={hex_to_track}").json()
+                current_location = flight_data['trail'][0]
+                reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1&key=AIzaSyCiGYPCr8an-KXJArTgK5YC_Zm45TmhQJ8").json()
+
+            requests_limiter = requests_limiter + 1
+
             self.canvas.Clear()
 
-            graphics.DrawText(self.canvas, self.font57, 34, 6, graphics.Color(200, 10, 10), f"-  {flight_data['identification']['callsign']}  -")
+            flight_number_header = f"8        {flight_data['identification']['callsign']}        8"
+
+            graphics.DrawText(self.canvas, self.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
 
             graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
             graphics.DrawText(self.canvas, self.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
@@ -330,14 +337,17 @@ class PlaneSign:
             elif blip_count == 2:
                 self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
-            graphics.DrawText(self.canvas, self.font46, 30, 31, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
+            #graphics.DrawText(self.canvas, self.font46, 30, 28, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
 
             graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
             graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
 
-            
-            graphics.DrawText(self.canvas, self.font46, 48, 17, graphics.Color(160, 160, 200), f"Alt:{flight_data['trail'][0]['alt']}")
-            graphics.DrawText(self.canvas, self.font46, 48, 23, graphics.Color(20, 160, 60), f"Spd:{flight_data['trail'][0]['spd']}")
+            graphics.DrawText(self.canvas, self.font46, 48, 17, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
+            graphics.DrawText(self.canvas, self.font46, 48, 23, graphics.Color(20, 160, 60), f"Spd:{current_location['spd']}")
+
+            formatted_address = reverse_geocode['results'][0]['formatted_address']
+
+            graphics.DrawText(self.canvas, self.font46, get_centered_text_x_offset_value(4, formatted_address), 31, graphics.Color(0, 0, 255), formatted_address)
 
             self.matrix.SwapOnVSync(self.canvas)
 
@@ -345,7 +355,7 @@ class PlaneSign:
             if blip_count == 3:
                 blip_count = 0
 
-            self.wait_loop(1.0)
+            self.wait_loop(0.8)
 
     def show_custom_message(self):
         raw_message = data_dict["custom_message"]

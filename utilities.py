@@ -47,6 +47,11 @@ def first(iter, pred, member):
         if pred(member):
             return element
 
+def get_centered_text_x_offset_value(font_width, text):
+    text_pixel_length = len(text) * font_width
+    return 64 - (text_pixel_length / 2)
+
+
 # Remove quotes and handle commas in fields
 # 6369,"TIST","medium_airport","Cyril E. King Airport",18.337299346923828,-64.97339630126953,23,"NA","VI","VI-U-A","Charlotte Amalie, Harry S. Truman Airport","yes","TIST","STT","STT","http://www.viport.com/airports.html","https://en.wikipedia.org/wiki/Cyril_E._King_Airport",
 def csv_superparser(csv_line):
