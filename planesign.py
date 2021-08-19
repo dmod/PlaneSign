@@ -330,7 +330,7 @@ class PlaneSign:
             elif blip_count == 2:
                 self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
-            graphics.DrawText(self.canvas, self.font46, 28, 31, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
+            graphics.DrawText(self.canvas, self.font46, 30, 31, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
 
             graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
             graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
