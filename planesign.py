@@ -346,8 +346,8 @@ def next_color_random_walk_uniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax
 
     while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
 
-        theta = math.acos(2*random()-1)
-        phi = 2*pi*random()
+        theta = math.acos(2*random.random()-1)
+        phi = 2*pi*random.random()
 
         dr=round(step*cos(phi)*sin(theta))
         dg=round(step*sin(phi)*sin(theta))
@@ -622,7 +622,7 @@ class PlaneSign:
 
         generation_time = 0.15
 
-        cgol_cellcolor = False #change this
+        cgol_cellcolor = True #change this
 
         current_state = [[False for j in range(32)] for i in range(128)]
         next_state = [[False for j in range(32)] for i in range(128)]
@@ -637,24 +637,16 @@ class PlaneSign:
                 else:
                     current_state[i][j]=False
                 if cgol_cellcolor:
-                        hmatrix[i][j]=random_angle()
+                        #hmatrix[i][j]=random_angle()
+                        hmatrix[i][j]=round(359*i/127+359*j/31)%360
 
         firstgen = True
 
         gen_index = 0
 
-        #r = 255
-        #g = 150
-        #b = 30
+        angle = random_angle() 
+        #r,g,b = random_rgb()
 
-        angle = random_angle()  
-
-        #dr = -9
-        #dg = -6
-        #db = -3
-
-
-        
         tstart = time.perf_counter()
         while True:
         
@@ -662,7 +654,10 @@ class PlaneSign:
             gen_index += 1
 
             if not cgol_cellcolor:
-                angle, r, g, b = next_color_rainbow_linear(angle)
+                #angle, r, g, b = next_color_rainbow_linear(angle)
+                angle, r, g, b = next_color_rainbow_sine(angle)
+                #r,g,b = next_color_random_walk_uniform_step(r,g,b,10)
+                #r,g,b = next_color_random_walk_const_sum(r,g,b,10)
 
             next_state = [[False for j in range(32)] for i in range(128)]
 
@@ -1180,4 +1175,5 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    PlaneSign().sign_loop()
+    PlaneSign().cgol()
+    #PlaneSign().sign_loop()
