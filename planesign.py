@@ -440,7 +440,7 @@ class PlaneSign:
 
         self.canvas.brightness = shared_current_brightness.value
 
-        self.last_brightness = self.canvas.brightness
+        self.last_brightness = None
 
         manager = Manager()
         global data_dict
@@ -616,6 +616,81 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         self.matrix.SwapOnVSync(self.canvas)
+
+    def cca(self):
+        self.canvas.Clear()
+
+        generation_time = 0.15
+
+        current_state = [[0 for j in range(32)] for i in range(128)]
+        next_state = [[0 for j in range(32)] for i in range(128)]
+        
+        numstates = 12 #number of states/colors possible
+        threshold = 1 #set from 1 to numstates to adjust behavior
+        
+        
+        for i in range(128):
+            for j in range(32):
+                current_state[i][j]=random.randrange(0,numstates)
+
+        # current_state[8][8]=0
+        # current_state[9][8]=1
+        # current_state[10][8]=2
+        # current_state[10][9]=3
+        # current_state[9][9]=4
+        # current_state[8][9]=5
+
+        tstart = time.perf_counter()        
+        while True:
+    
+            for col in range(0, 128):
+                for row in range(0, 32):
+        
+                    cs=self.check_matrix(col,row,current_state)
+                    ns = (cs+1)%numstates
+                    curr = 0
+        
+                    if self.check_matrix(col-1,row-1,current_state) == ns:
+                        curr += 1
+                    if self.check_matrix(col,row-1,current_state) == ns:
+                        curr += 1
+                    if self.check_matrix(col+1,row-1,current_state) == ns:
+                        curr += 1
+        
+                    if self.check_matrix(col-1,row,current_state) == ns:
+                        curr += 1
+                    if self.check_matrix(col+1,row,current_state) == ns:
+                        curr += 1
+        
+                    if self.check_matrix(col-1,row+1,current_state) == ns:
+                        curr += 1
+                    if self.check_matrix(col,row+1,current_state) == ns:
+                        curr += 1
+                    if self.check_matrix(col+1,row+1,current_state) == ns:
+                        curr += 1
+                    
+                    if curr >= threshold:
+                        self.set_matrix(col,row,next_state,ns)
+                        r,g,b=hsv_2_rgb(ns/numstates,1,1)
+                    else:
+                        self.set_matrix(col,row,next_state,cs)
+                        r,g,b=hsv_2_rgb(cs/numstates,1,1)
+                    
+                    self.canvas.SetPixel(col, row, r, g, b)
+
+            for col in range(0, 128):
+                for row in range(0, 32):
+                    current_state[col][row] = next_state[col][row]
+
+            tend = time.perf_counter()
+            if( tend < tstart + generation_time):
+                breakout=self.wait_loop(tstart + generation_time-tend)
+            else:
+                breakout=self.wait_loop(0)
+
+            self.matrix.SwapOnVSync(self.canvas)
+
+            tstart = time.perf_counter()
 
     def cgol(self):
         self.canvas.Clear()
@@ -1096,6 +1171,9 @@ class PlaneSign:
                 if mode == 11:
                     self.pong()
 
+                if mode == 12:
+                    self.cca()
+
                 plane_to_show = None
 
                 if mode == 1:
@@ -1175,5 +1253,5 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    PlaneSign().cgol()
-    #PlaneSign().sign_loop()
+    #PlaneSign().cca()
+    PlaneSign().sign_loop()
