@@ -236,9 +236,9 @@ class PlaneSign:
         global data_dict
         data_dict = manager.dict()
 
-        Process(target=get_data_worker, args=(data_dict,)).start()
-        Process(target=get_weather_data_worker, args=(data_dict,)).start()
-        Process(target=server).start()
+        #Process(target=get_data_worker, args=(data_dict,)).start()
+        #Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        #Process(target=server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -274,21 +274,78 @@ class PlaneSign:
 
     def track_a_flight(self):
         # https://www.flightradar24.com/v1/search/web/find?query=jbu1186&limit=10
-        # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=28c9c1e7
+        # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=A0F427
 
-        self.canvas.Clear()
-        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), "- UA001 -")
+        blip_count = 0
+        hex_to_track = "28d50299"
 
-        graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
-        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-        graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
-        graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
+        flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={hex_to_track}").json()
 
-        graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
-        graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
-        graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
 
-        self.matrix.SwapOnVSync(self.canvas)
+        while True:
+            self.canvas.Clear()
+
+            graphics.DrawText(self.canvas, self.font57, 34, 6, graphics.Color(200, 10, 10), f"-  {flight_data['identification']['callsign']}  -")
+
+            graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
+            graphics.DrawText(self.canvas, self.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
+
+            start_time = flight_data['time']['real']['departure']
+            end_time = flight_data['time']['estimated']['arrival']
+            current_time = int(time.time())
+
+            # current progress divited by total
+            duration = end_time - start_time
+            current_progress = current_time - start_time 
+
+            percent_complete = current_progress / duration
+
+            line_x_start = 30
+            line_x_end = 98
+            line_y = 9
+
+            line_distance = line_x_end - line_x_start
+
+            for x in range(line_x_start, line_x_end):
+                self.canvas.SetPixel(x, line_y, 120, 120, 120)
+
+            # Left Bar
+            for y in range(line_y - 2, line_y + 3):
+                self.canvas.SetPixel(line_x_start, y, 255, 255, 255)
+
+            # Right Bar
+            for y in range(line_y - 2, line_y + 3):
+                self.canvas.SetPixel(line_x_end, y, 255, 255, 255)
+
+            progress_box_start_offset = int(line_distance * percent_complete) + line_x_start
+
+            if blip_count == 0:
+                self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
+            elif blip_count == 1:
+                for x in range(progress_box_start_offset - 1, progress_box_start_offset + 2):
+                    for y in range(line_y - 1, line_y + 2):
+                        self.canvas.SetPixel(x, y, 255, 0, 0)
+
+                self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
+            elif blip_count == 2:
+                self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
+
+            graphics.DrawText(self.canvas, self.font46, 28, 31, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
+
+            graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
+            graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
+
+            
+            graphics.DrawText(self.canvas, self.font46, 48, 17, graphics.Color(160, 160, 200), f"Alt:{flight_data['trail'][0]['alt']}")
+            graphics.DrawText(self.canvas, self.font46, 48, 23, graphics.Color(20, 160, 60), f"Spd:{flight_data['trail'][0]['spd']}")
+
+            self.matrix.SwapOnVSync(self.canvas)
+
+            blip_count = blip_count + 1
+            if blip_count == 3:
+                blip_count = 0
+
+            self.wait_loop(1.0)
 
     def show_custom_message(self):
         raw_message = data_dict["custom_message"]
@@ -737,10 +794,16 @@ class PlaneSign:
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
 
-        self.welcome()
 
         while True:
             try:
+
+                self.track_a_flight()
+
+                self.wait_loop(0.5)
+                continue
+
+
                 mode = shared_mode.value
 
                 forced_breakout = False
@@ -876,7 +939,7 @@ class PlaneSign:
 # Main function
 if __name__ == "__main__":
 
-    read_config()
-    read_static_airport_data()
+    #read_config()
+    #read_static_airport_data()
 
     PlaneSign().sign_loop()
