@@ -633,13 +633,6 @@ class PlaneSign:
             for j in range(32):
                 current_state[i][j]=random.randrange(0,numstates)
 
-        # current_state[8][8]=0
-        # current_state[9][8]=1
-        # current_state[10][8]=2
-        # current_state[10][9]=3
-        # current_state[9][9]=4
-        # current_state[8][9]=5
-
         tstart = time.perf_counter()        
         while True:
     
@@ -691,6 +684,8 @@ class PlaneSign:
             self.matrix.SwapOnVSync(self.canvas)
 
             tstart = time.perf_counter()
+            if breakout:
+                return
 
     def cgol(self):
         self.canvas.Clear()
@@ -1213,14 +1208,14 @@ class PlaneSign:
 
                     for i in range(NUM_STEPS):
                         self.canvas.Clear()
-                        graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
-                        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-                        graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
-                        graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
+                        graphics.DrawText(self.canvas, self.fontreallybig, 0, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
+                        graphics.DrawText(self.canvas, self.font57, 1, 21, graphics.Color(200, 10, 10), friendly_name[:14])
+                        graphics.DrawText(self.canvas, self.font57, 36, 30, graphics.Color(0, 0, 200), formatted_flight)
+                        graphics.DrawText(self.canvas, self.font57, 1, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
 
-                        graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
-                        graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
-                        graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
+                        graphics.DrawText(self.canvas, self.font57, 78, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
+                        graphics.DrawText(self.canvas, self.font57, 78, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
+                        graphics.DrawText(self.canvas, self.font57, 78, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
 
                         forced_breakout = self.wait_loop(0.065)
                         if forced_breakout:
