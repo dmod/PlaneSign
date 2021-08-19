@@ -61,7 +61,6 @@ def set_color_mode(color):
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
-    data_dict["custom_message"] = ""
     shared_mode.value = int(mode)
     shared_forced_sign_update.value = 1
     return ""
