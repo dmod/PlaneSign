@@ -5,6 +5,7 @@ import time
 import traceback
 import requests
 import random
+from math import sin, cos, pi
 from datetime import datetime
 from utilities import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
@@ -16,6 +17,8 @@ from enum import Enum
 from collections import namedtuple
 
 RGB = namedtuple('RGB', 'r g b')
+
+DEG_2_RAD = pi/180.0
 
 COLORS = {}
 COLORS[0] = [RGB(3, 194, 255)] #Plain
@@ -205,12 +208,217 @@ def read_static_airport_data():
 
     print(str(len(code_to_airport)) + " airports added.")
 
+def random_angle():
+    return random.randrange(0, 360)
+
+def random_rgb_255_sum():
+    _, r, g, b = next_color_rainbow_linear(random_angle())
+    return r, g, b
+
+def random_rgb(rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
+    rmin %= 256
+    rmax %= 256
+    gmin %= 256
+    gmax %= 256
+    bmin %= 256
+    bmax %= 256
+    if rmax<rmin: rmin=rmax
+    if gmax<gmin: gmin=gmax
+    if bmax<bmin: bmin=bmax
+    r=random.randrange(rmin, rmax+1)
+    g=random.randrange(gmin, gmax+1)
+    b=random.randrange(bmin, bmax+1)
+    return r, g, b
+
+def hsv_2_rgb(h,s,v):
+        if s == 0.0: v*=255; return (v, v, v)
+        i = int(h*6.)
+        f = (h*6.)-i; p,q,t = int(255*(v*(1.-s))), int(255*(v*(1.-s*f))), int(255*(v*(1.-s*(1.-f)))); v*=255; i%=6
+        if i == 0: return (v, t, p)
+        if i == 1: return (q, v, p)
+        if i == 2: return (p, v, t)
+        if i == 3: return (p, q, v)
+        if i == 4: return (t, p, v)
+        if i == 5: return (v, p, q)
+
+def next_color_rainbow_linear(angle,dangle=1,bright=255):
+    bright %= 256
+    angle += dangle
+    angle %= 360
+
+    if(angle <= 120):
+        r = round(bright*(120-angle)/120)
+        g = round(bright*angle/120)
+        b = 0
+    elif(angle <= 240):
+        r = 0
+        g = round(bright*(240-angle)/120)
+        b = round(bright*(angle-120)/120)
+    else:
+        r = round(bright*(angle-240)/120)
+        g = 0
+        b = round(bright*(360-angle)/120)
+
+    return angle, r, g, b
+
+def next_color_rainbow_sine(angle,dangle=1,bright=255):
+    bright %= 256
+    angle += dangle
+    angle %= 360
+
+    if(angle <= 120):
+        r = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
+        g = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
+        b = 0
+    elif(angle <= 240):
+        r = 0
+        g = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
+        b = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
+    else:
+        r = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
+        g = 0
+        b = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
+
+    return angle, r, g, b
+
+def next_color_random_walk_const_sum(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
+
+    rmin %= 256
+    rmax %= 256
+    gmin %= 256
+    gmax %= 256
+    bmin %= 256
+    bmax %= 256
+
+    step %= 100
+
+    if rmax<rmin: rmin=rmax
+    if gmax<gmin: gmin=gmax
+    if bmax<bmin: bmin=bmax
+
+    dr=256
+    dg=256
+    db=256
+
+    while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
+
+        i = random.randrange(0, 3)
+        j = (random.randrange(0, 2)*2-1)*step
+
+        if i == 0:
+            dr = j
+            dg = -j
+            db = 0
+        elif i == 1:
+            dr = j
+            dg = 0
+            db = -j
+        else:
+            dr = 0
+            dg = j
+            db = -j
+    
+    r += dr
+    g += dg
+    b += db
+
+    return r, g, b
+
+
+def next_color_random_walk_uniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
+
+    rmin %= 256
+    rmax %= 256
+    gmin %= 256
+    gmax %= 256
+    bmin %= 256
+    bmax %= 256
+
+    step %= 100
+
+    if rmax<rmin: rmin=rmax
+    if gmax<gmin: gmin=gmax
+    if bmax<bmin: bmin=bmax
+
+    dr=256
+    dg=256
+    db=256
+
+    while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
+
+        theta = math.acos(2*random()-1)
+        phi = 2*pi*random()
+
+        dr=round(step*cos(phi)*sin(theta))
+        dg=round(step*sin(phi)*sin(theta))
+        db=round(step*cos(theta))
+    
+    r += dr
+    g += dg
+    b += db
+
+    return r, g, b
+
+def next_color_random_walk_nonuniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
+
+    rmin %= 256
+    rmax %= 256
+    gmin %= 256
+    gmax %= 256
+    bmin %= 256
+    bmax %= 256
+
+    step %= 100
+
+    if rmax<rmin: rmin=rmax
+    if gmax<gmin: gmin=gmax
+    if bmax<bmin: bmin=bmax
+
+    dr=256
+    dg=256
+    db=256
+
+    while (r+dr > rmax or r+dr < rmin):
+        dr = random.randrange(-step, step+1)
+    while (g+dg > gmax or g+dg < gmin):
+        dg = random.randrange(-step, step+1)
+    while (b+db > bmax or b+db < bmin):
+        db = random.randrange(-step, step+1)
+    
+    r += dr
+    g += dg
+    b += db
+
+    return r, g, b
+
+def next_color_andrew_weird(r,g,b,dr,dg,db):
+
+    rtemp = r+dr
+    gtemp = g+dg
+    btemp = b+db
+
+    if not (r>230 and dr<0) and not (r<30 and dr>0) and (rtemp <= 30 or rtemp >= 230):
+        dr *= -1
+
+    if not (g>230 and dg>0) and not (g<30 and dg<0) and (gtemp <= 30 or gtemp >= 230):
+        dg *= -1
+
+    if not (b>230 and db>0) and not (b<30 and db<0) and (btemp <= 30 or btemp >= 230):
+        db *= -1
+
+    r += dr
+    g += dg
+    b += db
+
+    return r, g, b, dr, dg, db
+
+
 class PlaneSign:
     def __init__(self):
 
         options = RGBMatrixOptions()
         options.cols = 64
-        options.gpio_slowdown = 4
+        options.gpio_slowdown = 5
         options.chain_length = 2
         #options.limit_refresh_rate_hz = 200
 
@@ -232,6 +440,8 @@ class PlaneSign:
 
         self.canvas.brightness = shared_current_brightness.value
 
+        self.last_brightness = self.canvas.brightness
+
         manager = Manager()
         global data_dict
         data_dict = manager.dict()
@@ -249,9 +459,11 @@ class PlaneSign:
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time
 
-            self.canvas.brightness = shared_current_brightness.value
-            self.matrix.brightness = shared_current_brightness.value
-            self.matrix.SwapOnVSync(self.canvas)
+            if (self.last_brightness != shared_current_brightness.value):
+                self.last_brightness = shared_current_brightness.value
+                self.canvas.brightness = shared_current_brightness.value
+                self.matrix.brightness = shared_current_brightness.value
+                self.matrix.SwapOnVSync(self.canvas) #slow, want to avoid redrawing
 
             if shared_forced_sign_update.value == 1:
                 stay_in_loop = False
@@ -408,67 +620,63 @@ class PlaneSign:
     def cgol(self):
         self.canvas.Clear()
 
-        current_state = []
-        for i in range(0, 128):
-            current_state.append([])
-            for _ in range(0, 32):
-                if (random.randrange(0,2) == 1):
-                    current_state[i].append(True)
-                else:
-                    current_state[i].append(False)
+        generation_time = 0.15
 
-        next_state = []
+        cgol_cellcolor = False #change this
+
+        current_state = [[False for j in range(32)] for i in range(128)]
+        next_state = [[False for j in range(32)] for i in range(128)]
+        if cgol_cellcolor:
+            hmatrix = [[0 for j in range(32)] for i in range(128)]
+            next_hmatrix = [[0 for j in range(32)] for i in range(128)]
+
         for i in range(0, 128):
-            next_state.append([False for j in range(0, 32)])
+            for j in range(0, 32):
+                if (random.random() < 0.3):
+                    current_state[i][j]=True
+                else:
+                    current_state[i][j]=False
+                if cgol_cellcolor:
+                        hmatrix[i][j]=random_angle()
 
         firstgen = True
 
         gen_index = 0
 
+        #r = 255
+        #g = 150
+        #b = 30
 
-        r = 255
-        g = 150
-        b = 30
+        angle = random_angle()  
 
-        r_delta = -9
-        g_delta = -6
-        b_delta = -3
+        #dr = -9
+        #dg = -6
+        #db = -3
 
 
+        
+        tstart = time.perf_counter()
         while True:
-
+        
             detect2cycle = True
             gen_index += 1
 
-            next_state = []
-            for i in range(0, 128):
-                next_state.append([False for j in range(0, 32)])
+            if not cgol_cellcolor:
+                angle, r, g, b = next_color_rainbow_linear(angle)
 
-            if gen_index % 3 == 0:
-                r += r_delta
-                g += g_delta
-                b += b_delta
-
-                if r <= 30:
-                    r_delta = 9
-                if g <= 30:
-                    g_delta = 6
-                if b <= 30:
-                    b_delta = 3
-
-                if r >= 230:
-                    r_delta = -9
-                if g >= 230:
-                    g_delta = -6
-                if b >= 230:
-                    b_delta = -3
+            next_state = [[False for j in range(32)] for i in range(128)]
 
             for col in range(0, 128):
                 for row in range(0, 32):
 
-                    candidate = self.check_life(col, row, current_state)
+                    if cgol_cellcolor:
+                        candidate, r, g, b = self.check_life_color(col, row, current_state, hmatrix, next_hmatrix)
+                    else:
+                        candidate = self.check_life(col, row, current_state)
+
                     next_state[col][row] = candidate
-                    if not firstgen and candidate != prev_state[col][row]:
+
+                    if detect2cycle and not firstgen and candidate != prev_state[col][row]:
                         detect2cycle = False
                     if candidate:
                         self.canvas.SetPixel(col, row, r, g, b)
@@ -482,15 +690,26 @@ class PlaneSign:
             if detect2cycle:
                 for i in range(0, 128):
                     for j in range(0, 32):
-                        if (random.randrange(0,2) == 1):
+                        if (random.random() < 0.3):
                             next_state[i][j]=True
+                            if cgol_cellcolor:
+                                hmatrix[i][j]=random_angle()
                         else:
                             next_state[i][j]=False
 
             prev_state = current_state
             current_state = next_state
+
+            tend = time.perf_counter()
+            if( tend < tstart + generation_time):
+                breakout=self.wait_loop(tstart + generation_time-tend)
+            else:
+                breakout=self.wait_loop(0)
+
             self.matrix.SwapOnVSync(self.canvas)
-            breakout = self.wait_loop(0)
+
+            tstart = time.perf_counter()
+
             if breakout:
                 return
 
@@ -525,6 +744,92 @@ class PlaneSign:
 
         return False
 
+    def check_life_color(self, x, y, matrix, hm, nhm):
+
+        num_neighbors_alive = 0
+
+        cx=0
+        cy=0
+
+        # Check neighbors above
+        if self.check_matrix(x-1, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y-1, matrix): num_neighbors_alive += 1
+
+        # Check neighbors aside
+        if self.check_matrix(x-1, y, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y, matrix): num_neighbors_alive += 1
+
+        # Check neighbors below
+        if self.check_matrix(x-1, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y+1, matrix): num_neighbors_alive += 1
+
+        # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+        # Any live cell with two or three live neighbours lives on to the next generation.
+        # Any live cell with more than three live neighbours dies, as if by overpopulation.
+        # Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+
+        if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
+            h=self.check_matrix(x, y, hm)
+            self.set_matrix(x,y,nhm,h)
+            r,g,b=hsv_2_rgb(h/360.0,1,1)
+            return True, r, g, b
+        
+        if not matrix[x][y] and num_neighbors_alive == 3:
+
+            #Find the mean color of the 3 neighbors
+
+            # Check neighbors above
+            if self.check_matrix(x-1, y-1, matrix):
+                h=self.check_matrix(x-1, y-1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x, y-1, matrix):
+                h=self.check_matrix(x, y-1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x+1, y-1, matrix):
+                h=self.check_matrix(x+1, y-1, hm)
+                cx += cos(h)
+                cy += sin(h)
+
+            # Check neighbors aside
+            if self.check_matrix(x-1, y, matrix):
+                h=self.check_matrix(x-1, y, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x+1, y, matrix):
+                h=self.check_matrix(x+1, y, hm)
+                cx += cos(h)
+                cy += sin(h)
+
+            # Check neighbors below
+            if self.check_matrix(x-1, y+1, matrix):
+                h=self.check_matrix(x-1, y+1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x, y+1, matrix):
+                h=self.check_matrix(x, y+1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x+1, y+1, matrix):
+                h=self.check_matrix(x+1, y+1, hm)
+                cx += cos(h)
+                cy += sin(h)
+
+            h=round(math.atan2(cy,cx)/DEG_2_RAD)%360
+            self.set_matrix(x,y,nhm,h)
+            
+            #h=self.check_matrix(x, y, hm)
+            #self.set_matrix(x,y,nhm,h)
+
+            r,g,b=hsv_2_rgb(h/360.0,1,1)
+
+            return True, r, g, b
+
+        return False, 0, 0, 0
+
     def check_matrix(self, x, y, matrix):
         if x == -1:
             x = 127
@@ -540,6 +845,20 @@ class PlaneSign:
 
         return matrix[x][y]
 
+    def set_matrix(self, x, y, matrix, val):
+        if x == -1:
+            x = 127
+        
+        if x == 128:
+            x = 0
+
+        if y == -1:
+            y = 31
+
+        if y == 32:
+            y = 0
+
+        matrix[x][y] = val
 
     def pong(self):
 
@@ -694,6 +1013,7 @@ class PlaneSign:
 
 
     def welcome(self):
+
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
         self.matrix.SwapOnVSync(self.canvas)
@@ -857,7 +1177,6 @@ class PlaneSign:
 
 # Main function
 if __name__ == "__main__":
-
     read_config()
     read_static_airport_data()
 

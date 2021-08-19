@@ -28,3 +28,6 @@ share/python-wheels/
 MANIFEST
 
 logs/
+
+#Config
+sign.conf
