@@ -5,6 +5,11 @@ import time
 import traceback
 import requests
 import random
+import numpy
+import pandas
+import yfinance as yf
+import re
+from PIL import Image
 from math import sin, cos, pi
 from datetime import datetime
 from utilities import *
@@ -95,6 +100,13 @@ def get_brightness():
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
     data_dict["custom_message"] = message
+    shared_forced_sign_update.value = 1
+    return ""
+
+@app.route("/submit_ticker/", defaults={"ticker": ""})
+@app.route("/submit_ticker/<ticker>")
+def submit_ticker(ticker):
+    data_dict["ticker"] = ticker
     shared_forced_sign_update.value = 1
     return ""
 
@@ -616,6 +628,105 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         self.matrix.SwapOnVSync(self.canvas)
+
+
+    def finance(self):
+        self.canvas.Clear()
+
+        data_dict["ticker"]="MSFT"
+
+        currprice = None
+
+        while True:
+            if(data_dict["ticker"] != None and data_dict["ticker"] != ""):
+
+                raw_ticker = data_dict["ticker"].upper()
+                clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker) 
+
+                ticker_data = yf.Ticker(clean_ticker)
+
+                prevprice = currprice
+                currprice=ticker_data.info["regularMarketPrice"]
+                openprice=ticker_data.info["regularMarketOpen"]
+                prevclose=ticker_data.info["previousClose"]
+                percchange=100*(currprice-prevclose)/prevclose
+                logourl=ticker_data.info["logo_url"]
+
+                if logourl != "":
+                    image = Image.open(requests.get(logourl, stream=True).raw)  
+
+                    new_image = Image.new("RGB", image.size, (0, 0, 0))
+
+                    new_image.paste(image)
+                    
+                    image= new_image
+
+                    bg=max(image.getcolors(image.size[0]*image.size[1]))
+
+                    im = image.convert('RGBA')
+
+                    data = numpy.array(im)
+                    # just use the rgb values for comparison
+                    rgb = data[:,:,:3]
+                    color = bg[1]  # Original value
+                    black = [0,0,0, 255]
+                    white = [255,255,255,255]
+                    mask = numpy.all(rgb == color, axis = -1)
+                    # change all pixels that match color to white
+                    data[mask] = black
+
+                    # change all pixels that don't match color to black
+                    ##data[np.logical_not(mask)] = black
+                    image = Image.fromarray(data)
+
+                    image = image.resize((20,20), Image.BICUBIC)
+                    self.canvas.SetImage(image.convert('RGB'), 3, 11)   
+
+
+                print_time = datetime.now().strftime('%-I:%M%p')
+
+                graphics.DrawText(self.canvas, self.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
+
+                graphics.DrawText(self.canvas, self.fontbig, 2, 10, graphics.Color(0, 20, 150), clean_ticker)
+
+                if percchange>=0:
+                    graphics.DrawText(self.canvas, self.fontbig, 30, 22, graphics.Color(50,150,0), "+{0:.1f}".format(percchange)+"%")
+                else:
+                    graphics.DrawText(self.canvas, self.fontbig, 30, 22, graphics.Color(150,50,0), "{0:.1f}".format(percchange)+"%")
+
+                graphics.DrawText(self.canvas, self.fontbig, 30, 10, graphics.Color(150, 150, 150), "{0:.2f}".format(currprice))
+                
+
+                dayvals = ticker_data.history(period="1d",interval="5m")
+                dayvals.Open.to_csv("prices.csv", index=False, header=None)
+                dayvals=dayvals.Open.tolist()
+                dayvals=dayvals[-64:]
+
+                daymax = max(dayvals)
+                daymin = min(dayvals)
+                dayspread = daymax - daymin
+
+                for col in range(len(dayvals)):
+                    dayvals[col]=round(20*(dayvals[col]-daymin)/dayspread)
+                    if percchange>=0:
+                        self.canvas.SetPixel(64+col, 31-dayvals[col], 50, 150, 0)
+                    else:
+                        self.canvas.SetPixel(64+col, 31-dayvals[col], 150, 50, 0)
+                if prevprice != None and prevprice != currprice:
+                    if currprice>prevprice:
+                        image = Image.open("/home/pi/PlaneSign/icons/finance/up.png")
+                        #image = image.resize((7,7), Image.BICUBIC)
+                        self.canvas.SetImage(image.convert('RGB'), 66, 2)  
+                    else:
+                        image = Image.open("/home/pi/PlaneSign/icons/finance/down.png")
+                        #image = image.resize((7,7), Image.BICUBIC)
+                        self.canvas.SetImage(image.convert('RGB'), 66, 2)  
+
+            breakout = self.wait_loop(5)
+            if breakout:
+                return
+            self.matrix.SwapOnVSync(self.canvas)
+            self.canvas = self.matrix.CreateFrameCanvas()
 
     def cca(self):
         self.canvas.Clear()
@@ -1248,5 +1359,5 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    #PlaneSign().cca()
-    PlaneSign().sign_loop()
+    PlaneSign().finance()
+    #PlaneSign().sign_loop()
