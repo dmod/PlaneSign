@@ -5,8 +5,7 @@ import time
 import traceback
 import requests
 import random
-import numpy
-import pandas
+import numpy as np
 import yfinance as yf
 import re
 from PIL import Image
@@ -20,6 +19,7 @@ from PIL import Image
 from flask_cors import CORS
 from enum import Enum
 from collections import namedtuple
+from scipy.interpolate import interp1d
 
 RGB = namedtuple('RGB', 'r g b')
 
@@ -107,7 +107,6 @@ def set_custom_message(message):
 @app.route("/submit_ticker/<ticker>")
 def submit_ticker(ticker):
     data_dict["ticker"] = ticker
-    shared_forced_sign_update.value = 1
     return ""
 
 def server():
@@ -633,12 +632,21 @@ class PlaneSign:
     def finance(self):
         self.canvas.Clear()
 
-        data_dict["ticker"]="MSFT"
+        #data_dict["ticker"]="LUV"
 
         currprice = None
+        logo = None
+        last_ticker = None
+        data_dict["ticker"] = None
 
         while True:
             if(data_dict["ticker"] != None and data_dict["ticker"] != ""):
+
+                if last_ticker != data_dict["ticker"]:
+                    currprice = None
+                    logo = None
+                    last_ticker = data_dict["ticker"]
+                    self.canvas.Clear()
 
                 raw_ticker = data_dict["ticker"].upper()
                 clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker) 
@@ -653,34 +661,37 @@ class PlaneSign:
                 logourl=ticker_data.info["logo_url"]
 
                 if logourl != "":
-                    image = Image.open(requests.get(logourl, stream=True).raw)  
+                    if logo == None: # dont do all this image processing after the first time
+                        image = Image.open(requests.get(logourl, stream=True).raw)  
 
-                    new_image = Image.new("RGB", image.size, (0, 0, 0))
+                        new_image = Image.new("RGB", image.size, (0, 0, 0))
 
-                    new_image.paste(image)
-                    
-                    image= new_image
+                        new_image.paste(image)
+                        
+                        image= new_image
 
-                    bg=max(image.getcolors(image.size[0]*image.size[1]))
+                        bg=max(image.getcolors(image.size[0]*image.size[1]))
 
-                    im = image.convert('RGBA')
+                        im = image.convert('RGBA')
 
-                    data = numpy.array(im)
-                    # just use the rgb values for comparison
-                    rgb = data[:,:,:3]
-                    color = bg[1]  # Original value
-                    black = [0,0,0, 255]
-                    white = [255,255,255,255]
-                    mask = numpy.all(rgb == color, axis = -1)
-                    # change all pixels that match color to white
-                    data[mask] = black
+                        data = np.array(im)
+                        # just use the rgb values for comparison
+                        rgb = data[:,:,:3]
+                        color = bg[1]  # Original value
+                        black = [0,0,0, 255]
+                        white = [255,255,255,255]
+                        mask = np.all(rgb == color, axis = -1)
+                        # change all pixels that match color to white
+                        data[mask] = black
 
-                    # change all pixels that don't match color to black
-                    ##data[np.logical_not(mask)] = black
-                    image = Image.fromarray(data)
+                        # change all pixels that don't match color to black
+                        ##data[np.logical_not(mask)] = black
+                        image = Image.fromarray(data)
 
-                    image = image.resize((20,20), Image.BICUBIC)
-                    self.canvas.SetImage(image.convert('RGB'), 3, 11)   
+                        image = image.resize((20,20), Image.BICUBIC)
+                        logo=image.convert('RGB')
+
+                    self.canvas.SetImage(logo, 3, 11)   
 
 
                 print_time = datetime.now().strftime('%-I:%M%p')
@@ -700,11 +711,21 @@ class PlaneSign:
                 dayvals = ticker_data.history(period="1d",interval="5m")
                 dayvals.Open.to_csv("prices.csv", index=False, header=None)
                 dayvals=dayvals.Open.tolist()
-                dayvals=dayvals[-64:]
+                #dayvals=dayvals[-64:]
+
+                if len(dayvals)>64:
+                    told=np.linspace(0,len(dayvals)-1, num=len(dayvals))
+                    tnew=np.linspace(0, 63, num=64)
+                    interpdayvals = interp1d(told, dayvals)
+
+                    dayvals = interpdayvals(tnew)
 
                 daymax = max(dayvals)
                 daymin = min(dayvals)
                 dayspread = daymax - daymin
+
+                if dayspread < 0.01*openprice:
+                    dayspread = 0.01*openprice
 
                 for col in range(len(dayvals)):
                     dayvals[col]=round(20*(dayvals[col]-daymin)/dayspread)
@@ -1280,6 +1301,9 @@ class PlaneSign:
                 if mode == 12:
                     self.cca()
 
+                if mode == 13:
+                    self.finance()
+
                 plane_to_show = None
 
                 if mode == 1:
@@ -1359,5 +1383,5 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    PlaneSign().finance()
-    #PlaneSign().sign_loop()
+    #PlaneSign().finance()
+    PlaneSign().sign_loop()
