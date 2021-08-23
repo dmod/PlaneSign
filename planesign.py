@@ -276,7 +276,7 @@ class PlaneSign:
         # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=A0F427
 
         blip_count = 0
-        hex_to_track = "28d6e5b7"
+        hex_to_track = "28e2f1d7"
         requests_limiter = 0
 
         while True:
@@ -285,12 +285,19 @@ class PlaneSign:
                 flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={hex_to_track}").json()
                 current_location = flight_data['trail'][0]
                 reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1&key=AIzaSyCiGYPCr8an-KXJArTgK5YC_Zm45TmhQJ8").json()
+                print(current_location)
+                print(reverse_geocode)
+
+                if len(reverse_geocode['results']) != 0:
+                    formatted_address = reverse_geocode['results'][0]['formatted_address']
+                else:
+                    formatted_address = 'Somewhere'
 
             requests_limiter = requests_limiter + 1
 
             self.canvas.Clear()
 
-            flight_number_header = f"8        {flight_data['identification']['callsign']}        8"
+            flight_number_header = f"- {flight_data['identification']['callsign']} -"
 
             graphics.DrawText(self.canvas, self.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
 
@@ -345,9 +352,7 @@ class PlaneSign:
             graphics.DrawText(self.canvas, self.font46, 48, 17, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
             graphics.DrawText(self.canvas, self.font46, 48, 23, graphics.Color(20, 160, 60), f"Spd:{current_location['spd']}")
 
-            formatted_address = reverse_geocode['results'][0]['formatted_address']
-
-            graphics.DrawText(self.canvas, self.font46, get_centered_text_x_offset_value(4, formatted_address), 31, graphics.Color(0, 0, 255), formatted_address)
+            graphics.DrawText(self.canvas, self.font57, get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
 
             self.matrix.SwapOnVSync(self.canvas)
 
