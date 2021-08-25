@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import operator
 import time
 import traceback
 import requests
@@ -12,6 +13,7 @@ from PIL import Image
 from math import sin, cos, pi
 from datetime import datetime
 from utilities import *
+from fish import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
 from flask import Flask
@@ -457,9 +459,9 @@ class PlaneSign:
         global data_dict
         data_dict = manager.dict()
 
-        Process(target=get_data_worker, args=(data_dict,)).start()
-        Process(target=get_weather_data_worker, args=(data_dict,)).start()
-        Process(target=server).start()
+        #Process(target=get_data_worker, args=(data_dict,)).start()
+        #Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        #Process(target=server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -628,11 +630,32 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
+    def aquarium(self):
+        self.canvas.Clear()
+
+        tank = Tank(self,"Background.png")
+
+        clown = Fish(tank,"Clownfish",2,0.01)
+        hippo = Fish(tank,"Hippotang",2,0.01)
+        queentrigger = Fish(tank,"Queentrigger",1,0.005)
+        grouper = Fish(tank,"Coralgrouper",1,0.005)
+        anthias = Fish(tank,"Anthias",2,0.02)
+        puffer = Fish(tank,"Pufferfish",1.5,0.005)
+        regal = Fish(tank,"Regalangel",1,0.005)
+        bicolor = Fish(tank,"Bicolorpseudochromis",3,0.01)
+        flame = Fish(tank,"Flameangel",1.5,0.01)
+        cardinal = Fish(tank,"Cardinal",1.5,0.01)
+        copper = Fish(tank,"Copperbanded",1.5,0.01)
+        wrasse = Fish(tank,"Wrasse",3,0.01)
+
+        while True:
+            tank.swim()
+            tank.draw()
+            self.wait_loop(0.1)
+
 
     def finance(self):
         self.canvas.Clear()
-
-        #data_dict["ticker"]="LUV"
 
         currprice = None
         logo = None
@@ -1380,8 +1403,8 @@ class PlaneSign:
 
 # Main function
 if __name__ == "__main__":
-    read_config()
-    read_static_airport_data()
+    #read_config()
+    #read_static_airport_data()
 
-    #PlaneSign().finance()
-    PlaneSign().sign_loop()
+    PlaneSign().aquarium()
+    #PlaneSign().sign_loop()
