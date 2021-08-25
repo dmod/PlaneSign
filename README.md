@@ -8,7 +8,7 @@
 - 2x 64x32 RGB LED Matrix = EITHER the 4mm or 5mm pitch <https://www.adafruit.com/product/2277>
 - 5V 10A 50W Power Supply 100V-240V AC to DC Adapter
 - 15 female-to-female breadboard jumper wires (150mm is best)
-- 3D print [this L-bracket](.data/adjustable_L_braket.stl) which will allow you to attach the panel to the frame
+- 3D print [this L-bracket](.data/adjustable_L_bracket.stl) which will allow you to attach the panel to the frame
 - 3D print a rectangle spacer, ~4mm back from front of wood to help with spacing the panel away from front of frame
 - 1 inch x 4 inch >= 6ft board - Cut board top piece is 25 inch 3/16 inch, side piece is 6 and 5/16 inch (for 5 MM pitch)
 - Socket cap screw M3-0.5 x 16mm to secure sign (you can find these at a hardware store)
