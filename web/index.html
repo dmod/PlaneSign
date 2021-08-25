@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="plane_button.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>DMOD Enterprises</title>
 </head>
@@ -43,7 +44,7 @@
 
   function submit_ticker() {
     call_endpoint("/submit_ticker/" + encodeURIComponent(document.getElementById("ticker").value));
-    document.getElementById("ticker").value="";
+    document.getElementById("ticker").value = "";
   }
 
   function call_endpoint(endpoint, callback) {
@@ -109,40 +110,58 @@
     </div>
   </label>
 
-  <input id="brightness_slider" type="range" min="0" max="100" step="10" value="100">
+  <input id="brightness_slider" type="range" min="0" max="100" step="1" value="100">
 
-  <button class="mode_button" onclick="set_mode(1)">Default Mode</button>
-  <button class="mode_button" onclick="set_mode(2)">Show Closest</button>
-  <button class="mode_button" onclick="set_mode(3)">Show Highest</button>
-  <button class="mode_button" onclick="set_mode(4)">Show Fastest</button>
-  <button class="mode_button" onclick="set_mode(5)">Show Slowest</button>
-  <button class="mode_button" onclick="set_mode(6)">Weather</button>
-  <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
-  <button class="mode_button" onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
-  <div id="custom_message_div" hidden>
-    <div>
-      <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
-      <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
-      <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
-      <button class="custom_colors_button" onclick="set_color_mode(3)">USA</button>
-      <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
-    </div>
-    <br>
-    <input type="text" id="custom_message"></input>
+  <div>
+
+    <fieldset class="mode_selector_button_group">
+      <legend>Planes</legend>
+      <button class="mode_button" onclick="set_mode(1)">Default Mode</button>
+      <button class="mode_button" onclick="set_mode(2)">Show Closest</button>
+      <button class="mode_button" onclick="set_mode(3)">Show Highest</button>
+      <button class="mode_button" onclick="set_mode(4)">Show Fastest</button>
+      <button class="mode_button" onclick="set_mode(5)">Show Slowest</button>
+    </fieldset>
+
+
+    <fieldset class="mode_selector_button_group">
+      <legend>Informational</legend>
+      <button class="mode_button" onclick="set_mode(6)">Weather</button>
+      <div id="finance_div" hidden>
+        Ticker Symbol:<input type="text" id="ticker"></input>
+        <button class="submit" onclick="submit_ticker();">Submit</button>
+      </div>
+      <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
+    </fieldset>
+
+    <fieldset class="mode_selector_button_group">
+      <legend>Just for Fun :)</legend>
+      <button class="mode_button" onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
+      <div id="custom_message_div" hidden>
+        <div>
+          <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
+          <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
+          <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
+          <button class="custom_colors_button" onclick="set_color_mode(3)">USA</button>
+          <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
+        </div>
+        <br>
+        <input type="text" id="custom_message"></input>
+
+      </div>
+      <button class="mode_button" onclick="set_mode(9)">Welcome Intro</button>
+      <button class="mode_button" onclick="set_mode(10)">CGOL</button>
+      <button class="mode_button" onclick="set_mode(11); document.getElementById('pong_div').hidden = false">PONG!</button>
+      <div id="pong_div" hidden>
+        <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
+        <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
+      </div>
+      <button class="mode_button" onclick="set_mode(12)">CCA</button>
+      <button class="mode_button" onclick="set_mode(13); document.getElementById('finance_div').hidden = false">Finance</button>
+    </fieldset>
 
   </div>
-  <button class="mode_button" onclick="set_mode(9)">Welcome Intro</button>
-  <button class="mode_button" onclick="set_mode(10)">CGOL</button>
-  <button class="mode_button" onclick="set_mode(11); document.getElementById('pong_div').hidden = false">PONG!</button>
-  <div id="pong_div" hidden>
-    <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
-    <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
-  </div>
-  <button class="mode_button" onclick="set_mode(12)">CCA</button>
-  <button class="mode_button" onclick="set_mode(13); document.getElementById('finance_div').hidden = false">Finance</button>
-  <div id="finance_div" hidden>
-    Ticker Symbol:<input type="text" id="ticker"></input>
-    <button class="submit" onclick="submit_ticker();">Submit</button>
-  </div>
+
 </body>
+
 </html>
