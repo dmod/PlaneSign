@@ -58,6 +58,12 @@ def set_color_mode(color):
     shared_forced_sign_update.value = 1
     return ""
 
+@app.route("/set_track_a_flight/<flight_num>")
+def set_track_a_flight(flight_num):
+    data_dict["track_a_flight_num"] = flight_num
+    shared_mode.value = 99
+    return ""
+
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
     shared_mode.value = int(mode)
@@ -235,9 +241,9 @@ class PlaneSign:
         global data_dict
         data_dict = manager.dict()
 
-        #Process(target=get_data_worker, args=(data_dict,)).start()
-        #Process(target=get_weather_data_worker, args=(data_dict,)).start()
-        #Process(target=server).start()
+        Process(target=get_data_worker, args=(data_dict,)).start()
+        Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        Process(target=server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -276,17 +282,17 @@ class PlaneSign:
         # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=A0F427
 
         blip_count = 0
-        hex_to_track = "28e2f1d7"
+        hex_to_track = data_dict["track_a_flight_num"]
         requests_limiter = 0
 
         while True:
 
-            if (requests_limiter % 16 == 0):
+            if (requests_limiter % 22 == 0):
                 flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={hex_to_track}").json()
                 current_location = flight_data['trail'][0]
-                reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1&key=AIzaSyCiGYPCr8an-KXJArTgK5YC_Zm45TmhQJ8").json()
+                reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1&key=AIzaSyD65DETlTi-o5ymfcSp2Gl8JxBS7fwOl5g").json()
                 print(current_location)
-                print(reverse_geocode)
+                #print(reverse_geocode)
 
                 if len(reverse_geocode['results']) != 0:
                     formatted_address = reverse_geocode['results'][0]['formatted_address']
@@ -344,13 +350,14 @@ class PlaneSign:
             elif blip_count == 2:
                 self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
-            #graphics.DrawText(self.canvas, self.font46, 30, 28, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
 
             graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
             graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
 
-            graphics.DrawText(self.canvas, self.font46, 48, 17, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
-            graphics.DrawText(self.canvas, self.font46, 48, 23, graphics.Color(20, 160, 60), f"Spd:{current_location['spd']}")
+            #graphics.DrawText(self.canvas, self.font46, 31, 17, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
+
+            graphics.DrawText(self.canvas, self.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
+            graphics.DrawText(self.canvas, self.font46, 70, 19, graphics.Color(20, 160, 60), f"Spd:{current_location['spd']}")
 
             graphics.DrawText(self.canvas, self.font57, get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
 
@@ -360,7 +367,9 @@ class PlaneSign:
             if blip_count == 3:
                 blip_count = 0
 
-            self.wait_loop(0.8)
+            breakout = self.wait_loop(0.8)
+            if breakout:
+                return
 
     def show_custom_message(self):
         raw_message = data_dict["custom_message"]
@@ -813,11 +822,7 @@ class PlaneSign:
         while True:
             try:
 
-                self.track_a_flight()
-
                 self.wait_loop(0.5)
-                continue
-
 
                 mode = shared_mode.value
 
@@ -845,6 +850,9 @@ class PlaneSign:
                 # 9 = welcome
                 # 10 = CGOL
                 # 11 = PONG
+
+                if mode == 99:
+                    self.track_a_flight()
 
                 if mode == 6:
                     self.show_weather()
@@ -950,11 +958,12 @@ class PlaneSign:
                 print("General error in main loop, waiting...")
                 traceback.print_exc()
                 time.sleep(5)
+                shared_mode.value = 1
 
 # Main function
 if __name__ == "__main__":
 
-    #read_config()
-    #read_static_airport_data()
+    read_config()
+    read_static_airport_data()
 
     PlaneSign().sign_loop()

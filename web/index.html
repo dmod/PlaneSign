@@ -108,14 +108,10 @@
   <button class="mode_button" onclick="set_mode(3)">Show Highest</button>
   <button class="mode_button" onclick="set_mode(4)">Show Fastest</button>
   <button class="mode_button" onclick="set_mode(5)">Show Slowest</button>
-  <button class="mode_button" onclick="set_mode(22); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
+  <button class="mode_button" onclick="document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
   <div id="track-a-flight_div" hidden>
-    <form autocomplete="off">
-      <div class="autocomplete" style="width:300px;">
-        <input id="track-a-flight_input" type="text" placeholder="Flight #"></input>
-      </div>
-    <input type="submit">
-    </form>
+    <input id="track-a-flight_flight-num"></input>
+    <button onclick="call_endpoint('/set_track_a_flight/' + document.getElementById('track-a-flight_flight-num').value);">Track-It™</button>
   </div>
   <button class="mode_button" onclick="set_mode(6)">Weather</button>
   <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
