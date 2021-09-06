@@ -439,7 +439,9 @@ class PlaneSign:
         while True:
             tank.swim()
             tank.draw()
-            self.wait_loop(0.1)
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                return
 
 
     def finance(self):
