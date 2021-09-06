@@ -5,6 +5,7 @@ import time
 import traceback
 import requests
 import random
+import sys
 from datetime import datetime
 from utilities import *
 from fish import *
@@ -448,6 +449,8 @@ class PlaneSign:
         self.canvas.Clear()
         data_dict["ticker"] = None
         s = None
+
+        sys.setrecursionlimit(3000)
 
         while True:
 
