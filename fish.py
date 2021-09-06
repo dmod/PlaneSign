@@ -3,8 +3,7 @@
 
 import PIL
 import random
-from PIL import Image
-from operator import attrgetter
+from PIL import Image, ImageDraw
 
 tankxmin = -100
 tankxmax = 227

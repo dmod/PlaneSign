@@ -1,225 +1,18 @@
-import math
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+import time
+import yfinance as yf
+import re
+from PIL import Image, ImageDraw
 import numpy as np
-import pytz
-import random
 import favicon
 import re
 import json
 import requests
+from rgbmatrix import graphics
 from requests import Session
-from PIL import Image
-from math import pi, cos, sin
-from datetime import tzinfo, timedelta, datetime
-
-NUM_STEPS = 40
-DEG_2_RAD = pi/180.0
-
-local_tz = pytz.timezone('America/New_York')
-
-def random_angle():
-    return random.randrange(0, 360)
-
-def random_rgb_255_sum():
-    _, r, g, b = next_color_rainbow_linear(random_angle())
-    return r, g, b
-
-def random_rgb(rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-    r=random.randrange(rmin, rmax+1)
-    g=random.randrange(gmin, gmax+1)
-    b=random.randrange(bmin, bmax+1)
-    return r, g, b
-
-def hsv_2_rgb(h,s,v):
-        if s == 0.0: v*=255; return (v, v, v)
-        i = int(h*6.)
-        f = (h*6.)-i; p,q,t = int(255*(v*(1.-s))), int(255*(v*(1.-s*f))), int(255*(v*(1.-s*(1.-f)))); v*=255; i%=6
-        if i == 0: return (v, t, p)
-        if i == 1: return (q, v, p)
-        if i == 2: return (p, v, t)
-        if i == 3: return (p, q, v)
-        if i == 4: return (t, p, v)
-        if i == 5: return (v, p, q)
-
-def next_color_rainbow_linear(angle,dangle=1,bright=255):
-    bright %= 256
-    angle += dangle
-    angle %= 360
-
-    if(angle <= 120):
-        r = round(bright*(120-angle)/120)
-        g = round(bright*angle/120)
-        b = 0
-    elif(angle <= 240):
-        r = 0
-        g = round(bright*(240-angle)/120)
-        b = round(bright*(angle-120)/120)
-    else:
-        r = round(bright*(angle-240)/120)
-        g = 0
-        b = round(bright*(360-angle)/120)
-
-    return angle, r, g, b
-
-def next_color_rainbow_sine(angle,dangle=1,bright=255):
-    bright %= 256
-    angle += dangle
-    angle %= 360
-
-    if(angle <= 120):
-        r = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
-        g = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
-        b = 0
-    elif(angle <= 240):
-        r = 0
-        g = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
-        b = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
-    else:
-        r = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
-        g = 0
-        b = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
-
-    return angle, r, g, b
-
-def next_color_random_walk_const_sum(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-
-    step %= 100
-
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-
-    dr=256
-    dg=256
-    db=256
-
-    while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
-
-        i = random.randrange(0, 3)
-        j = (random.randrange(0, 2)*2-1)*step
-
-        if i == 0:
-            dr = j
-            dg = -j
-            db = 0
-        elif i == 1:
-            dr = j
-            dg = 0
-            db = -j
-        else:
-            dr = 0
-            dg = j
-            db = -j
-    
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b
-
-
-def next_color_random_walk_uniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-
-    step %= 100
-
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-
-    dr=256
-    dg=256
-    db=256
-
-    while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
-
-        theta = math.acos(2*random.random()-1)
-        phi = 2*pi*random.random()
-
-        dr=round(step*cos(phi)*sin(theta))
-        dg=round(step*sin(phi)*sin(theta))
-        db=round(step*cos(theta))
-    
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b
-
-def next_color_random_walk_nonuniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-
-    step %= 100
-
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-
-    dr=256
-    dg=256
-    db=256
-
-    while (r+dr > rmax or r+dr < rmin):
-        dr = random.randrange(-step, step+1)
-    while (g+dg > gmax or g+dg < gmin):
-        dg = random.randrange(-step, step+1)
-    while (b+db > bmax or b+db < bmin):
-        db = random.randrange(-step, step+1)
-    
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b
-
-def next_color_andrew_weird(r,g,b,dr,dg,db):
-
-    rtemp = r+dr
-    gtemp = g+dg
-    btemp = b+db
-
-    if not (r>230 and dr<0) and not (r<30 and dr>0) and (rtemp <= 30 or rtemp >= 230):
-        dr *= -1
-
-    if not (g>230 and dg>0) and not (g<30 and dg<0) and (gtemp <= 30 or gtemp >= 230):
-        dg *= -1
-
-    if not (b>230 and db>0) and not (b<30 and db<0) and (btemp <= 30 or btemp >= 230):
-        db *= -1
-
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b, dr, dg, db
-
+from datetime import datetime
+from scipy.interpolate import interp1d
 
 def colordista(c1,c2):
     r1=c1[0]/255
@@ -244,7 +37,7 @@ def colordista(c1,c2):
     db=b1-b2
 
     return np.sqrt(max(dr**2, (dr - a1+a2)**2) + max(dg**2, (dg - a1+a2)**2) + max(db**2, (db - a1+a2)**2))*255
-    
+
 def flood(image,x,y,color,bg):
     threshold = 15
     sizex, sizey = image.size
@@ -566,68 +359,192 @@ def get_crypto(symbol,name):
     else:
         return None
 
-def get_distance(coord1, coord2):
-    R = 3958.8  # Earth radius in meters
-    lat1, lon1 = coord1
-    lat2, lon2 = coord2
 
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
+class Stock:
+    def __init__(self,sign,raw_ticker):
 
-    a = math.sin(dphi/2)**2 + math.cos(phi1) * \
-        math.cos(phi2)*math.sin(dlambda/2)**2
+        self.sign = sign
 
-    return (2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a)))
+        self.clean_ticker = None
+        self.cleaner_ticker = None
+        self.ticker_data = None
+        self.prev_ticker = None
+        self.prev_price = None
+        self.curr_price = None
+        self.perc_change = None
+        self.logo = None
+        self.chart = None
 
-def convert_unix_to_local_time(unix_timestamp):
-    utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
-    local_time = utc_time.astimezone(local_tz)
-    return local_time
+        self.floc = '/home/pi/PlaneSign/icons/favicons/'
 
-def interpolate(num1, num2):
-    if (num1 == 0):
-        num1 = num2
+        self.last_time = None
 
-    if num2 > num1:
-        thing = float((num2 - num1)) / NUM_STEPS
-        interpolated = [num1]
-        for _ in range(NUM_STEPS):
-            interpolated.append(interpolated[-1] + thing)
-    else:
-        thing = float((num1 - num2)) / NUM_STEPS
-        interpolated = [num1]
-        for _ in range(NUM_STEPS):
-            interpolated.append(interpolated[-1] - thing)
+        self.isnew = False
+        self.isvalid = False
 
-    return interpolated[1:]
+        try:
+            self.setticker(raw_ticker)
+        except Exception as e:
+            print(e)
 
-# Remove quotes and handle commas in fields
-# 6369,"TIST","medium_airport","Cyril E. King Airport",18.337299346923828,-64.97339630126953,23,"NA","VI","VI-U-A","Charlotte Amalie, Harry S. Truman Airport","yes","TIST","STT","STT","http://www.viport.com/airports.html","https://en.wikipedia.org/wiki/Cyril_E._King_Airport",
-def csv_superparser(csv_line):
-    parts = []
-    field = ""
-    in_quote_field = False
-    for c in csv_line:
-        if c == "\"":
-            if in_quote_field:
-                # Found quote but already in field, so it's the end of the quote field
-                in_quote_field = False
-            else:
-                # Start of quote field
-                in_quote_field = True
+    def setticker(self,raw_ticker):
+        self.isvalid = self.validate(raw_ticker)
 
-        elif c == ",":
-            if in_quote_field:
-                # Comma is in quote field, just add it like normal
-                field += c
-            else:
-                # Comma delimeter, so we are at the end of the field
-                parts.append(field)
-                field = ""
+        if self.isvalid:
+            if self.isnew:
 
+                clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker)
+                ticker_data = yf.Ticker(clean_ticker)
+
+                parts = clean_ticker.split('-')
+                cleaner_ticker = parts[0]
+
+                self.prev_ticker = self.clean_ticker
+                self.clean_ticker = clean_ticker
+                self.cleaner_ticker = cleaner_ticker
+                self.ticker_data = ticker_data
+
+                self.updatedata()
+                self.isnew = False
         else:
-            # Not a special char, just add it
-            field += c
+            raise ValueError(f'No data for ticker {raw_ticker}')
 
-    return parts
+    def updatedata(self):
+
+        self.prev_price = self.curr_price
+        self.ticker_data = yf.Ticker(self.clean_ticker)
+        self.curr_price = self.ticker_data.info["regularMarketPrice"]
+        self.open_price = self.ticker_data.info["regularMarketOpen"]
+        self.prev_close = self.ticker_data.info["previousClose"]
+        self.perc_change=100*(self.curr_price-self.prev_close)/self.prev_close
+
+        #avoid image processing after the first time unless ticker changes
+        if self.logo == None or self.isnew: 
+
+            logo = check_logos(self.floc,self.cleaner_ticker)
+            
+            if logo == None: #logo not saved, go get it from the web
+
+                logourl=self.ticker_data.info["logo_url"]
+                
+                if self.ticker_data.info["quoteType"]=="CRYPTOCURRENCY": #go get this logo somewhere else
+                    logo = get_crypto(self.ticker_data.info["fromCurrency"],self.ticker_data.info["name"])
+                else:
+                    website = self.ticker_data.info["website"]
+                    # try:
+                    #     website = self.ticker_data.info["website"]
+                    # except:
+                    #     website = re.findall(r"([^\/]*)$", logourl)[0]
+
+                    req = requests.get(logourl, stream=True, timeout=5)
+                    if req.status_code == requests.codes.ok:
+                        image = Image.open(req.raw)
+                        logo = improcess(image.convert("RGBA")).convert("RGB")
+                        width, height = logo.size
+                        if height<6: #not enough detail on scaled logo, get favicon instead
+                            logo = getFavicon(self.floc,website)
+                    else: #logourl failed, get favicon instead
+                        logo = getFavicon(self.floc,website)
+
+                if logo == None:
+                    logo = Image.new("RGB", (20,20), (0, 0, 0))
+                else:
+                    logo.save(self.floc+self.cleaner_ticker+".png")
+
+            self.logo = logo
+
+        #avoid getting history data more frequently than the interval unless ticker changes
+        if  self.chart == None or self.isnew or time.perf_counter()-self.last_time > 300:
+            self.last_time = time.perf_counter()
+            dayvals = self.ticker_data.history(period="1d",interval="5m")
+            dayvals.Open.to_csv("prices.csv", index=False, header=None)
+            dayvals=dayvals.Open.tolist()
+            
+            numpts = 32
+            tnew=np.linspace(0, 63, numpts)
+            if len(dayvals)>numpts:
+                told=np.linspace(0, 63, len(dayvals))
+                interpdayvals = interp1d(told, dayvals)
+                dayvals = interpdayvals(tnew)
+
+            daymax = max(dayvals)
+            daymin = min(dayvals)
+            dayspread = daymax - daymin
+
+            if dayspread < 0.001*self.open_price:
+                dayspread = 0.001*self.open_price
+
+            stockplot = Image.new("RGB", (64*2, 20*2), (0, 0, 0))
+            points = []
+            for col in range(len(dayvals)):
+                points.append((round(tnew[col])*2,(20-round(20*(dayvals[col]-daymin)/dayspread))*2))
+            draw = ImageDraw.Draw(stockplot)
+            if self.perc_change>=0:
+                draw.line(points, width=1, fill=(50, 255, 0), joint="curve")
+            else:
+                draw.line(points, width=1, fill=(255, 50, 0), joint="curve")
+
+            self.chart=stockplot.resize((64, 20), Image.BICUBIC)
+
+    def validate(self,raw_ticker):
+
+        clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker)
+        ticker_data = yf.Ticker(clean_ticker)
+
+        parts = clean_ticker.split('-')
+        cleaner_ticker = parts[0]
+
+        if ticker_data.info["regularMarketPrice"] != None:
+
+            if self.clean_ticker != clean_ticker:
+                self.isnew = True
+
+            return True
+        else:
+            return False
+
+    def drawlogo(self):
+
+        _, height = self.logo.size
+        self.sign.canvas.SetImage(self.logo, 5, 11+round((20-height)/2))
+
+    def drawtime(self):
+
+        print_time = datetime.now().strftime('%-I:%M%p')
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
+
+    def drawticker(self):
+
+        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3+round(3*(4-len(self.cleaner_ticker[0:4]))), 10, graphics.Color(0, 20, 150), self.cleaner_ticker[0:4])
+
+    def drawprice(self):
+
+        if self.perc_change>=0:
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(50,150,0), "+{0:.1f}".format(self.perc_change)+"%")
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(150,50,0), "{0:.1f}".format(self.perc_change)+"%")
+        currprice_str="{0:.2f}".format(self.curr_price)
+        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 10, graphics.Color(150, 150, 150), currprice_str)
+
+        if self.prev_price != None and self.prev_price != self.curr_price:
+            if self.curr_price>self.prev_price:
+                image = Image.open("/home/pi/PlaneSign/icons/finance/up.png")
+            else:
+                image = Image.open("/home/pi/PlaneSign/icons/finance/down.png")
+            self.sign.canvas.SetImage(image.convert('RGB'), 32+6*len(currprice_str), 2)  
+                
+    def drawchart(self):
+
+        self.sign.canvas.SetImage(self.chart, 64, 11)
+
+    def drawfullpage(self):
+
+        self.updatedata()
+
+        self.sign.canvas.Clear()
+
+        self.drawlogo()
+        self.drawtime()
+        self.drawticker()
+        self.drawprice()
+        self.drawchart()
