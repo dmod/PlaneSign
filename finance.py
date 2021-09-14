@@ -39,30 +39,35 @@ def colordista(c1,c2):
     return np.sqrt(max(dr**2, (dr - a1+a2)**2) + max(dg**2, (dg - a1+a2)**2) + max(db**2, (db - a1+a2)**2))*255
 
 def flood(image,x,y,color,bg):
-    threshold = 15
+    
     sizex, sizey = image.size
+    
+    if color == None:
+        color = image.getpixel((x,y))
     
     if x >= sizex or y >= sizey or x < 0 or y < 0:
         return
     
-    imagecolor = image.getpixel((x,y))
-
-    if imagecolor==bg:
-        return
+    threshold = 50
+    threshold2 = 80
+    q = []
+    q.append((x,y))
+    while (len(q)>0):
+        (x1,y1) = q.pop()
     
-    if color == None or colordista(imagecolor,color)<threshold:
-        image.putpixel((x,y),bg)
-        
-        if x<sizex-1 and colordista(imagecolor,image.getpixel((x+1,y)))<threshold:
-            flood(image,x+1,y,imagecolor,bg)
-        if y<sizey-1 and colordista(imagecolor,image.getpixel((x,y+1)))<threshold:
-            flood(image,x,y+1,imagecolor,bg)
-        if x>1 and colordista(imagecolor,image.getpixel((x-1,y)))<threshold:
-            flood(image,x-1,y,imagecolor,bg)
-        if y>1 and colordista(imagecolor,image.getpixel((x,y-1)))<threshold:
-            flood(image,x,y-1,imagecolor,bg)
-        
+        imagecolor = image.getpixel((x1,y1))
+         
+        image.putpixel((x1,y1),bg)
     
+        if x1<sizex-1 and image.getpixel((x1+1,y1))!=bg and colordista(imagecolor,image.getpixel((x1+1,y1)))<threshold and colordista(color,image.getpixel((x1+1,y1)))<threshold2:
+            q.append((x1+1,y1))
+        if y1<sizey-1 and image.getpixel((x1,y1+1))!=bg and colordista(imagecolor,image.getpixel((x1,y1+1)))<threshold and colordista(color,image.getpixel((x1,y1+1)))<threshold2:
+            q.append((x1,y1+1))
+        if x1>1 and image.getpixel((x1-1,y1))!=bg and colordista(imagecolor,image.getpixel((x1-1,y1)))<threshold and colordista(color,image.getpixel((x1-1,y1)))<threshold2:
+            q.append((x1-1,y1))
+        if y1>1 and image.getpixel((x1,y1-1))!=bg and colordista(imagecolor,image.getpixel((x1,y1-1)))<threshold and colordista(color,image.getpixel((x1,y1-1)))<threshold2:
+            q.append((x1,y1-1))
+            
 def autocrop(image,bg):
 
     sizex, sizey = image.size
@@ -80,7 +85,7 @@ def autocrop(image,bg):
     top = row
         
     flag=False
-    for row in range(sizey-1,-1,-1):
+    for row in range(sizey-1,top+2,-1):
         for col in range(sizex):
             if image.getpixel((col,row))!=bg:
                 flag=True
@@ -92,7 +97,7 @@ def autocrop(image,bg):
     
     flag=False
     for col in range(sizex):
-        for row in range(sizey):
+        for row in range(top+1,bot,1):
             if image.getpixel((col,row))!=bg:
                 flag=True
             if flag:
@@ -103,8 +108,8 @@ def autocrop(image,bg):
     left = col
     
     flag=False
-    for col in range(sizex-1,-1,-1):
-        for row in range(sizey):
+    for col in range(sizex-1,left+2,-1):
+        for row in range(top+1,bot,1):
             if image.getpixel((col,row))!=bg:
                 flag=True
             if flag:
@@ -114,7 +119,7 @@ def autocrop(image,bg):
         
     right = col
     
-    return image.crop((left, top, right, bot))    
+    return image.crop((left, top, right, bot))   
 
 def improcess(image):
     width, height = image.size
@@ -139,19 +144,6 @@ def improcess(image):
     new_image.paste(image,(0,0),image)
     
     image = new_image
-    
-    #preshrink logo so recursive flood doesn't cause stack overflow or hit recursion limit
-    width, height = image.size
-    sz=50
-    if width>sz or height>sz:
-        if width>height:
-            image = image.resize((sz,int(sz*height/width)), Image.BICUBIC)
-        elif height>width:
-            image = image.resize((int(sz*width/height),sz), Image.BICUBIC)
-        else:
-            image = image.resize((sz,sz), Image.BICUBIC)
-            
-        width, height = image.size
     
     tl = image.getpixel((0,0))
     tr = image.getpixel((-1,0))
@@ -374,6 +366,7 @@ class Stock:
         self.perc_change = None
         self.logo = None
         self.chart = None
+        self.x = None
 
         self.floc = '/home/pi/PlaneSign/icons/favicons/'
 
@@ -388,31 +381,26 @@ class Stock:
             print(e)
 
     def setticker(self,raw_ticker):
-        self.isvalid = self.validate(raw_ticker)
+        clean_ticker, cleaner_ticker, ticker_data = self.validate(raw_ticker)
 
         if self.isvalid:
             if self.isnew:
-
-                clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker)
-                ticker_data = yf.Ticker(clean_ticker)
-
-                parts = clean_ticker.split('-')
-                cleaner_ticker = parts[0]
 
                 self.prev_ticker = self.clean_ticker
                 self.clean_ticker = clean_ticker
                 self.cleaner_ticker = cleaner_ticker
                 self.ticker_data = ticker_data
 
-                self.updatedata()
+                self.updatedata(False)
                 self.isnew = False
         else:
             raise ValueError(f'No data for ticker {raw_ticker}')
 
-    def updatedata(self):
+    def updatedata(self,newticker=True):
 
         self.prev_price = self.curr_price
-        self.ticker_data = yf.Ticker(self.clean_ticker)
+        if newticker:
+            self.ticker_data = yf.Ticker(self.clean_ticker)
         self.curr_price = self.ticker_data.info["regularMarketPrice"]
         self.open_price = self.ticker_data.info["regularMarketOpen"]
         self.prev_close = self.ticker_data.info["previousClose"]
@@ -429,12 +417,12 @@ class Stock:
                 
                 if self.ticker_data.info["quoteType"]=="CRYPTOCURRENCY": #go get this logo somewhere else
                     logo = get_crypto(self.ticker_data.info["fromCurrency"],self.ticker_data.info["name"])
-                else:
-                    website = self.ticker_data.info["website"]
-                    # try:
-                    #     website = self.ticker_data.info["website"]
-                    # except:
-                    #     website = re.findall(r"([^\/]*)$", logourl)[0]
+                elif logourl != "":
+                    #website = self.ticker_data.info["website"]
+                    try:
+                        website = self.ticker_data.info["website"]
+                    except:
+                        website = re.findall(r"([^\/]*)$", logourl)[0]
 
                     req = requests.get(logourl, stream=True, timeout=5)
                     if req.status_code == requests.codes.ok:
@@ -499,14 +487,16 @@ class Stock:
             if self.clean_ticker != clean_ticker:
                 self.isnew = True
 
-            return True
+            self.isvalid = True
         else:
-            return False
+            self.isvalid = False
+
+        return clean_ticker, cleaner_ticker, ticker_data
 
     def drawlogo(self):
 
-        _, height = self.logo.size
-        self.sign.canvas.SetImage(self.logo, 5, 11+round((20-height)/2))
+        width, height = self.logo.size
+        self.sign.canvas.SetImage(self.logo, 5+round((20-width)/2.0), 11+round((20-height)/2.0))
 
     def drawtime(self):
 

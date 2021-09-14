@@ -5,7 +5,6 @@ import time
 import traceback
 import requests
 import random
-import sys
 from datetime import datetime
 from utilities import *
 from fish import *
@@ -450,8 +449,6 @@ class PlaneSign:
         data_dict["ticker"] = None
         s = None
 
-        sys.setrecursionlimit(3000)
-
         while True:
 
             ddt = data_dict["ticker"] 
@@ -479,7 +476,7 @@ class PlaneSign:
                 image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
                 self.canvas.SetImage(image.convert('RGB'), 75, -5)  
 
-            breakout = self.wait_loop(2)
+            breakout = self.wait_loop(0.1)
             if breakout:
                 return
             self.matrix.SwapOnVSync(self.canvas)
