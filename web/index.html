@@ -127,11 +127,12 @@
     <fieldset class="mode_selector_button_group">
       <legend>Informational</legend>
       <button class="mode_button" onclick="set_mode(6)">Weather</button>
+      <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
+      <button class="mode_button" onclick="set_mode(13); document.getElementById('finance_div').hidden = false">Finance</button>
       <div id="finance_div" hidden>
         Ticker Symbol:<input type="text" id="ticker"></input>
         <button class="submit" onclick="submit_ticker();">Submit</button>
       </div>
-      <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
     </fieldset>
 
     <fieldset class="mode_selector_button_group">
@@ -157,7 +158,7 @@
         <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
       </div>
       <button class="mode_button" onclick="set_mode(12)">CCA</button>
-      <button class="mode_button" onclick="set_mode(13); document.getElementById('finance_div').hidden = false">Finance</button>
+      <button class="mode_button" onclick="set_mode(14)">Aquarium</button>
     </fieldset>
 
   </div>
