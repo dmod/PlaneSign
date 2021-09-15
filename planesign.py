@@ -5,25 +5,19 @@ import time
 import traceback
 import requests
 import random
-import numpy as np
-import yfinance as yf
-import re
-from PIL import Image
-from math import sin, cos, pi
 from datetime import datetime
 from utilities import *
+from fish import *
+from finance import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
 from flask import Flask
-from PIL import Image
+from PIL import Image, ImageDraw
 from flask_cors import CORS
 from enum import Enum
 from collections import namedtuple
-from scipy.interpolate import interp1d
 
 RGB = namedtuple('RGB', 'r g b')
-
-DEG_2_RAD = pi/180.0
 
 COLORS = {}
 COLORS[0] = [RGB(3, 194, 255)] #Plain
@@ -218,210 +212,6 @@ def read_static_airport_data():
             code_to_airport[code] = name
 
     print(str(len(code_to_airport)) + " airports added.")
-
-def random_angle():
-    return random.randrange(0, 360)
-
-def random_rgb_255_sum():
-    _, r, g, b = next_color_rainbow_linear(random_angle())
-    return r, g, b
-
-def random_rgb(rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-    r=random.randrange(rmin, rmax+1)
-    g=random.randrange(gmin, gmax+1)
-    b=random.randrange(bmin, bmax+1)
-    return r, g, b
-
-def hsv_2_rgb(h,s,v):
-        if s == 0.0: v*=255; return (v, v, v)
-        i = int(h*6.)
-        f = (h*6.)-i; p,q,t = int(255*(v*(1.-s))), int(255*(v*(1.-s*f))), int(255*(v*(1.-s*(1.-f)))); v*=255; i%=6
-        if i == 0: return (v, t, p)
-        if i == 1: return (q, v, p)
-        if i == 2: return (p, v, t)
-        if i == 3: return (p, q, v)
-        if i == 4: return (t, p, v)
-        if i == 5: return (v, p, q)
-
-def next_color_rainbow_linear(angle,dangle=1,bright=255):
-    bright %= 256
-    angle += dangle
-    angle %= 360
-
-    if(angle <= 120):
-        r = round(bright*(120-angle)/120)
-        g = round(bright*angle/120)
-        b = 0
-    elif(angle <= 240):
-        r = 0
-        g = round(bright*(240-angle)/120)
-        b = round(bright*(angle-120)/120)
-    else:
-        r = round(bright*(angle-240)/120)
-        g = 0
-        b = round(bright*(360-angle)/120)
-
-    return angle, r, g, b
-
-def next_color_rainbow_sine(angle,dangle=1,bright=255):
-    bright %= 256
-    angle += dangle
-    angle %= 360
-
-    if(angle <= 120):
-        r = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
-        g = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
-        b = 0
-    elif(angle <= 240):
-        r = 0
-        g = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
-        b = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
-    else:
-        r = round(bright*(1-cos(angle*DEG_2_RAD*3/2))/2)
-        g = 0
-        b = round(bright*(cos(angle*DEG_2_RAD*3/2)+1)/2)
-
-    return angle, r, g, b
-
-def next_color_random_walk_const_sum(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-
-    step %= 100
-
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-
-    dr=256
-    dg=256
-    db=256
-
-    while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
-
-        i = random.randrange(0, 3)
-        j = (random.randrange(0, 2)*2-1)*step
-
-        if i == 0:
-            dr = j
-            dg = -j
-            db = 0
-        elif i == 1:
-            dr = j
-            dg = 0
-            db = -j
-        else:
-            dr = 0
-            dg = j
-            db = -j
-    
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b
-
-
-def next_color_random_walk_uniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-
-    step %= 100
-
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-
-    dr=256
-    dg=256
-    db=256
-
-    while (r+dr) > rmax or (r+dr) < rmin or (g+dg) > gmax or (g+dg) < gmin or (b+db) > bmax or (b+db) < bmin:
-
-        theta = math.acos(2*random.random()-1)
-        phi = 2*pi*random.random()
-
-        dr=round(step*cos(phi)*sin(theta))
-        dg=round(step*sin(phi)*sin(theta))
-        db=round(step*cos(theta))
-    
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b
-
-def next_color_random_walk_nonuniform_step(r,g,b,step=1,rmin=0,rmax=255,gmin=0,gmax=255,bmin=0,bmax=255):
-
-    rmin %= 256
-    rmax %= 256
-    gmin %= 256
-    gmax %= 256
-    bmin %= 256
-    bmax %= 256
-
-    step %= 100
-
-    if rmax<rmin: rmin=rmax
-    if gmax<gmin: gmin=gmax
-    if bmax<bmin: bmin=bmax
-
-    dr=256
-    dg=256
-    db=256
-
-    while (r+dr > rmax or r+dr < rmin):
-        dr = random.randrange(-step, step+1)
-    while (g+dg > gmax or g+dg < gmin):
-        dg = random.randrange(-step, step+1)
-    while (b+db > bmax or b+db < bmin):
-        db = random.randrange(-step, step+1)
-    
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b
-
-def next_color_andrew_weird(r,g,b,dr,dg,db):
-
-    rtemp = r+dr
-    gtemp = g+dg
-    btemp = b+db
-
-    if not (r>230 and dr<0) and not (r<30 and dr>0) and (rtemp <= 30 or rtemp >= 230):
-        dr *= -1
-
-    if not (g>230 and dg>0) and not (g<30 and dg<0) and (gtemp <= 30 or gtemp >= 230):
-        dg *= -1
-
-    if not (b>230 and db>0) and not (b<30 and db<0) and (btemp <= 30 or btemp >= 230):
-        db *= -1
-
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b, dr, dg, db
 
 
 class PlaneSign:
@@ -630,126 +420,70 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
+    def aquarium(self):
+        self.canvas.Clear()
+
+        tank = Tank(self,"Background.png")
+
+        clown = Fish(tank,"Clownfish",2,0.01)
+        hippo = Fish(tank,"Hippotang",2,0.01)
+        queentrigger = Fish(tank,"Queentrigger",1,0.005)
+        grouper = Fish(tank,"Coralgrouper",1,0.005)
+        anthias = Fish(tank,"Anthias",2,0.02)
+        puffer = Fish(tank,"Pufferfish",1.5,0.005)
+        regal = Fish(tank,"Regalangel",1,0.005)
+        bicolor = Fish(tank,"Bicolorpseudochromis",3,0.01)
+        flame = Fish(tank,"Flameangel",1.5,0.01)
+        cardinal = Fish(tank,"Cardinal",1.5,0.01)
+        copper = Fish(tank,"Copperbanded",1.5,0.01)
+        wrasse = Fish(tank,"Wrasse",3,0.01)
+
+        while True:
+            tank.swim()
+            tank.draw()
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                return
+
 
     def finance(self):
         self.canvas.Clear()
-
-        #data_dict["ticker"]="LUV"
-
-        currprice = None
-        logo = None
-        last_ticker = None
         data_dict["ticker"] = None
+        s = None
 
         while True:
-            if(data_dict["ticker"] != None and data_dict["ticker"] != ""):
 
-                if last_ticker != data_dict["ticker"]:
-                    currprice = None
-                    logo = None
-                    last_ticker = data_dict["ticker"]
-                    self.canvas.Clear()
+            ddt = data_dict["ticker"] 
 
-                raw_ticker = data_dict["ticker"].upper()
-                clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker) 
+            if(ddt != None and ddt != ""):
 
-                ticker_data = yf.Ticker(clean_ticker)
+                raw_ticker = ddt.upper()
 
-                prevprice = currprice
-                currprice=ticker_data.info["regularMarketPrice"]
-                openprice=ticker_data.info["regularMarketOpen"]
-                prevclose=ticker_data.info["previousClose"]
-                percchange=100*(currprice-prevclose)/prevclose
-                logourl=ticker_data.info["logo_url"]
-
-                if logourl != "":
-                    if logo == None: # dont do all this image processing after the first time
-                        image = Image.open(requests.get(logourl, stream=True).raw)  
-
-                        new_image = Image.new("RGB", image.size, (0, 0, 0))
-
-                        new_image.paste(image)
-                        
-                        image= new_image
-
-                        bg=max(image.getcolors(image.size[0]*image.size[1]))
-
-                        im = image.convert('RGBA')
-
-                        data = np.array(im)
-                        # just use the rgb values for comparison
-                        rgb = data[:,:,:3]
-                        color = bg[1]  # Original value
-                        black = [0,0,0, 255]
-                        white = [255,255,255,255]
-                        mask = np.all(rgb == color, axis = -1)
-                        # change all pixels that match color to white
-                        data[mask] = black
-
-                        # change all pixels that don't match color to black
-                        ##data[np.logical_not(mask)] = black
-                        image = Image.fromarray(data)
-
-                        image = image.resize((20,20), Image.BICUBIC)
-                        logo=image.convert('RGB')
-
-                    self.canvas.SetImage(logo, 3, 11)   
-
-
-                print_time = datetime.now().strftime('%-I:%M%p')
-
-                graphics.DrawText(self.canvas, self.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
-
-                graphics.DrawText(self.canvas, self.fontbig, 2, 10, graphics.Color(0, 20, 150), clean_ticker)
-
-                if percchange>=0:
-                    graphics.DrawText(self.canvas, self.fontbig, 30, 22, graphics.Color(50,150,0), "+{0:.1f}".format(percchange)+"%")
+                if s == None:
+                    s = Stock(self, raw_ticker)
                 else:
-                    graphics.DrawText(self.canvas, self.fontbig, 30, 22, graphics.Color(150,50,0), "{0:.1f}".format(percchange)+"%")
+                    s.setticker(raw_ticker)
 
-                graphics.DrawText(self.canvas, self.fontbig, 30, 10, graphics.Color(150, 150, 150), "{0:.2f}".format(currprice))
-                
+                s.drawfullpage()
 
-                dayvals = ticker_data.history(period="1d",interval="5m")
-                dayvals.Open.to_csv("prices.csv", index=False, header=None)
-                dayvals=dayvals.Open.tolist()
-                #dayvals=dayvals[-64:]
+            else:
 
-                if len(dayvals)>64:
-                    told=np.linspace(0,len(dayvals)-1, num=len(dayvals))
-                    tnew=np.linspace(0, 63, num=64)
-                    interpdayvals = interp1d(told, dayvals)
+                graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
+                graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
 
-                    dayvals = interpdayvals(tnew)
+                image = Image.open("/home/pi/PlaneSign/icons/finance/money.png")
+                image = image.resize((20, 20), Image.BICUBIC)
+                self.canvas.SetImage(image.convert('RGB'), 10, 14)
 
-                daymax = max(dayvals)
-                daymin = min(dayvals)
-                dayspread = daymax - daymin
+                image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
+                self.canvas.SetImage(image.convert('RGB'), 75, -5)  
 
-                if dayspread < 0.01*openprice:
-                    dayspread = 0.01*openprice
-
-                for col in range(len(dayvals)):
-                    dayvals[col]=round(20*(dayvals[col]-daymin)/dayspread)
-                    if percchange>=0:
-                        self.canvas.SetPixel(64+col, 31-dayvals[col], 50, 150, 0)
-                    else:
-                        self.canvas.SetPixel(64+col, 31-dayvals[col], 150, 50, 0)
-                if prevprice != None and prevprice != currprice:
-                    if currprice>prevprice:
-                        image = Image.open("/home/pi/PlaneSign/icons/finance/up.png")
-                        #image = image.resize((7,7), Image.BICUBIC)
-                        self.canvas.SetImage(image.convert('RGB'), 66, 2)  
-                    else:
-                        image = Image.open("/home/pi/PlaneSign/icons/finance/down.png")
-                        #image = image.resize((7,7), Image.BICUBIC)
-                        self.canvas.SetImage(image.convert('RGB'), 66, 2)  
-
-            breakout = self.wait_loop(5)
+            breakout = self.wait_loop(0.1)
             if breakout:
                 return
             self.matrix.SwapOnVSync(self.canvas)
             self.canvas = self.matrix.CreateFrameCanvas()
+
 
     def cca(self):
         self.canvas.Clear()
@@ -1305,6 +1039,9 @@ class PlaneSign:
 
                 if mode == 13:
                     self.finance()
+                
+                if mode == 14:
+                    self.aquarium()
 
                 plane_to_show = None
 
@@ -1385,5 +1122,4 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    #PlaneSign().finance()
     PlaneSign().sign_loop()
