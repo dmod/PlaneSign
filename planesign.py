@@ -496,7 +496,10 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def show_custom_message(self):
-        raw_message = data_dict["custom_message"]
+
+        raw_message = ""
+        if "custom_message" in data_dict:
+            raw_message = data_dict["custom_message"]
 
         self.canvas.Clear()
 
@@ -520,7 +523,6 @@ class PlaneSign:
             starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
 
         print_the_char_at_this_x_index = starting_line_1_x_index
-        lines = line_1 + line_2
 
         if len(line_2) == 0:
             print_at_y_index = 21
