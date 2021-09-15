@@ -361,15 +361,15 @@ class PlaneSign:
         day_2_xoffset = 88
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][0]['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.ANTIALIAS)
+        image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][1]['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.ANTIALIAS)
+        image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
 
         image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][2]['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.ANTIALIAS)
+        image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
         graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), CONF["WEATHER_CITY_NAME"])
