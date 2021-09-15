@@ -12,6 +12,8 @@
 
 <script type="application/javascript">
 
+  var global_current_mode;
+
   window.onload = function () {
     update_sign_status();
     update_brightness_slider();
@@ -65,11 +67,9 @@
   }
 
   function set_mode(mode) {
-    var all_buttons = document.getElementsByClassName("mode_button");
-    for (let button of all_buttons) {
-      button.style.backgroundColor = "black"
-    }
-    document.getElementById(mode).style.backgroundColor = "red";
+    document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
+    document.getElementById(mode).style.backgroundColor = "red"; // Turn on new button
+    global_current_mode = mode;
 
     if (mode !== 8) {
       document.getElementById('custom_message_div').hidden = true;
@@ -99,6 +99,7 @@
     call_endpoint("/get_mode", function (current_mode) {
       if (current_mode){
         document.getElementById(current_mode).style.backgroundColor = "red";
+        global_current_mode = current_mode;
       }
     });
   }
