@@ -1,5 +1,27 @@
+.groups_wrapper {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 30px;
+  row-gap: 30px;
+}
+
+.box1 {
+  grid-column-start: 1;
+  grid-column-end: 2;
+}
+
+.box2 {
+  grid-column-start: 2;
+  grid-column-end: 3;
+}
+
+.box3 {
+  grid-column-start: 2;
+  grid-column-end: 3;
+}
+
 .mode_button {
-  color:white;
+  color: white;
   padding: 7px 35px;
   font: 300 150% langdon;
   margin: 20px;
@@ -7,11 +29,17 @@
   border: 3px solid black;
 }
 
+.mode_button:active {
+  background-color: red;
+}
+
+.mode_button:focus {
+  background-color: red;
+}
+
 .mode_selector_button_group {
   border-radius: 25px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+
   background: #7bb9c9;
   margin: 20px;
   border-style: solid;
