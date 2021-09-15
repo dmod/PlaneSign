@@ -423,7 +423,7 @@ class PlaneSign:
     def aquarium(self):
         self.canvas.Clear()
 
-        tank = Tank(self,"Background.png")
+        tank = Tank(self)
 
         clown = Fish(tank,"Clownfish",2,0.01)
         hippo = Fish(tank,"Hippotang",2,0.01)

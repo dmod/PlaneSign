@@ -25,8 +25,8 @@ def randomloc():
 
 
 class Tank:
-    def __init__(self,sign,background):
-        self.background = Image.open(f"/home/pi/PlaneSign/icons/aquarium/{background}")
+    def __init__(self, sign):
+        self.background = Image.open(f"/home/pi/PlaneSign/icons/aquarium/Background.png")
         self.fulltank = None
         self.sign = sign
         self.denizens=[]
@@ -39,20 +39,15 @@ class Tank:
         
         self.fulltank = self.background.copy()
 
-        
         for zind in range(tankzmin,tankzmax+1):
             if self.denizens:
                 for fish in self.denizens:
                     if fish.z == zind:
                         self.fulltank.paste(fish.sprite, (round(fish.x),round(fish.y)), fish.sprite)
             self.fulltank.paste(waterlayer, (0,0), waterlayer)
-        
 
-        self.sign.canvas.brightness = 25
-        self.sign.matrix.brightness = 25
         self.sign.canvas.SetImage(self.fulltank.convert('RGB'), 0, 0)
         self.sign.matrix.SwapOnVSync(self.sign.canvas)
-
 
 class Fish:
     def __init__(self,tank,name,maxspeed,turnprob,dir=random.randint(0,3)):
