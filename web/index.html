@@ -65,6 +65,12 @@
   }
 
   function set_mode(mode) {
+    var all_buttons = document.getElementsByClassName("mode_button");
+    for (let button of all_buttons) {
+      button.style.backgroundColor = "black"
+    }
+    document.getElementById(mode).style.backgroundColor = "red";
+
     if (mode !== 8) {
       document.getElementById('custom_message_div').hidden = true;
     }
@@ -82,16 +88,18 @@
   }
 
   function update_sign_status() {
-    call_endpoint("/status", function (actual_text) {
-      if (actual_text === "1") {
+    call_endpoint("/status", function (current_status) {
+      if (current_status === "1") {
         document.getElementById("toggle_switch").checked = true;
       } else {
         document.getElementById("toggle_switch").checked = false;
       }
     });
 
-    call_endpoint("/get_mode", function (actual_text) {
-      document.getElementById(actual_text).focus();
+    call_endpoint("/get_mode", function (current_mode) {
+      if (current_mode){
+        document.getElementById(current_mode).style.backgroundColor = "red";
+      }
     });
   }
 </script>

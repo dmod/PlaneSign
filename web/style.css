@@ -22,19 +22,11 @@
 
 .mode_button {
   color: white;
+  background-color: black;
   padding: 7px 35px;
   font: 300 150% langdon;
   margin: 20px;
-  background: transparent;
   border: 3px solid black;
-}
-
-.mode_button:active {
-  background-color: red;
-}
-
-.mode_button:focus {
-  background-color: red;
 }
 
 .mode_selector_button_group {
