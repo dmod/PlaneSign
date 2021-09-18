@@ -321,6 +321,8 @@ class PlaneSign:
 
         if shared_color_mode.value == 1:
             selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
+        elif shared_color_mode.value >= 5:
+            selected_color_list = [RGB(((shared_color_mode.value-5) >> 16) & 255, ((shared_color_mode.value-5) >> 8) & 255, (shared_color_mode.value-5) & 255)]
         else:
             selected_color_list = COLORS[shared_color_mode.value]
 
@@ -1019,6 +1021,8 @@ class PlaneSign:
                     self.starting_color_index += 1
 
                     if shared_color_mode.value == 1:
+                        self.wait_loop(0.1)
+                    elif shared_color_mode.value >= 5:
                         self.wait_loop(0.1)
                     else:
                         self.wait_loop(1.1)

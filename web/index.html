@@ -84,7 +84,7 @@
   }
 
   function set_color_mode(color) {
-    call_endpoint("/set_color_mode/" + color);
+      call_endpoint("/set_color_mode/" + color);
   }
 
   function update_sign_status() {
@@ -156,6 +156,7 @@
           <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
           <button class="custom_colors_button" onclick="set_color_mode(3)">USA</button>
           <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
+          <input type="color" id="colorpicker" oninput="set_color_mode(5+parseInt(document.getElementById('colorpicker').value.substring(1), 16))" value="#ff0000">
         </div>
         <br>
         <input type="text" id="custom_message"></input>
