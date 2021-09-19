@@ -37,6 +37,9 @@ cd
 sudo -H pip3 install pytz flask flask_cors libatlas-base-dev numpy scipy yfinance favicon
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
+touch prices.csv
+chmod 777 prices.csv
+chmod -R 777 icons/
 sudo ./planesign.py
 ```
 
