@@ -74,13 +74,25 @@
     if (mode !== 8) {
       document.getElementById('custom_message_div').hidden = true;
     }
+    if (mode !== 10) {
+      document.getElementById('cgol_div').hidden = true;
+    }
     if (mode !== 11) {
       document.getElementById('pong_div').hidden = true;
     }
     if (mode !== 13) {
       document.getElementById('finance_div').hidden = true;
     }
-    call_endpoint("/set_mode/" + mode);
+    if (mode == 10){
+      var ele = document.getElementsByName('cgolstyle');
+      for(i = 0; i < ele.length; i++) {
+          if(ele[i].checked)
+            break;
+      }
+      call_endpoint("/set_mode/" + mode +"?style=" + ele[i].value);
+    } else {
+      call_endpoint("/set_mode/" + mode);
+    }
   }
 
   function set_color_mode(color) {
@@ -162,7 +174,13 @@
         <input type="text" id="custom_message"></input>
       </div>
       <button id="9" class="mode_button" onclick="set_mode(this.id)">Welcome Intro</button>
-      <button id="10" class="mode_button" onclick="set_mode(this.id)">CGOL</button>
+      <button id="10" class="mode_button" onclick="set_mode(this.id); document.getElementById('cgol_div').hidden = false">CGOL</button>
+      <div id="cgol_div" hidden>
+        <input type="radio" id="rainbowgol" name="cgolstyle" onclick="set_mode(10)" value="1" checked="checked">
+        <label for="rainbowgol">Rainbow Rules</label>
+        <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode(10)" value="2">
+        <label for="colorshift">Color Shifting</label>
+      </div>
       <button id="11" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
       <div id="pong_div" hidden>
         <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">

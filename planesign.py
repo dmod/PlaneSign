@@ -11,7 +11,7 @@ from fish import *
 from finance import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
-from flask import Flask
+from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 from enum import Enum
@@ -65,6 +65,8 @@ def set_color_mode(color):
 def set_mode(mode):
     shared_mode.value = int(mode)
     shared_forced_sign_update.value = 1
+    if request.args:
+        arg_dict.update(request.args)
     return ""
 
 @app.route("/get_mode")
@@ -245,7 +247,9 @@ class PlaneSign:
 
         manager = Manager()
         global data_dict
+        global arg_dict
         data_dict = manager.dict()
+        arg_dict = manager.dict()
 
         Process(target=get_data_worker, args=(data_dict,)).start()
         Process(target=get_weather_data_worker, args=(data_dict,)).start()
@@ -516,24 +520,24 @@ class PlaneSign:
                     ns = (cs+1)%numstates
                     curr = 0
         
-                    if self.check_matrix(col-1,row-1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col-1,row-1,current_state) == ns:
+                    #    curr += 1
                     if self.check_matrix(col,row-1,current_state) == ns:
                         curr += 1
-                    if self.check_matrix(col+1,row-1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col+1,row-1,current_state) == ns:
+                    #    curr += 1
         
                     if self.check_matrix(col-1,row,current_state) == ns:
                         curr += 1
                     if self.check_matrix(col+1,row,current_state) == ns:
                         curr += 1
         
-                    if self.check_matrix(col-1,row+1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col-1,row+1,current_state) == ns:
+                    #    curr += 1
                     if self.check_matrix(col,row+1,current_state) == ns:
                         curr += 1
-                    if self.check_matrix(col+1,row+1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col+1,row+1,current_state) == ns:
+                    #    curr += 1
                     
                     if curr >= threshold:
                         self.set_matrix(col,row,next_state,ns)
@@ -565,7 +569,10 @@ class PlaneSign:
 
         generation_time = 0.15
 
-        cgol_cellcolor = True #change this
+        if arg_dict["style"]=="2":
+            cgol_cellcolor = False
+        else:
+            cgol_cellcolor = True
 
         current_state = [[False for j in range(32)] for i in range(128)]
         next_state = [[False for j in range(32)] for i in range(128)]
