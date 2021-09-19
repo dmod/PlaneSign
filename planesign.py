@@ -369,6 +369,23 @@ class PlaneSign:
         day_1_xoffset = 45
         day_2_xoffset = 88
 
+        daily = data_dict['weather']['daily']
+
+        day = daily[start_index_day]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.BICUBIC)
+        self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
+
+        day = daily[start_index_day+1]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.BICUBIC)
+        self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
+        
+        day = daily[start_index_day+2]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.BICUBIC)
+        self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
+
         graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), CONF["WEATHER_CITY_NAME"])
 
         # Calculate and draw the horizontal boarder around the WEATHER_CITY_NAME
@@ -385,15 +402,8 @@ class PlaneSign:
         graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
         graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
 
-        daily = data_dict['weather']['daily']
-
         # Day 0
         day = daily[start_index_day]
-
-        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.BICUBIC)
-        self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
-
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
@@ -401,11 +411,6 @@ class PlaneSign:
 
         # Day 1 
         day = daily[start_index_day + 1]
-
-        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.BICUBIC)
-        self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
-
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
@@ -413,11 +418,6 @@ class PlaneSign:
 
         # Day 2 
         day = daily[start_index_day + 2]
-
-        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.BICUBIC)
-        self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
-
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(self.canvas, self.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
