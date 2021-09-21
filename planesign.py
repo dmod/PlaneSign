@@ -11,7 +11,7 @@ from fish import *
 from finance import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
-from flask import Flask
+from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 from enum import Enum
@@ -65,6 +65,8 @@ def set_color_mode(color):
 def set_mode(mode):
     shared_mode.value = int(mode)
     shared_forced_sign_update.value = 1
+    if request.args:
+        arg_dict.update(request.args)
     return ""
 
 @app.route("/get_mode")
@@ -245,7 +247,9 @@ class PlaneSign:
 
         manager = Manager()
         global data_dict
+        global arg_dict
         data_dict = manager.dict()
+        arg_dict = manager.dict()
 
         Process(target=get_data_worker, args=(data_dict,)).start()
         Process(target=get_weather_data_worker, args=(data_dict,)).start()
@@ -321,6 +325,8 @@ class PlaneSign:
 
         if shared_color_mode.value == 1:
             selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
+        elif shared_color_mode.value >= 5:
+            selected_color_list = [RGB(((shared_color_mode.value-5) >> 16) & 255, ((shared_color_mode.value-5) >> 8) & 255, (shared_color_mode.value-5) & 255)]
         else:
             selected_color_list = COLORS[shared_color_mode.value]
 
@@ -356,19 +362,31 @@ class PlaneSign:
     def show_weather(self):
         self.canvas = self.matrix.CreateFrameCanvas()
 
+        # Default to the actual "today"
+        start_index_day = 0
+
+        # After 6PM today? Get the next days forecast
+        if (datetime.now().hour >= 18):
+            start_index_day = 1
+
         day_0_xoffset = 2
         day_1_xoffset = 45
         day_2_xoffset = 88
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][0]['weather'][0]['icon']}.png")
+        daily = data_dict['weather']['daily']
+
+        day = daily[start_index_day]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][1]['weather'][0]['icon']}.png")
+        day = daily[start_index_day+1]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
-
-        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][2]['weather'][0]['icon']}.png")
+        
+        day = daily[start_index_day+2]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
@@ -387,15 +405,6 @@ class PlaneSign:
 
         graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
         graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
-
-        daily = data_dict['weather']['daily']
-
-        # Default to the actual "today"
-        start_index_day = 0
-
-        # After 6PM today? Get the next days forecast
-        if (datetime.now().hour >= 18):
-            start_index_day = 1
 
         # Day 0
         day = daily[start_index_day]
@@ -511,24 +520,24 @@ class PlaneSign:
                     ns = (cs+1)%numstates
                     curr = 0
         
-                    if self.check_matrix(col-1,row-1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col-1,row-1,current_state) == ns:
+                    #    curr += 1
                     if self.check_matrix(col,row-1,current_state) == ns:
                         curr += 1
-                    if self.check_matrix(col+1,row-1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col+1,row-1,current_state) == ns:
+                    #    curr += 1
         
                     if self.check_matrix(col-1,row,current_state) == ns:
                         curr += 1
                     if self.check_matrix(col+1,row,current_state) == ns:
                         curr += 1
         
-                    if self.check_matrix(col-1,row+1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col-1,row+1,current_state) == ns:
+                    #    curr += 1
                     if self.check_matrix(col,row+1,current_state) == ns:
                         curr += 1
-                    if self.check_matrix(col+1,row+1,current_state) == ns:
-                        curr += 1
+                    #if self.check_matrix(col+1,row+1,current_state) == ns:
+                    #    curr += 1
                     
                     if curr >= threshold:
                         self.set_matrix(col,row,next_state,ns)
@@ -560,7 +569,10 @@ class PlaneSign:
 
         generation_time = 0.15
 
-        cgol_cellcolor = True #change this
+        if arg_dict["style"]=="2":
+            cgol_cellcolor = False
+        else:
+            cgol_cellcolor = True
 
         current_state = [[False for j in range(32)] for i in range(128)]
         next_state = [[False for j in range(32)] for i in range(128)]
@@ -1019,6 +1031,8 @@ class PlaneSign:
                     self.starting_color_index += 1
 
                     if shared_color_mode.value == 1:
+                        self.wait_loop(0.1)
+                    elif shared_color_mode.value >= 5:
                         self.wait_loop(0.1)
                     else:
                         self.wait_loop(1.1)
