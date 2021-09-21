@@ -26,6 +26,9 @@
   padding: 7px 35px;
   font: 300 150% langdon;
   margin: 20px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
   border: 3px solid black;
 }
 
@@ -33,7 +36,7 @@
   border-radius: 25px;
 
   background: #7bb9c9;
-  margin: 20px;
+  margin: 10px;
   border-style: solid;
   border-width: 3px;
 }
