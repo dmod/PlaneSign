@@ -83,6 +83,9 @@
     if (mode !== 13) {
       document.getElementById('finance_div').hidden = true;
     }
+    if (mode !== 99) {
+      document.getElementById('track-a-flight_div').hidden = true;
+    }
     if (mode == 10){
       var ele = document.getElementsByName('cgolstyle');
       for(i = 0; i < ele.length; i++) {
@@ -145,6 +148,11 @@
       <button id="3" class="mode_button" onclick="set_mode(this.id)">Show Highest</button>
       <button id="4" class="mode_button" onclick="set_mode(this.id)">Show Fastest</button>
       <button id="5" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
+      <button id="99" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
+      <div id="track-a-flight_div" hidden>
+        <input id="track-a-flight_flight-num"></input>
+        <button onclick="call_endpoint('/set_track_a_flight/' + document.getElementById('track-a-flight_flight-num').value);">Track-It™</button>
+      </div>
     </fieldset>
 
     <fieldset class="mode_selector_button_group box2">
