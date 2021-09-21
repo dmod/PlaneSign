@@ -602,9 +602,9 @@ def interpolate(num1, num2):
 
     return interpolated[1:]
 
-def first(iter, pred, member):
+def first(iter, pred):
     for element in iter:
-        if pred(member):
+        if pred(element):
             return element
 
 def get_centered_text_x_offset_value(font_width, text):

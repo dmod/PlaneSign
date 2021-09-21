@@ -295,26 +295,36 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
 
     def track_a_flight(self):
-        # https://www.flightradar24.com/v1/search/web/find?query=jbu1186&limit=10
-        # https://data-live.flightradar24.com/clickhandler/?version=1.5&flight=A0F427
 
-        blip_count = 0
-        hex_to_track = data_dict["track_a_flight_num"]
+        if "track_a_flight_num" not in data_dict:
+            self.canvas.Clear()
+            self.matrix.SwapOnVSync(self.canvas)
+            return
+
         requests_limiter = 0
+        blip_count = 0
 
         while True:
 
+            flight_num_to_track = data_dict["track_a_flight_num"]
+
             if (requests_limiter % 22 == 0):
-                flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={hex_to_track}").json()
+                parse_this_to_get_hex = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={flight_num_to_track}&limit=10").json()
+
+                live_flight_info = first(parse_this_to_get_hex["results"], lambda x: x["type"] == "live")
+                print(live_flight_info)
+
+                flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={live_flight_info['id']}").json()
                 current_location = flight_data['trail'][0]
                 reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1&key=AIzaSyD65DETlTi-o5ymfcSp2Gl8JxBS7fwOl5g").json()
-                print(current_location)
-                #print(reverse_geocode)
 
                 if len(reverse_geocode['results']) != 0:
                     formatted_address = reverse_geocode['results'][0]['formatted_address']
                 else:
                     formatted_address = 'Somewhere'
+
+                print(current_location)
+                print(formatted_address)
 
             requests_limiter = requests_limiter + 1
 
@@ -327,11 +337,30 @@ class PlaneSign:
             graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
             graphics.DrawText(self.canvas, self.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
 
-            start_time = flight_data['time']['real']['departure']
-            end_time = flight_data['time']['estimated']['arrival']
-            current_time = int(time.time())
+            scheduled_start_time = flight_data['time']['scheduled']['departure']
+            real_start_time = flight_data['time']['real']['departure']
+            estimated_start_time = flight_data['time']['estimated']['departure']
+
+            scheduled_end_time = flight_data['time']['scheduled']['arrival']
+            real_end_time = flight_data['time']['real']['arrival']
+            estimated_end_time = flight_data['time']['estimated']['arrival']
+
+            if real_start_time is not None:
+                start_time = real_start_time
+            elif estimated_start_time is not None:
+                start_time = estimated_start_time
+            else:
+                start_time = scheduled_start_time
+
+            if real_end_time is not None:
+                end_time = real_end_time
+            elif estimated_end_time is not None:
+                end_time = estimated_end_time
+            else:
+                end_time = scheduled_end_time
 
             # current progress divited by total
+            current_time = int(time.time())
             duration = end_time - start_time
             current_progress = current_time - start_time 
 
@@ -1233,7 +1262,7 @@ class PlaneSign:
             except:
                 print("General error in main loop, waiting...")
                 traceback.print_exc()
-                time.sleep(5)
+                time.sleep(3)
                 shared_mode.value = 1
 
 # Main function
