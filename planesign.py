@@ -64,9 +64,9 @@ def set_color_mode(color):
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
     shared_mode.value = int(mode)
-    shared_forced_sign_update.value = 1
     if request.args:
         arg_dict.update(request.args)
+    shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/get_mode")
