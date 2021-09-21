@@ -7,10 +7,12 @@ import requests
 import random
 from datetime import datetime
 from utilities import *
+from fish import *
+from finance import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
-from flask import Flask
-from PIL import Image
+from flask import Flask, request
+from PIL import Image, ImageDraw
 from flask_cors import CORS
 from collections import namedtuple
 
@@ -68,6 +70,8 @@ def set_track_a_flight(flight_num):
 def set_mode(mode):
     shared_mode.value = int(mode)
     shared_forced_sign_update.value = 1
+    if request.args:
+        arg_dict.update(request.args)
     return ""
 
 @app.route("/get_mode")
@@ -98,6 +102,12 @@ def get_brightness():
 def set_custom_message(message):
     data_dict["custom_message"] = message
     shared_forced_sign_update.value = 1
+    return ""
+
+@app.route("/submit_ticker/", defaults={"ticker": ""})
+@app.route("/submit_ticker/<ticker>")
+def submit_ticker(ticker):
+    data_dict["ticker"] = ticker
     return ""
 
 def server():
@@ -210,12 +220,13 @@ def read_static_airport_data():
 
     print(str(len(code_to_airport)) + " airports added.")
 
+
 class PlaneSign:
     def __init__(self):
 
         options = RGBMatrixOptions()
         options.cols = 64
-        options.gpio_slowdown = 4
+        options.gpio_slowdown = 5
         options.chain_length = 2
         #options.limit_refresh_rate_hz = 200
 
@@ -237,9 +248,13 @@ class PlaneSign:
 
         self.canvas.brightness = shared_current_brightness.value
 
+        self.last_brightness = None
+
         manager = Manager()
         global data_dict
+        global arg_dict
         data_dict = manager.dict()
+        arg_dict = manager.dict()
 
         Process(target=get_data_worker, args=(data_dict,)).start()
         Process(target=get_weather_data_worker, args=(data_dict,)).start()
@@ -254,9 +269,11 @@ class PlaneSign:
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time
 
-            self.canvas.brightness = shared_current_brightness.value
-            self.matrix.brightness = shared_current_brightness.value
-            self.matrix.SwapOnVSync(self.canvas)
+            if (self.last_brightness != shared_current_brightness.value):
+                self.last_brightness = shared_current_brightness.value
+                self.canvas.brightness = shared_current_brightness.value
+                self.matrix.brightness = shared_current_brightness.value
+                self.matrix.SwapOnVSync(self.canvas) #slow, want to avoid redrawing
 
             if shared_forced_sign_update.value == 1:
                 stay_in_loop = False
@@ -372,7 +389,10 @@ class PlaneSign:
                 return
 
     def show_custom_message(self):
-        raw_message = data_dict["custom_message"]
+
+        raw_message = ""
+        if "custom_message" in data_dict:
+            raw_message = data_dict["custom_message"]
 
         self.canvas.Clear()
 
@@ -396,7 +416,6 @@ class PlaneSign:
             starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
 
         print_the_char_at_this_x_index = starting_line_1_x_index
-        lines = line_1 + line_2
 
         if len(line_2) == 0:
             print_at_y_index = 21
@@ -405,6 +424,8 @@ class PlaneSign:
 
         if shared_color_mode.value == 1:
             selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
+        elif shared_color_mode.value >= 5:
+            selected_color_list = [RGB(((shared_color_mode.value-5) >> 16) & 255, ((shared_color_mode.value-5) >> 8) & 255, (shared_color_mode.value-5) & 255)]
         else:
             selected_color_list = COLORS[shared_color_mode.value]
 
@@ -440,20 +461,32 @@ class PlaneSign:
     def show_weather(self):
         self.canvas = self.matrix.CreateFrameCanvas()
 
+        # Default to the actual "today"
+        start_index_day = 0
+
+        # After 6PM today? Get the next days forecast
+        if (datetime.now().hour >= 18):
+            start_index_day = 1
+
         day_0_xoffset = 2
         day_1_xoffset = 45
         day_2_xoffset = 88
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][0]['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.ANTIALIAS)
+        daily = data_dict['weather']['daily']
+
+        day = daily[start_index_day]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
 
-        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][1]['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.ANTIALIAS)
+        day = daily[start_index_day+1]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
-
-        image = Image.open(f"/home/pi/PlaneSign/icons/{data_dict['weather']['daily'][2]['weather'][0]['icon']}.png")
-        image.thumbnail((22, 22), Image.ANTIALIAS)
+        
+        day = daily[start_index_day+2]
+        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
         graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), CONF["WEATHER_CITY_NAME"])
@@ -471,15 +504,6 @@ class PlaneSign:
 
         graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
         graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
-
-        daily = data_dict['weather']['daily']
-
-        # Default to the actual "today"
-        start_index_day = 0
-
-        # After 6PM today? Get the next days forecast
-        if (datetime.now().hour >= 18):
-            start_index_day = 1
 
         # Day 0
         day = daily[start_index_day]
@@ -504,70 +528,199 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
+    def aquarium(self):
+        self.canvas.Clear()
+
+        tank = Tank(self)
+
+        clown = Fish(tank,"Clownfish",2,0.01)
+        hippo = Fish(tank,"Hippotang",2,0.01)
+        queentrigger = Fish(tank,"Queentrigger",1,0.005)
+        grouper = Fish(tank,"Coralgrouper",1,0.005)
+        anthias = Fish(tank,"Anthias",2,0.02)
+        puffer = Fish(tank,"Pufferfish",1.5,0.005)
+        regal = Fish(tank,"Regalangel",1,0.005)
+        bicolor = Fish(tank,"Bicolorpseudochromis",3,0.01)
+        flame = Fish(tank,"Flameangel",1.5,0.01)
+        cardinal = Fish(tank,"Cardinal",1.5,0.01)
+        copper = Fish(tank,"Copperbanded",1.5,0.01)
+        wrasse = Fish(tank,"Wrasse",3,0.01)
+
+        while True:
+            tank.swim()
+            tank.draw()
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                return
+
+
+    def finance(self):
+        self.canvas.Clear()
+        data_dict["ticker"] = None
+        s = None
+
+        while True:
+
+            ddt = data_dict["ticker"] 
+
+            if(ddt != None and ddt != ""):
+
+                raw_ticker = ddt.upper()
+
+                if s == None:
+                    s = Stock(self, raw_ticker)
+                else:
+                    s.setticker(raw_ticker)
+
+                s.drawfullpage()
+
+            else:
+
+                graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
+                graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
+
+                image = Image.open("/home/pi/PlaneSign/icons/finance/money.png")
+                image = image.resize((20, 20), Image.BICUBIC)
+                self.canvas.SetImage(image.convert('RGB'), 10, 14)
+
+                image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
+                self.canvas.SetImage(image.convert('RGB'), 75, -5)  
+
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                return
+            self.matrix.SwapOnVSync(self.canvas)
+            self.canvas = self.matrix.CreateFrameCanvas()
+
+
+    def cca(self):
+        self.canvas.Clear()
+
+        generation_time = 0.15
+
+        current_state = [[0 for j in range(32)] for i in range(128)]
+        next_state = [[0 for j in range(32)] for i in range(128)]
+        
+        numstates = 12 #number of states/colors possible
+        threshold = 1 #set from 1 to numstates to adjust behavior
+        
+        
+        for i in range(128):
+            for j in range(32):
+                current_state[i][j]=random.randrange(0,numstates)
+
+        tstart = time.perf_counter()        
+        while True:
+    
+            for col in range(0, 128):
+                for row in range(0, 32):
+        
+                    cs=self.check_matrix(col,row,current_state)
+                    ns = (cs+1)%numstates
+                    curr = 0
+        
+                    #if self.check_matrix(col-1,row-1,current_state) == ns:
+                    #    curr += 1
+                    if self.check_matrix(col,row-1,current_state) == ns:
+                        curr += 1
+                    #if self.check_matrix(col+1,row-1,current_state) == ns:
+                    #    curr += 1
+        
+                    if self.check_matrix(col-1,row,current_state) == ns:
+                        curr += 1
+                    if self.check_matrix(col+1,row,current_state) == ns:
+                        curr += 1
+        
+                    #if self.check_matrix(col-1,row+1,current_state) == ns:
+                    #    curr += 1
+                    if self.check_matrix(col,row+1,current_state) == ns:
+                        curr += 1
+                    #if self.check_matrix(col+1,row+1,current_state) == ns:
+                    #    curr += 1
+                    
+                    if curr >= threshold:
+                        self.set_matrix(col,row,next_state,ns)
+                        r,g,b=hsv_2_rgb(ns/numstates,1,1)
+                    else:
+                        self.set_matrix(col,row,next_state,cs)
+                        r,g,b=hsv_2_rgb(cs/numstates,1,1)
+                    
+                    self.canvas.SetPixel(col, row, r, g, b)
+
+            for col in range(0, 128):
+                for row in range(0, 32):
+                    current_state[col][row] = next_state[col][row]
+
+            tend = time.perf_counter()
+            if( tend < tstart + generation_time):
+                breakout=self.wait_loop(tstart + generation_time-tend)
+            else:
+                breakout=self.wait_loop(0)
+
+            self.matrix.SwapOnVSync(self.canvas)
+
+            tstart = time.perf_counter()
+            if breakout:
+                return
+
     def cgol(self):
         self.canvas.Clear()
 
-        current_state = []
-        for i in range(0, 128):
-            current_state.append([])
-            for _ in range(0, 32):
-                if (random.randrange(0,2) == 1):
-                    current_state[i].append(True)
-                else:
-                    current_state[i].append(False)
+        generation_time = 0.15
 
-        next_state = []
+        if arg_dict["style"]=="2":
+            cgol_cellcolor = False
+        else:
+            cgol_cellcolor = True
+
+        current_state = [[False for j in range(32)] for i in range(128)]
+        next_state = [[False for j in range(32)] for i in range(128)]
+        if cgol_cellcolor:
+            hmatrix = [[0 for j in range(32)] for i in range(128)]
+            next_hmatrix = [[0 for j in range(32)] for i in range(128)]
+
         for i in range(0, 128):
-            next_state.append([False for j in range(0, 32)])
+            for j in range(0, 32):
+                if (random.random() < 0.3):
+                    current_state[i][j]=True
+                else:
+                    current_state[i][j]=False
+                if cgol_cellcolor:
+                        #hmatrix[i][j]=random_angle()
+                        hmatrix[i][j]=round(359*i/127+359*j/31)%360
 
         firstgen = True
 
         gen_index = 0
 
+        angle = random_angle() 
+        #r,g,b = random_rgb()
 
-        r = 255
-        g = 150
-        b = 30
-
-        r_delta = -9
-        g_delta = -6
-        b_delta = -3
-
-
+        tstart = time.perf_counter()
         while True:
-
+        
             detect2cycle = True
             gen_index += 1
 
-            next_state = []
-            for i in range(0, 128):
-                next_state.append([False for j in range(0, 32)])
+            if not cgol_cellcolor:
+                #angle, r, g, b = next_color_rainbow_linear(angle)
+                angle, r, g, b = next_color_rainbow_sine(angle)
+                #r,g,b = next_color_random_walk_uniform_step(r,g,b,10)
+                #r,g,b = next_color_random_walk_const_sum(r,g,b,10)
 
-            if gen_index % 3 == 0:
-                r += r_delta
-                g += g_delta
-                b += b_delta
-
-                if r <= 30:
-                    r_delta = 9
-                if g <= 30:
-                    g_delta = 6
-                if b <= 30:
-                    b_delta = 3
-
-                if r >= 230:
-                    r_delta = -9
-                if g >= 230:
-                    g_delta = -6
-                if b >= 230:
-                    b_delta = -3
+            next_state = [[False for j in range(32)] for i in range(128)]
 
             for col in range(0, 128):
                 for row in range(0, 32):
 
-                    candidate = self.check_life(col, row, current_state)
+                    if cgol_cellcolor:
+                        candidate, r, g, b = self.check_life_color(col, row, current_state, hmatrix, next_hmatrix)
+                    else:
+                        candidate = self.check_life(col, row, current_state)
+
                     next_state[col][row] = candidate
-                    if not firstgen and candidate != prev_state[col][row]:
+
+                    if detect2cycle and not firstgen and candidate != prev_state[col][row]:
                         detect2cycle = False
                     if candidate:
                         self.canvas.SetPixel(col, row, r, g, b)
@@ -581,15 +734,26 @@ class PlaneSign:
             if detect2cycle:
                 for i in range(0, 128):
                     for j in range(0, 32):
-                        if (random.randrange(0,2) == 1):
+                        if (random.random() < 0.3):
                             next_state[i][j]=True
+                            if cgol_cellcolor:
+                                hmatrix[i][j]=random_angle()
                         else:
                             next_state[i][j]=False
 
             prev_state = current_state
             current_state = next_state
+
+            tend = time.perf_counter()
+            if( tend < tstart + generation_time):
+                breakout=self.wait_loop(tstart + generation_time-tend)
+            else:
+                breakout=self.wait_loop(0)
+
             self.matrix.SwapOnVSync(self.canvas)
-            breakout = self.wait_loop(0)
+
+            tstart = time.perf_counter()
+
             if breakout:
                 return
 
@@ -624,6 +788,92 @@ class PlaneSign:
 
         return False
 
+    def check_life_color(self, x, y, matrix, hm, nhm):
+
+        num_neighbors_alive = 0
+
+        cx=0
+        cy=0
+
+        # Check neighbors above
+        if self.check_matrix(x-1, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y-1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y-1, matrix): num_neighbors_alive += 1
+
+        # Check neighbors aside
+        if self.check_matrix(x-1, y, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y, matrix): num_neighbors_alive += 1
+
+        # Check neighbors below
+        if self.check_matrix(x-1, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x, y+1, matrix): num_neighbors_alive += 1
+        if self.check_matrix(x+1, y+1, matrix): num_neighbors_alive += 1
+
+        # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+        # Any live cell with two or three live neighbours lives on to the next generation.
+        # Any live cell with more than three live neighbours dies, as if by overpopulation.
+        # Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+
+        if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
+            h=self.check_matrix(x, y, hm)
+            self.set_matrix(x,y,nhm,h)
+            r,g,b=hsv_2_rgb(h/360.0,1,1)
+            return True, r, g, b
+        
+        if not matrix[x][y] and num_neighbors_alive == 3:
+
+            #Find the mean color of the 3 neighbors
+
+            # Check neighbors above
+            if self.check_matrix(x-1, y-1, matrix):
+                h=self.check_matrix(x-1, y-1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x, y-1, matrix):
+                h=self.check_matrix(x, y-1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x+1, y-1, matrix):
+                h=self.check_matrix(x+1, y-1, hm)
+                cx += cos(h)
+                cy += sin(h)
+
+            # Check neighbors aside
+            if self.check_matrix(x-1, y, matrix):
+                h=self.check_matrix(x-1, y, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x+1, y, matrix):
+                h=self.check_matrix(x+1, y, hm)
+                cx += cos(h)
+                cy += sin(h)
+
+            # Check neighbors below
+            if self.check_matrix(x-1, y+1, matrix):
+                h=self.check_matrix(x-1, y+1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x, y+1, matrix):
+                h=self.check_matrix(x, y+1, hm)
+                cx += cos(h)
+                cy += sin(h)
+            if self.check_matrix(x+1, y+1, matrix):
+                h=self.check_matrix(x+1, y+1, hm)
+                cx += cos(h)
+                cy += sin(h)
+
+            h=round(math.atan2(cy,cx)/DEG_2_RAD)%360
+            self.set_matrix(x,y,nhm,h)
+            
+            #h=self.check_matrix(x, y, hm)
+            #self.set_matrix(x,y,nhm,h)
+
+            r,g,b=hsv_2_rgb(h/360.0,1,1)
+
+            return True, r, g, b
+
+        return False, 0, 0, 0
+
     def check_matrix(self, x, y, matrix):
         if x == -1:
             x = 127
@@ -639,6 +889,20 @@ class PlaneSign:
 
         return matrix[x][y]
 
+    def set_matrix(self, x, y, matrix, val):
+        if x == -1:
+            x = 127
+        
+        if x == 128:
+            x = 0
+
+        if y == -1:
+            y = 31
+
+        if y == 32:
+            y = 0
+
+        matrix[x][y] = val
 
     def pong(self):
 
@@ -793,6 +1057,7 @@ class PlaneSign:
 
 
     def welcome(self):
+
         self.canvas.Clear()
         graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
         self.matrix.SwapOnVSync(self.canvas)
@@ -871,6 +1136,8 @@ class PlaneSign:
 
                     if shared_color_mode.value == 1:
                         self.wait_loop(0.1)
+                    elif shared_color_mode.value >= 5:
+                        self.wait_loop(0.1)
                     else:
                         self.wait_loop(1.1)
                     
@@ -884,6 +1151,15 @@ class PlaneSign:
 
                 if mode == 11:
                     self.pong()
+
+                if mode == 12:
+                    self.cca()
+
+                if mode == 13:
+                    self.finance()
+                
+                if mode == 14:
+                    self.aquarium()
 
                 plane_to_show = None
 
@@ -962,7 +1238,6 @@ class PlaneSign:
 
 # Main function
 if __name__ == "__main__":
-
     read_config()
     read_static_airport_data()
 

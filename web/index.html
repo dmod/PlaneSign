@@ -5,11 +5,14 @@
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="plane_button.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>DMOD Enterprises</title>
 </head>
 
 <script type="application/javascript">
+
+  var global_current_mode;
 
   window.onload = function () {
     update_sign_status();
@@ -41,6 +44,11 @@
 
   }
 
+  function submit_ticker() {
+    call_endpoint("/submit_ticker/" + encodeURIComponent(document.getElementById("ticker").value));
+    document.getElementById("ticker").value = "";
+  }
+
   function call_endpoint(endpoint, callback) {
     var request = new XMLHttpRequest();
     request.onreadystatechange = function () {
@@ -59,26 +67,51 @@
   }
 
   function set_mode(mode) {
+    document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
+    document.getElementById(mode).style.backgroundColor = "red"; // Turn on new button
+    global_current_mode = mode;
+
     if (mode !== 8) {
       document.getElementById('custom_message_div').hidden = true;
+    }
+    if (mode !== 10) {
+      document.getElementById('cgol_div').hidden = true;
     }
     if (mode !== 11) {
       document.getElementById('pong_div').hidden = true;
     }
-    call_endpoint("/set_mode/" + mode);
+    if (mode !== 13) {
+      document.getElementById('finance_div').hidden = true;
+    }
+    if (mode == 10){
+      var ele = document.getElementsByName('cgolstyle');
+      for(i = 0; i < ele.length; i++) {
+          if(ele[i].checked)
+            break;
+      }
+      call_endpoint("/set_mode/" + mode +"?style=" + ele[i].value);
+    } else {
+      call_endpoint("/set_mode/" + mode);
+    }
   }
 
   function set_color_mode(color) {
-    call_endpoint("/set_color_mode/" + color);
+      call_endpoint("/set_color_mode/" + color);
   }
 
   function update_sign_status() {
-    call_endpoint("/status", function (actual_text) {
-      var html_to_send;
-      if (actual_text === "1") {
+    call_endpoint("/status", function (current_status) {
+      if (current_status === "1") {
         document.getElementById("toggle_switch").checked = true;
       } else {
         document.getElementById("toggle_switch").checked = false;
+      }
+    });
+
+    call_endpoint("/get_mode", function (current_mode) {
+      if (current_mode){
+        document.getElementById(current_mode).style.backgroundColor = "red";
+        global_current_mode = current_mode;
       }
     });
   }
@@ -101,39 +134,64 @@
     </div>
   </label>
 
-  <input id="brightness_slider" type="range" min="0" max="100" step="10" value="100">
+  <input id="brightness_slider" type="range" min="0" max="100" step="1" value="100">
 
-  <button class="mode_button" onclick="set_mode(1)">Default Mode</button>
-  <button class="mode_button" onclick="set_mode(2)">Show Closest</button>
-  <button class="mode_button" onclick="set_mode(3)">Show Highest</button>
-  <button class="mode_button" onclick="set_mode(4)">Show Fastest</button>
-  <button class="mode_button" onclick="set_mode(5)">Show Slowest</button>
-  <button class="mode_button" onclick="document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
-  <div id="track-a-flight_div" hidden>
-    <input id="track-a-flight_flight-num"></input>
-    <button onclick="call_endpoint('/set_track_a_flight/' + document.getElementById('track-a-flight_flight-num').value);">Track-It™</button>
+  <div class="groups_wrapper">
+
+    <fieldset class="mode_selector_button_group box1">
+      <legend>Planes</legend>
+      <button id="1" class="mode_button" onclick="set_mode(this.id)">Default Mode</button>
+      <button id="2" class="mode_button" onclick="set_mode(this.id)">Show Closest</button>
+      <button id="3" class="mode_button" onclick="set_mode(this.id)">Show Highest</button>
+      <button id="4" class="mode_button" onclick="set_mode(this.id)">Show Fastest</button>
+      <button id="5" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
+    </fieldset>
+
+    <fieldset class="mode_selector_button_group box2">
+      <legend>Informational</legend>
+      <button id="6" class="mode_button" onclick="set_mode(this.id)">Weather</button>
+      <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only</button>
+      <button id="13" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance</button>
+      <div id="finance_div" hidden>
+        Ticker Symbol:<input type="text" id="ticker"></input>
+        <button class="submit" onclick="submit_ticker();">Submit</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="mode_selector_button_group box3">
+      <legend>Just for Fun :)</legend>
+      <button id="8" class="mode_button" onclick="set_mode(this.id); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
+      <div id="custom_message_div" hidden>
+        <div>
+          <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
+          <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
+          <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
+          <button class="custom_colors_button" onclick="set_color_mode(3)">USA</button>
+          <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
+          <input type="color" id="colorpicker" oninput="set_color_mode(5+parseInt(document.getElementById('colorpicker').value.substring(1), 16))" value="#ff0000">
+        </div>
+        <br>
+        <input type="text" id="custom_message"></input>
+      </div>
+      <button id="9" class="mode_button" onclick="set_mode(this.id)">Welcome Intro</button>
+      <button id="10" class="mode_button" onclick="set_mode(this.id); document.getElementById('cgol_div').hidden = false">CGOL</button>
+      <div id="cgol_div" hidden>
+        <input type="radio" id="rainbowgol" name="cgolstyle" onclick="set_mode(10)" value="1" checked="checked">
+        <label for="rainbowgol">Rainbow Rules</label>
+        <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode(10)" value="2">
+        <label for="colorshift">Color Shifting</label>
+      </div>
+      <button id="11" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
+      <div id="pong_div" hidden>
+        <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
+        <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
+      </div>
+      <button id="12" class="mode_button" onclick="set_mode(this.id)">CCA</button>
+      <button id="14" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
+    </fieldset>
+
   </div>
-  <button class="mode_button" onclick="set_mode(6)">Weather</button>
-  <button class="mode_button" onclick="set_mode(7)">Clock Only</button>
-  <button class="mode_button" onclick="set_mode(8); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
-  <div id="custom_message_div" hidden>
-    <div>
-      <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
-      <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
-      <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
-      <button class="custom_colors_button" onclick="set_color_mode(3)">USA</button>
-      <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
-    </div>
-    <br>
-    <input type="text" id="custom_message"></input>
-  </div>
-  <button class="mode_button" onclick="set_mode(9)">Welcome Intro</button>
-  <button class="mode_button" onclick="set_mode(10)">CGOL</button>
-  <button class="mode_button" onclick="set_mode(11); document.getElementById('pong_div').hidden = false">PONG!</button>
-  <div id="pong_div" hidden>
-    <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
-    <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
-  </div>
+
 </body>
 
 </html>

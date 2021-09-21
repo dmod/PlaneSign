@@ -28,3 +28,11 @@ share/python-wheels/
 MANIFEST
 
 logs/
+
+#Config
+sign.conf
+
+#misc
+prices.csv
+icons/favicons/*
+!icons/favicons/.gitkeep 
