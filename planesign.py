@@ -64,6 +64,7 @@ def set_color_mode(color):
 def set_track_a_flight(flight_num):
     data_dict["track_a_flight_num"] = flight_num
     shared_mode.value = 99
+    shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/set_mode/<mode>")
