@@ -213,10 +213,10 @@ def read_config():
 def read_static_airport_data():
     with open("airports.csv") as f:
         lines = f.readlines()
-        for line in lines[1:]:
-            parts = csv_superparser(line)
-            name = parts[3]
-            code = parts[13]
+        for line in lines:
+            parts = line.split(',')
+            code = parts[0]
+            name = parts[1]
             code_to_airport[code] = name
 
     print(str(len(code_to_airport)) + " airports added.")
