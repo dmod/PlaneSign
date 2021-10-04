@@ -565,6 +565,7 @@ def get_crypto(symbol,name):
     else:
         return None
 
+# Returns the distance in MILES
 def get_distance(coord1, coord2):
     R = 3958.8  # Earth radius in meters
     lat1, lon1 = coord1
