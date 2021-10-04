@@ -160,10 +160,11 @@ def get_data_worker(data_dict):
                         newguy["destination"] = result[12]
                         newguy["distance"] = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (result[1], result[2]))
 
+                        # Filter out planes on the ground
                         if newguy["altitude"] < 100:
                             continue
 
-                        if (closest is None or int(newguy["distance"]) < int(closest["distance"])):
+                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < 10000)):
                             closest = newguy
 
                         # The rest of these are for fun, filter out the unknown planes
