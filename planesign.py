@@ -156,18 +156,19 @@ def get_data_worker(data_dict):
                         newguy["speed"] = result[5]
                         newguy["flight"] = result[16] if result[16] else ""
                         newguy["typecode"] = result[8]
-                        newguy["origin"] = result[11] if result[11] else "???"
-                        newguy["destination"] = result[12] if result[12] else "???"
+                        newguy["origin"] = result[11]
+                        newguy["destination"] = result[12]
                         newguy["distance"] = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (result[1], result[2]))
 
+                        # Filter out planes on the ground
                         if newguy["altitude"] < 100:
                             continue
 
-                        if (closest is None or int(newguy["distance"]) < int(closest["distance"])):
+                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < 10000)):
                             closest = newguy
 
-                        # The rest of these are for fun, filter out ??? planes
-                        if newguy["origin"] == "???":
+                        # The rest of these are for fun, filter out the unknown planes
+                        if not newguy["origin"]:
                             continue
 
                         if (highest is None or int(newguy["altitude"]) > int(highest["altitude"])):
@@ -213,13 +214,15 @@ def read_config():
 def read_static_airport_data():
     with open("airports.csv") as f:
         lines = f.readlines()
-        for line in lines[1:]:
-            parts = csv_superparser(line)
-            name = parts[3]
-            code = parts[13]
-            code_to_airport[code] = name
+        for line in lines:
+            parts = line.strip().split(',')
+            code = parts[0]
+            name = parts[1]
+            lat = float(parts[2])
+            lon = float(parts[3])
+            code_to_airport[code] = (name, lat, lon)
 
-    print(str(len(code_to_airport)) + " airports added.")
+    print(f"{len(code_to_airport)} static airport configs added")
 
 
 class PlaneSign:
@@ -286,7 +289,10 @@ class PlaneSign:
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
 
-        temp = str(round(data_dict["weather"]["current"]["temp"]))
+        if data_dict["weather"] and data_dict["weather"]["current"] and data_dict["weather"]["current"]["temp"]:
+            temp = str(round(data_dict["weather"]["current"]["temp"]))
+        else:
+            temp = "--"
 
         self.canvas.Clear()
 
@@ -1093,17 +1099,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
         self.wait_loop(2)
         self.canvas.Clear()
-        graphics.DrawText(self.canvas, self.fontbig, 4, 12, graphics.Color(140, 140, 140), "Welcome")
-        self.matrix.SwapOnVSync(self.canvas)
-        self.wait_loop(2)
-        graphics.DrawText(self.canvas, self.fontbig, 4, 26, graphics.Color(140, 140, 140), "to")
-        self.matrix.SwapOnVSync(self.canvas)
-        self.wait_loop(2)
-        graphics.DrawText(self.canvas, self.fontbig, 66, 14, graphics.Color(60, 60, 160), "Casa")
-        graphics.DrawText(self.canvas, self.fontbig, 66, 27, graphics.Color(160, 160, 200), "Darmody")
-        self.matrix.SwapOnVSync(self.canvas)
         shared_mode.value = 1
-        self.wait_loop(3)
 
     def sign_loop(self):
 
@@ -1112,7 +1108,6 @@ class PlaneSign:
         prev_thing["altitude"] = 0
         prev_thing["speed"] = 0
         prev_thing["flight"] = None
-
 
         while True:
             try:
@@ -1214,19 +1209,37 @@ class PlaneSign:
                     interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
                     interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
 
-                    # Don't look up the names of these airports, we already know what they are
-                    ignore_these_codes = ("BWI", "IAD", "DCA")
+                    # We only have room to display one full airport name. So pick the one that is further away assuming
+                    # the user probably hasn't heard of that one
+                    origin_distance = 0
+                    if plane_to_show["origin"]:
+                        origin_config = code_to_airport.get(plane_to_show["origin"])
+                        origin_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
+                        print(f"Origin is {origin_distance:.2f} miles away")
 
-                    code_to_resolve = plane_to_show["origin"] if plane_to_show["origin"] not in ignore_these_codes else plane_to_show["destination"] if plane_to_show["destination"] not in ignore_these_codes else ""
+                    destination_distance = 0
+                    if plane_to_show["destination"]:
+                        destination_config = code_to_airport.get(plane_to_show["destination"])
+                        destination_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
+                        print(f"Destination is {destination_distance:.2f} miles away")
 
-                    print("Resolving code: "  + code_to_resolve)
-
-                    friendly_name = code_to_airport.get(str(code_to_resolve), "")
+                    if origin_distance != 0 and origin_distance > destination_distance:
+                        friendly_name = origin_config[0]
+                    elif destination_distance != 0:
+                        friendly_name = destination_config[0]
+                    else:
+                        friendly_name = ""
 
                     print("Full airport name from code: "  + friendly_name)
 
                     # Front pad the flight number to a max of 7 for spacing
                     formatted_flight = plane_to_show["flight"].rjust(7, ' ')
+
+                    if not plane_to_show["origin"]:
+                        plane_to_show["origin"] = "???"
+
+                    if not plane_to_show["destination"]:
+                        plane_to_show["destination"] = "???"
 
                     for i in range(NUM_STEPS):
                         self.canvas.Clear()

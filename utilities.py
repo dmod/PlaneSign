@@ -264,34 +264,3 @@ def first(iter, pred):
 def get_centered_text_x_offset_value(font_width, text):
     text_pixel_length = len(text) * font_width
     return 64 - (text_pixel_length / 2)
-
-
-# Remove quotes and handle commas in fields
-# 6369,"TIST","medium_airport","Cyril E. King Airport",18.337299346923828,-64.97339630126953,23,"NA","VI","VI-U-A","Charlotte Amalie, Harry S. Truman Airport","yes","TIST","STT","STT","http://www.viport.com/airports.html","https://en.wikipedia.org/wiki/Cyril_E._King_Airport",
-def csv_superparser(csv_line):
-    parts = []
-    field = ""
-    in_quote_field = False
-    for c in csv_line:
-        if c == "\"":
-            if in_quote_field:
-                # Found quote but already in field, so it's the end of the quote field
-                in_quote_field = False
-            else:
-                # Start of quote field
-                in_quote_field = True
-
-        elif c == ",":
-            if in_quote_field:
-                # Comma is in quote field, just add it like normal
-                field += c
-            else:
-                # Comma delimeter, so we are at the end of the field
-                parts.append(field)
-                field = ""
-
-        else:
-            # Not a special char, just add it
-            field += c
-
-    return parts
