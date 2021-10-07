@@ -9,6 +9,7 @@ from datetime import datetime
 from utilities import *
 from fish import *
 from finance import *
+from lightning import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
 from flask import Flask, request
@@ -260,9 +261,9 @@ class PlaneSign:
         data_dict = manager.dict()
         arg_dict = manager.dict()
 
-        Process(target=get_data_worker, args=(data_dict,)).start()
-        Process(target=get_weather_data_worker, args=(data_dict,)).start()
-        Process(target=server).start()
+        #Process(target=get_data_worker, args=(data_dict,)).start()
+        #Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        #Process(target=server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -627,6 +628,38 @@ class PlaneSign:
                 return
             self.matrix.SwapOnVSync(self.canvas)
             self.canvas = self.matrix.CreateFrameCanvas()
+
+    def lightning(self):
+        self.canvas.Clear()
+        
+        LM=LightningManager(self,float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"]))
+        LM.connect()
+
+        last_heartbeat = time.perf_counter()
+        last_draw = time.perf_counter()
+
+        while not LM.connected.value: #wait for websocket to connect on separate thread
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                LM.close()
+                return
+
+        while LM.connected.value:
+            if time.perf_counter()-last_heartbeat > 25:
+                try:
+                    LM.heartbeat()
+                except websocket._exceptions.WebSocketConnectionClosedException:
+                    LM.close()
+                    LM.connect()
+                last_heartbeat = time.perf_counter()
+            if time.perf_counter()-last_draw > 2:
+                LM.draw()
+                last_draw = time.perf_counter()
+
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                LM.close()
+                return
 
 
     def cca(self):
@@ -1284,4 +1317,5 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    PlaneSign().sign_loop()
+    #PlaneSign().sign_loop()
+    PlaneSign().lightning()
