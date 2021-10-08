@@ -12,6 +12,8 @@ import numpy as np
 from utilities import *
 from rgbmatrix import graphics
 
+import _thread as thread
+
 class LightningManager:
 
     def __init__(self,sign,lat,lon):
@@ -41,6 +43,14 @@ class LightningManager:
         self.connected.value = 0
         
     def onOpen(self, ws):
+
+        def heartbeat(*args):
+            while True:
+                json_data = json.dumps({"wsServer":self.ws_server})
+                time.sleep(25)
+                ws.send(json_data)
+
+        thread.start_new_thread(heartbeat, ())
     
         print('Opening Websocket connection to the server ... ')
     
@@ -48,17 +58,21 @@ class LightningManager:
         ws.send(json_data)
         json_data = json.dumps({"wsServer":self.ws_server})
         ws.send(json_data)
+
+        print(json_data)
+
         #json_data = json.dumps({"sig":False})
         #ws.send(json_data)
         
         self.connected.value = 1
     
     def close(self):
-
+        if self.connected.value == 1:
+            self.ws.close()
         if self.thread and self.thread.is_alive():
-            if self.connected.value:
-                self.ws.close()
+            print("closing process")
             self.thread.join()
+            print("process closed")
     
     def draw(self):
         #print(self.strikes)
@@ -68,6 +82,10 @@ class LightningManager:
 
         #strikescopy = self.strikes._getvalue()
         strikescopy = sorted(self.strikes, key=lambda k: k["dist"])
+        closest = strikescopy[0]
+        strikescopy = sorted(strikescopy, key=lambda k: k["time"], reverse=True)
+        recent = strikescopy[0]
+
         if strikescopy:
             for strike in strikescopy:
                 now = time.time()
@@ -94,7 +112,9 @@ class LightningManager:
                 y.append(strike["lat"])
                 c=np.append(c,[np.array(color)],axis=0)
 
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(50,150,0), "{0:.1f}".format(strikescopy[0]["dist"])+" miles "+direction_lookup((strikescopy[0]["lat"],strikescopy[0]["lon"]), (self.mylat,self.mylong)))
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 5, 9, graphics.Color(180,180,40), "Closest: "+"{0:.1f}".format(closest["dist"])+" miles "+direction_lookup((closest["lat"],closest["lon"]), (self.mylat,self.mylong)))
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 5, 19, graphics.Color(180,180,40), "Recent: "+"{0:.1f}".format(recent["dist"])+" miles "+direction_lookup((recent["lat"],recent["lon"]), (self.mylat,self.mylong)))
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 5, 29, graphics.Color(180,180,40), "# Strikes < 2m ago: "+str(len(strikescopy)))
 
             #plt.rcParams['axes.facecolor'] = 'black'
             #plt.rcParams['figure.facecolor'] = 'black'
@@ -108,16 +128,10 @@ class LightningManager:
             self.sign.matrix.SwapOnVSync(self.sign.canvas)
             self.sign.canvas = self.sign.matrix.CreateFrameCanvas()
 
-            
-        
-    
-    def heartbeat(self):
-        json_data = json.dumps({"wsServer":self.ws_server})
-        self.ws.send(json_data)
-            
     def connect(self):
           
         if not self.connected.value:
+            self.connected.value = 2
             try:    
                 ws_servers = ["ws5.blitzortung.org", "ws6.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
                 
@@ -157,7 +171,6 @@ class LightningManager:
                 self.thread = Process(target=self.ws.run_forever, kwargs={'host':self.ws_server, 'origin':"https://map.blitzortung.org", 'sslopt':{"cert_reqs": ssl.CERT_NONE}})
                 self.thread.start()
 
-            except websocket._exceptions.WebSocketBadStatusException as e:
-                print("### Bad Handshake ### ", e)
             except Exception as e:
-                    print("### Exception ### ",e)
+                print("### Exception ### ",e)
+                self.connected.value = 0

@@ -645,13 +645,6 @@ class PlaneSign:
                 return
 
         while LM.connected.value:
-            if time.perf_counter()-last_heartbeat > 25:
-                try:
-                    LM.heartbeat()
-                except websocket._exceptions.WebSocketConnectionClosedException:
-                    LM.close()
-                    LM.connect()
-                last_heartbeat = time.perf_counter()
             if time.perf_counter()-last_draw > 2:
                 LM.draw()
                 last_draw = time.perf_counter()
