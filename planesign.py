@@ -631,8 +631,8 @@ class PlaneSign:
 
     def lightning(self):
         self.canvas.Clear()
-        
-        LM=LightningManager(self,float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"]))
+        LM=LightningManager(self,47.34045883887302,-94.23635732086981)
+        #LM=LightningManager(self,float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"]))
         LM.connect()
 
         last_heartbeat = time.perf_counter()
