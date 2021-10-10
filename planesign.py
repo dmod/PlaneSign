@@ -261,9 +261,9 @@ class PlaneSign:
         data_dict = manager.dict()
         arg_dict = manager.dict()
 
-        #Process(target=get_data_worker, args=(data_dict,)).start()
-        #Process(target=get_weather_data_worker, args=(data_dict,)).start()
-        #Process(target=server).start()
+        Process(target=get_data_worker, args=(data_dict,)).start()
+        Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        Process(target=server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -633,17 +633,12 @@ class PlaneSign:
         self.canvas.Clear()
         #LM=LightningManager(self,47.34045883887302,-94.23635732086981)
         LM=LightningManager(self,float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"]))
+        #LM.draw_loading()
         LM.connect()
 
-        last_heartbeat = time.perf_counter()
         last_draw = time.perf_counter()
 
-        while not LM.connected.value: #wait for websocket to connect on separate thread
-            breakout = self.wait_loop(0.1)
-            if breakout:
-                LM.close()
-                return
-
+        self.canvas.Clear()
         while LM.connected.value:
             if time.perf_counter()-last_draw > 2:
                 LM.draw()
@@ -1212,6 +1207,9 @@ class PlaneSign:
                 if mode == 14:
                     self.aquarium()
 
+                if mode == 15:
+                    self.lightning()
+
                 plane_to_show = None
 
                 if mode == 1:
@@ -1310,5 +1308,4 @@ if __name__ == "__main__":
     read_config()
     read_static_airport_data()
 
-    #PlaneSign().sign_loop()
-    PlaneSign().lightning()
+    PlaneSign().sign_loop()

@@ -40,10 +40,10 @@ def get_lightning_color(strike_time,now,format):
         return color[0],color[1],color[2]
 
 def draw_power(x,y,radius,sign):
-    t1 = 650
-    t2 = 1200
-    t3 = 2000
-    sign.canvas.SetPixel(x, y-2, 0, 70, 0)
+    t1 = 900#650
+    t2 = 1500#1200
+    t3 = 2500#2000
+    sign.canvas.SetPixel(x, y-2, 0, 90, 0)
     if radius > t1:
         sign.canvas.SetPixel(x, y-3, 140, 120, 10)
     if radius > t2:
@@ -69,6 +69,13 @@ class LightningManager:
         self.background = None
         self.genBackground()
 
+    def draw_loading(self):
+        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 12, graphics.Color(180,180,40), "Storm")
+        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 34, 26, graphics.Color(180,180,40), "Sign")
+
+        image = Image.open("/home/pi/PlaneSign/icons/11d.png")
+        image = image.resize((30, 30), Image.BICUBIC)
+        self.sign.canvas.SetImage(image.convert('RGB'), 75, 5)
 
     def genBackground(self):
         self.background = Image.new("RGB", (64, 32))
@@ -105,8 +112,10 @@ class LightningManager:
         for det in strike_js["sig"]:
             dets.append(get_distance((det["lat"],det["lon"]), (strike_js["lat"],strike_js["lon"])))
         dets.sort()
+        #Median detector distance - use dets[floor(len(dets)/2.0)]
+        #Second farthest detector distance - user dets[len(dets)-2]
 
-        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (self.mylat,self.mylong)),"radius":dets[floor(len(dets)/2.0)]}
+        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (self.mylat,self.mylong)),"radius":dets[len(dets)-2]}
         #print(strike)
         self.strikes.append(strike)
 
@@ -145,9 +154,8 @@ class LightningManager:
         if self.connected.value == 1:
             self.ws.close()
         if self.thread and self.thread.is_alive():
-            print("closing process")
-            self.thread.join()
-            print("process closed")
+            self.thread.terminate()
+
     
     def draw(self):
 
