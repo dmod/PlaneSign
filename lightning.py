@@ -12,6 +12,7 @@ import numpy as np
 from utilities import *
 from rgbmatrix import graphics
 import requests
+from math import floor
 import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import _thread as thread
@@ -38,6 +39,18 @@ def get_lightning_color(strike_time,now,format):
     else:
         return color[0],color[1],color[2]
 
+def draw_power(x,y,radius,sign):
+    t1 = 650
+    t2 = 1200
+    t3 = 2000
+    sign.canvas.SetPixel(x, y-2, 0, 70, 0)
+    if radius > t1:
+        sign.canvas.SetPixel(x, y-3, 140, 120, 10)
+    if radius > t2:
+        sign.canvas.SetPixel(x, y-4, 140, 50, 10)
+    if radius > t3:
+        sign.canvas.SetPixel(x, y-5, 120, 0, 0)
+
 class LightningManager:
 
     def __init__(self,sign,lat,lon):
@@ -52,7 +65,7 @@ class LightningManager:
         self.sign = sign
         self.mylong = lon
         self.mylat = lat
-        self.scale=40#60
+        self.scale=60
         self.background = None
         self.genBackground()
 
@@ -93,7 +106,7 @@ class LightningManager:
             dets.append(get_distance((det["lat"],det["lon"]), (strike_js["lat"],strike_js["lon"])))
         dets.sort()
 
-        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (self.mylat,self.mylong)),"radius":dets[round(len(dets)/2.0)]}
+        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (self.mylat,self.mylong)),"radius":dets[floor(len(dets)/2.0)]}
         #print(strike)
         self.strikes.append(strike)
 
@@ -139,10 +152,6 @@ class LightningManager:
     def draw(self):
 
         now = time.time()
-
-        t1 = 650
-        t2 = 1200
-        t3 = 2000
 
         #print(self.strikes)
         x=[]
@@ -224,13 +233,7 @@ class LightningManager:
                 else:
                     graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (self.mylat,self.mylong)))
                 
-                self.sign.canvas.SetPixel(0, 12, 0, 70, 0)
-                if closest1["radius"] > t1:
-                    self.sign.canvas.SetPixel(0, 11, 140, 120, 10)
-                if closest1["radius"] > t2:
-                    self.sign.canvas.SetPixel(0, 10, 140, 50, 10)
-                if closest1["radius"] > t3:
-                    self.sign.canvas.SetPixel(0, 9, 120, 0, 0)
+                draw_power(0,14,closest1["radius"],self.sign)
 
             if closest2:
                 r,g,b = get_lightning_color(closest2["time"],now,False)
@@ -239,13 +242,7 @@ class LightningManager:
                 else:
                     graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (self.mylat,self.mylong)))
             
-                self.sign.canvas.SetPixel(0, 20, 0, 70, 0)
-                if closest2["radius"] > t1:
-                    self.sign.canvas.SetPixel(0, 19, 140, 120, 10)
-                if closest2["radius"] > t2:
-                    self.sign.canvas.SetPixel(0, 18, 140, 50, 10)
-                if closest2["radius"] > t3:
-                    self.sign.canvas.SetPixel(0, 17, 120, 0, 0)
+                draw_power(0,22,closest2["radius"],self.sign)
 
             if closest3:    
                 r,g,b = get_lightning_color(closest3["time"],now,False)
@@ -254,13 +251,7 @@ class LightningManager:
                 else:
                     graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (self.mylat,self.mylong)))
 
-                self.sign.canvas.SetPixel(0, 28, 0, 70, 0)
-                if closest3["radius"] > t1:
-                    self.sign.canvas.SetPixel(0, 27, 140, 120, 10)
-                if closest3["radius"] > t2:
-                    self.sign.canvas.SetPixel(0, 26, 140, 50, 10)
-                if closest3["radius"] > t3:
-                    self.sign.canvas.SetPixel(0, 25, 120, 0, 0)
+                draw_power(0,30,closest3["radius"],self.sign)
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 6, graphics.Color(20, 20, 210), "Recent:")
             if recent[0]:
@@ -269,6 +260,8 @@ class LightningManager:
                 else:
                     graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (self.mylat,self.mylong)))
 
+                draw_power(31,14,recent[0]["radius"],self.sign)
+
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "Near:")
             if newclose:
                 if newclose["dist"]<100:
@@ -276,6 +269,7 @@ class LightningManager:
                 else:
                     graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.0f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (self.mylat,self.mylong)))
 
+                draw_power(31,30,newclose["radius"],self.sign)
 
             self.sign.matrix.SwapOnVSync(self.sign.canvas)
             self.sign.canvas = self.sign.matrix.CreateFrameCanvas()
