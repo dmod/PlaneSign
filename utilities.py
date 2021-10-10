@@ -234,6 +234,25 @@ def get_distance(coord1, coord2):
 
     return (2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
+def direction_lookup(destination, origin):
+    destination_y, destination_x = destination
+    origin_y, origin_x = origin
+
+    deltaX = destination_x - origin_x
+
+    deltaY = destination_y - origin_y
+
+    degrees = math.atan2(deltaX, deltaY)/math.pi*180
+
+    if degrees < 0:
+        degrees = 360 + degrees
+
+    compass_brackets = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"]
+
+    compass_lookup = round(degrees/45)
+
+    return compass_brackets[compass_lookup]
+
 def convert_unix_to_local_time(unix_timestamp):
     utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
     local_time = utc_time.astimezone(local_tz)

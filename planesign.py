@@ -9,6 +9,7 @@ from datetime import datetime
 from utilities import *
 from fish import *
 from finance import *
+from lightning import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
 from flask import Flask, request
@@ -628,6 +629,26 @@ class PlaneSign:
             self.matrix.SwapOnVSync(self.canvas)
             self.canvas = self.matrix.CreateFrameCanvas()
 
+    def lightning(self):
+        self.canvas.Clear()
+        #LM=LightningManager(self,47.34045883887302,-94.23635732086981)
+        LM=LightningManager(self,float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"]))
+        #LM.draw_loading()
+        LM.connect()
+
+        last_draw = time.perf_counter()
+
+        self.canvas.Clear()
+        while LM.connected.value:
+            if time.perf_counter()-last_draw > 2:
+                LM.draw()
+                last_draw = time.perf_counter()
+
+            breakout = self.wait_loop(0.1)
+            if breakout:
+                LM.close()
+                return
+
 
     def cca(self):
         self.canvas.Clear()
@@ -1185,6 +1206,9 @@ class PlaneSign:
                 
                 if mode == 14:
                     self.aquarium()
+
+                if mode == 15:
+                    self.lightning()
 
                 plane_to_show = None
 
