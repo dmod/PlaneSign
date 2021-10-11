@@ -165,9 +165,11 @@
     }
 }
 
+/*
 body .plane-switch {
     margin: 12px 0;
 }
+*/
 
 .scaled {
     transform: scale(2.9);

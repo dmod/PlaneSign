@@ -12,6 +12,7 @@ from finance import *
 from lightning import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array
+import subprocess
 from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
@@ -38,6 +39,10 @@ shared_pong_player2 = Value('i', 0)
 shared_mode = Value('i', 1)
 shared_color_mode = Value('i', 0)
 shared_forced_sign_update = Value('i', 0)
+
+@app.route("/update")
+def update_sign():
+    subprocess.call(['sh', './update.sh'])
 
 @app.route("/status")
 def get_status():

@@ -142,11 +142,17 @@ legend {
   float: none;
 }
 
+/*
 .switch {
   position: relative;
   display: inline-block;
-  width: 100px;
-  height: 68x;
+  width: 200px;
+  height: 68px;
+}*/
+
+#header_switch {
+  position: relative;
+  display: inline-block;
 }
 
 .switch input {
@@ -165,6 +171,7 @@ legend {
   background-color: #ccc;
   -webkit-transition: .2s;
   transition: .2s;
+  display:inline-block;
 }
 
 .slider:before {
@@ -193,9 +200,11 @@ input:checked+.slider:before {
   transform: translateX(62px);
 }
 
+/*
 .switch {
   width: 200px;
 }
+*/
 
 .slider.round {
   border-radius: 34px;
@@ -211,10 +220,85 @@ input:checked+.slider:before {
   text-align: center;
 }
 
-#header_switch {
-  margin-top: 50px;
-  margin-bottom: 50px;
+#topbar {
+  margin-top: 25px;
+  /*margin-bottom: 50px;*/
+  width: 300px;
+  height: 125px;
+  text-align: center
 }
+
+#centered { 
+  display: inline-block; 
+  width: 300px;
+  height: 125px;
+  margin-top: 25px;
+}
+
+#floating {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 0; 
+  vertical-align: top;
+}
+
+#optionsbutton {
+  border-radius: 50%;
+  background-color: #e7e7e7;
+  /*border: none;*/
+  border-color: black;
+  text-align: center;
+  width: 75px;
+  height: 75px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+#optionsbutton:hover {
+  background-color: #f4f4f4;
+}
+
+#optionsbutton:active {
+  border-color: #499bfb;
+}
+
+.sidenav {
+  height: 100%;
+  width: 100%;
+  background-color: #fff;
+  position: fixed !important;
+  z-index: 999999;
+  overflow: auto;
+  text-align: center;
+  /*border-right: 1px solid #ccc !important;*/
+}
+
+.closebutton {
+  width: 100%;
+  display: block;
+  padding: 8px 16px;
+  text-align: right;
+  border: none;
+  white-space: normal;
+  float: none;
+  outline: 0;
+  overflow: visible;
+}
+
+.baritem {
+  width: 100%;
+  display: block;
+  padding: 8px 16px;
+  text-align: left;
+  border: none;
+  white-space: normal;
+  float: none;
+  outline: 0;
+}
+
+
+
 
 html {
   box-sizing: border-box;
@@ -233,8 +317,8 @@ html {
 body {
   display: flex;
   font-family: "Roboto", Arial;
-  justify-content: center;
-  align-items: center;
+  /*justify-content: center;
+  align-items: center;*/
   flex-direction: column;
   background: #fff;
 }
