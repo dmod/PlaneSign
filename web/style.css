@@ -276,14 +276,16 @@ input:checked+.slider:before {
 
 .closebutton {
   width: 100%;
+  height: 50px;
   display: block;
-  padding: 8px 16px;
+  padding: 0 16px;
   text-align: right;
   border: none;
   white-space: normal;
   float: none;
   outline: 0;
   overflow: visible;
+  font-size: 40px;
 }
 
 .baritem {
