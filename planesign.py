@@ -40,9 +40,30 @@ shared_mode = Value('i', 1)
 shared_color_mode = Value('i', 0)
 shared_forced_sign_update = Value('i', 0)
 
+@app.route("/get_config")
+def get_config():
+    read_config()
+    global CONF
+    return json.dumps(CONF)
+
+@app.route("/write_conf")
+def write_config():
+    if request.args:
+        keys = list(request.args.keys())
+        vals = list(request.args.values())
+        f = open("sign.conf", "w+")
+        for i in range(len(keys)):
+            f.write(keys[i]+"="+vals[i]+"\n")
+        f.close()
+        #print(list(request.args.keys()))
+        #print(list(request.args.values()))
+        read_config()
+        shared_forced_sign_update.value = 1
+    return ""
+
 @app.route("/update")
 def update_sign():
-    subprocess.call(['sh', './update.sh'])
+    subprocess.call(['sh', './update.sh',])
 
 @app.route("/status")
 def get_status():
