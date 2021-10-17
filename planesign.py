@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import time
+import logging
+import logging.handlers
+import subprocess
+import multiprocessing
+import sys
 import traceback
 import requests
 import random
@@ -11,8 +16,6 @@ from fish import *
 from finance import *
 from lightning import *
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from multiprocessing import Process, Manager, Value, Array
-import subprocess
 from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
@@ -138,6 +141,42 @@ def submit_ticker(ticker):
     data_dict["ticker"] = ticker
     return ""
 
+def log_listener_process(queue):
+    root = logging.getLogger()
+    log_filename = "logs/planesign.log"
+    os.makedirs(os.path.dirname(log_filename), exist_ok=True)
+    log_handler = logging.handlers.TimedRotatingFileHandler(log_filename, when="midnight")
+    log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
+    root.addHandler(log_handler)
+
+    while True:
+        try:
+            record = queue.get()
+            if record is None:
+                break
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+
+def configure_logging():
+    logging_queue = multiprocessing.Queue(-1)
+    listener = multiprocessing.Process(target=log_listener_process, args=(logging_queue, ))
+    listener.start()
+
+    queue_handler = logging.handlers.QueueHandler(logging_queue)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
+    console_handler.setFormatter(console_formatter)
+
+    root = logging.getLogger()
+    root.addHandler(queue_handler)
+    root.addHandler(console_handler)
+    root.setLevel(logging.DEBUG)
+
+    logging.debug("hey this should be a debug message")
+
 def server():
     app.run(host='0.0.0.0')
 
@@ -146,8 +185,7 @@ def get_weather_data_worker(data_dict):
         try:
             data_dict["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
         except:
-            print("Error getting weather data...")
-            traceback.print_exc()
+            logging.exception("Error getting weather data...")
             time.sleep(5)
             data_dict["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
 
@@ -157,14 +195,10 @@ def get_data_worker(data_dict):
     while True:
         try:
             if shared_flag.value is 0:
-                print("off, skipping FR24 request...")
+                logging.info("off, skipping FR24 request...")
             else:
 
                 r = requests.get(CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.2'})
-
-                if r.status_code is not 200:
-                    print("FR REQUEST WAS BAD")
-                    print("STATUS CODE: " + str(r.status_code))
 
                 results = r.json()
 
@@ -207,7 +241,7 @@ def get_data_worker(data_dict):
                         if (slowest is None or int(newguy["speed"]) < int(slowest["speed"])):
                             slowest = newguy
 
-                print(str(closest))
+                logging.info(str(closest))
 
                 data_dict["closest"] = closest
                 data_dict["highest"] = highest
@@ -215,8 +249,7 @@ def get_data_worker(data_dict):
                 data_dict["slowest"] = slowest
 
         except:
-            print("Error getting FR24 data...")
-            traceback.print_exc()
+            logging.exception("Error getting FR24 data...")
 
         time.sleep(7)
 
@@ -225,18 +258,18 @@ def read_config():
     CONF = {}
     with open("sign.conf") as f:
         lines = f.readlines()
-        print("reading  config...")
+        logging.info("reading  config...")
         for line in lines:
             parts = line.split('=')
             CONF[parts[0]] = parts[1].rstrip()
 
-    print("Config loaded: " + str(CONF))
+    logging.info("Config loaded: " + str(CONF))
 
     CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(CONF["SENSOR_LAT"]) + 2},{float(CONF["SENSOR_LAT"]) - 2},{float(CONF["SENSOR_LON"]) - 2},{float(CONF["SENSOR_LON"]) + 2}'
     CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={CONF["SENSOR_LAT"]}&lon={CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 
-    print("Plane Endpoint: " + CONF["ENDPOINT"])
-    print("Weather Endpoint: " + CONF["WEATHER_ENDPOINT"])
+    logging.info("Plane Endpoint: " + CONF["ENDPOINT"])
+    logging.info("Weather Endpoint: " + CONF["WEATHER_ENDPOINT"])
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -249,7 +282,7 @@ def read_static_airport_data():
             lon = float(parts[3])
             code_to_airport[code] = (name, lat, lon)
 
-    print(f"{len(code_to_airport)} static airport configs added")
+    logging.info(f"{len(code_to_airport)} static airport configs added")
 
 
 class PlaneSign:
@@ -346,7 +379,7 @@ class PlaneSign:
                 parse_this_to_get_hex = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={flight_num_to_track}&limit=10").json()
 
                 live_flight_info = first(parse_this_to_get_hex["results"], lambda x: x["type"] == "live")
-                print(live_flight_info)
+                logging.info(live_flight_info)
 
                 flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={live_flight_info['id']}").json()
                 current_location = flight_data['trail'][0]
@@ -357,8 +390,8 @@ class PlaneSign:
                 else:
                     formatted_address = 'Somewhere'
 
-                print(current_location)
-                print(formatted_address)
+                logging.info(current_location)
+                logging.info(formatted_address)
 
             requests_limiter = requests_limiter + 1
 
@@ -1172,7 +1205,7 @@ class PlaneSign:
                     continue
 
                 if not data_dict or "closest" not in data_dict:
-                    print("no data found, waiting...")
+                    logging.info("no data found, waiting...")
                     self.wait_loop(3)
                     continue
 
@@ -1265,13 +1298,13 @@ class PlaneSign:
                     if plane_to_show["origin"]:
                         origin_config = code_to_airport.get(plane_to_show["origin"])
                         origin_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
-                        print(f"Origin is {origin_distance:.2f} miles away")
+                        logging.info(f"Origin is {origin_distance:.2f} miles away")
 
                     destination_distance = 0
                     if plane_to_show["destination"]:
                         destination_config = code_to_airport.get(plane_to_show["destination"])
                         destination_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
-                        print(f"Destination is {destination_distance:.2f} miles away")
+                        logging.info(f"Destination is {destination_distance:.2f} miles away")
 
                     if origin_distance != 0 and origin_distance > destination_distance:
                         friendly_name = origin_config[0]
@@ -1280,7 +1313,7 @@ class PlaneSign:
                     else:
                         friendly_name = ""
 
-                    print("Full airport name from code: "  + friendly_name)
+                    logging.info("Full airport name from code: "  + friendly_name)
 
                     # Front pad the flight number to a max of 7 for spacing
                     formatted_flight = plane_to_show["flight"].rjust(7, ' ')
@@ -1324,13 +1357,14 @@ class PlaneSign:
                 # Wait before doing anything
                 self.wait_loop(1)
             except:
-                print("General error in main loop, waiting...")
-                traceback.print_exc()
+                logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
                 shared_mode.value = 1
 
 # Main function
 if __name__ == "__main__":
+    configure_logging()
+
     read_config()
     read_static_airport_data()
 
