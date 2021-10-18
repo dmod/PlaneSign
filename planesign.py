@@ -8,8 +8,11 @@ import subprocess
 import multiprocessing
 import sys
 import traceback
+import http
 import requests
 import random
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from datetime import datetime
 from utilities import *
 from fish import *
@@ -183,11 +186,12 @@ def server():
 def get_weather_data_worker(data_dict):
     while True:
         try:
-            data_dict["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
+            with requests.Session() as s:
+                s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
+                response = s.get(CONF["WEATHER_ENDPOINT"])
+                data_dict["weather"] = response.json()
         except:
             logging.exception("Error getting weather data...")
-            time.sleep(5)
-            data_dict["weather"] = requests.get(CONF["WEATHER_ENDPOINT"]).json()
 
         time.sleep(600)
 
@@ -198,9 +202,10 @@ def get_data_worker(data_dict):
                 logging.info("off, skipping FR24 request...")
             else:
 
-                r = requests.get(CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.2'})
-
-                results = r.json()
+                with requests.Session() as s:
+                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
+                    response = s.get(CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.3'})
+                    results = response.json()
 
                 closest = None
                 highest = None
@@ -349,7 +354,7 @@ class PlaneSign:
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
 
-        if data_dict["weather"] and data_dict["weather"]["current"] and data_dict["weather"]["current"]["temp"]:
+        if "weather" in data_dict:
             temp = str(round(data_dict["weather"]["current"]["temp"]))
         else:
             temp = "--"
