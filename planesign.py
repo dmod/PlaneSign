@@ -8,7 +8,6 @@ import subprocess
 import multiprocessing
 import sys
 import traceback
-import http
 import requests
 import random
 from requests.adapters import HTTPAdapter
@@ -177,8 +176,6 @@ def configure_logging():
     root.addHandler(queue_handler)
     root.addHandler(console_handler)
     root.setLevel(logging.DEBUG)
-
-    logging.debug("hey this should be a debug message")
 
 def server():
     app.run(host='0.0.0.0')
@@ -431,7 +428,7 @@ class PlaneSign:
             else:
                 end_time = scheduled_end_time
 
-            # current progress divited by total
+            # current progress divided by total
             current_time = int(time.time())
             duration = end_time - start_time
             current_progress = current_time - start_time 
@@ -1302,14 +1299,16 @@ class PlaneSign:
                     origin_distance = 0
                     if plane_to_show["origin"]:
                         origin_config = code_to_airport.get(plane_to_show["origin"])
-                        origin_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
-                        logging.info(f"Origin is {origin_distance:.2f} miles away")
+                        if origin_config:
+                            origin_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
+                            logging.info(f"Origin is {origin_distance:.2f} miles away")
 
                     destination_distance = 0
                     if plane_to_show["destination"]:
                         destination_config = code_to_airport.get(plane_to_show["destination"])
-                        destination_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
-                        logging.info(f"Destination is {destination_distance:.2f} miles away")
+                        if destination_config:
+                            destination_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
+                            logging.info(f"Destination is {destination_distance:.2f} miles away")
 
                     if origin_distance != 0 and origin_distance > destination_distance:
                         friendly_name = origin_config[0]
