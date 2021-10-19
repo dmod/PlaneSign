@@ -121,13 +121,12 @@
           if (status === 0 || (status >= 200 && status < 400)) {
             var value = xhr.responseText;
 
-            console.log(value)
             var data = JSON.parse(value);
             var itm = document.getElementById("linetemplate");
             for (let i = 0; i < Object.keys(data).length; i++) { 
               //console.log(Object.keys(data)[i]);
               //console.log(data[Object.keys(data)[i]])
-              //Skip extra junk in CONF dictionary not loaded from config file
+              //Skip extra junk in read_static_airport_data() dictionary not loaded from config file
               if (String(Object.keys(data)[i])=="ENDPOINT" || String(Object.keys(data)[i])=="WEATHER_ENDPOINT") {
                 continue
               }

@@ -16,6 +16,7 @@ from math import floor
 import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import _thread as thread
+#import cfg
 
 def get_lightning_color(strike_time,now,format):
     if strike_time > now: #future
@@ -53,21 +54,21 @@ def draw_power(x,y,radius,sign):
 
 class LightningManager:
 
-    def __init__(self,sign,lat,lon):
+    def __init__(self,sign,CONF):
         self.host = ''
         self.ws = None
         self.thread = None
         self.ws_server = None
         self.ws_key = None
         self.header = None
+        self.CONF=CONF
         self.connected = Value('i', 0)
         self.strikes = Manager().list()
         self.sign = sign
-        self.mylong = lon
-        self.mylat = lat
-        self.scale=60
+        self.scale = 60
         self.background = None
         self.genBackground()
+
 
     def draw_loading(self):
         graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 12, graphics.Color(180,180,40), "Storm")
@@ -82,7 +83,7 @@ class LightningManager:
 
         draw = ImageDraw.Draw(self.background)
 
-        url=f'https://public.opendatasoft.com/api/records/1.0/search/?dataset=us-county-boundaries&q=&lang=EN&facet=countyfp&geofilter.distance={self.mylat}%2C{self.mylong}%2C500000'
+        url=f'https://public.opendatasoft.com/api/records/1.0/search/?dataset=us-county-boundaries&q=&lang=EN&facet=countyfp&geofilter.distance={float(self.CONF["SENSOR_LAT"])}%2C{float(self.CONF["SENSOR_LON"])}%2C500000'
 
         response = requests.get(url, stream=True, timeout=10)
         if response.status_code == requests.codes.ok:
@@ -93,13 +94,13 @@ class LightningManager:
                 if shape["type"]=='Polygon':
                     points=[]
                     for coord in shape["coordinates"][0]:
-                        points.append((self.background.width/2+(coord[0]-self.mylong)*self.scale,self.background.height/2-(coord[1]-self.mylat)*self.scale))
+                        points.append((self.background.width/2+(coord[0]-float(self.CONF["SENSOR_LON"]))*self.scale,self.background.height/2-(coord[1]-float(self.CONF["SENSOR_LAT"]))*self.scale))
                     draw.polygon((points),outline=(50,50,50))
                 elif shape["type"]=='MultiPolygon':
                     for subshape in shape["coordinates"]:
                         points=[]
                         for coord in subshape[0]:
-                            points.append((self.background.width/2+(coord[0]-self.mylong)*self.scale,self.background.height/2-(coord[1]-self.mylat)*self.scale))
+                            points.append((self.background.width/2+(coord[0]-float(self.CONF["SENSOR_LON"]))*self.scale,self.background.height/2-(coord[1]-float(self.CONF["SENSOR_LAT"]))*self.scale))
                         draw.polygon((points),outline=(50,50,50))
 
             
@@ -115,7 +116,7 @@ class LightningManager:
         #Median detector distance - use dets[floor(len(dets)/2.0)]
         #Second farthest detector distance - user dets[len(dets)-2]
 
-        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (self.mylat,self.mylong)),"radius":dets[len(dets)-2]}
+        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))),"radius":dets[len(dets)-2]}
         #print(strike)
         self.strikes.append(strike)
 
@@ -219,8 +220,8 @@ class LightningManager:
                     color=get_lightning_color(strike_time,now,True)
 
                 if lightningmap:
-                    x=self.background.width/2+(strike["lon"]-self.mylong)*self.scale
-                    y=self.background.height/2-(strike["lat"]-self.mylat)*self.scale
+                    x=self.background.width/2+(strike["lon"]-float(self.CONF["SENSOR_LON"]))*self.scale
+                    y=self.background.height/2-(strike["lat"]-float(self.CONF["SENSOR_LAT"]))*self.scale
                     draw.point([x,y], fill=color)
 
             if lightningmap:
@@ -237,45 +238,45 @@ class LightningManager:
             if closest1:
                 r,g,b = get_lightning_color(closest1["time"],now,False)
                 if closest1["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
                 
                 draw_power(0,14,closest1["radius"],self.sign)
 
             if closest2:
                 r,g,b = get_lightning_color(closest2["time"],now,False)
                 if closest2["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
             
                 draw_power(0,22,closest2["radius"],self.sign)
 
             if closest3:    
                 r,g,b = get_lightning_color(closest3["time"],now,False)
                 if closest3["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
 
                 draw_power(0,30,closest3["radius"],self.sign)
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 6, graphics.Color(20, 20, 210), "Recent:")
             if recent[0]:
                 if recent[0]["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
 
                 draw_power(31,14,recent[0]["radius"],self.sign)
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "Near:")
             if newclose:
                 if newclose["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.1f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.1f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.0f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (self.mylat,self.mylong)))
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.0f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (float(self.CONF["SENSOR_LAT"]),float(self.CONF["SENSOR_LON"]))))
 
                 draw_power(31,30,newclose["radius"],self.sign)
 

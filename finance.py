@@ -13,6 +13,7 @@ from rgbmatrix import graphics
 from requests import Session
 from datetime import datetime
 from scipy.interpolate import interp1d
+import os
 
 def colordista(c1,c2):
     r1=c1[0]/255
@@ -445,6 +446,7 @@ class Stock:
         if  self.chart == None or self.isnew or time.perf_counter()-self.last_time > 300:
             self.last_time = time.perf_counter()
             dayvals = self.ticker_data.history(period="1d",interval="5m")
+            os.chmod("prices.csv", 0o777)
             dayvals.Open.to_csv("prices.csv", index=False, header=None)
             dayvals=dayvals.Open.tolist()
             

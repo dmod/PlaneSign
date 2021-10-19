@@ -4,8 +4,6 @@
 import time
 import logging
 import logging.handlers
-import subprocess
-import multiprocessing
 import sys
 import traceback
 import requests
@@ -16,12 +14,15 @@ from datetime import datetime
 from utilities import *
 from fish import *
 from finance import *
-from lightning import *
+import lightning
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
+from multiprocessing import Process, Manager, Value, Array, Queue
+import subprocess
 from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 from collections import namedtuple
+#import cfg
 
 RGB = namedtuple('RGB', 'r g b')
 
@@ -47,24 +48,43 @@ shared_forced_sign_update = Value('i', 0)
 
 @app.route("/get_config")
 def get_config():
-    read_config()
     global CONF
-    return json.dumps(CONF)
+    read_config()
+    #global CONF
+    print("get ",id(CONF))
+
+    sample = {}
+    with open("sign.conf.sample") as f:
+        lines = f.readlines()
+        for line in lines:
+            parts = line.split('=')
+            sample[parts[0]] = parts[1].rstrip()
+
+    for key in sample.keys():
+        if key in CONF:
+            sample[key]=CONF[key]
+
+    return json.dumps(sample)
 
 @app.route("/write_conf")
 def write_config():
+    global CONF
+    print("write ", id(CONF))
     if request.args:
         keys = list(request.args.keys())
         vals = list(request.args.values())
         f = open("sign.conf", "w+")
         for i in range(len(keys)):
             f.write(keys[i]+"="+vals[i]+"\n")
+            #CONF[keys[i]]=vals[i]
+        f.flush()
         f.close()
         #print(list(request.args.keys()))
         #print(list(request.args.values()))
+        
         read_config()
         shared_forced_sign_update.value = 1
-    return ""
+    return json.dumps(CONF)
 
 @app.route("/update")
 def update_sign():
@@ -162,8 +182,8 @@ def log_listener_process(queue):
             traceback.print_exc(file=sys.stderr)
 
 def configure_logging():
-    logging_queue = multiprocessing.Queue(-1)
-    listener = multiprocessing.Process(target=log_listener_process, args=(logging_queue, ))
+    logging_queue = Queue(-1)
+    listener = Process(target=log_listener_process, args=(logging_queue, ))
     listener.start()
 
     queue_handler = logging.handlers.QueueHandler(logging_queue)
@@ -258,12 +278,15 @@ def get_data_worker(data_dict):
 def read_config():
     global CONF
     CONF = {}
-    with open("sign.conf") as f:
-        lines = f.readlines()
-        logging.info("reading  config...")
-        for line in lines:
-            parts = line.split('=')
-            CONF[parts[0]] = parts[1].rstrip()
+    print("read ",id(CONF))
+    f = open("sign.conf")
+    lines = f.readlines()
+    print("reading  config...")
+    for line in lines:
+        parts = line.split('=')
+        CONF[parts[0]] = parts[1].rstrip()
+    f.flush()
+    f.close()
 
     logging.info("Config loaded: " + str(CONF))
 
@@ -316,11 +339,18 @@ class PlaneSign:
 
         self.last_brightness = None
 
-        manager = Manager()
+        #global manager
         global data_dict
         global arg_dict
+        global CONF
+        manager=Manager()
         data_dict = manager.dict()
         arg_dict = manager.dict()
+        CONF = manager.dict()
+        print("init ",id(CONF))
+
+        read_config()
+        read_static_airport_data()
 
         Process(target=get_data_worker, args=(data_dict,)).start()
         Process(target=get_weather_data_worker, args=(data_dict,)).start()
@@ -351,7 +381,7 @@ class PlaneSign:
     def show_time(self):
         print_time = datetime.now().strftime('%-I:%M%p')
 
-        if "weather" in data_dict:
+        if "weather" in data_dict and data_dict["weather"] and data_dict["weather"]["current"] and data_dict["weather"]["current"]["temp"]:
             temp = str(round(data_dict["weather"]["current"]["temp"]))
         else:
             temp = "--"
@@ -692,8 +722,12 @@ class PlaneSign:
 
     def lightning(self):
         self.canvas.Clear()
+        #global CONF
         #LM=LightningManager(self,47.34045883887302,-94.23635732086981)
-        LM=LightningManager(self,float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"]))
+        #float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"])
+        print("Lightning ##########################")
+        print(CONF)
+        LM=lightning.LightningManager(self,CONF)
         #LM.draw_loading()
         LM.connect()
 
@@ -1368,8 +1402,5 @@ class PlaneSign:
 # Main function
 if __name__ == "__main__":
     configure_logging()
-
-    read_config()
-    read_static_airport_data()
-
+    
     PlaneSign().sign_loop()
