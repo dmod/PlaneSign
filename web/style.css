@@ -62,6 +62,7 @@ legend {
   opacity: 0.7;
   -webkit-transition: .2s;
   transition: opacity .2s;
+  cursor: pointer;
 }
 
 #brightness_slider:hover {
@@ -69,6 +70,15 @@ legend {
 }
 
 #brightness_slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 150px;
+  height: 50px;
+  background: #4CAF50;
+  cursor: pointer;
+}
+
+#brightness_slider::-moz-range-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 150px;
@@ -103,11 +113,28 @@ legend {
   cursor: pointer;
 }
 
+.pong_slider::-moz-range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 50px;
+  height: 50px;
+  background: #4CAF50;
+  cursor: pointer;
+}
+
 #pong_player1_slider::-webkit-slider-thumb {
   background: #ff2222;
 }
 
+#pong_player1_slider::-moz-range-thumb {
+  background: #ff2222;
+}
+
 #pong_player2_slider::-webkit-slider-thumb {
+  background: #2222ff
+}
+
+#pong_player2_slider::-moz-range-thumb {
   background: #2222ff
 }
 
@@ -293,8 +320,23 @@ label.configline {
 input.configline {
   width: 35%;
   float: right;
-  margin-right:30%;
+  margin-right:20%;
   font-size:40px;
+}
+
+input[type='checkbox'].configline {
+  height: 40px;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
 }
 
 .closebutton {

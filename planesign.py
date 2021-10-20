@@ -22,7 +22,6 @@ from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 from collections import namedtuple
-#import cfg
 
 RGB = namedtuple('RGB', 'r g b')
 
@@ -49,16 +48,31 @@ shared_forced_sign_update = Value('i', 0)
 @app.route("/get_config")
 def get_config():
     global CONF
+    CONF.clear()
     read_config()
-    #global CONF
-    print("get ",id(CONF))
+    sample={}
+    sample["DATATYPES"]=[]
 
-    sample = {}
     with open("sign.conf.sample") as f:
         lines = f.readlines()
+        lastline = None
         for line in lines:
+            if line[0]=="#":
+                lastline = line.rstrip()
+                continue
             parts = line.split('=')
             sample[parts[0]] = parts[1].rstrip()
+            if lastline:
+                comment_parts = lastline[1:].split(' ')
+                newdict = {}
+                newdict["id"]=parts[0]
+                newdict["type"]=comment_parts[0]
+                for i in range(len(comment_parts)):
+                    if comment_parts[i]=="min" and i+1<len(comment_parts):
+                        newdict["min"]=comment_parts[i+1]
+                    if comment_parts[i]=="max" and i+1<len(comment_parts):
+                        newdict["max"]=comment_parts[i+1]
+                sample["DATATYPES"].append(newdict)
 
     for key in sample.keys():
         if key in CONF:
@@ -66,10 +80,9 @@ def get_config():
 
     return json.dumps(sample)
 
-@app.route("/write_conf")
+@app.route('/write_config')
 def write_config():
     global CONF
-    print("write ", id(CONF))
     if request.args:
         keys = list(request.args.keys())
         vals = list(request.args.values())
@@ -79,12 +92,10 @@ def write_config():
             #CONF[keys[i]]=vals[i]
         f.flush()
         f.close()
-        #print(list(request.args.keys()))
-        #print(list(request.args.values()))
         
         read_config()
         shared_forced_sign_update.value = 1
-    return json.dumps(CONF)
+    return ""
 
 @app.route("/update")
 def update_sign():
@@ -247,7 +258,7 @@ def get_data_worker(data_dict):
                         if newguy["altitude"] < 100:
                             continue
 
-                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < 10000)):
+                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < float(CONF["CLOSEST_HEIGHT_LIMIT"]))):
                             closest = newguy
 
                         # The rest of these are for fun, filter out the unknown planes
@@ -277,16 +288,29 @@ def get_data_worker(data_dict):
 
 def read_config():
     global CONF
-    CONF = {}
-    print("read ",id(CONF))
-    f = open("sign.conf")
-    lines = f.readlines()
-    print("reading  config...")
-    for line in lines:
-        parts = line.split('=')
-        CONF[parts[0]] = parts[1].rstrip()
-    f.flush()
-    f.close()
+    CONF.clear()
+
+    logging.info("reading  config...")
+
+    with open("sign.conf") as f, open("sign.conf.sample") as s:
+        lines = f.readlines()
+        lines_s = s.readlines()
+
+        temp={}
+        for line in lines:
+            if line[0]=="#":
+                continue
+            parts = line.split('=')
+            temp[parts[0]] = parts[1].rstrip()
+
+        for line in lines_s:
+            if line[0]=="#":
+                continue
+            parts = line.split('=')
+            if parts[0] in temp.keys():
+                CONF[parts[0]] = temp[parts[0]]
+            else:
+                CONF[parts[0]] = parts[1].rstrip()
 
     logging.info("Config loaded: " + str(CONF))
 
@@ -347,9 +371,10 @@ class PlaneSign:
         data_dict = manager.dict()
         arg_dict = manager.dict()
         CONF = manager.dict()
-        print("init ",id(CONF))
 
         read_config()
+        shared_current_brightness.value = int(CONF["DEFAULT_BRIGHTNESS"])
+
         read_static_airport_data()
 
         Process(target=get_data_worker, args=(data_dict,)).start()
@@ -379,7 +404,10 @@ class PlaneSign:
         return forced_breakout
 
     def show_time(self):
-        print_time = datetime.now().strftime('%-I:%M%p')
+        if CONF["MILITARY_TIME"].lower()=='true':
+            print_time = datetime.now().strftime('%-H:%M%p')
+        else:
+            print_time = datetime.now().strftime('%-I:%M%p')
 
         if "weather" in data_dict and data_dict["weather"] and data_dict["weather"]["current"] and data_dict["weather"]["current"]["temp"]:
             temp = str(round(data_dict["weather"]["current"]["temp"]))
@@ -495,9 +523,12 @@ class PlaneSign:
             elif blip_count == 2:
                 self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
-
-            graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
-            graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
+            if CONF["MILITARY_TIME"].lower()=='true':
+                graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M%p', time.localtime(start_time))}")
+                graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M%p', time.localtime(end_time))}")
+            else:
+                graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
+                graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
 
             #graphics.DrawText(self.canvas, self.font46, 31, 17, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
 
@@ -630,8 +661,12 @@ class PlaneSign:
 
         sunrise_sunset_start_x = num_horizontal_pixels + 20
 
-        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
-        graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
+        if CONF["MILITARY_TIME"].lower()=='true':
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-H:%M'))
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-H:%M'))
+        else:
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
 
         # Day 0
         day = daily[start_index_day]
@@ -722,13 +757,9 @@ class PlaneSign:
 
     def lightning(self):
         self.canvas.Clear()
-        #global CONF
-        #LM=LightningManager(self,47.34045883887302,-94.23635732086981)
-        #float(CONF["SENSOR_LAT"]),float(CONF["SENSOR_LON"])
-        print("Lightning ##########################")
-        print(CONF)
+
+        lightning.draw_loading(self)
         LM=lightning.LightningManager(self,CONF)
-        #LM.draw_loading()
         LM.connect()
 
         last_draw = time.perf_counter()

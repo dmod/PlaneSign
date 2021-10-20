@@ -1,3 +1,12 @@
+#number min -90 max 90
 SENSOR_LAT=39.015074
+#number min -180 max 180
 SENSOR_LON=-76.528318
+#text
 WEATHER_CITY_NAME=Annapolis
+#checkbox
+MILITARY_TIME=false
+#range min 0 max 100
+DEFAULT_BRIGHTNESS=80
+#number min 0 max 100000
+CLOSEST_HEIGHT_LIMIT=10000

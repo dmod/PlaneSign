@@ -16,7 +16,6 @@ from math import floor
 import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import _thread as thread
-#import cfg
 
 def get_lightning_color(strike_time,now,format):
     if strike_time > now: #future
@@ -52,6 +51,14 @@ def draw_power(x,y,radius,sign):
     if radius > t3:
         sign.canvas.SetPixel(x, y-5, 120, 0, 0)
 
+def draw_loading(sign):
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 7, 12, graphics.Color(180,180,40), "Storm")
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 34, 26, graphics.Color(180,180,40), "Sign")
+
+    image = Image.open("/home/pi/PlaneSign/icons/11d.png")
+    image = image.resize((35, 35), Image.BICUBIC)
+    sign.canvas.SetImage(image.convert('RGB'), 75, 0)
+
 class LightningManager:
 
     def __init__(self,sign,CONF):
@@ -68,15 +75,6 @@ class LightningManager:
         self.scale = 60
         self.background = None
         self.genBackground()
-
-
-    def draw_loading(self):
-        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 12, graphics.Color(180,180,40), "Storm")
-        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 34, 26, graphics.Color(180,180,40), "Sign")
-
-        image = Image.open("/home/pi/PlaneSign/icons/11d.png")
-        image = image.resize((30, 30), Image.BICUBIC)
-        self.sign.canvas.SetImage(image.convert('RGB'), 75, 5)
 
     def genBackground(self):
         self.background = Image.new("RGB", (64, 32))
