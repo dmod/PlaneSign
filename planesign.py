@@ -731,7 +731,7 @@ class PlaneSign:
                 raw_ticker = ddt.upper()
 
                 if s == None:
-                    s = Stock(self, raw_ticker)
+                    s = Stock(self, raw_ticker, CONF)
                 else:
                     s.setticker(raw_ticker)
 

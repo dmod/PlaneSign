@@ -354,9 +354,10 @@ def get_crypto(symbol,name):
 
 
 class Stock:
-    def __init__(self,sign,raw_ticker):
+    def __init__(self,sign,raw_ticker,CONF):
 
         self.sign = sign
+        self.CONF = CONF
 
         self.clean_ticker = None
         self.cleaner_ticker = None
@@ -446,7 +447,6 @@ class Stock:
         if  self.chart == None or self.isnew or time.perf_counter()-self.last_time > 300:
             self.last_time = time.perf_counter()
             dayvals = self.ticker_data.history(period="1d",interval="5m")
-            os.chmod("prices.csv", 0o777)
             dayvals.Open.to_csv("prices.csv", index=False, header=None)
             dayvals=dayvals.Open.tolist()
             
@@ -502,7 +502,10 @@ class Stock:
 
     def drawtime(self):
 
-        print_time = datetime.now().strftime('%-I:%M%p')
+        if self.CONF["MILITARY_TIME"].lower()=='true':
+            print_time = datetime.now().strftime('%-H:%M%p')
+        else:
+            print_time = datetime.now().strftime('%-I:%M%p')
         graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
 
     def drawticker(self):
