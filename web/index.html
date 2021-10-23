@@ -225,7 +225,7 @@
   }
 
   function update_sign() {
-    if (confirm('Are you sure you want to update?')) {
+    if (confirm('Are you sure you want to update?\n(Uncommitted sign updates will be lost)')) {
       call_endpoint("/update");
     }
   }
@@ -340,7 +340,7 @@
   </div>
   <div class="sidenav" style="display:none" id="optionsSidebar">
     <button onclick="hideoptions()" class="closebutton">&times;</button>
-    <!--<button class="mode_button" onclick="update_sign()">UPDATE</button>-->
+    <button class="mode_button" onclick="update_sign()">UPDATE PLANESIGN</button>
     <span id="linetemplate" class="configline" style="display:none">
       <label for="templatename" class="configline"></label><input type="text" class="configline" id="templateid" name="templatename" value="">
     </span>

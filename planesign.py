@@ -100,6 +100,7 @@ def write_config():
 @app.route("/update")
 def update_sign():
     subprocess.call(['sh', './update.sh',])
+    return ""
 
 @app.route("/status")
 def get_status():
