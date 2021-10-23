@@ -39,6 +39,7 @@ sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocke
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
 touch prices.csv
+touch sign.conf
 chmod 777 prices.csv
 chmod 777 sign.conf
 chmod -R 777 icons/
