@@ -1,14 +1,15 @@
 import time
 import random
+import shared_config
 from utilities import *
 
 
-def cgol(sign, arg_dict):
+def cgol(sign):
     sign.canvas.Clear()
 
     generation_time = 0.15
     
-    if arg_dict["style"] == "2":
+    if shared_config.arg_dict["style"] == "2":
         cgol_cellcolor = False
     else:
         cgol_cellcolor = True

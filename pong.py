@@ -1,6 +1,6 @@
 import shared_config
 import random
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
+from rgbmatrix import graphics
 
 def pong(sign):
 

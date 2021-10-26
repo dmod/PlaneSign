@@ -17,6 +17,7 @@ from finance import *
 import lightning
 import cgol
 import pong
+import planes
 import shared_config
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
@@ -49,8 +50,7 @@ shared_forced_sign_update = Value('i', 0)
 
 @app.route("/get_config")
 def get_config():
-    global CONF
-    CONF.clear()
+    shared_config.CONF.clear()
     read_config()
     sample={}
     sample["DATATYPES"]=[]
@@ -77,21 +77,19 @@ def get_config():
                 sample["DATATYPES"].append(newdict)
 
     for key in sample.keys():
-        if key in CONF:
-            sample[key]=CONF[key]
+        if key in shared_config.CONF:
+            sample[key]=shared_config.CONF[key]
 
     return json.dumps(sample)
 
 @app.route('/write_config')
 def write_config():
-    global CONF
     if request.args:
         keys = list(request.args.keys())
         vals = list(request.args.values())
         f = open("sign.conf", "w+")
         for i in range(len(keys)):
             f.write(keys[i]+"="+vals[i]+"\n")
-            #CONF[keys[i]]=vals[i]
         f.flush()
         f.close()
         
@@ -128,7 +126,7 @@ def set_color_mode(color):
 
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
-    data_dict["track_a_flight_num"] = flight_num
+    shared_config.data_dict["track_a_flight_num"] = flight_num
     shared_mode.value = 99
     shared_forced_sign_update.value = 1
     return ""
@@ -137,7 +135,7 @@ def set_track_a_flight(flight_num):
 def set_mode(mode):
     shared_mode.value = int(mode)
     if request.args:
-        arg_dict.update(request.args)
+        shared_config.arg_dict.update(request.args)
     shared_forced_sign_update.value = 1
     return ""
 
@@ -167,14 +165,14 @@ def get_brightness():
 @app.route("/set_custom_message/", defaults={"message": ""})
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
-    data_dict["custom_message"] = message
+    shared_config.data_dict["custom_message"] = message
     shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/submit_ticker/", defaults={"ticker": ""})
 @app.route("/submit_ticker/<ticker>")
 def submit_ticker(ticker):
-    data_dict["ticker"] = ticker
+    shared_config.data_dict["ticker"] = ticker
     return ""
 
 def log_listener_process(queue):
@@ -220,7 +218,7 @@ def get_weather_data_worker(data_dict):
         try:
             with requests.Session() as s:
                 s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                response = s.get(CONF["WEATHER_ENDPOINT"])
+                response = s.get(shared_config.CONF["WEATHER_ENDPOINT"])
                 data_dict["weather"] = response.json()
         except:
             logging.exception("Error getting weather data...")
@@ -236,7 +234,7 @@ def get_data_worker(data_dict):
 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    response = s.get(CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.3'})
+                    response = s.get(shared_config.CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.3'})
                     results = response.json()
 
                 closest = None
@@ -256,13 +254,13 @@ def get_data_worker(data_dict):
                         newguy["typecode"] = result[8]
                         newguy["origin"] = result[11]
                         newguy["destination"] = result[12]
-                        newguy["distance"] = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (result[1], result[2]))
+                        newguy["distance"] = get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (result[1], result[2]))
 
                         # Filter out planes on the ground
                         if newguy["altitude"] < 100:
                             continue
 
-                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < float(CONF["CLOSEST_HEIGHT_LIMIT"]))):
+                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"]))):
                             closest = newguy
 
                         # The rest of these are for fun, filter out the unknown planes
@@ -291,8 +289,7 @@ def get_data_worker(data_dict):
         time.sleep(7)
 
 def read_config():
-    global CONF
-    CONF.clear()
+    shared_config.CONF.clear()
 
     logging.info("reading  config...")
 
@@ -312,17 +309,17 @@ def read_config():
                 continue
             parts = line.split('=')
             if parts[0] in temp.keys():
-                CONF[parts[0]] = temp[parts[0]]
+                shared_config.CONF[parts[0]] = temp[parts[0]]
             else:
-                CONF[parts[0]] = parts[1].rstrip()
+                shared_config.CONF[parts[0]] = parts[1].rstrip()
 
-    logging.info("Config loaded: " + str(CONF))
+    logging.info("Config loaded: " + str(shared_config.CONF))
 
-    CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(CONF["SENSOR_LAT"]) + 2},{float(CONF["SENSOR_LAT"]) - 2},{float(CONF["SENSOR_LON"]) - 2},{float(CONF["SENSOR_LON"]) + 2}'
-    CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={CONF["SENSOR_LAT"]}&lon={CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
+    shared_config.CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(shared_config.CONF["SENSOR_LAT"]) + 2},{float(shared_config.CONF["SENSOR_LAT"]) - 2},{float(shared_config.CONF["SENSOR_LON"]) - 2},{float(shared_config.CONF["SENSOR_LON"]) + 2}'
+    shared_config.CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={shared_config.CONF["SENSOR_LAT"]}&lon={shared_config.CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 
-    logging.info("Plane Endpoint: " + CONF["ENDPOINT"])
-    logging.info("Weather Endpoint: " + CONF["WEATHER_ENDPOINT"])
+    logging.info("Plane Endpoint: " + shared_config.CONF["ENDPOINT"])
+    logging.info("Weather Endpoint: " + shared_config.CONF["WEATHER_ENDPOINT"])
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -367,22 +364,18 @@ class PlaneSign:
 
         self.last_brightness = None
 
-        #global manager
-        global data_dict
-        global arg_dict
-        global CONF
-        manager=Manager()
-        data_dict = manager.dict()
-        arg_dict = manager.dict()
-        CONF = manager.dict()
+        manager = Manager()
+        shared_config.data_dict = manager.dict()
+        shared_config.arg_dict = manager.dict()
+        shared_config.CONF = manager.dict()
 
         read_config()
-        shared_current_brightness.value = int(CONF["DEFAULT_BRIGHTNESS"])
+        shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
         read_static_airport_data()
 
-        Process(target=get_data_worker, args=(data_dict,)).start()
-        Process(target=get_weather_data_worker, args=(data_dict,)).start()
+        Process(target=get_data_worker, args=(shared_config.data_dict,)).start()
+        Process(target=get_weather_data_worker, args=(shared_config.data_dict,)).start()
         Process(target=server).start()
 
     def wait_loop(self, seconds):
@@ -408,13 +401,13 @@ class PlaneSign:
         return forced_breakout
 
     def show_time(self):
-        if CONF["MILITARY_TIME"].lower()=='true':
+        if shared_config.CONF["MILITARY_TIME"].lower()=='true':
             print_time = datetime.now().strftime('%-H:%M%p')
         else:
             print_time = datetime.now().strftime('%-I:%M%p')
 
-        if "weather" in data_dict and data_dict["weather"] and data_dict["weather"]["current"] and data_dict["weather"]["current"]["temp"]:
-            temp = str(round(data_dict["weather"]["current"]["temp"]))
+        if "weather" in shared_config.data_dict and shared_config.data_dict["weather"] and shared_config.data_dict["weather"]["current"] and shared_config.data_dict["weather"]["current"]["temp"]:
+            temp = str(round(shared_config.data_dict["weather"]["current"]["temp"]))
         else:
             temp = "--"
 
@@ -425,137 +418,11 @@ class PlaneSign:
         
         self.matrix.SwapOnVSync(self.canvas)
 
-    def track_a_flight(self):
-
-        if "track_a_flight_num" not in data_dict:
-            self.canvas.Clear()
-            self.matrix.SwapOnVSync(self.canvas)
-            return
-
-        requests_limiter = 0
-        blip_count = 0
-
-        while True:
-
-            flight_num_to_track = data_dict["track_a_flight_num"]
-
-            if (requests_limiter % 22 == 0):
-                parse_this_to_get_hex = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={flight_num_to_track}&limit=10").json()
-
-                live_flight_info = first(parse_this_to_get_hex["results"], lambda x: x["type"] == "live")
-                logging.info(live_flight_info)
-
-                flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={live_flight_info['id']}").json()
-                current_location = flight_data['trail'][0]
-                reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key=AIzaSyD65DETlTi-o5ymfcSp2Gl8JxBS7fwOl5g").json()
-
-                if len(reverse_geocode['results']) != 0:
-                    formatted_address = reverse_geocode['results'][0]['formatted_address']
-                else:
-                    formatted_address = 'Somewhere'
-
-                logging.info(current_location)
-                logging.info(formatted_address)
-
-            requests_limiter = requests_limiter + 1
-
-            self.canvas.Clear()
-
-            flight_number_header = f"- {flight_data['identification']['callsign']} -"
-
-            graphics.DrawText(self.canvas, self.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
-
-            graphics.DrawText(self.canvas, self.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
-            graphics.DrawText(self.canvas, self.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
-
-            scheduled_start_time = flight_data['time']['scheduled']['departure']
-            real_start_time = flight_data['time']['real']['departure']
-            estimated_start_time = flight_data['time']['estimated']['departure']
-
-            scheduled_end_time = flight_data['time']['scheduled']['arrival']
-            real_end_time = flight_data['time']['real']['arrival']
-            estimated_end_time = flight_data['time']['estimated']['arrival']
-
-            if real_start_time is not None:
-                start_time = real_start_time
-            elif estimated_start_time is not None:
-                start_time = estimated_start_time
-            else:
-                start_time = scheduled_start_time
-
-            if real_end_time is not None:
-                end_time = real_end_time
-            elif estimated_end_time is not None:
-                end_time = estimated_end_time
-            else:
-                end_time = scheduled_end_time
-
-            # current progress divided by total
-            current_time = int(time.time())
-            duration = end_time - start_time
-            current_progress = current_time - start_time 
-
-            percent_complete = current_progress / duration
-
-            line_x_start = 30
-            line_x_end = 98
-            line_y = 9
-
-            line_distance = line_x_end - line_x_start
-
-            for x in range(line_x_start, line_x_end):
-                self.canvas.SetPixel(x, line_y, 120, 120, 120)
-
-            # Left Bar
-            for y in range(line_y - 2, line_y + 3):
-                self.canvas.SetPixel(line_x_start, y, 255, 255, 255)
-
-            # Right Bar
-            for y in range(line_y - 2, line_y + 3):
-                self.canvas.SetPixel(line_x_end, y, 255, 255, 255)
-
-            progress_box_start_offset = int(line_distance * percent_complete) + line_x_start
-
-            if blip_count == 0:
-                self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
-            elif blip_count == 1:
-                for x in range(progress_box_start_offset - 1, progress_box_start_offset + 2):
-                    for y in range(line_y - 1, line_y + 2):
-                        self.canvas.SetPixel(x, y, 255, 0, 0)
-
-                self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
-            elif blip_count == 2:
-                self.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
-
-            if CONF["MILITARY_TIME"].lower()=='true':
-                graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M%p', time.localtime(start_time))}")
-                graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M%p', time.localtime(end_time))}")
-            else:
-                graphics.DrawText(self.canvas, self.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
-                graphics.DrawText(self.canvas, self.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
-
-            #graphics.DrawText(self.canvas, self.font46, 31, 17, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
-
-            graphics.DrawText(self.canvas, self.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
-            graphics.DrawText(self.canvas, self.font46, 70, 19, graphics.Color(20, 160, 60), f"Spd:{current_location['spd']}")
-
-            graphics.DrawText(self.canvas, self.font57, get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
-
-            self.matrix.SwapOnVSync(self.canvas)
-
-            blip_count = blip_count + 1
-            if blip_count == 3:
-                blip_count = 0
-
-            breakout = self.wait_loop(0.8)
-            if breakout:
-                return
-
     def show_custom_message(self):
 
         raw_message = ""
-        if "custom_message" in data_dict:
-            raw_message = data_dict["custom_message"]
+        if "custom_message" in shared_config.data_dict:
+            raw_message = shared_config.data_dict["custom_message"]
 
         self.canvas.Clear()
 
@@ -635,7 +502,7 @@ class PlaneSign:
         day_1_xoffset = 45
         day_2_xoffset = 88
 
-        daily = data_dict['weather']['daily']
+        daily = shared_config.data_dict['weather']['daily']
 
         day = daily[start_index_day]
         image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
@@ -652,10 +519,10 @@ class PlaneSign:
         image.thumbnail((22, 22), Image.BICUBIC)
         self.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
-        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), CONF["WEATHER_CITY_NAME"])
+        graphics.DrawText(self.canvas, self.font46, 0, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
 
         # Calculate and draw the horizontal boarder around the WEATHER_CITY_NAME
-        num_horizontal_pixels = (len(CONF["WEATHER_CITY_NAME"]) * 4)
+        num_horizontal_pixels = (len(shared_config.CONF["WEATHER_CITY_NAME"]) * 4)
         for x in range(num_horizontal_pixels):
             self.canvas.SetPixel(x, 6, 140, 140, 140)
 
@@ -665,12 +532,12 @@ class PlaneSign:
 
         sunrise_sunset_start_x = num_horizontal_pixels + 20
 
-        if CONF["MILITARY_TIME"].lower()=='true':
-            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-H:%M'))
-            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-H:%M'))
+        if shared_config.CONF["MILITARY_TIME"].lower()=='true':
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise']).strftime('%-H:%M'))
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset']).strftime('%-H:%M'))
         else:
-            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
-            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
+            graphics.DrawText(self.canvas, self.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
 
         # Day 0
         day = daily[start_index_day]
@@ -723,19 +590,19 @@ class PlaneSign:
 
     def finance(self):
         self.canvas.Clear()
-        data_dict["ticker"] = None
+        shared_config.data_dict["ticker"] = None
         s = None
 
         while True:
 
-            ddt = data_dict["ticker"] 
+            ddt = shared_config.data_dict["ticker"] 
 
             if(ddt != None and ddt != ""):
 
                 raw_ticker = ddt.upper()
 
                 if s == None:
-                    s = Stock(self, raw_ticker, CONF)
+                    s = Stock(self, raw_ticker, shared_config.CONF)
                 else:
                     s.setticker(raw_ticker)
 
@@ -763,7 +630,7 @@ class PlaneSign:
         self.canvas.Clear()
 
         lightning.draw_loading(self)
-        LM=lightning.LightningManager(self,CONF)
+        LM=lightning.LightningManager(self,shared_config.CONF)
         LM.connect()
 
         last_draw = time.perf_counter()
@@ -883,7 +750,7 @@ class PlaneSign:
                     self.wait_loop(0.5)
                     continue
 
-                if not data_dict or "closest" not in data_dict:
+                if not shared_config.data_dict or "closest" not in shared_config.data_dict:
                     logging.info("no data found, waiting...")
                     self.wait_loop(3)
                     continue
@@ -901,7 +768,7 @@ class PlaneSign:
                 # 11 = PONG
 
                 if mode == 99:
-                    self.track_a_flight()
+                    planes.track_a_flight(self)
 
                 if mode == 6:
                     self.show_weather()
@@ -931,7 +798,7 @@ class PlaneSign:
                     self.welcome()
 
                 if mode == 10:
-                    cgol.cgol(self, arg_dict)
+                    cgol.cgol(self)
 
                 if mode == 11:
                     pong.pong(self)
@@ -951,20 +818,20 @@ class PlaneSign:
                 plane_to_show = None
 
                 if mode == 1:
-                    if data_dict["closest"] and data_dict["closest"]["distance"] <= 2:
-                        plane_to_show = data_dict["closest"]
+                    if shared_config.data_dict["closest"] and shared_config.data_dict["closest"]["distance"] <= 2:
+                        plane_to_show = shared_config.data_dict["closest"]
 
                 if mode == 2:
-                    plane_to_show = data_dict["closest"]
+                    plane_to_show = shared_config.data_dict["closest"]
 
                 if mode == 3:
-                    plane_to_show = data_dict["highest"]
+                    plane_to_show = shared_config.data_dict["highest"]
 
                 if mode == 4:
-                    plane_to_show = data_dict["fastest"]
+                    plane_to_show = shared_config.data_dict["fastest"]
 
                 if mode == 5:
-                    plane_to_show = data_dict["slowest"]
+                    plane_to_show = shared_config.data_dict["slowest"]
 
                 if plane_to_show:
                     interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
@@ -977,14 +844,14 @@ class PlaneSign:
                     if plane_to_show["origin"]:
                         origin_config = code_to_airport.get(plane_to_show["origin"])
                         if origin_config:
-                            origin_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
+                            origin_distance = get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
                             logging.info(f"Origin is {origin_distance:.2f} miles away")
 
                     destination_distance = 0
                     if plane_to_show["destination"]:
                         destination_config = code_to_airport.get(plane_to_show["destination"])
                         if destination_config:
-                            destination_distance = get_distance((float(CONF["SENSOR_LAT"]), float(CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
+                            destination_distance = get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
                             logging.info(f"Destination is {destination_distance:.2f} miles away")
 
                     if origin_distance != 0 and origin_distance > destination_distance:
