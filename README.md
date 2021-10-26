@@ -34,11 +34,14 @@ cd rpi-rgb-led-matrix
 make build-python PYTHON=$(which python3)
 sudo make install-python PYTHON=$(which python3)
 cd
-sudo -H pip3 install pytz flask flask_cors libatlas-base-dev numpy scipy yfinance favicon websocket-client
+sudo apt install libatlas-base-dev
+sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
 touch prices.csv
+touch sign.conf
 chmod 777 prices.csv
+chmod 777 sign.conf
 chmod -R 777 icons/
 sudo ./planesign.py
 ```

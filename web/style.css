@@ -146,7 +146,8 @@ legend {
 }
 
 .custom_colors_button {
-  border: 5px 20px 5px 20px;
+  /*padding: 5px 10px 5px 10px;*/
+  font-size: 20px;
 }
 
 #checkbox_rainbow_mode_label {
@@ -370,9 +371,6 @@ input[type=number] {
   float: none;
   outline: 0;
 }
-
-
-
 
 html {
   box-sizing: border-box;

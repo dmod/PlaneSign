@@ -100,6 +100,7 @@ def write_config():
 @app.route("/update")
 def update_sign():
     subprocess.call(['sh', './update.sh',])
+    return ""
 
 @app.route("/status")
 def get_status():
@@ -732,7 +733,7 @@ class PlaneSign:
                 raw_ticker = ddt.upper()
 
                 if s == None:
-                    s = Stock(self, raw_ticker)
+                    s = Stock(self, raw_ticker, CONF)
                 else:
                     s.setticker(raw_ticker)
 
