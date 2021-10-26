@@ -15,6 +15,9 @@ from utilities import *
 from fish import *
 from finance import *
 import lightning
+import cgol
+import pong
+import shared_config
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
 import subprocess
@@ -39,8 +42,7 @@ CORS(app)
 
 shared_flag = Value('i', 1)
 shared_current_brightness = Value('i', 80)
-shared_pong_player1 = Value('i', 0)
-shared_pong_player2 = Value('i', 0)
+
 shared_mode = Value('i', 1)
 shared_color_mode = Value('i', 0)
 shared_forced_sign_update = Value('i', 0)
@@ -150,12 +152,12 @@ def set_brightness(brightness):
 
 @app.route("/set_pong_player_1/<spot>")
 def set_pong_player1(spot):
-    shared_pong_player1.value = int(spot)
+    shared_config.shared_pong_player1.value = int(spot)
     return ""
 
 @app.route("/set_pong_player_2/<spot>")
 def set_pong_player2(spot):
-    shared_pong_player2.value = int(spot)
+    shared_config.shared_pong_player2.value = int(spot)
     return ""
 
 @app.route("/get_brightness")
@@ -848,398 +850,6 @@ class PlaneSign:
             if breakout:
                 return
 
-    def cgol(self):
-        self.canvas.Clear()
-
-        generation_time = 0.15
-
-        if arg_dict["style"]=="2":
-            cgol_cellcolor = False
-        else:
-            cgol_cellcolor = True
-
-        current_state = [[False for j in range(32)] for i in range(128)]
-        next_state = [[False for j in range(32)] for i in range(128)]
-        if cgol_cellcolor:
-            hmatrix = [[0 for j in range(32)] for i in range(128)]
-            next_hmatrix = [[0 for j in range(32)] for i in range(128)]
-
-        for i in range(0, 128):
-            for j in range(0, 32):
-                if (random.random() < 0.3):
-                    current_state[i][j]=True
-                else:
-                    current_state[i][j]=False
-                if cgol_cellcolor:
-                        #hmatrix[i][j]=random_angle()
-                        hmatrix[i][j]=round(359*i/127+359*j/31)%360
-
-        firstgen = True
-
-        gen_index = 0
-
-        angle = random_angle() 
-        #r,g,b = random_rgb()
-
-        tstart = time.perf_counter()
-        while True:
-        
-            detect2cycle = True
-            gen_index += 1
-
-            if not cgol_cellcolor:
-                #angle, r, g, b = next_color_rainbow_linear(angle)
-                angle, r, g, b = next_color_rainbow_sine(angle)
-                #r,g,b = next_color_random_walk_uniform_step(r,g,b,10)
-                #r,g,b = next_color_random_walk_const_sum(r,g,b,10)
-
-            next_state = [[False for j in range(32)] for i in range(128)]
-
-            for col in range(0, 128):
-                for row in range(0, 32):
-
-                    if cgol_cellcolor:
-                        candidate, r, g, b = self.check_life_color(col, row, current_state, hmatrix, next_hmatrix)
-                    else:
-                        candidate = self.check_life(col, row, current_state)
-
-                    next_state[col][row] = candidate
-
-                    if detect2cycle and not firstgen and candidate != prev_state[col][row]:
-                        detect2cycle = False
-                    if candidate:
-                        self.canvas.SetPixel(col, row, r, g, b)
-                    else:
-                        self.canvas.SetPixel(col, row, 0, 0, 0)
-
-            if firstgen:
-                detect2cycle = False
-                firstgen = False
-             
-            if detect2cycle:
-                for i in range(0, 128):
-                    for j in range(0, 32):
-                        if (random.random() < 0.3):
-                            next_state[i][j]=True
-                            if cgol_cellcolor:
-                                hmatrix[i][j]=random_angle()
-                        else:
-                            next_state[i][j]=False
-
-            prev_state = current_state
-            current_state = next_state
-
-            tend = time.perf_counter()
-            if( tend < tstart + generation_time):
-                breakout=self.wait_loop(tstart + generation_time-tend)
-            else:
-                breakout=self.wait_loop(0)
-
-            self.matrix.SwapOnVSync(self.canvas)
-
-            tstart = time.perf_counter()
-
-            if breakout:
-                return
-
-    def check_life(self, x, y, matrix):
-        num_neighbors_alive = 0
-
-
-        # Check neighbors above
-        if self.check_matrix(x-1, y-1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x, y-1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x+1, y-1, matrix): num_neighbors_alive += 1
-    
-        # Check neighbors aside
-        if self.check_matrix(x-1, y, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x+1, y, matrix): num_neighbors_alive += 1
-
-        # Check neighbors below
-        if self.check_matrix(x-1, y+1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x, y+1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x+1, y+1, matrix): num_neighbors_alive += 1
-
-        # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
-        # Any live cell with two or three live neighbours lives on to the next generation.
-        # Any live cell with more than three live neighbours dies, as if by overpopulation.
-        # Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
-
-        if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
-            return True
-        
-        if not matrix[x][y] and num_neighbors_alive == 3:
-            return True
-
-        return False
-
-    def check_life_color(self, x, y, matrix, hm, nhm):
-
-        num_neighbors_alive = 0
-
-        cx=0
-        cy=0
-
-        # Check neighbors above
-        if self.check_matrix(x-1, y-1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x, y-1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x+1, y-1, matrix): num_neighbors_alive += 1
-
-        # Check neighbors aside
-        if self.check_matrix(x-1, y, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x+1, y, matrix): num_neighbors_alive += 1
-
-        # Check neighbors below
-        if self.check_matrix(x-1, y+1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x, y+1, matrix): num_neighbors_alive += 1
-        if self.check_matrix(x+1, y+1, matrix): num_neighbors_alive += 1
-
-        # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
-        # Any live cell with two or three live neighbours lives on to the next generation.
-        # Any live cell with more than three live neighbours dies, as if by overpopulation.
-        # Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
-
-        if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
-            h=self.check_matrix(x, y, hm)
-            self.set_matrix(x,y,nhm,h)
-            r,g,b=hsv_2_rgb(h/360.0,1,1)
-            return True, r, g, b
-        
-        if not matrix[x][y] and num_neighbors_alive == 3:
-
-            #Find the mean color of the 3 neighbors
-
-            # Check neighbors above
-            if self.check_matrix(x-1, y-1, matrix):
-                h=self.check_matrix(x-1, y-1, hm)
-                cx += cos(h)
-                cy += sin(h)
-            if self.check_matrix(x, y-1, matrix):
-                h=self.check_matrix(x, y-1, hm)
-                cx += cos(h)
-                cy += sin(h)
-            if self.check_matrix(x+1, y-1, matrix):
-                h=self.check_matrix(x+1, y-1, hm)
-                cx += cos(h)
-                cy += sin(h)
-
-            # Check neighbors aside
-            if self.check_matrix(x-1, y, matrix):
-                h=self.check_matrix(x-1, y, hm)
-                cx += cos(h)
-                cy += sin(h)
-            if self.check_matrix(x+1, y, matrix):
-                h=self.check_matrix(x+1, y, hm)
-                cx += cos(h)
-                cy += sin(h)
-
-            # Check neighbors below
-            if self.check_matrix(x-1, y+1, matrix):
-                h=self.check_matrix(x-1, y+1, hm)
-                cx += cos(h)
-                cy += sin(h)
-            if self.check_matrix(x, y+1, matrix):
-                h=self.check_matrix(x, y+1, hm)
-                cx += cos(h)
-                cy += sin(h)
-            if self.check_matrix(x+1, y+1, matrix):
-                h=self.check_matrix(x+1, y+1, hm)
-                cx += cos(h)
-                cy += sin(h)
-
-            h=round(math.atan2(cy,cx)/DEG_2_RAD)%360
-            self.set_matrix(x,y,nhm,h)
-            
-            #h=self.check_matrix(x, y, hm)
-            #self.set_matrix(x,y,nhm,h)
-
-            r,g,b=hsv_2_rgb(h/360.0,1,1)
-
-            return True, r, g, b
-
-        return False, 0, 0, 0
-
-    def check_matrix(self, x, y, matrix):
-        if x == -1:
-            x = 127
-        
-        if x == 128:
-            x = 0
-
-        if y == -1:
-            y = 31
-
-        if y == 32:
-            y = 0
-
-        return matrix[x][y]
-
-    def set_matrix(self, x, y, matrix, val):
-        if x == -1:
-            x = 127
-        
-        if x == 128:
-            x = 0
-
-        if y == -1:
-            y = 31
-
-        if y == 32:
-            y = 0
-
-        matrix[x][y] = val
-
-    def pong(self):
-
-        xball = 64
-        yball = 16
-
-        xvel = random.randint(0,1)*2-1
-        yvel = random.randint(0,1)*2-1
-
-        framecount = 0
-
-        player1_score = 0
-        player2_score = 0
-
-        starting_y_value = shared_pong_player1.value
-        starting_y_value_2 = shared_pong_player2.value
-
-        #player 1 paddle
-        for width in range(0, 3):
-            for height in range(starting_y_value, starting_y_value + 6):
-                self.canvas.SetPixel(width, height, 255, 20, 20)
-
-        #player 2 paddle
-        for width in range(125, 128):
-            for height in range(starting_y_value_2, starting_y_value_2 + 6):
-                self.canvas.SetPixel(width, height, 20, 20, 255)
-
-        while True:
-            framecount += 1
-            self.canvas.Clear()
-
-            setyval = shared_pong_player1.value
-            setyval2 = shared_pong_player2.value
-
-
-            if framecount % 20 == 0 and self.wait_loop(0):
-                return
-
-            #starting_y_value = shared_pong_player1.value
-            #starting_y_value_2 = shared_pong_player2.value
-
-            #limit paddle move speed to 1 per frame - continuous motion, no teleporting
-            if framecount == 1:
-                starting_y_value = setyval
-                starting_y_value_2 = setyval2
-            else:
-                if framecount % 3 == 0: #limit paddle update (move speed)
-                    if starting_y_value < setyval:
-                        starting_y_value += 1
-                    if starting_y_value > setyval:
-                        starting_y_value -= 1
-                    if starting_y_value_2 < setyval2:
-                        starting_y_value_2 += 1
-                    if starting_y_value_2 > setyval2:
-                        starting_y_value_2 -= 1
-
-            ##paddle face reflection
-            #if (starting_y_value <= yball and starting_y_value+6 >= yball and xball <= 4 and xvel < 0) or (starting_y_value_2 <= yball and starting_y_value_2+6 >= yball and xball >= 123 and xvel > 0):
-            #    xvel *= -1
-            #    yvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '1' for default gameplay
-
-            ##paddle top and bottom reflection
-            #if (yball >= starting_y_value and yball <= starting_y_value+6+2 and yvel < 0 and xball <= 3) or (yball >= starting_y_value-2 and yball <= starting_y_value+6 and yvel > 0 and xball <= 3) or (yball >= starting_y_value_2 and yball <= starting_y_value_2+6+2 and yvel < 0 and xball >= 124) or (yball >= starting_y_value_2-2 and yball <= starting_y_value_2+6 and yvel > 0 and xball >= 124):
-            #    xvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '-1' for default gameplay
-            #    yvel *= -1
-
-            #left paddle face reflection
-            if (starting_y_value-1 <= yball and starting_y_value+6 >= yball and xball <= 4 and xvel < 0):
-                xvel = 1
-                if (starting_y_value-1 <= yball and starting_y_value+1 >= yball):
-                    yvel = -1
-                elif (starting_y_value+2 <= yball and starting_y_value+3 >= yball):
-                    yvel = 0
-                    #xvel = 2
-                else:
-                    yvel = 1
-
-            #right paddle face reflection
-            if (starting_y_value_2-1 <= yball and starting_y_value_2+6 >= yball and xball >= 123 and xvel > 0):
-                xvel = -1
-                if (starting_y_value_2-1 <= yball and starting_y_value_2+1 >= yball):
-                    yvel = -1
-                elif (starting_y_value_2+2 <= yball and starting_y_value_2+3 >= yball):
-                    yvel = 0
-                    #xvel = 2
-                else:
-                    yvel = 1        
-
-            #paddle top and bottom reflection
-            if (yball >= starting_y_value and yball <= starting_y_value+5+2 and yvel < 0 and xball <= 3) or (yball >= starting_y_value-2 and yball <= starting_y_value+5 and yvel > 0 and xball <= 3) or (yball >= starting_y_value_2 and yball <= starting_y_value_2+5+2 and yvel < 0 and xball >= 124) or (yball >= starting_y_value_2-2 and yball <= starting_y_value_2+5 and yvel > 0 and xball >= 124):
-                xvel *= random.randint(0,1)*2-1 #try and make it a little more unpredictable to prevent steadystate during real gameplay - set to '-1' for default gameplay
-                yvel *= -1
-
-            #top and bottom bounce
-            if (yball <= 0 and yvel <0) or (yball >= 31 and yvel >0):
-                yvel *= -1
-
-            if xball <= 0:
-                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
-                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-                self.matrix.SwapOnVSync(self.canvas)
-                self.wait_loop(0.5)
-                self.canvas.Clear()
-                player2_score += 1
-                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
-                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-                self.matrix.SwapOnVSync(self.canvas)
-                self.wait_loop(3)
-                self.canvas.Clear()
-                xball = 64
-                yball = random.randint(2,30)
-                xvel = random.randint(0,1)*2-1
-                yvel = random.randint(0,1)*2-1
-
-            if xball >= 127:
-                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
-                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-                self.matrix.SwapOnVSync(self.canvas)
-                self.wait_loop(0.5)
-                self.canvas.Clear()
-                player1_score += 1
-                graphics.DrawText(self.canvas, self.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
-                graphics.DrawText(self.canvas, self.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-                self.matrix.SwapOnVSync(self.canvas)
-                self.wait_loop(3)
-                self.canvas.Clear()
-                xball = 64
-                yball = random.randint(2,30)
-                xvel = random.randint(0,1)*2-1
-                yvel = random.randint(0,1)*2-1
-
-            if framecount % 5 == 0:
-                xball += xvel
-                yball += yvel
-
-            #player 1 paddle
-            for width in range(0, 3):
-                for height in range(starting_y_value, starting_y_value + 6):
-                    self.canvas.SetPixel(width, height, 255, 20, 20)
-
-            #player 2 paddle
-            for width in range(125, 128):
-                for height in range(starting_y_value_2, starting_y_value_2 + 6):
-                    self.canvas.SetPixel(width, height, 20, 20, 255)
-
-            for width in range(xball-1, xball+2):
-                for height in range(yball-1, yball+2):
-                    self.canvas.SetPixel(width, height, 255, 255, 255)
-
-            self.matrix.SwapOnVSync(self.canvas)
-            
-
 
     def welcome(self):
 
@@ -1321,10 +931,10 @@ class PlaneSign:
                     self.welcome()
 
                 if mode == 10:
-                    self.cgol()
+                    cgol.cgol(self, arg_dict)
 
                 if mode == 11:
-                    self.pong()
+                    pong.pong(self)
 
                 if mode == 12:
                     self.cca()
