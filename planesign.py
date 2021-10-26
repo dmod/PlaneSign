@@ -207,6 +207,7 @@ def configure_logging():
     root.addHandler(queue_handler)
     root.addHandler(console_handler)
     root.setLevel(logging.DEBUG)
+    logging.getLogger('PIL').setLevel(logging.WARNING)
 
 def server():
     app.run(host='0.0.0.0')
