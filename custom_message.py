@@ -6,11 +6,11 @@ from rgbmatrix import graphics
 RGB = namedtuple('RGB', 'r g b')
 
 COLORS = {}
-COLORS[0] = [RGB(3, 194, 255)] #Plain
-COLORS[1] = [RGB(0, 0, 0)] #RAINBOW
-COLORS[2] = [RGB(12, 169, 12), RGB(206, 13, 13)] #CHRISTMAS
-COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)] #FOURTH_OF_JULY
-COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)] #HALLOWEEN
+COLORS[0] = [RGB(3, 194, 255)]  # Plain
+COLORS[1] = [RGB(0, 0, 0)]  # RAINBOW
+COLORS[2] = [RGB(12, 169, 12), RGB(206, 13, 13)]  # CHRISTMAS
+COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_OF_JULY
+COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
 
 def show_custom_message(sign):
@@ -67,7 +67,7 @@ def show_custom_message(sign):
             graphics.DrawText(sign.canvas, sign.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, char_color, line_1_char)
             print_the_char_at_this_x_index += 9
 
-            color_index = color_index + 1 if line_1_char is not  ' ' else color_index
+            color_index = color_index + 1 if line_1_char is not ' ' else color_index
 
             if color_index >= len(selected_color_list):
                 color_index = 0
@@ -79,12 +79,13 @@ def show_custom_message(sign):
             graphics.DrawText(sign.canvas, sign.fontreallybig, print_the_char_at_this_x_index, 28, char_color, line_2_char)
             print_the_char_at_this_x_index += 9
 
-            color_index = color_index + 1 if line_2_char is not  ' ' else color_index
+            color_index = color_index + 1 if line_2_char is not ' ' else color_index
 
             if color_index >= len(selected_color_list):
                 color_index = 0
+
         sign.matrix.SwapOnVSync(sign.canvas)
-        
+
         starting_color_index += 1
 
         if shared_config.shared_color_mode.value == 1:
