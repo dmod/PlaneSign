@@ -16,6 +16,7 @@ from fish import *
 from finance import *
 import lightning
 import cgol
+import custom_message
 import pong
 import planes
 import shared_config
@@ -25,28 +26,11 @@ import subprocess
 from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
-from collections import namedtuple
-
-RGB = namedtuple('RGB', 'r g b')
-
-COLORS = {}
-COLORS[0] = [RGB(3, 194, 255)] #Plain
-COLORS[1] = [RGB(0, 0, 0)] #RAINBOW
-COLORS[2] = [RGB(12, 169, 12), RGB(206, 13, 13)] #CHRISTMAS
-COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)] #FOURTH_OF_JULY
-COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)] #HALLOWEEN
 
 code_to_airport = {}
 
 app = Flask(__name__)
 CORS(app)
-
-shared_flag = Value('i', 1)
-shared_current_brightness = Value('i', 80)
-
-shared_mode = Value('i', 1)
-shared_color_mode = Value('i', 0)
-shared_forced_sign_update = Value('i', 0)
 
 @app.route("/get_config")
 def get_config():
@@ -94,7 +78,7 @@ def write_config():
         f.close()
         
         read_config()
-        shared_forced_sign_update.value = 1
+        shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/update")
@@ -104,48 +88,48 @@ def update_sign():
 
 @app.route("/status")
 def get_status():
-    return str(shared_flag.value)
+    return str(shared_config.shared_flag.value)
 
 @app.route("/turn_on")
 def turn_on():
-    shared_flag.value = 1
-    shared_forced_sign_update.value = 1
+    shared_config.shared_flag.value = 1
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/turn_off")
 def turn_off():
-    shared_flag.value = 0
-    shared_forced_sign_update.value = 1
+    shared_config.shared_flag.value = 0
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
-    shared_color_mode.value = int(color)
-    shared_forced_sign_update.value = 1
+    shared_config.shared_color_mode.value = int(color)
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
     shared_config.data_dict["track_a_flight_num"] = flight_num
-    shared_mode.value = 99
-    shared_forced_sign_update.value = 1
+    shared_config.shared_mode.value = 99
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
-    shared_mode.value = int(mode)
+    shared_config.shared_mode.value = int(mode)
     if request.args:
         shared_config.arg_dict.update(request.args)
-    shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/get_mode")
 def get_mode():
-    return str(shared_mode.value)
+    return str(shared_config.shared_mode.value)
 
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
-    shared_current_brightness.value = int(brightness)
+    shared_config.shared_current_brightness.value = int(brightness)
     return ""
 
 @app.route("/set_pong_player_1/<spot>")
@@ -160,13 +144,13 @@ def set_pong_player2(spot):
 
 @app.route("/get_brightness")
 def get_brightness():
-    return str(shared_current_brightness.value)
+    return str(shared_config.shared_current_brightness.value)
 
 @app.route("/set_custom_message/", defaults={"message": ""})
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
     shared_config.data_dict["custom_message"] = message
-    shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 @app.route("/submit_ticker/", defaults={"ticker": ""})
@@ -228,7 +212,7 @@ def get_weather_data_worker(data_dict):
 def get_data_worker(data_dict):
     while True:
         try:
-            if shared_flag.value is 0:
+            if shared_config.shared_flag.value is 0:
                 logging.info("off, skipping FR24 request...")
             else:
 
@@ -347,8 +331,6 @@ class PlaneSign:
         self.matrix = RGBMatrix(options = options)
         self.canvas = self.matrix.CreateFrameCanvas()
 
-        self.starting_color_index = 0
-
         self.font57 = graphics.Font()
         self.font46 = graphics.Font()
         self.fontbig = graphics.Font()
@@ -360,7 +342,7 @@ class PlaneSign:
         self.fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
         self.fontplanesign.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/helvR12.bdf")
 
-        self.canvas.brightness = shared_current_brightness.value
+        self.canvas.brightness = shared_config.shared_current_brightness.value
 
         self.last_brightness = None
 
@@ -370,7 +352,7 @@ class PlaneSign:
         shared_config.CONF = manager.dict()
 
         read_config()
-        shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
+        shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
         read_static_airport_data()
 
@@ -387,17 +369,13 @@ class PlaneSign:
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time
 
-            if (self.last_brightness != shared_current_brightness.value):
-                self.last_brightness = shared_current_brightness.value
-                self.canvas.brightness = shared_current_brightness.value
-                self.matrix.brightness = shared_current_brightness.value
-                self.matrix.SwapOnVSync(self.canvas) #slow, want to avoid redrawing
+            self.matrix.brightness = shared_config.shared_current_brightness.value
 
-            if shared_forced_sign_update.value == 1:
+            if shared_config.shared_forced_sign_update.value == 1:
                 stay_in_loop = False
                 forced_breakout = True
 
-        shared_forced_sign_update.value = 0
+        shared_config.shared_forced_sign_update.value = 0
         return forced_breakout
 
     def show_time(self):
@@ -418,75 +396,6 @@ class PlaneSign:
         
         self.matrix.SwapOnVSync(self.canvas)
 
-    def show_custom_message(self):
-
-        raw_message = ""
-        if "custom_message" in shared_config.data_dict:
-            raw_message = shared_config.data_dict["custom_message"]
-
-        self.canvas.Clear()
-
-        clean_message = raw_message.strip()
-
-        line_1 = clean_message[0:14]
-        line_2 = clean_message[14:]
-
-        line_1 = line_1.strip()
-        line_2 = line_2.strip()
-
-        # Figure out odd/even # of chars spacing
-        if len(line_1) % 2 == 0:
-            starting_line_1_x_index = 64 - ((len(line_1) / 2) * 9)
-        else:
-            starting_line_1_x_index = 59 - (((len(line_1) - 1) / 2) * 9)
-
-        if len(line_2) % 2 == 0:
-            starting_line_2_x_index = 64 - ((len(line_2) / 2) * 9)
-        else:
-            starting_line_2_x_index = 59 - (((len(line_2) - 1) / 2) * 9)
-
-        print_the_char_at_this_x_index = starting_line_1_x_index
-
-        if len(line_2) == 0:
-            print_at_y_index = 21
-        else:
-            print_at_y_index = 14
-
-        if shared_color_mode.value == 1:
-            selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
-        elif shared_color_mode.value >= 5:
-            selected_color_list = [RGB(((shared_color_mode.value-5) >> 16) & 255, ((shared_color_mode.value-5) >> 8) & 255, (shared_color_mode.value-5) & 255)]
-        else:
-            selected_color_list = COLORS[shared_color_mode.value]
-
-        if self.starting_color_index >= len(selected_color_list):
-            self.starting_color_index = 0
-
-        color_index = self.starting_color_index
-
-        for line_1_char in line_1:
-            char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
-            graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, char_color, line_1_char)
-            print_the_char_at_this_x_index += 9
-
-            color_index = color_index + 1 if line_1_char is not  ' ' else color_index
-
-            if color_index >= len(selected_color_list):
-                color_index = 0
-
-        print_the_char_at_this_x_index = starting_line_2_x_index
-
-        for line_2_char in line_2:
-            char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
-            graphics.DrawText(self.canvas, self.fontreallybig, print_the_char_at_this_x_index, 28, char_color, line_2_char)
-            print_the_char_at_this_x_index += 9
-
-            color_index = color_index + 1 if line_2_char is not  ' ' else color_index
-
-            if color_index >= len(selected_color_list):
-                color_index = 0
-
-        self.matrix.SwapOnVSync(self.canvas)
 
     def show_weather(self):
         self.canvas = self.matrix.CreateFrameCanvas()
@@ -725,7 +634,7 @@ class PlaneSign:
         self.matrix.SwapOnVSync(self.canvas)
         self.wait_loop(2)
         self.canvas.Clear()
-        shared_mode.value = 1
+        shared_config.shared_mode.value = 1
 
     def sign_loop(self):
 
@@ -740,11 +649,11 @@ class PlaneSign:
 
                 self.wait_loop(0.5)
 
-                mode = shared_mode.value
+                mode = shared_config.shared_mode.value
 
                 forced_breakout = False
 
-                if shared_flag.value is 0:
+                if shared_config.shared_flag.value is 0:
                     self.canvas.Clear()
                     self.matrix.SwapOnVSync(self.canvas)
                     self.wait_loop(0.5)
@@ -781,18 +690,7 @@ class PlaneSign:
                     continue
 
                 if mode == 8:
-                    self.show_custom_message()
-
-                    self.starting_color_index += 1
-
-                    if shared_color_mode.value == 1:
-                        self.wait_loop(0.1)
-                    elif shared_color_mode.value >= 5:
-                        self.wait_loop(0.1)
-                    else:
-                        self.wait_loop(1.1)
-                    
-                    continue
+                    custom_message.show_custom_message(self)
 
                 if mode == 9:
                     self.welcome()
@@ -907,7 +805,7 @@ class PlaneSign:
             except:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
-                shared_mode.value = 1
+                shared_config.shared_mode.value = 1
 
 # Main function
 if __name__ == "__main__":
