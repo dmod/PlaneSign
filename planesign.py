@@ -14,6 +14,7 @@ from datetime import datetime
 from utilities import *
 from fish import *
 from finance import *
+#import firework
 import lightning
 import cgol
 import cca
@@ -28,6 +29,7 @@ import subprocess
 from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
+import os
 
 code_to_airport = {}
 
@@ -460,7 +462,7 @@ class PlaneSign:
                 raw_ticker = ddt.upper()
 
                 if s == None:
-                    s = Stock(self, raw_ticker, shared_config.CONF)
+                    s = Stock(self, raw_ticker)
                 else:
                     s.setticker(raw_ticker)
 
@@ -487,8 +489,7 @@ class PlaneSign:
     def lightning(self):
         self.canvas.Clear()
 
-        lightning.draw_loading(self)
-        LM = lightning.LightningManager(self, shared_config.CONF)
+        LM=lightning.LightningManager(self)
         LM.connect()
 
         last_draw = time.perf_counter()

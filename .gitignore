@@ -34,5 +34,8 @@ sign.conf
 
 #misc
 prices.csv
+disable_update
 icons/favicons/*
 !icons/favicons/.gitkeep 
+icons/lightning/*
+!icons/lightning/.gitkeep
