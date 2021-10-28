@@ -14,6 +14,7 @@ from datetime import datetime
 from utilities import *
 from fish import *
 from finance import *
+#import firework
 import lightning
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
@@ -759,8 +760,7 @@ class PlaneSign:
     def lightning(self):
         self.canvas.Clear()
 
-        lightning.draw_loading(self)
-        LM=lightning.LightningManager(self,CONF)
+        LM=lightning.LightningManager(self,CONF,app)
         LM.connect()
 
         last_draw = time.perf_counter()
@@ -1304,7 +1304,7 @@ class PlaneSign:
 
                 if mode == 8:
                     self.show_custom_message()
-
+                    
                     self.starting_color_index += 1
 
                     if shared_color_mode.value == 1:
