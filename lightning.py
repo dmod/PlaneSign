@@ -72,7 +72,7 @@ class LightningManager:
 
     zoomind = Value('i', 6)
 
-    def __init__(self,sign,CONF,app):
+    def __init__(self,sign,CONF):
         self.host = ''
         self.ws = None
         self.thread = None
@@ -80,7 +80,6 @@ class LightningManager:
         self.ws_key = None
         self.header = None
         self.CONF = CONF
-        self.app = app
         self.floc = '/home/pi/PlaneSign/icons/lightning/'
         self.connected = Value('i', 0)
         self.strikes = Manager().list()
