@@ -283,3 +283,34 @@ def first(iter, pred):
 def get_centered_text_x_offset_value(font_width, text):
     text_pixel_length = len(text) * font_width
     return 64 - (text_pixel_length / 2)
+
+def check_matrix(x, y, matrix):
+    if x == -1:
+        x = 127
+
+    if x == 128:
+        x = 0
+
+    if y == -1:
+        y = 31
+
+    if y == 32:
+        y = 0
+
+    return matrix[x][y]
+
+
+def set_matrix(x, y, matrix, val):
+    if x == -1:
+        x = 127
+
+    if x == 128:
+        x = 0
+
+    if y == -1:
+        y = 31
+
+    if y == 32:
+        y = 0
+
+    matrix[x][y] = val

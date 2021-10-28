@@ -15,14 +15,15 @@ def track_a_flight(sign):
     requests_limiter = 0
     blip_count = 0
 
-    while True:
+    while shared_config.shared_mode.value == 99:
 
         flight_num_to_track = shared_config.data_dict["track_a_flight_num"]
 
-        if (requests_limiter % 22 == 0):
+        if (requests_limiter % 50 == 0):
             parse_this_to_get_hex = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={flight_num_to_track}&limit=10").json()
 
             live_flight_info = first(parse_this_to_get_hex["results"], lambda x: x["type"] == "live")
+            
             logging.info(live_flight_info)
 
             flight_data = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={live_flight_info['id']}").json()
@@ -127,6 +128,4 @@ def track_a_flight(sign):
         if blip_count == 3:
             blip_count = 0
 
-        breakout = sign.wait_loop(0.8)
-        if breakout:
-            return
+        sign.wait_loop(0.8)
