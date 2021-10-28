@@ -199,14 +199,14 @@ class LightningManager:
                             for coord in shape["coordinates"][0]:
                                 x,y=mercator_proj(coord[1], coord[0])
                                 points.append((self.bgwidth/2+(x-self.x1)*scale,self.bgheight/2-(y-self.y1)*scale))
-                            draw.polygon((points),outline=(40,40,40))
+                            draw.polygon((points),outline=(30,30,30))
                         elif shape["type"]=='MultiPolygon':
                             for subshape in shape["coordinates"]:
                                 points=[]
                                 for coord in subshape[0]:
                                     x,y=mercator_proj(coord[1], coord[0])
                                     points.append((self.bgwidth/2+(x-self.x1)*scale,self.bgheight/2-(y-self.y1)*scale))
-                                draw.polygon((points),outline=(40,40,40))
+                                draw.polygon((points),outline=(30,30,30))
                                 
                 if usadata:
                     for polygon in usapoints:
