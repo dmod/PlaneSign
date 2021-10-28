@@ -33,6 +33,7 @@ def csv_superparser(csv_line):
 
     return parts
 
+
 if __name__ == "__main__":
     # Get the raw CSV (without the first header line)
     data_request = requests.get('https://ourairports.com/data/airports.csv')

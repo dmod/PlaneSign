@@ -17,6 +17,7 @@ from finance import *
 #import firework
 import lightning
 import cgol
+import cca
 import custom_message
 import pong
 import weather
@@ -35,18 +36,19 @@ code_to_airport = {}
 app = Flask(__name__)
 CORS(app)
 
+
 @app.route("/get_config")
 def get_config():
     shared_config.CONF.clear()
     read_config()
-    sample={}
-    sample["DATATYPES"]=[]
+    sample = {}
+    sample["DATATYPES"] = []
 
     with open("sign.conf.sample") as f:
         lines = f.readlines()
         lastline = None
         for line in lines:
-            if line[0]=="#":
+            if line[0] == "#":
                 lastline = line.rstrip()
                 continue
             parts = line.split('=')
@@ -54,20 +56,21 @@ def get_config():
             if lastline:
                 comment_parts = lastline[1:].split(' ')
                 newdict = {}
-                newdict["id"]=parts[0]
-                newdict["type"]=comment_parts[0]
+                newdict["id"] = parts[0]
+                newdict["type"] = comment_parts[0]
                 for i in range(len(comment_parts)):
-                    if comment_parts[i]=="min" and i+1<len(comment_parts):
-                        newdict["min"]=comment_parts[i+1]
-                    if comment_parts[i]=="max" and i+1<len(comment_parts):
-                        newdict["max"]=comment_parts[i+1]
+                    if comment_parts[i] == "min" and i+1 < len(comment_parts):
+                        newdict["min"] = comment_parts[i+1]
+                    if comment_parts[i] == "max" and i+1 < len(comment_parts):
+                        newdict["max"] = comment_parts[i+1]
                 sample["DATATYPES"].append(newdict)
 
     for key in sample.keys():
         if key in shared_config.CONF:
-            sample[key]=shared_config.CONF[key]
+            sample[key] = shared_config.CONF[key]
 
     return json.dumps(sample)
+
 
 @app.route('/write_config')
 def write_config():
@@ -79,19 +82,22 @@ def write_config():
             f.write(keys[i]+"="+vals[i]+"\n")
         f.flush()
         f.close()
-        
+
         read_config()
         shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/update")
 def update_sign():
-    subprocess.call(['sh', './update.sh',])
+    subprocess.call(['sh', './update.sh', ])
     return ""
+
 
 @app.route("/status")
 def get_status():
     return str(shared_config.shared_flag.value)
+
 
 @app.route("/turn_on")
 def turn_on():
@@ -99,11 +105,13 @@ def turn_on():
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/turn_off")
 def turn_off():
     shared_config.shared_flag.value = 0
     shared_config.shared_forced_sign_update.value = 1
     return ""
+
 
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
@@ -111,12 +119,14 @@ def set_color_mode(color):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
     shared_config.data_dict["track_a_flight_num"] = flight_num
     shared_config.shared_mode.value = 99
     shared_config.shared_forced_sign_update.value = 1
     return ""
+
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
@@ -126,28 +136,34 @@ def set_mode(mode):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/get_mode")
 def get_mode():
     return str(shared_config.shared_mode.value)
+
 
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_config.shared_current_brightness.value = int(brightness)
     return ""
 
+
 @app.route("/set_pong_player_1/<spot>")
 def set_pong_player1(spot):
     shared_config.shared_pong_player1.value = int(spot)
     return ""
+
 
 @app.route("/set_pong_player_2/<spot>")
 def set_pong_player2(spot):
     shared_config.shared_pong_player2.value = int(spot)
     return ""
 
+
 @app.route("/get_brightness")
 def get_brightness():
     return str(shared_config.shared_current_brightness.value)
+
 
 @app.route("/set_custom_message/", defaults={"message": ""})
 @app.route("/set_custom_message/<message>")
@@ -156,11 +172,13 @@ def set_custom_message(message):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/submit_ticker/", defaults={"ticker": ""})
 @app.route("/submit_ticker/<ticker>")
 def submit_ticker(ticker):
     shared_config.data_dict["ticker"] = ticker
     return ""
+
 
 def log_listener_process(queue):
     root = logging.getLogger()
@@ -180,6 +198,7 @@ def log_listener_process(queue):
         except Exception:
             traceback.print_exc(file=sys.stderr)
 
+
 def configure_logging():
     logging_queue = Queue(-1)
     listener = Process(target=log_listener_process, args=(logging_queue, ))
@@ -197,8 +216,10 @@ def configure_logging():
     root.setLevel(logging.DEBUG)
     logging.getLogger('PIL').setLevel(logging.WARNING)
 
-def server():
+
+def api_server():
     app.run(host='0.0.0.0')
+
 
 def get_weather_data_worker(data_dict):
     while True:
@@ -211,6 +232,7 @@ def get_weather_data_worker(data_dict):
             logging.exception("Error getting weather data...")
 
         time.sleep(600)
+
 
 def get_data_worker(data_dict):
     while True:
@@ -275,6 +297,7 @@ def get_data_worker(data_dict):
 
         time.sleep(7)
 
+
 def read_config():
     shared_config.CONF.clear()
 
@@ -284,15 +307,15 @@ def read_config():
         lines = f.readlines()
         lines_s = s.readlines()
 
-        temp={}
+        temp = {}
         for line in lines:
-            if line[0]=="#":
+            if line[0] == "#":
                 continue
             parts = line.split('=')
             temp[parts[0]] = parts[1].rstrip()
 
         for line in lines_s:
-            if line[0]=="#":
+            if line[0] == "#":
                 continue
             parts = line.split('=')
             if parts[0] in temp.keys():
@@ -307,6 +330,7 @@ def read_config():
 
     logging.info("Plane Endpoint: " + shared_config.CONF["ENDPOINT"])
     logging.info("Weather Endpoint: " + shared_config.CONF["WEATHER_ENDPOINT"])
+
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -331,7 +355,7 @@ class PlaneSign:
         options.chain_length = 2
         #options.limit_refresh_rate_hz = 200
 
-        self.matrix = RGBMatrix(options = options)
+        self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
 
         self.font57 = graphics.Font()
@@ -361,7 +385,7 @@ class PlaneSign:
 
         Process(target=get_data_worker, args=(shared_config.data_dict,)).start()
         Process(target=get_weather_data_worker, args=(shared_config.data_dict,)).start()
-        Process(target=server).start()
+        Process(target=api_server).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -382,7 +406,7 @@ class PlaneSign:
         return forced_breakout
 
     def show_time(self):
-        if shared_config.CONF["MILITARY_TIME"].lower()=='true':
+        if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
             print_time = datetime.now().strftime('%-H:%M%p')
         else:
             print_time = datetime.now().strftime('%-I:%M%p')
@@ -396,29 +420,26 @@ class PlaneSign:
 
         graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
         graphics.DrawText(self.canvas, self.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
-        
+
         self.matrix.SwapOnVSync(self.canvas)
-
-
-
 
     def aquarium(self):
         self.canvas.Clear()
 
         tank = Tank(self)
 
-        clown = Fish(tank,"Clownfish",2,0.01)
-        hippo = Fish(tank,"Hippotang",2,0.01)
-        queentrigger = Fish(tank,"Queentrigger",1,0.005)
-        grouper = Fish(tank,"Coralgrouper",1,0.005)
-        anthias = Fish(tank,"Anthias",2,0.02)
-        puffer = Fish(tank,"Pufferfish",1.5,0.005)
-        regal = Fish(tank,"Regalangel",1,0.005)
-        bicolor = Fish(tank,"Bicolorpseudochromis",3,0.01)
-        flame = Fish(tank,"Flameangel",1.5,0.01)
-        cardinal = Fish(tank,"Cardinal",1.5,0.01)
-        copper = Fish(tank,"Copperbanded",1.5,0.01)
-        wrasse = Fish(tank,"Wrasse",3,0.01)
+        clown = Fish(tank, "Clownfish", 2, 0.01)
+        hippo = Fish(tank, "Hippotang", 2, 0.01)
+        queentrigger = Fish(tank, "Queentrigger", 1, 0.005)
+        grouper = Fish(tank, "Coralgrouper", 1, 0.005)
+        anthias = Fish(tank, "Anthias", 2, 0.02)
+        puffer = Fish(tank, "Pufferfish", 1.5, 0.005)
+        regal = Fish(tank, "Regalangel", 1, 0.005)
+        bicolor = Fish(tank, "Bicolorpseudochromis", 3, 0.01)
+        flame = Fish(tank, "Flameangel", 1.5, 0.01)
+        cardinal = Fish(tank, "Cardinal", 1.5, 0.01)
+        copper = Fish(tank, "Copperbanded", 1.5, 0.01)
+        wrasse = Fish(tank, "Wrasse", 3, 0.01)
 
         while True:
             tank.swim()
@@ -427,7 +448,6 @@ class PlaneSign:
             if breakout:
                 return
 
-
     def finance(self):
         self.canvas.Clear()
         shared_config.data_dict["ticker"] = None
@@ -435,7 +455,7 @@ class PlaneSign:
 
         while True:
 
-            ddt = shared_config.data_dict["ticker"] 
+            ddt = shared_config.data_dict["ticker"]
 
             if(ddt != None and ddt != ""):
 
@@ -458,7 +478,7 @@ class PlaneSign:
                 self.canvas.SetImage(image.convert('RGB'), 10, 14)
 
                 image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
-                self.canvas.SetImage(image.convert('RGB'), 75, -5)  
+                self.canvas.SetImage(image.convert('RGB'), 75, -5)
 
             breakout = self.wait_loop(0.1)
             if breakout:
@@ -485,78 +505,6 @@ class PlaneSign:
                 LM.close()
                 return
 
-
-    def cca(self):
-        self.canvas.Clear()
-
-        generation_time = 0.15
-
-        current_state = [[0 for j in range(32)] for i in range(128)]
-        next_state = [[0 for j in range(32)] for i in range(128)]
-        
-        numstates = 12 #number of states/colors possible
-        threshold = 1 #set from 1 to numstates to adjust behavior
-        
-        
-        for i in range(128):
-            for j in range(32):
-                current_state[i][j]=random.randrange(0,numstates)
-
-        tstart = time.perf_counter()        
-        while True:
-    
-            for col in range(0, 128):
-                for row in range(0, 32):
-        
-                    cs=check_matrix(col,row,current_state)
-                    ns = (cs+1)%numstates
-                    curr = 0
-        
-                    #if check_matrix(col-1,row-1,current_state) == ns:
-                    #    curr += 1
-                    if check_matrix(col,row-1,current_state) == ns:
-                        curr += 1
-                    #if check_matrix(col+1,row-1,current_state) == ns:
-                    #    curr += 1
-        
-                    if check_matrix(col-1,row,current_state) == ns:
-                        curr += 1
-                    if check_matrix(col+1,row,current_state) == ns:
-                        curr += 1
-        
-                    #if check_matrix(col-1,row+1,current_state) == ns:
-                    #    curr += 1
-                    if check_matrix(col,row+1,current_state) == ns:
-                        curr += 1
-                    #if check_matrix(col+1,row+1,current_state) == ns:
-                    #    curr += 1
-                    
-                    if curr >= threshold:
-                        set_matrix(col,row,next_state,ns)
-                        r,g,b=hsv_2_rgb(ns/numstates,1,1)
-                    else:
-                        set_matrix(col,row,next_state,cs)
-                        r,g,b=hsv_2_rgb(cs/numstates,1,1)
-                    
-                    self.canvas.SetPixel(col, row, r, g, b)
-
-            for col in range(0, 128):
-                for row in range(0, 32):
-                    current_state[col][row] = next_state[col][row]
-
-            tend = time.perf_counter()
-            if( tend < tstart + generation_time):
-                breakout=self.wait_loop(tstart + generation_time-tend)
-            else:
-                breakout=self.wait_loop(0)
-
-            self.matrix.SwapOnVSync(self.canvas)
-
-            tstart = time.perf_counter()
-            if breakout:
-                return
-
-
     def welcome(self):
 
         self.canvas.Clear()
@@ -581,6 +529,7 @@ class PlaneSign:
 
                 forced_breakout = False
 
+                # Sign is off, clear canvas and wait
                 if shared_config.shared_flag.value is 0:
                     self.canvas.Clear()
                     self.matrix.SwapOnVSync(self.canvas)
@@ -588,7 +537,7 @@ class PlaneSign:
                     continue
 
                 if not shared_config.data_dict or "closest" not in shared_config.data_dict:
-                    logging.info("no data found, waiting...")
+                    logging.info("No plane data found, waiting...")
                     self.wait_loop(3)
                     continue
 
@@ -628,11 +577,11 @@ class PlaneSign:
                     pong.pong(self)
 
                 if mode == 12:
-                    self.cca()
+                    cca.cca(self)
 
                 if mode == 13:
                     self.finance()
-                
+
                 if mode == 14:
                     self.aquarium()
 
@@ -685,7 +634,7 @@ class PlaneSign:
                     else:
                         friendly_name = ""
 
-                    logging.info("Full airport name from code: "  + friendly_name)
+                    logging.info("Full airport name from code: " + friendly_name)
 
                     # Front pad the flight number to a max of 7 for spacing
                     formatted_flight = plane_to_show["flight"].rjust(7, ' ')
@@ -733,8 +682,9 @@ class PlaneSign:
                 time.sleep(3)
                 shared_config.shared_mode.value = 1
 
+
 # Main function
 if __name__ == "__main__":
     configure_logging()
-    
+
     PlaneSign().sign_loop()

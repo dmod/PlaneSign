@@ -438,7 +438,7 @@ class Stock:
                 if logo == None:
                     logo = Image.new("RGB", (20,20), (0, 0, 0))
                 else:
-                    logo.save(self.floc+self.cleaner_ticker+".png")
+                    logo.save(self.floc+self.cleaner_ticker, 'PNG')
 
             self.logo = logo
 
