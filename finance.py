@@ -13,7 +13,7 @@ from rgbmatrix import graphics
 from requests import Session
 from datetime import datetime
 from scipy.interpolate import interp1d
-import os
+import shared_config
 
 def colordista(c1,c2):
     r1=c1[0]/255
@@ -354,10 +354,9 @@ def get_crypto(symbol,name):
 
 
 class Stock:
-    def __init__(self,sign,raw_ticker,CONF):
+    def __init__(self,sign,raw_ticker):
 
         self.sign = sign
-        self.CONF = CONF
 
         self.clean_ticker = None
         self.cleaner_ticker = None
@@ -502,7 +501,7 @@ class Stock:
 
     def drawtime(self):
 
-        if self.CONF["MILITARY_TIME"].lower()=='true':
+        if shared_config.CONF["MILITARY_TIME"].lower()=='true':
             print_time = datetime.now().strftime('%-H:%M%p')
         else:
             print_time = datetime.now().strftime('%-I:%M%p')
