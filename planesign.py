@@ -508,34 +508,34 @@ class PlaneSign:
             for col in range(0, 128):
                 for row in range(0, 32):
         
-                    cs=self.check_matrix(col,row,current_state)
+                    cs=check_matrix(col,row,current_state)
                     ns = (cs+1)%numstates
                     curr = 0
         
-                    #if self.check_matrix(col-1,row-1,current_state) == ns:
+                    #if check_matrix(col-1,row-1,current_state) == ns:
                     #    curr += 1
-                    if self.check_matrix(col,row-1,current_state) == ns:
+                    if check_matrix(col,row-1,current_state) == ns:
                         curr += 1
-                    #if self.check_matrix(col+1,row-1,current_state) == ns:
+                    #if check_matrix(col+1,row-1,current_state) == ns:
                     #    curr += 1
         
-                    if self.check_matrix(col-1,row,current_state) == ns:
+                    if check_matrix(col-1,row,current_state) == ns:
                         curr += 1
-                    if self.check_matrix(col+1,row,current_state) == ns:
+                    if check_matrix(col+1,row,current_state) == ns:
                         curr += 1
         
-                    #if self.check_matrix(col-1,row+1,current_state) == ns:
+                    #if check_matrix(col-1,row+1,current_state) == ns:
                     #    curr += 1
-                    if self.check_matrix(col,row+1,current_state) == ns:
+                    if check_matrix(col,row+1,current_state) == ns:
                         curr += 1
-                    #if self.check_matrix(col+1,row+1,current_state) == ns:
+                    #if check_matrix(col+1,row+1,current_state) == ns:
                     #    curr += 1
                     
                     if curr >= threshold:
-                        self.set_matrix(col,row,next_state,ns)
+                        set_matrix(col,row,next_state,ns)
                         r,g,b=hsv_2_rgb(ns/numstates,1,1)
                     else:
-                        self.set_matrix(col,row,next_state,cs)
+                        set_matrix(col,row,next_state,cs)
                         r,g,b=hsv_2_rgb(cs/numstates,1,1)
                     
                     self.canvas.SetPixel(col, row, r, g, b)

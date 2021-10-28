@@ -228,35 +228,3 @@ def check_life_color(x, y, matrix, hm, nhm):
         return True, r, g, b
 
     return False, 0, 0, 0
-
-
-def check_matrix(x, y, matrix):
-    if x == -1:
-        x = 127
-
-    if x == 128:
-        x = 0
-
-    if y == -1:
-        y = 31
-
-    if y == 32:
-        y = 0
-
-    return matrix[x][y]
-
-
-def set_matrix(x, y, matrix, val):
-    if x == -1:
-        x = 127
-
-    if x == 128:
-        x = 0
-
-    if y == -1:
-        y = 31
-
-    if y == 32:
-        y = 0
-
-    matrix[x][y] = val
