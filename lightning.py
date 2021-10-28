@@ -147,20 +147,20 @@ class LightningManager:
             usapoints=[]
             for feature in usadata["features"]:
                 shape = feature["geometry"]
-                
-                if shape["type"]=='Polygon':
-                    points=[]
-                    for coord in shape["coordinates"][0]:
-                        x,y=mercator_proj(coord[1], coord[0])
-                        points.append((x,y))
-                    usapoints.append(points)
-                elif shape["type"]=='MultiPolygon':
-                    for subshape in shape["coordinates"]:
+                if feature["properties"]["ste_stusps_code"] not in ["AS","AK","VI","GU","HI","MP","PR"]:
+                    if shape["type"]=='Polygon':
                         points=[]
-                        for coord in subshape[0]:
+                        for coord in shape["coordinates"][0]:
                             x,y=mercator_proj(coord[1], coord[0])
                             points.append((x,y))
                         usapoints.append(points)
+                    elif shape["type"]=='MultiPolygon':
+                        for subshape in shape["coordinates"]:
+                            points=[]
+                            for coord in subshape[0]:
+                                x,y=mercator_proj(coord[1], coord[0])
+                                points.append((x,y))
+                            usapoints.append(points)
 
         if (not os.path.exists(self.floc+f'usa_{USAlat}_{USAlong}_{USAscale}.png')) or len(Image.open(self.floc+f'usa_{USAlat}_{USAlong}_{USAscale}.png').getcolors())==1:
             self.usa = Image.new("RGB", (self.bgwidth, self.bgheight))
