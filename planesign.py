@@ -14,7 +14,7 @@ from datetime import datetime
 from utilities import *
 from fish import *
 from finance import *
-#import firework
+import firework
 import lightning
 import cgol
 import cca
@@ -505,6 +505,35 @@ class PlaneSign:
                 LM.close()
                 return
 
+    def fireworks(self):
+        self.canvas.Clear()
+        height=32
+        width=128
+
+        fireworks=[]
+        while True:
+            if len(fireworks)==0 or (len(fireworks)<10 and random.random()<0.2):
+                if random.random()<0.6:
+                    ftype = firework.RING_FW
+                elif random.random()<0.75:
+                    ftype = firework.WILLOW_FW
+                else:
+                    ftype = firework.CRACKLER_FW
+                fireworks.append(firework.Firework(self,ftype))
+            for fw in fireworks:
+                if fw.exploded==2:
+                    fireworks.remove(fw)
+            self.canvas.Clear()
+            for fw in fireworks:       
+                fw.draw()
+                
+            self.matrix.SwapOnVSync(self.canvas)   
+
+            breakout = self.wait_loop(0.01)
+            if breakout:
+                return
+
+
     def welcome(self):
 
         self.canvas.Clear()
@@ -587,6 +616,9 @@ class PlaneSign:
 
                 if mode == 15:
                     self.lightning()
+
+                if mode == 16:
+                    self.fireworks()
 
                 plane_to_show = None
 

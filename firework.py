@@ -20,56 +20,6 @@ WILLOW_FW = 1
 TRACER_FW = 2
 CRACKLER_FW = 3
 
-class PlaneSign:
-    def __init__(self):
-
-        options = RGBMatrixOptions()
-        options.cols = 64
-        options.gpio_slowdown = 5
-        options.chain_length = 2
-        #options.limit_refresh_rate_hz = 200
-
-        self.matrix = RGBMatrix(options = options)
-        self.canvas = self.matrix.CreateFrameCanvas()
-
-        self.starting_color_index = 0
-
-        self.font57 = graphics.Font()
-        self.font46 = graphics.Font()
-        self.fontbig = graphics.Font()
-        self.fontreallybig = graphics.Font()
-        self.fontplanesign = graphics.Font()
-        self.font57.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/5x7.bdf")
-        self.font46.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/4x6.bdf")
-        self.fontbig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/6x13.bdf")
-        self.fontreallybig.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/9x18B.bdf")
-        self.fontplanesign.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/helvR12.bdf")
-
-        self.canvas.brightness = 50
-    
-    def fireworks(self):
-        height=32
-        width=128
-
-        fireworks=[]
-        while True:
-            if len(fireworks)==0 or (len(fireworks)<10 and random.random()<0.2):
-                if random.random()<0.6:
-                    ftype = RING_FW
-                elif random.random()<0.75:
-                    ftype = WILLOW_FW
-                else:
-                    ftype = CRACKLER_FW
-                fireworks.append(Firework(self,ftype))
-            for fw in fireworks:
-                if fw.exploded==2:
-                    fireworks.remove(fw)
-            self.canvas.Clear()
-            for fw in fireworks:       
-                fw.draw()
-                
-            self.matrix.SwapOnVSync(self.canvas)   
-
 class Particle:
     def __init__(self,fwlist,ptype,x,y,color,lifetime,speed=0,angle=0):
         self.x0=x
@@ -271,9 +221,5 @@ class Firework:
                 r=np.sqrt(random.random())*maxsize
                 angle = random.random()*360*DEG_2_RAD
                 Particle(self.explosion_particles,CRACKLER_PARTICLE,self.x+math.cos(angle)*r,self.y+math.sin(angle)*r,color,lifetime+random.random())
-
-
-PlaneSign().fireworks()
-
 
 
