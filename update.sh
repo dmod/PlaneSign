@@ -28,7 +28,9 @@ else
     git pull
 
     touch sign.conf
+    touch prices.csv
     sudo chmod 777 sign.conf
+    sudo chmod 777 prices.csv
     sudo chmod -R 777 icons/
 
     echo "Finished... Rebooting"
