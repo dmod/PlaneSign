@@ -49,9 +49,13 @@ def get_lightning_color(strike_time,now,format):
     elif strike_time + 60 > now:
         color = (120,10,0)
     elif strike_time + 120 > now:
-        color = (50,0,0)  
-    else:   #older than 2 mins
-        color = (50,0,0) 
+        color = (92,5,8) 
+    elif strike_time + 300 > now:
+        color = (63,6,8)
+    elif strike_time + 600 > now:
+        color = (37,0,0)
+    else:   #older than 10 mins
+        color = (37,0,0) 
     if format:
         return color
     else:
@@ -337,8 +341,8 @@ class LightningManager:
                 
                 if strike_time > now: #sound hasn't reached us yet
                     continue
-                elif strike_time + 120 <= now:
-                    self.strikes.remove(strike)#sound hit more than 2 mins ago
+                elif strike_time + 600 <= now:
+                    self.strikes.remove(strike)#sound hit more than 10 mins ago
                     continue
                 else:
                     color=get_lightning_color(strike_time,now,True)
