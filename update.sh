@@ -27,9 +27,7 @@ else
     git reset --hard HEAD
     git pull
 
-    touch prices.csv
     touch sign.conf
-    sudo chmod 777 prices.csv
     sudo chmod 777 sign.conf
     sudo chmod -R 777 icons/
 
