@@ -25,11 +25,6 @@ USAlong=-96
 USAlat=38
 USAscale=55
 
-#@app.route("/lightning/<zi>")
-def set_zoom(zi):
-    LightningManager.zoomind.value = int(zi)
-    return ""
-
 def mercator_proj(lat, lon):
     x = np.radians(lon)
     y = np.log(np.tan(np.radians(lat))+1/np.cos(np.radians(lat)))

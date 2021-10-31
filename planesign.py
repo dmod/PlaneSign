@@ -179,6 +179,10 @@ def submit_ticker(ticker):
     shared_config.data_dict["ticker"] = ticker
     return ""
 
+@app.route("/lightning/<zi>")
+def set_zoom(zi):
+    lightning.LightningManager.zoomind.value = int(zi)
+    return ""
 
 def log_listener_process(queue):
     root = logging.getLogger()

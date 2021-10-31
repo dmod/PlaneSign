@@ -54,6 +54,10 @@
       call_endpoint("/set_pong_player_2/" + encodeURIComponent(this.value));
     }
 
+    document.getElementById("lightning_slider").oninput = function () {
+      call_endpoint("/lightning/" + this.value);
+    }
+
     toggle_switch.onchange = function () {
       if (document.getElementById("toggle_switch").checked) {
         call_endpoint('/turn_on')
@@ -102,6 +106,9 @@
     }
     if (mode !== 13) {
       document.getElementById('finance_div').hidden = true;
+    }
+    if (mode !== 15) {
+      document.getElementById('lightning_div').hidden = true;
     }
     if (mode !== 99) {
       document.getElementById('track-a-flight_div').hidden = true;
@@ -298,7 +305,10 @@
       <legend>Informational</legend>
       <button id="6" class="mode_button" onclick="set_mode(this.id)">Weather</button>
       <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only</button>
-      <button id="15" class="mode_button" onclick="set_mode(this.id)">Lightning</button>
+      <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning</button>
+      <div id="lightning_div" hidden>
+        <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6">
+      </div>
       <button id="13" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance</button>
       <div id="finance_div" hidden>
         Ticker Symbol:<input type="text" id="ticker"></input>
