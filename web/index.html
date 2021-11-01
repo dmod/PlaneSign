@@ -123,6 +123,11 @@
     } else {
       call_endpoint("/set_mode/" + mode);
     }
+    
+  }
+
+  function set_lightning_mode(mode){
+      call_endpoint("/lightning_mode/" + mode);
   }
 
   function set_color_mode(color) {
@@ -307,7 +312,15 @@
       <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only</button>
       <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning</button>
       <div id="lightning_div" hidden>
-        <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6">
+        <div id="lightning_button_div">
+          <label for="local">Local</label>
+          <input type="radio" class="lightning_button" id="local" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = false" value="1" checked="checked">
+          <label for="usa">USA</label>
+          <input type="radio" class="lightning_button" id="usa" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = true" value="2">  
+        </div>
+        <div id="lightning_slider_div">
+          <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6">
+        </div>
       </div>
       <button id="13" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance</button>
       <div id="finance_div" hidden>

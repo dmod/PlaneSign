@@ -184,6 +184,11 @@ def set_zoom(zi):
     lightning.LightningManager.zoomind.value = int(zi)
     return ""
 
+@app.route("/lightning_mode/<mode>")
+def set_lightning_mode(mode):
+    lightning.LightningManager.mode.value = int(mode)
+    return ""
+
 def log_listener_process(queue):
     root = logging.getLogger()
     log_filename = "logs/planesign.log"

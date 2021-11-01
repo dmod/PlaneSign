@@ -87,12 +87,24 @@ legend {
   cursor: pointer;
 }
 
+#lightning_button_div {
+  width: 50%;
+  float: left;
+  padding: 20px;
+}
+
+#lightning_slider_div {
+  width: 50%;
+  float: right;
+  padding: 20px;
+}
+
 #lightning_slider {
   -webkit-appearance: none;
   appearance: none;
   transform: rotate(270deg);
   margin-top: 50px;
-  margin-bottom: 80px;
+  margin-bottom: 70px;
   margin-right: 10px;
   margin-left: 10px;
   height: 50px;
@@ -200,6 +212,11 @@ legend {
   font-size: 50px;
   display: inline;
   float: none;
+}
+
+.lightning_button {
+  display: block;
+  margin: auto;
 }
 
 /*

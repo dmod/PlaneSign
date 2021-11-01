@@ -71,6 +71,7 @@ def draw_power(x,y,radius,sign):
 class LightningManager:
 
     zoomind = Value('i', 6)
+    mode = Value('i', 1)
 
     def __init__(self,sign):
         self.host = ''
@@ -93,6 +94,8 @@ class LightningManager:
         self.draw_loading()
         self.background = None
         self.backgrounds = [None] * self.numzooms
+        self.x0 = None
+        self.y0 = None
         self.x1 = None
         self.y1 = None
         self.usa = None
@@ -110,7 +113,7 @@ class LightningManager:
             self.sign.canvas.SetPixel(15+i, 28, 180, 20, 0)
 
     def genBackgrounds(self):
-        x0,y0 = mercator_proj(USAlat, USAlong)
+        self.x0,self.y0 = mercator_proj(USAlat, USAlong)
         self.x1,self.y1 = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
 
         countyurl=f'https://public.opendatasoft.com/api/records/1.0/search/?dataset=us-county-boundaries&q=&lang=EN&rows=200&facet=countyfp&geofilter.distance={shared_config.CONF["SENSOR_LAT"]}%2C{shared_config.CONF["SENSOR_LON"]}%2C220000'
@@ -169,7 +172,7 @@ class LightningManager:
                 for polygon in usapoints:
                     temp = []
                     for p in polygon:
-                        temp.append((self.bgwidth/2+(p[0]-x0)*USAscale,self.bgheight/2-(p[1]-y0)*USAscale))
+                        temp.append((self.bgwidth/2+(p[0]-self.x0)*USAscale,self.bgheight/2-(p[1]-self.y0)*USAscale))
                     usadraw.polygon((temp),outline=(60,60,60))
 
             self.usa.save(self.floc+f'usa_{USAlat}_{USAlong}_{USAscale}.png')
@@ -275,6 +278,11 @@ class LightningManager:
     
     def draw(self):
 
+        if LightningManager.mode.value == 1:
+            local = True
+        else:
+            local = False
+
         now = time.time()
 
         #print(self.strikes)
@@ -318,14 +326,23 @@ class LightningManager:
                     newclose=strike
 
         lightningmap = None
-        self.background = self.backgrounds[LightningManager.zoomind.value]
+        if local:
+            self.background = self.backgrounds[LightningManager.zoomind.value]
+        else:
+            self.background =  self.usa
+
         if self.background:
             lightningmap=self.background.copy()
             draw = ImageDraw.Draw(lightningmap)
 
         if lightningmap:
-            x=self.bgwidth/2
-            y=self.bgheight/2
+            if local:
+                x=self.bgwidth/2
+                y=self.bgheight/2
+            else:
+                x,y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                x=self.bgwidth/2+(x-self.x0)*USAscale
+                y=self.bgheight/2-(y-self.y0)*USAscale
             draw.point([x,y], fill=(0,0,255))
 
             self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
@@ -343,10 +360,13 @@ class LightningManager:
                     color=get_lightning_color(strike_time,now,True)
 
                 if lightningmap:
-                    x=self.bgwidth/2+(strike["lon"]-float(shared_config.CONF["SENSOR_LON"]))*self.zooms[LightningManager.zoomind.value]
-                    y=self.bgheight/2-(strike["lat"]-float(shared_config.CONF["SENSOR_LAT"]))*self.zooms[LightningManager.zoomind.value]
+                    
                     x,y = mercator_proj(strike["lat"], strike["lon"])
-                    draw.point([self.bgwidth/2+(x-self.x1)*self.zooms[LightningManager.zoomind.value],self.bgheight/2-(y-self.y1)*self.zooms[LightningManager.zoomind.value]], fill=color)
+                    if local:
+                        draw.point([self.bgwidth/2+(x-self.x1)*self.zooms[LightningManager.zoomind.value],self.bgheight/2-(y-self.y1)*self.zooms[LightningManager.zoomind.value]], fill=color)
+                    else:
+                        draw.point([self.bgwidth/2+(x-self.x0)*USAscale,self.bgheight/2-(y-self.y0)*USAscale], fill=color)
+        
 
             for i in range(32):
                 self.sign.canvas.SetPixel(63, i, 120, 120, 120)
