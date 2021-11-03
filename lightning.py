@@ -91,7 +91,6 @@ class LightningManager:
         self.zoomstep = 300
         self.numzooms = (((self.maxzoom-self.minzoom)//self.zoomstep)+1)
         self.zooms = np.linspace(self.minzoom,self.maxzoom,self.numzooms)
-        self.draw_loading()
         self.background = None
         self.backgrounds = [None] * self.numzooms
         self.x0 = None
@@ -128,7 +127,7 @@ class LightningManager:
                     break
 
         if genmaps:
-            
+            self.draw_loading()
             response = requests.get(countyurl, stream=True, timeout=10)
             if response.status_code == requests.codes.ok:
                 countydata=response.json()
@@ -179,10 +178,11 @@ class LightningManager:
 
         else:
             self.usa = Image.open(self.floc+f'usa_{USAlat}_{USAlong}_{USAscale}.png')
-            
-        loadingind = 0
-        self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
-        loadingind += 1
+
+        if genmaps:    
+            loadingind = 0
+            self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
+            loadingind += 1
 
         i=-1
         for scale in range(self.minzoom,self.maxzoom+self.zoomstep,self.zoomstep):   
@@ -221,8 +221,10 @@ class LightningManager:
 
             else:
                 self.backgrounds[i] = Image.open(self.floc+f'local_{shared_config.CONF["SENSOR_LAT"]}_{shared_config.CONF["SENSOR_LON"]}_{scale}.png')  
-            self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
-            loadingind += 1
+            
+            if genmaps:
+                self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
+                loadingind += 1
         
     def onMessage(self, ws, message):
         strike_js = json.loads(message)
@@ -345,8 +347,6 @@ class LightningManager:
                 y=self.bgheight/2-(y-self.y0)*USAscale
             draw.point([x,y], fill=(0,0,255))
 
-            self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
-
         if strikescopy:
             for strike in strikescopy:
                 strike_time = strike["time"]
@@ -363,10 +363,16 @@ class LightningManager:
                     
                     x,y = mercator_proj(strike["lat"], strike["lon"])
                     if local:
-                        draw.point([self.bgwidth/2+(x-self.x1)*self.zooms[LightningManager.zoomind.value],self.bgheight/2-(y-self.y1)*self.zooms[LightningManager.zoomind.value]], fill=color)
+                        x=self.bgwidth/2+(x-self.x1)*self.zooms[LightningManager.zoomind.value]
+                        y=self.bgheight/2-(y-self.y1)*self.zooms[LightningManager.zoomind.value]
                     else:
-                        draw.point([self.bgwidth/2+(x-self.x0)*USAscale,self.bgheight/2-(y-self.y0)*USAscale], fill=color)
-        
+                        x=self.bgwidth/2+(x-self.x0)*USAscale
+                        y=self.bgheight/2-(y-self.y0)*USAscale
+                    draw.point([x,y], fill=color)
+                    if 0<=x<64 and 0<=y<32:
+                        print(x,y)
+
+            self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
 
             for i in range(32):
                 self.sign.canvas.SetPixel(63, i, 120, 120, 120)
