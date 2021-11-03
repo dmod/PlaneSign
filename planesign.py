@@ -7,7 +7,6 @@ import logging.handlers
 import sys
 import traceback
 import requests
-import random
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from datetime import datetime
@@ -30,8 +29,6 @@ from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 import os
-
-code_to_airport = {}
 
 app = Flask(__name__)
 CORS(app)
@@ -179,15 +176,18 @@ def submit_ticker(ticker):
     shared_config.data_dict["ticker"] = ticker
     return ""
 
+
 @app.route("/lightning/<zi>")
 def set_zoom(zi):
     lightning.LightningManager.zoomind.value = int(zi)
     return ""
 
+
 @app.route("/lightning_mode/<mode>")
 def set_lightning_mode(mode):
     lightning.LightningManager.mode.value = int(mode)
     return ""
+
 
 def log_listener_process(queue):
     root = logging.getLogger()
@@ -341,20 +341,6 @@ def read_config():
     logging.info("Weather Endpoint: " + shared_config.CONF["WEATHER_ENDPOINT"])
 
 
-def read_static_airport_data():
-    with open("airports.csv") as f:
-        lines = f.readlines()
-        for line in lines:
-            parts = line.strip().split(',')
-            code = parts[0]
-            name = parts[1]
-            lat = float(parts[2])
-            lon = float(parts[3])
-            code_to_airport[code] = (name, lat, lon)
-
-    logging.info(f"{len(code_to_airport)} static airport configs added")
-
-
 class PlaneSign:
     def __init__(self):
 
@@ -390,7 +376,7 @@ class PlaneSign:
         read_config()
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
-        read_static_airport_data()
+        shared_config.read_static_airport_data()
 
         Process(target=get_data_worker, args=(shared_config.data_dict,)).start()
         Process(target=get_weather_data_worker, args=(shared_config.data_dict,)).start()
@@ -466,7 +452,7 @@ class PlaneSign:
 
             ddt = shared_config.data_dict["ticker"]
 
-            if(ddt != None and ddt != ""):
+            if ddt != None and ddt != "":
 
                 raw_ticker = ddt.upper()
 
@@ -498,7 +484,7 @@ class PlaneSign:
     def lightning(self):
         self.canvas.Clear()
 
-        LM=lightning.LightningManager(self)
+        LM = lightning.LightningManager(self)
         LM.connect()
 
         last_draw = time.perf_counter()
@@ -516,32 +502,31 @@ class PlaneSign:
 
     def fireworks(self):
         self.canvas.Clear()
-        height=32
-        width=128
+        height = 32
+        width = 128
 
-        fireworks=[]
+        fireworks = []
         while True:
-            if len(fireworks)==0 or (len(fireworks)<10 and random.random()<0.2):
-                if random.random()<0.6:
+            if len(fireworks) == 0 or (len(fireworks) < 10 and random.random() < 0.2):
+                if random.random() < 0.6:
                     ftype = firework.RING_FW
-                elif random.random()<0.75:
+                elif random.random() < 0.75:
                     ftype = firework.WILLOW_FW
                 else:
                     ftype = firework.CRACKLER_FW
-                fireworks.append(firework.Firework(self,ftype))
+                fireworks.append(firework.Firework(self, ftype))
             for fw in fireworks:
-                if fw.exploded==2:
+                if fw.exploded == 2:
                     fireworks.remove(fw)
             self.canvas.Clear()
-            for fw in fireworks:       
+            for fw in fireworks:
                 fw.draw()
-                
-            self.matrix.SwapOnVSync(self.canvas)   
+
+            self.matrix.SwapOnVSync(self.canvas)
 
             breakout = self.wait_loop(0.01)
             if breakout:
                 return
-
 
     def welcome(self):
 
@@ -554,18 +539,14 @@ class PlaneSign:
 
     def sign_loop(self):
 
-        prev_thing = {}
-        prev_thing["distance"] = 0
-        prev_thing["altitude"] = 0
-        prev_thing["speed"] = 0
-        prev_thing["flight"] = None
-
         while True:
             try:
 
                 mode = shared_config.shared_mode.value
 
                 forced_breakout = False
+
+                logging.info(f"Top of loop. Current mode is: {mode}")
 
                 # Sign is off, clear canvas and wait
                 if shared_config.shared_flag.value is 0:
@@ -579,6 +560,7 @@ class PlaneSign:
                     self.wait_loop(3)
                     continue
 
+                # This should reallllllly be enum'ed
                 # 1 = default
                 # 2 = always alert closest
                 # 3 = always alert highest
@@ -629,89 +611,8 @@ class PlaneSign:
                 if mode == 16:
                     self.fireworks()
 
-                plane_to_show = None
-
-                if mode == 1:
-                    if shared_config.data_dict["closest"] and shared_config.data_dict["closest"]["distance"] <= 2:
-                        plane_to_show = shared_config.data_dict["closest"]
-
-                if mode == 2:
-                    plane_to_show = shared_config.data_dict["closest"]
-
-                if mode == 3:
-                    plane_to_show = shared_config.data_dict["highest"]
-
-                if mode == 4:
-                    plane_to_show = shared_config.data_dict["fastest"]
-
-                if mode == 5:
-                    plane_to_show = shared_config.data_dict["slowest"]
-
-                if plane_to_show:
-                    interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
-                    interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
-                    interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
-
-                    # We only have room to display one full airport name. So pick the one that is further away assuming
-                    # the user probably hasn't heard of that one
-                    origin_distance = 0
-                    if plane_to_show["origin"]:
-                        origin_config = code_to_airport.get(plane_to_show["origin"])
-                        if origin_config:
-                            origin_distance = get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
-                            logging.info(f"Origin is {origin_distance:.2f} miles away")
-
-                    destination_distance = 0
-                    if plane_to_show["destination"]:
-                        destination_config = code_to_airport.get(plane_to_show["destination"])
-                        if destination_config:
-                            destination_distance = get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
-                            logging.info(f"Destination is {destination_distance:.2f} miles away")
-
-                    if origin_distance != 0 and origin_distance > destination_distance:
-                        friendly_name = origin_config[0]
-                    elif destination_distance != 0:
-                        friendly_name = destination_config[0]
-                    else:
-                        friendly_name = ""
-
-                    logging.info("Full airport name from code: " + friendly_name)
-
-                    # Front pad the flight number to a max of 7 for spacing
-                    formatted_flight = plane_to_show["flight"].rjust(7, ' ')
-
-                    if not plane_to_show["origin"]:
-                        plane_to_show["origin"] = "???"
-
-                    if not plane_to_show["destination"]:
-                        plane_to_show["destination"] = "???"
-
-                    for i in range(NUM_STEPS):
-                        self.canvas.Clear()
-                        graphics.DrawText(self.canvas, self.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
-                        graphics.DrawText(self.canvas, self.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
-                        graphics.DrawText(self.canvas, self.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
-                        graphics.DrawText(self.canvas, self.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
-
-                        graphics.DrawText(self.canvas, self.font57, 79, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
-                        graphics.DrawText(self.canvas, self.font57, 79, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
-                        graphics.DrawText(self.canvas, self.font57, 79, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
-
-                        forced_breakout = self.wait_loop(0.065)
-                        if forced_breakout:
-                            break
-
-                        self.matrix.SwapOnVSync(self.canvas)
-
-                    prev_thing = plane_to_show
-                else:
-                    # NOT ALERT RADIUS
-                    prev_thing = {}
-                    prev_thing["distance"] = 0
-                    prev_thing["altitude"] = 0
-                    prev_thing["speed"] = 0
-
-                    self.show_time()
+                if mode >= 1 and mode <= 5:
+                    planes.show_planes(self)
 
                 if forced_breakout:
                     continue
@@ -727,5 +628,6 @@ class PlaneSign:
 # Main function
 if __name__ == "__main__":
     configure_logging()
+    shared_config.read_static_airport_data()
 
     PlaneSign().sign_loop()

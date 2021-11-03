@@ -8,7 +8,7 @@ def cgol(sign):
     sign.canvas.Clear()
 
     generation_time = 0.15
-    
+
     if shared_config.arg_dict["style"] == "2":
         cgol_cellcolor = False
     else:

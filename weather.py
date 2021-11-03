@@ -1,5 +1,4 @@
 import datetime
-import time
 from PIL import Image
 from utilities import *
 import shared_config
