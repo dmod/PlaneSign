@@ -1,4 +1,5 @@
 from multiprocessing import Value
+import logging
 
 shared_flag = Value('i', 1)
 shared_mode = Value('i', 1)
@@ -14,3 +15,18 @@ shared_forced_sign_update = Value('i', 0)
 data_dict = None
 arg_dict = None
 CONF = None
+
+code_to_airport = {}
+
+def read_static_airport_data():
+    with open("airports.csv") as f:
+        lines = f.readlines()
+        for line in lines:
+            parts = line.strip().split(',')
+            code = parts[0]
+            name = parts[1]
+            lat = float(parts[2])
+            lon = float(parts[3])
+            code_to_airport[code] = (name, lat, lon)
+
+    logging.info(f"{len(code_to_airport)} static airport configs added")
