@@ -30,31 +30,22 @@ def mercator_proj(lat, lon):
     y = np.log(np.tan(np.radians(lat))+1/np.cos(np.radians(lat)))
     return x,y
 
-def get_lightning_color(strike_time,now,format):
-    if strike_time > now: #future
-        color = (150,150,150)
-    elif strike_time + 20 > now:
-        color = (150,150,150)
-    elif strike_time + 30 > now:
-        color = (160,160,100)
-    elif strike_time + 40 > now:
-        color = (140,120,10)
-    elif strike_time + 50 > now:
-        color = (140,50,10)
-    elif strike_time + 60 > now:
-        color = (120,10,0)
-    elif strike_time + 120 > now:
-        color = (92,5,8) 
-    elif strike_time + 300 > now:
-        color = (63,6,8)
-    elif strike_time + 600 > now:
-        color = (37,0,0)
-    else:   #older than 10 mins
-        color = (37,0,0) 
+def get_lightning_color(strike_time,now,format=False):
+
+    max_bright=150
+
+    dt=now-strike_time
+
+    b=max(min(round(max_bright*(1-dt/60)),max_bright),0)#min brightness at 1 min
+    g=max(min(round(max_bright*(2-dt/60)),max_bright),0)#min brightness at 2 mins
+    r=max(min(round(dt*(30-max_bright)/180+(5*max_bright-60)/3),max_bright),30)#min brightness at 5 mins
+
+    color=(r,g,b)
+
     if format:
         return color
     else:
-        return color[0],color[1],color[2]
+        return r,g,b
 
 def draw_power(x,y,radius,sign):
     t1 = 900#650
@@ -144,7 +135,7 @@ class LightningManager:
             countydata=None
             
                 
-        if usadata:
+        if usadata and genmaps:
             usapoints=[]
             for feature in usadata["features"]:
                 shape = feature["geometry"]
@@ -172,7 +163,7 @@ class LightningManager:
                     temp = []
                     for p in polygon:
                         temp.append((self.bgwidth/2+(p[0]-self.x0)*USAscale,self.bgheight/2-(p[1]-self.y0)*USAscale))
-                    usadraw.polygon((temp),outline=(60,60,60))
+                    usadraw.polygon((temp),outline=(40,40,40))
 
             self.usa.save(self.floc+f'usa_{USAlat}_{USAlong}_{USAscale}.png')
 
@@ -369,8 +360,6 @@ class LightningManager:
                         x=self.bgwidth/2+(x-self.x0)*USAscale
                         y=self.bgheight/2-(y-self.y0)*USAscale
                     draw.point([x,y], fill=color)
-                    if 0<=x<64 and 0<=y<32:
-                        print(x,y)
 
             self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
 
