@@ -89,6 +89,8 @@ class LightningManager:
         self.x1 = None
         self.y1 = None
         self.usa = None
+        self.last_drawn_zoomind = Value('i', 6)
+        self.last_drawn_mode = Value('i', 1)
         self.genBackgrounds()
 
     def draw_loading(self):
@@ -414,6 +416,9 @@ class LightningManager:
 
             self.sign.matrix.SwapOnVSync(self.sign.canvas)
             self.sign.canvas = self.sign.matrix.CreateFrameCanvas()
+
+            self.last_drawn_zoomind.value = LightningManager.zoomind.value
+            self.last_drawn_mode.value = LightningManager.mode.value
 
     def connect(self):
           
