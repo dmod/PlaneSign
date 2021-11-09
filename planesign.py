@@ -210,7 +210,7 @@ def log_listener_process(queue):
 
 def configure_logging():
     logging_queue = Queue(-1)
-    listener = Process(target=log_listener_process, args=(logging_queue, ))
+    listener = Process(target=log_listener_process, args=(logging_queue, ), daemon=True)
     listener.start()
 
     queue_handler = logging.handlers.QueueHandler(logging_queue)
@@ -378,9 +378,9 @@ class PlaneSign:
 
         shared_config.read_static_airport_data()
 
-        Process(target=get_data_worker, args=(shared_config.data_dict,)).start()
-        Process(target=get_weather_data_worker, args=(shared_config.data_dict,)).start()
-        Process(target=api_server).start()
+        Process(target=get_data_worker, args=(shared_config.data_dict,), daemon=True).start()
+        Process(target=get_weather_data_worker, args=(shared_config.data_dict,), daemon=True).start()
+        Process(target=api_server, daemon=True).start()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
