@@ -491,7 +491,7 @@ class PlaneSign:
 
         self.canvas.Clear()
         while LM.connected.value:
-            if time.perf_counter()-last_draw > 2:
+            if time.perf_counter()-last_draw > 2 or (LM.last_drawn_zoomind.value != lightning.LightningManager.zoomind.value) or (LM.last_drawn_mode.value != lightning.LightningManager.mode.value):
                 LM.draw()
                 last_draw = time.perf_counter()
 

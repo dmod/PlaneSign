@@ -88,33 +88,28 @@ legend {
 }
 
 #lightning_button_div {
-  width: 50%;
+  width: 25%;
   float: left;
   padding: 20px;
+  margin-left: 25%;
+  margin-top: 5%;
+  margin-bottom: 10%;
 }
 
 #lightning_slider_div {
   width: 50%;
   float: right;
-  padding: 20px;
+  margin-bottom: 5%;
 }
 
 #lightning_slider {
-  /*-webkit-appearance: slider-vertical;
-  //appearance: none;
-  //transform: rotate(270deg);
-  writing-mode: bt-lr;*/
-  -webkit-appearance: none;
-  appearance: none;
-  transform: rotate(270deg);
-  margin-top: 50px;
-  margin-bottom: 70px;
+  writing-mode: bt-lr; /* IE */
+  -webkit-appearance: slider-vertical; /* WebKit */
   margin-right: 10px;
   margin-left: 10px;
-  height: 50px;
+  width: 50px;
   background: #d3d3d3;
   outline: none;
-  float: right;
 }
 
 #lightning_slider::-webkit-slider-thumb {
@@ -220,7 +215,7 @@ legend {
 
 .lightning_button {
   display: block;
-  margin: auto;
+  margin: auto auto 20px auto;
 }
 
 /*

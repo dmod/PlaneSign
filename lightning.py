@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+import copy as cp
 import random
 import websocket #sudo -H pip3 install websocket-client
 import json
@@ -30,31 +31,22 @@ def mercator_proj(lat, lon):
     y = np.log(np.tan(np.radians(lat))+1/np.cos(np.radians(lat)))
     return x,y
 
-def get_lightning_color(strike_time,now,format):
-    if strike_time > now: #future
-        color = (150,150,150)
-    elif strike_time + 20 > now:
-        color = (150,150,150)
-    elif strike_time + 30 > now:
-        color = (160,160,100)
-    elif strike_time + 40 > now:
-        color = (140,120,10)
-    elif strike_time + 50 > now:
-        color = (140,50,10)
-    elif strike_time + 60 > now:
-        color = (120,10,0)
-    elif strike_time + 120 > now:
-        color = (92,5,8) 
-    elif strike_time + 300 > now:
-        color = (63,6,8)
-    elif strike_time + 600 > now:
-        color = (37,0,0)
-    else:   #older than 10 mins
-        color = (37,0,0) 
+def get_lightning_color(strike_time,now,format=False):
+
+    max_bright=150
+
+    dt=now-strike_time
+
+    b=max(min(round(max_bright*(1-dt/60)),max_bright),0)#min brightness at 1 min
+    g=max(min(round(max_bright*(2-dt/60)),max_bright),0)#min brightness at 2 mins
+    r=max(min(round(dt*(30-max_bright)/180+(5*max_bright-60)/3),max_bright),30)#min brightness at 5 mins
+
+    color=(r,g,b)
+
     if format:
         return color
     else:
-        return color[0],color[1],color[2]
+        return r,g,b
 
 def draw_power(x,y,radius,sign):
     t1 = 900#650
@@ -98,6 +90,8 @@ class LightningManager:
         self.x1 = None
         self.y1 = None
         self.usa = None
+        self.last_drawn_zoomind = Value('i', 6)
+        self.last_drawn_mode = Value('i', 1)
         self.genBackgrounds()
 
     def draw_loading(self):
@@ -144,7 +138,7 @@ class LightningManager:
             countydata=None
             
                 
-        if usadata:
+        if usadata and genmaps:
             usapoints=[]
             for feature in usadata["features"]:
                 shape = feature["geometry"]
@@ -172,7 +166,7 @@ class LightningManager:
                     temp = []
                     for p in polygon:
                         temp.append((self.bgwidth/2+(p[0]-self.x0)*USAscale,self.bgheight/2-(p[1]-self.y0)*USAscale))
-                    usadraw.polygon((temp),outline=(60,60,60))
+                    usadraw.polygon((temp),outline=(40,40,40))
 
             self.usa.save(self.floc+f'usa_{USAlat}_{USAlong}_{USAscale}.png')
 
@@ -304,6 +298,8 @@ class LightningManager:
                 break
             if strike["time"] + 60 <= now: #too old to show in close list
                 continue
+            if local and strike["dist"]>250: #too far to show for local mode
+                break
             if closest1==None or strike["dist"]<=closest1["dist"]:
                 closest3 = closest2
                 closest2 = closest1
@@ -314,18 +310,21 @@ class LightningManager:
             elif closest3 == None or strike["dist"]<=closest3["dist"]:
                 closest3 = strike
 
-
-        strikescopy = sorted(strikescopy, key=lambda k: k["time"], reverse=True)
+        if local:
+            strikescopy = sorted(filter(lambda n: n["dist"]<250, strikescopy), key=lambda k: k["time"], reverse=True)
+        else:
+            strikescopy = sorted(strikescopy, key=lambda k: k["time"], reverse=True)
+        
         recent = strikescopy
+        oldest = recent.copy()
+        oldest.reverse()
 
-        newclose = None
-        for strike in strikescopy:
-            if strike["dist"]<500:
-                newclose = strike
-                break
+        numstrikes = 0
+        for strike in recent:
+            if strike["time"] + 300 > now: #strike within last 5 mins
+                numstrikes+=1
             else:
-                if newclose == None or strike["dist"]<newclose["dist"]:
-                    newclose=strike
+                break
 
         lightningmap = None
         if local:
@@ -347,14 +346,14 @@ class LightningManager:
                 y=self.bgheight/2-(y-self.y0)*USAscale
             draw.point([x,y], fill=(0,0,255))
 
-        if strikescopy:
-            for strike in strikescopy:
+        if oldest:
+            for strike in oldest:
                 strike_time = strike["time"]
                 
-                if strike_time > now: #sound hasn't reached us yet
+                if strike_time > now: #desync in server and local clock
                     continue
                 elif strike_time + 600 <= now:
-                    self.strikes.remove(strike)#sound hit more than 10 mins ago
+                    self.strikes.remove(strike)#strike hit more than 10 mins ago
                     continue
                 else:
                     color=get_lightning_color(strike_time,now,True)
@@ -369,62 +368,95 @@ class LightningManager:
                         x=self.bgwidth/2+(x-self.x0)*USAscale
                         y=self.bgheight/2-(y-self.y0)*USAscale
                     draw.point([x,y], fill=color)
-                    if 0<=x<64 and 0<=y<32:
-                        print(x,y)
 
-            self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
+        self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
 
-            for i in range(32):
-                self.sign.canvas.SetPixel(63, i, 120, 120, 120)
+        for i in range(32):
+            self.sign.canvas.SetPixel(63, i, 50, 50, 200)
 
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 1, 6, graphics.Color(20, 20, 210), "Close:")
-            if closest1:
-                r,g,b = get_lightning_color(closest1["time"],now,False)
-                if closest1["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-                else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-                
-                draw_power(0,14,closest1["radius"],self.sign)
-
-            if closest2:
-                r,g,b = get_lightning_color(closest2["time"],now,False)
-                if closest2["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-                else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+        graphics.DrawText(self.sign.canvas, self.sign.font46, 1, 6, graphics.Color(20, 20, 210), "Closest")
+        if closest1:
+            r,g,b = get_lightning_color(closest1["time"],now,False)
+            if closest1["dist"]<100:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+            else:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             
-                draw_power(0,22,closest2["radius"],self.sign)
+            draw_power(0,14,closest1["radius"],self.sign)
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(70, 70, 215), "----")
 
-            if closest3:    
-                r,g,b = get_lightning_color(closest3["time"],now,False)
-                if closest3["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+        if closest2:
+            r,g,b = get_lightning_color(closest2["time"],now,False)
+            if closest2["dist"]<100:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+            else:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+        
+            draw_power(0,22,closest2["radius"],self.sign)
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(70, 70, 215), "----")
+
+        if closest3:    
+            r,g,b = get_lightning_color(closest3["time"],now,False)
+            if closest3["dist"]<100:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+            else:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+
+            draw_power(0,30,closest3["radius"],self.sign)
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(70, 70, 215), "----")
+
+        graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 6, graphics.Color(20, 20, 210), "Recent")
+        if recent:
+            if recent[0]["dist"]<100:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+            else:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+
+            draw_power(31,14,recent[0]["radius"],self.sign)
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(70, 70, 215), "----")
+
+        if local:
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Near")
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Global")
+        self.sign.canvas.SetPixel(32, 18, 20, 20, 210)#fix the janky looking # symbol
+        self.sign.canvas.SetPixel(32, 20, 20, 20, 210)#fix the janky looking # symbol
+
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), str(numstrikes))
+
+        self.sign.matrix.SwapOnVSync(self.sign.canvas)
+
+        if closest1 and closest1["dist"]<0.5 and closest1["time"]+30 > now and ("warned" not in closest1):
+            self.strikes[self.strikes.index(closest1)]["warned"]=True
+            for i in range(6):
+                if i%2==0:
+                    for i in range(32):
+                        self.sign.canvas.SetPixel(63, i, 200, 0, 0)
+                        self.sign.canvas.SetPixel(127, i, 200, 0, 0)
+                    for i in range(64,127):
+                        self.sign.canvas.SetPixel(i, 0, 200, 0, 0)
+                        self.sign.canvas.SetPixel(i, 31, 200, 0, 0)
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                    for i in range(32):
+                        self.sign.canvas.SetPixel(63, i, 0, 0, 0)
+                        self.sign.canvas.SetPixel(127, i, 0, 0, 0)
+                    for i in range(64,127):
+                        self.sign.canvas.SetPixel(i, 0, 0, 0, 0)
+                        self.sign.canvas.SetPixel(i, 31, 0, 0, 0)
+                self.sign.matrix.SwapOnVSync(self.sign.canvas)
+                time.sleep(0.2)
+                
 
-                draw_power(0,30,closest3["radius"],self.sign)
+        self.sign.canvas = self.sign.matrix.CreateFrameCanvas()
 
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 6, graphics.Color(20, 20, 210), "Recent:")
-            if recent[0]:
-                if recent[0]["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-                else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-
-                draw_power(31,14,recent[0]["radius"],self.sign)
-
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "Near:")
-            if newclose:
-                if newclose["dist"]<100:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.1f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-                else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), "{0:.0f}".format(newclose["dist"])+direction_lookup((newclose["lat"],newclose["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-
-                draw_power(31,30,newclose["radius"],self.sign)
-
-            self.sign.matrix.SwapOnVSync(self.sign.canvas)
-            self.sign.canvas = self.sign.matrix.CreateFrameCanvas()
+        self.last_drawn_zoomind.value = LightningManager.zoomind.value
+        self.last_drawn_mode.value = LightningManager.mode.value
 
     def connect(self):
           
