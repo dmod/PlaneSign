@@ -274,7 +274,7 @@ class LightningManager:
     
     def draw(self):
 
-        if LightningManager.mode.value == 1:
+        if LightningManager.mode.value == 2:
             local = True
         else:
             local = False

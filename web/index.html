@@ -313,13 +313,13 @@
       <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning</button>
       <div id="lightning_div" hidden>
         <div id="lightning_button_div">
-          <label for="local">Local</label>
-          <input type="radio" class="lightning_button" id="local" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = false" value="1" checked="checked">
-          <label for="usa">USA</label>
-          <input type="radio" class="lightning_button" id="usa" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = true" value="2">  
+          <label for="local">USA</label>
+          <input type="radio" class="lightning_button" id="local" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = true" value="1" checked="checked">
+          <label for="usa">Local</label>
+          <input type="radio" class="lightning_button" id="usa" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = false" value="2">  
         </div>
         <div id="lightning_slider_div">
-          <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" orient="vertical">
+          <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" orient="vertical" hidden>
         </div>
       </div>
       <button id="13" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance</button>
