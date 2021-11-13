@@ -308,13 +308,14 @@
 
     <fieldset class="mode_selector_button_group box2">
       <legend>Informational</legend>
-      <button id="6" class="mode_button" onclick="set_mode(this.id)">Weather</button>
-      <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only</button>
-      <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning</button>
+      <button id="6" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
+      <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only 🕓</button>
+      <button id="17" class="mode_button" onclick="set_mode(this.id)">Satellites 🛰️</button>
+      <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning ⛈️</button>
       <div id="lightning_div" hidden>
         <div id="lightning_button_div">
           <label for="local">USA</label>
-          <input type="radio" class="lightning_button" id="local" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = true" value="1" checked="checked">
+          <input type="radio" class="lightning_button" id="local" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = true" value="1" checked>
           <label for="usa">Local</label>
           <input type="radio" class="lightning_button" id="usa" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = false" value="2">  
         </div>
@@ -322,7 +323,7 @@
           <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" orient="vertical" hidden>
         </div>
       </div>
-      <button id="13" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance</button>
+      <button id="13" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance 🤑</button>
       <div id="finance_div" hidden>
         Ticker Symbol:<input type="text" id="ticker"></input>
         <button class="submit" onclick="submit_ticker();">Submit</button>

@@ -22,6 +22,7 @@ import pong
 import weather
 import planes
 import shared_config
+import satellite
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
 import subprocess
@@ -610,6 +611,9 @@ class PlaneSign:
 
                 if mode == 16:
                     self.fireworks()
+
+                if mode == 17:
+                    satellite.satellites(self)
 
                 if mode >= 1 and mode <= 5:
                     planes.show_planes(self)
