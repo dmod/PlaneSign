@@ -43,6 +43,8 @@ def satellites(sign):
                     lowest=closest_list[random.randint(1,len(closest_list)-1)]
 
                 close_name = closest["satname"]
+                if close_name.find("STARLINK") != -1:
+                    close_name=close_name.replace("-", "")
                 pindex = close_name.find(' (')
                 if pindex != -1 and len(close_name)>12:
                     clean_close_name = close_name[:pindex]
@@ -50,6 +52,8 @@ def satellites(sign):
                     clean_close_name = close_name
 
                 low_name = lowest["satname"]
+                if low_name.find("STARLINK") != -1:
+                    low_name=low_name.replace("-", "")
                 pindex = low_name.find(' (')
                 if pindex != -1 and len(low_name)>12:
                     clean_low_name = low_name[:pindex]
