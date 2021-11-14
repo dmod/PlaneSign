@@ -102,6 +102,10 @@ def show_planes(sign):
 
             sign.show_time()
 
+        breakout = sign.wait_loop(0)
+        if breakout:
+            return
+
 
 def track_a_flight(sign):
 
