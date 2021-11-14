@@ -13,6 +13,7 @@ from datetime import tzinfo, timedelta, datetime
 
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
+KM_2_MI = 0.6214
 
 local_tz = pytz.timezone('America/New_York')
 
