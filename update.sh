@@ -22,7 +22,7 @@ else
     echo "Updating..."
 
     sudo apt install libatlas-base-dev
-    sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client
+    sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client country_converter
     git fetch
     git reset --hard HEAD
     git pull

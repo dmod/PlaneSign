@@ -56,3 +56,12 @@ if __name__ == "__main__":
             # If there is acutally a code to look up, then write this config
             if code:
                 f.write(f'{code},{name},{lat},{lon}\n')
+
+
+    satdaturl = "https://www.ucsusa.org/media/11490"
+    file = requests.get(satdaturl, stream=True, allow_redirects=True)
+    if file.status_code == requests.codes.ok:
+        sat_lines = file.text.splitlines()[1:]
+        print(f"Found static data for {len(sat_lines)} satellites")
+        with open("/home/pi/PlaneSign/satdat.txt", 'wb') as f:
+            f.write(file.content)

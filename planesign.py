@@ -543,7 +543,7 @@ class PlaneSign:
         while True:
             try:
 
-                mode = shared_config.shared_mode.value
+                mode = 17#shared_config.shared_mode.value
 
                 forced_breakout = False
 
