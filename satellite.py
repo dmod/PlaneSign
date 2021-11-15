@@ -121,7 +121,7 @@ def satellites(sign):
                             pass
                     elif close_name.find("COSMOS") == 0  or close_name.find("MOLNIYA") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USR.png').convert('RGBA')
-                    elif close_name.find("USA") == 0:
+                    elif close_name.find("USA") == 0 or close_name.find("OPS") == 0 or close_name.find("GALAXY") == 0 or close_name.find("FLOCK") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
                     
                     image = image.resize((13, 9), Image.BICUBIC)
@@ -186,7 +186,7 @@ def satellites(sign):
                             pass
                     elif low_name.find("COSMOS") == 0 or low_name.find("MOLNIYA") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USR.png').convert('RGBA')
-                    elif low_name.find("USA") == 0:
+                    elif low_name.find("USA") == 0 or low_name.find("OPS") == 0 or low_name.find("GALAXY") == 0 or low_name.find("FLOCK") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
                     
                     image = image.resize((13, 9), Image.BICUBIC)
