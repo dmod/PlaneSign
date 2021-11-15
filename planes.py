@@ -8,11 +8,10 @@ from utilities import *
 
 def show_planes(sign):
 
-    prev_thing = {}
-    prev_thing["distance"] = 0
-    prev_thing["altitude"] = 0
-    prev_thing["speed"] = 0
-    prev_thing["flight"] = None
+    prev_stats = {}
+    prev_stats["distance"] = 0
+    prev_stats["altitude"] = 0
+    prev_stats["speed"] = 0
 
     plane_to_show = None
 
@@ -37,9 +36,9 @@ def show_planes(sign):
             plane_to_show = shared_config.data_dict["slowest"]
 
         if plane_to_show:
-            interpol_distance = interpolate(prev_thing["distance"], plane_to_show["distance"])
-            interpol_alt = interpolate(prev_thing["altitude"], plane_to_show["altitude"])
-            interpol_speed = interpolate(prev_thing["speed"], plane_to_show["speed"])
+            interpol_distance = interpolate(prev_stats["distance"], plane_to_show["distance"])
+            interpol_alt = interpolate(prev_stats["altitude"], plane_to_show["altitude"])
+            interpol_speed = interpolate(prev_stats["speed"], plane_to_show["speed"])
 
             # We only have room to display one full airport name. So pick the one that is further away assuming
             # the user probably hasn't heard of that one
@@ -92,13 +91,13 @@ def show_planes(sign):
 
                 sign.matrix.SwapOnVSync(sign.canvas)
 
-            prev_thing = plane_to_show
+            prev_stats = plane_to_show
         else:
             # NOT ALERT RADIUS
-            prev_thing = {}
-            prev_thing["distance"] = 0
-            prev_thing["altitude"] = 0
-            prev_thing["speed"] = 0
+            prev_stats = {}
+            prev_stats["distance"] = 0
+            prev_stats["altitude"] = 0
+            prev_stats["speed"] = 0
 
             sign.show_time()
 
@@ -231,4 +230,6 @@ def track_a_flight(sign):
         if blip_count == 3:
             blip_count = 0
 
-        sign.wait_loop(0.8)
+        breakout = sign.wait_loop(0.8)
+        if breakout:
+            return
