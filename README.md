@@ -35,7 +35,7 @@ make build-python PYTHON=$(which python3)
 sudo make install-python PYTHON=$(which python3)
 cd
 sudo apt install libatlas-base-dev
-sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client
+sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client country_converter
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
 sudo ./planesign.py
