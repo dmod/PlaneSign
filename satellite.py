@@ -62,7 +62,7 @@ def satellites(sign):
                 above = list(map(lambda item: dict(item, dist=get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                 #remove debris from results
-                above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"], above))
+                above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"]and "OBJECT " not in x["satname"], above))
 
                 closest_list = sorted(above, key=lambda k: k["dist"])
                 lowest_list = sorted(above, key=lambda k: k["satalt"])
@@ -201,7 +201,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 66, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(lowest["dist"]))
 
                 graphics.DrawText(sign.canvas, sign.font57, 88, 24, graphics.Color(160, 160, 200), "Alt:")
-                if dupeflag:
+                if not dupeflag:
                     for x in range(89,102):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
                 low_alt = lowest["satalt"]*KM_2_MI
