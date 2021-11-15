@@ -113,15 +113,17 @@ def satellites(sign):
                         sat = [d for d in satellite_data if d["COSPAR"] == closest["intDesignator"]]
                     if len(sat)>0:
                         try:
-                            if sat[0]["country"].upper()=="MULTINATIONAL":
-                                image = Image.open('/home/pi/PlaneSign/icons/flags/MULTINATIONAL.png').convert('RGBA')
+                            if sat[0]["country"].upper()=="MULTINATIONAL" or sat[0]["country"].find("/") != -1:
+                                image = Image.open('/home/pi/PlaneSign/icons/flags/UN.png').convert('RGBA')
+                            elif sat[0]["country"].upper()=="ESA":
+                                image = Image.open('/home/pi/PlaneSign/icons/flags/EU.png').convert('RGBA')
                             else:
                                 image = Image.open(f'/home/pi/PlaneSign/icons/flags/{coco.convert(names=sat[0]["country"], to="ISO3", not_found=None)}.png').convert('RGBA')
                         except Exception:
                             pass
                     elif close_name.find("COSMOS") == 0  or close_name.find("MOLNIYA") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USR.png').convert('RGBA')
-                    elif close_name.find("USA") == 0 or close_name.find("OPS") == 0 or close_name.find("GALAXY") == 0 or close_name.find("FLOCK") == 0:
+                    elif close_name.find("USA") == 0 or close_name.find("OPS") == 0 or close_name.find("GALAXY") == 0 or close_name.find("FLOCK") == 0 or close_name.find("IRIDIUM") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
                     
                     image = image.resize((13, 9), Image.BICUBIC)
@@ -178,15 +180,17 @@ def satellites(sign):
                         sat = [d for d in satellite_data if d["COSPAR"] == lowest["intDesignator"]]
                     if len(sat)>0:
                         try:
-                            if sat[0]["country"].upper()=="MULTINATIONAL":
-                                image = Image.open('/home/pi/PlaneSign/icons/flags/MULTINATIONAL.png').convert('RGBA')
+                            if sat[0]["country"].upper()=="MULTINATIONAL" or sat[0]["country"].find("/") != -1:
+                                image = Image.open('/home/pi/PlaneSign/icons/flags/UN.png').convert('RGBA')
+                            elif sat[0]["country"].upper()=="ESA":
+                                image = Image.open('/home/pi/PlaneSign/icons/flags/EU.png').convert('RGBA')
                             else:
                                 image = Image.open(f'/home/pi/PlaneSign/icons/flags/{coco.convert(names=sat[0]["country"], to="ISO3", not_found=None)}.png').convert('RGBA')
                         except Exception:
                             pass
                     elif low_name.find("COSMOS") == 0 or low_name.find("MOLNIYA") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USR.png').convert('RGBA')
-                    elif low_name.find("USA") == 0 or low_name.find("OPS") == 0 or low_name.find("GALAXY") == 0 or low_name.find("FLOCK") == 0:
+                    elif low_name.find("USA") == 0 or low_name.find("OPS") == 0 or low_name.find("GALAXY") == 0 or low_name.find("FLOCK") == 0 or low_name.find("IRIDIUM") == 0:
                         image = Image.open('/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
                     
                     image = image.resize((13, 9), Image.BICUBIC)
@@ -202,7 +206,7 @@ def satellites(sign):
 
                 graphics.DrawText(sign.canvas, sign.font57, 88, 24, graphics.Color(160, 160, 200), "Alt:")
                 if not dupeflag:
-                    for x in range(89,102):
+                    for x in range(88,102):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
                 low_alt = lowest["satalt"]*KM_2_MI
                 if low_alt < 10000:
