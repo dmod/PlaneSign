@@ -141,24 +141,22 @@ def satellites(sign):
             else:
                 graphics.DrawText(sign.canvas, sign.font57, 1, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(closest["dist"]))
             
-            graphics.DrawText(sign.canvas, sign.font57, 23, 24, graphics.Color(160, 160, 200), "Alt:")
+            graphics.DrawText(sign.canvas, sign.font57, 22, 24, graphics.Color(20, 160, 60), "Dir:")
+            close_dir = direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+            if len(close_dir)==1:
+                graphics.DrawText(sign.canvas, sign.font57, 27, 32, graphics.Color(20, 160, 60), close_dir)
+            else:
+                graphics.DrawText(sign.canvas, sign.font57, 25, 32, graphics.Color(20, 160, 60), close_dir)
+
+            graphics.DrawText(sign.canvas, sign.font57, 43, 24, graphics.Color(160, 160, 200), "Alt:")
             if dupeflag:
-                for x in range(23,37):
+                for x in range(43,57):
                     sign.canvas.SetPixel(x, 24, 110, 90, 0)
             close_alt = closest["satalt"]*KM_2_MI
             if close_alt < 10000:
-                graphics.DrawText(sign.canvas, sign.font57, 23, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(close_alt))
+                graphics.DrawText(sign.canvas, sign.font57, 43, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(close_alt))
             else:
-                graphics.DrawText(sign.canvas, sign.font57, 23, 32, graphics.Color(160, 160, 200), str(round(close_alt/1000))+"k")
-
-            graphics.DrawText(sign.canvas, sign.font57, 44, 24, graphics.Color(20, 160, 60), "Vel:")
-            graphics.DrawText(sign.canvas, sign.font57, 44, 32, graphics.Color(20, 160, 60), "{0:.1f}".format(closest["vel"]*KM_2_MI))
-            
-            # close_vel = closest["vel"]*KM_2_MI*3600
-            # if close_vel < 10000:
-            #     graphics.DrawText(sign.canvas, sign.font57, 44, 31, graphics.Color(20, 160, 60), "{0:.0f}".format(close_vel))
-            # else:
-            #     graphics.DrawText(sign.canvas, sign.font57, 44, 31, graphics.Color(20, 160, 60), str(round(close_vel/1000))+"k")
+                graphics.DrawText(sign.canvas, sign.font57, 43, 32, graphics.Color(160, 160, 200), str(round(close_alt/1000))+"k")
 
         #divider
         for y in range(32):
@@ -208,24 +206,22 @@ def satellites(sign):
             else:
                 graphics.DrawText(sign.canvas, sign.font57, 66, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(lowest["dist"]))
 
-            graphics.DrawText(sign.canvas, sign.font57, 88, 24, graphics.Color(160, 160, 200), "Alt:")
+            graphics.DrawText(sign.canvas, sign.font57, 87, 24, graphics.Color(20, 160, 60), "Dir:")
+            low_dir = direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+            if len(low_dir)==1:
+                graphics.DrawText(sign.canvas, sign.font57, 92, 32, graphics.Color(20, 160, 60), low_dir)
+            else:
+                graphics.DrawText(sign.canvas, sign.font57, 90, 32, graphics.Color(20, 160, 60), low_dir)
+
+            graphics.DrawText(sign.canvas, sign.font57, 108, 24, graphics.Color(160, 160, 200), "Alt:")
             if not dupeflag:
-                for x in range(88,102):
+                for x in range(108,122):
                     sign.canvas.SetPixel(x, 24, 110, 90, 0)
             low_alt = lowest["satalt"]*KM_2_MI
             if low_alt < 10000:
-                graphics.DrawText(sign.canvas, sign.font57, 88, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(low_alt))
+                graphics.DrawText(sign.canvas, sign.font57, 108, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(low_alt))
             else:
-                graphics.DrawText(sign.canvas, sign.font57, 88, 32, graphics.Color(160, 160, 200), str(round(low_alt/1000))+"k")
-
-            graphics.DrawText(sign.canvas, sign.font57, 109, 24, graphics.Color(20, 160, 60), "Vel:")
-            graphics.DrawText(sign.canvas, sign.font57, 109, 32, graphics.Color(20, 160, 60), "{0:.1f}".format(lowest["vel"]*KM_2_MI))
-
-            # low_vel = lowest["vel"]*KM_2_MI*3600
-            # if low_vel < 10000:
-            #     graphics.DrawText(sign.canvas, sign.font57, 109, 31, graphics.Color(20, 160, 60), "{0:.0f}".format(low_vel))
-            # else:
-            #     graphics.DrawText(sign.canvas, sign.font57, 109, 31, graphics.Color(20, 160, 60), str(round(low_vel/1000))+"k")
+                graphics.DrawText(sign.canvas, sign.font57, 108, 32, graphics.Color(160, 160, 200), str(round(low_alt/1000))+"k")
 
         sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas = sign.matrix.CreateFrameCanvas()   
