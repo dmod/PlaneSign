@@ -10,6 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends git build-essen
 
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
 
-RUN pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client
+RUN pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client country_converter
 
 ENTRYPOINT rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=4 --led-cols=64 --led-chain=2 -D4
