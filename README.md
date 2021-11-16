@@ -38,9 +38,6 @@ sudo apt install libatlas-base-dev
 sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client country_converter
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
-touch sign.conf
-chmod 777 sign.conf
-chmod -R 777 icons/
 sudo ./planesign.py
 ```
 

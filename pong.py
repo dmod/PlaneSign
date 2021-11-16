@@ -35,7 +35,6 @@ def pong(sign):
         setyval = shared_config.shared_pong_player1.value
         setyval2 = shared_config.shared_pong_player2.value
 
-
         if framecount % 20 == 0 and sign.wait_loop(0):
             return
 
