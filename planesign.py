@@ -247,7 +247,7 @@ def get_weather_data_worker(data_dict):
 def get_data_worker(data_dict):
     while True:
         try:
-            if shared_config.shared_flag.value is 0:
+            if shared_config.shared_flag.value == 0:
                 logging.info("off, skipping FR24 request...")
             else:
 
@@ -550,7 +550,7 @@ class PlaneSign:
                 logging.info(f"Top of loop. Current mode is: {mode}")
 
                 # Sign is off, clear canvas and wait
-                if shared_config.shared_flag.value is 0:
+                if shared_config.shared_flag.value == 0:
                     self.canvas.Clear()
                     self.matrix.SwapOnVSync(self.canvas)
                     self.wait_loop(0.5)
