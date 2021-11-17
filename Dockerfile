@@ -14,7 +14,7 @@
 # sudo docker stats
 
 
-FROM ubuntu:20.04
+FROM arm32v7/ubuntu:latest
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
