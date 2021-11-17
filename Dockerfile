@@ -1,6 +1,17 @@
 # THIS IS A BIG TIME WIP
+
+# Build:
 # sudo docker build -t planesign:latest .
-# sudo docker run --privileged planesign:latest
+
+# Lifecycle:
+# sudo docker run --privileged --rm --name planesign -p 8080:80/tcp planesign:latest
+# sudo docker kill planesign
+
+# Tips:
+# sudo docker ps --all
+# sudo docker logs planesign
+# sudo docker stats
+
 
 FROM ubuntu:20.04
 
