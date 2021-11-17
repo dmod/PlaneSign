@@ -8,6 +8,7 @@
 # sudo docker kill planesign
 
 # Tips:
+# sudo docker info
 # sudo docker ps --all
 # sudo docker logs planesign
 # sudo docker stats

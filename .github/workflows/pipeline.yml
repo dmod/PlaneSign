@@ -13,7 +13,7 @@ jobs:
     
     steps:
     
-      - name: Check Out Repo 
+      - name: Check Out Repo
         uses: actions/checkout@v2
 
       - name: Login to Docker Hub
@@ -23,13 +23,12 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
       - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
-        with:
-          context: ./
-          file: ./Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/planesign:latest
+          run: |
+            docker buildx build \
+            --platform linux/arm/v7 \
+            --tag ${{ secrets.DOCKER_HUB_USERNAME }}/planesign:latest \
+            --file ./Dockerfile \
+            --output type=image,push=true .
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
