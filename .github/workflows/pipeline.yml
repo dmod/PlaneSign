@@ -16,15 +16,15 @@ jobs:
       - name: Check Out Repo
         uses: actions/checkout@v2
 
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+
       - name: Login to Docker Hub
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v1
 
       - name: Inspect builder
         run: |
@@ -33,14 +33,15 @@ jobs:
           echo "Status:    ${{ steps.buildx.outputs.status }}"
           echo "Flags:     ${{ steps.buildx.outputs.flags }}"
           echo "Platforms: ${{ steps.buildx.outputs.platforms }}"
-
+          
       - name: Build and push
-        run: |
-            docker buildx build \
-            --platform linux/arm/v7 \
-            --tag ${{ secrets.DOCKER_HUB_USERNAME }}/planesign:latest \
-            --file ./Dockerfile \
-            --output type=image,push=true .
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm/v7
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/planesign:latest
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
