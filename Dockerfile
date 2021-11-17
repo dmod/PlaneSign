@@ -42,7 +42,8 @@ RUN pip3 install \
   yfinance \
   favicon \
   country_converter \
-  websocket-client
+  websocket-client \
+  country_converter
 
 WORKDIR /planesign
 
