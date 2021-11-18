@@ -1,5 +1,7 @@
 # PlaneSign
 
+[![CI to Docker Hub](https://github.com/dmod/PlaneSign/actions/workflows/pipeline.yml/badge.svg)](https://github.com/dmod/PlaneSign/actions/workflows/pipeline.yml)
+
 ![Image](.data/planesign.jpeg)
 
 ## Hardware To Buy
