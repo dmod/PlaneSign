@@ -110,6 +110,9 @@
     if (mode !== 15) {
       document.getElementById('lightning_div').hidden = true;
     }
+    if (mode !== 17) {
+      document.getElementById('satellite_div').hidden = true;
+    }
     if (mode !== 99) {
       document.getElementById('track-a-flight_div').hidden = true;
     }
@@ -128,6 +131,10 @@
 
   function set_lightning_mode(mode){
       call_endpoint("/lightning_mode/" + mode);
+  }
+
+  function set_satellite_mode(mode){
+      call_endpoint("/satellite_mode/" + mode);
   }
 
   function set_color_mode(color) {
@@ -310,7 +317,13 @@
       <legend>Informational</legend>
       <button id="6" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
       <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only 🕓</button>
-      <button id="17" class="mode_button" onclick="set_mode(this.id)">Satellites 🛰️</button>
+      <button id="17" class="mode_button" onclick="set_mode(this.id); document.getElementById('satellite_div').hidden = false">Satellites 🛰️</button>
+      <div id="satellite_div" hidden>
+        <input type="radio" id="Overhead" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="1" checked="checked">
+        <label for="Overhead">Overhead</label>
+        <input type="radio" id="ISS" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="2">
+        <label for="ISS">ISS</label>
+      </div>
       <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning ⛈️</button>
       <div id="lightning_div" hidden>
         <div id="lightning_button_div">

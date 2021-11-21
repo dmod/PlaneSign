@@ -189,6 +189,11 @@ def set_lightning_mode(mode):
     lightning.LightningManager.mode.value = int(mode)
     return ""
 
+@app.route("/satellite_mode/<mode>")
+def set_satellite_mode(mode):
+    shared_config.shared_satellite_mode.value = int(mode)
+    return ""
+
 
 def log_listener_process(queue):
     root = logging.getLogger()

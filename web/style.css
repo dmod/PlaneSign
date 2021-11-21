@@ -97,8 +97,8 @@ legend {
 }
 
 #lightning_slider_div {
-  width: 50%;
-  float: right;
+  width: 25%;
+  float: left;
   margin-bottom: 5%;
 }
 
@@ -128,6 +128,10 @@ legend {
   height: 50px;
   cursor: pointer;
   background: #ffee22;
+}
+
+#satellite_div, #cgol_div, #lightning_div {
+  text-align: center
 }
 
 .pong_slider {
