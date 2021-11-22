@@ -10,6 +10,15 @@ from rgbmatrix import graphics
 import country_converter as coco
 import numpy as np
 
+def fix_black(image):
+    #brighten black
+    rgb = np.array(image.convert('RGB'))
+    mask = (rgb[:,:,0] < 30) & (rgb[:,:,1] < 30) & (rgb[:,:,2] < 30)
+    rgb[mask] = np.true_divide(rgb[mask],2.0)+[15,15,15]
+    image = Image.fromarray(rgb)    
+
+    return image
+
 def shorten_name(name):
     name = name.replace("French Southern and Antarctic Lands","French S. Lands")
     name = name.replace("Northern", "N.").replace("North", "N.")
@@ -128,11 +137,8 @@ def get_flag(selected,satellite_data):
         image = Image.new("RGB", (13,9), (0, 0, 0))
 
     else:
-        #brighten black
-        rgb = np.array(image.convert('RGB'))
-        mask = (rgb[:,:,0] < 50) & (rgb[:,:,1] < 50) & (rgb[:,:,2] < 50)
-        rgb[mask] = np.true_divide(rgb[mask],2.0)+[25,25,25]
-        image = Image.fromarray(rgb)    
+
+        image = fix_black(image)  
 
         image = image.resize((13, 9), Image.BICUBIC)
 
@@ -207,7 +213,8 @@ def satellites(sign):
 
     stars.append(Star(sign, random.randint(41,46), random.randint(9,17), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(41,51), random.randint(18,24), random.randint(50,150), 0))
-    stars.append(Star(sign, random.randint(91,99), random.randint(9,24), random.randint(50,150), 0))
+    stars.append(Star(sign, random.randint(94,99), random.randint(9,24), random.randint(50,150), 0))
+    stars.append(Star(sign, random.randint(28,64), random.randint(0,3), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(28,64), random.randint(0,3), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(65,110), random.randint(0,3), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(65,110), random.randint(0,3), random.randint(50,150), 0))
@@ -462,11 +469,31 @@ def satellites(sign):
                 if formatted_address.find("Ocean") != -1:
                     image = Image.open('/home/pi/PlaneSign/icons/flags/OCEAN.png').convert('RGBA')
                 else:
-                    try:
-                        image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
-                    except Exception:
-                        pass
-            elif formatted_address.find("Ocean") != -1 or formatted_address.find("Sea") != -1 or formatted_address.find("River") != -1 or formatted_address.find("Bay") != -1 or formatted_address.find("Lake") != -1:
+
+                    if full_country_name == "United States":
+                        state = None
+                        comps = reverse_geocode['results'][0]['address_components']
+                        for c in comps:
+                            if "administrative_area_level_1" in c["types"]:
+                                state = c
+                                break
+                        if state != None:
+                            state_code = c["short_name"]
+
+                        if state:
+                            try:
+                                image = Image.open(f'/home/pi/PlaneSign/icons/flags/states/{state_code}.png').convert('RGBA')
+                            except Exception:
+                                image = Image.open(f'/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+                        else:
+                            image = Image.open(f'/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+                    else:
+                        try:
+                            image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
+                            image = fix_black(image)
+                        except Exception:
+                            pass
+            elif formatted_address.find("Ocean") != -1 or formatted_address.find("Gulf") != -1 or formatted_address.find("Sea") != -1 or formatted_address.find("River") != -1 or formatted_address.find("Bay") != -1 or formatted_address.find("Lake") != -1:
                     image = Image.open('/home/pi/PlaneSign/icons/flags/OCEAN.png').convert('RGBA')
                     
             if image:
@@ -518,21 +545,21 @@ def satellites(sign):
             seconds = s - (minutes * 60)
             flyby_time = "{:02}:{:02}:{:02}".format(int(hours),int(minutes),int(seconds))
             if overhead_flag:
-                graphics.DrawText(sign.canvas, sign.font57, 48, 16, graphics.Color(246, 242, 116), "Overhead")
+                graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), "Overhead")
             elif hours>=1000:
                 days = s//86400
-                graphics.DrawText(sign.canvas, sign.font57, 48, 16, graphics.Color(246, 242, 116), str(days)+" Days")
+                graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), str(days)+" Days")
             else:
-                graphics.DrawText(sign.canvas, sign.font57, 48, 16, graphics.Color(246, 242, 116), flyby_time)
+                graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), flyby_time)
             
-            graphics.DrawText(sign.canvas, sign.font57, 54, 24, graphics.Color(220, 180, 90), "El:")
-            graphics.DrawText(sign.canvas, sign.font57, 70, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
+            graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "El:")
+            graphics.DrawText(sign.canvas, sign.font57, 71, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
 
-            for x in range(81,83):
+            for x in range(82,84):
                 for y in range(18,20):
                     sign.canvas.SetPixel(x, y, 220, 180, 90)
 
-            mx = 87
+            mx = 88
             my = 21
             mag = flyby["mag"]
             if mag<-4:
@@ -581,14 +608,14 @@ def satellites(sign):
             startdir = flyby["startAzCompass"]
             enddir = flyby["endAzCompass"]
             if overhead_flag:
-                graphics.DrawText(sign.canvas, sign.font57, 45-(len(startdir)-1)*5, 32, graphics.Color(246, 242, 116), startdir)
+                graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(246, 242, 116), startdir)
                 graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(246, 242, 116), enddir)
             else:
-                graphics.DrawText(sign.canvas, sign.font57, 45-(len(startdir)-1)*5, 32, graphics.Color(142, 140, 68), startdir)
+                graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(142, 140, 68), startdir)
                 graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(142, 140, 68), enddir)
 
 
-            left_bar = 50
+            left_bar = 52
             right_bar = 83
             line_y = 28
 
@@ -623,7 +650,7 @@ def satellites(sign):
         sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas = sign.matrix.CreateFrameCanvas()   
 
-        breakout = sign.wait_loop(0.1)
+        breakout = sign.wait_loop(0.5)
 
         if breakout:
             return
