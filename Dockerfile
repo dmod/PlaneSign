@@ -3,8 +3,11 @@
 # Build:
 # sudo docker build -t planesign:latest .
 
+# Pull:
+# sudo docker pull dmod/planesign:latest
+
 # Lifecycle:
-# sudo docker run --privileged --rm --name planesign -p 8080:80/tcp planesign:latest
+# sudo docker run --privileged --rm --name planesign -p 8080:80/tcp dmod/planesign:latest
 # sudo docker kill planesign
 
 # Tips:
@@ -12,7 +15,6 @@
 # sudo docker ps --all
 # sudo docker logs planesign
 # sudo docker stats
-
 
 FROM arm32v7/ubuntu:latest
 
