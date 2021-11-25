@@ -634,14 +634,14 @@ def satellites(sign):
             if overhead_flag:
                 blip_loc = left_bar+round((right_bar-left_bar)*(now-flyby["startUTC"])/(flyby["endUTC"]-flyby["startUTC"]))
                 if blip_count == 0:
-                    sign.canvas.SetPixel(left_bar, line_y, 255, 255, 255)
+                    sign.canvas.SetPixel(left_bar, line_y, 255, 0, 0)
                 elif blip_count == 1:
                     for x in range(blip_loc - 1, blip_loc + 2):
                         for y in range(line_y - 1, line_y + 2):
                             sign.canvas.SetPixel(x, y, 255, 0, 0)
                     sign.canvas.SetPixel(blip_loc, line_y, 255, 255, 255)
                 elif blip_count == 2:
-                    sign.canvas.SetPixel(blip_loc, line_y, 255, 255, 255)
+                    sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
                 blip_count += 1
                 if blip_count == 3:
                     blip_count = 0
