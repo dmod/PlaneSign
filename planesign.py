@@ -410,7 +410,7 @@ class PlaneSign:
 
     def show_time(self):
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-            print_time = datetime.now().strftime('%-H:%M%p')
+            print_time = datetime.now().strftime('%-H:%M')
         else:
             print_time = datetime.now().strftime('%-I:%M%p')
 
