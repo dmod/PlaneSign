@@ -3,7 +3,13 @@ import numpy as np
 import pytz
 import random
 import favicon
+import logging
 import re
+import sys
+import os
+import traceback
+from multiprocessing import Process, Manager, Value, Array, Queue
+import shared_config
 import json
 import requests
 from requests import Session
@@ -26,6 +32,53 @@ def random_rgb_255_sum():
     _, r, g, b = next_color_rainbow_linear(random_angle())
     return r, g, b
 
+def log_listener_process(queue):
+    root = logging.getLogger()
+    
+    os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
+    log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight")
+    log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
+    root.addHandler(log_handler)
+
+    while True:
+        try:
+            record = queue.get()
+            if record is None:
+                break
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+
+def configure_logging():
+    logging_queue = Queue(-1)
+    listener = Process(target=log_listener_process, args=(logging_queue, ), daemon=True)
+    listener.start()
+
+    queue_handler = logging.handlers.QueueHandler(logging_queue)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
+    console_handler.setFormatter(console_formatter)
+
+    root = logging.getLogger()
+    root.addHandler(queue_handler)
+    root.addHandler(console_handler)
+    root.setLevel(logging.DEBUG)
+    logging.getLogger('PIL').setLevel(logging.WARNING)
+
+def read_static_airport_data():
+    with open("airports.csv") as f:
+        lines = f.readlines()
+        for line in lines:
+            parts = line.strip().split(',')
+            code = parts[0]
+            name = parts[1]
+            lat = float(parts[2])
+            lon = float(parts[3])
+            shared_config.code_to_airport[code] = (name, lat, lon)
+
+    logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
 
 def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):
     rmin %= 256

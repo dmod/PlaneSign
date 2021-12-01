@@ -11,6 +11,8 @@ import traceback
 import requests
 import datetime
 
+import shared_config
+
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -20,7 +22,7 @@ from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 
-ALL_ZE_HANDLERS = {}
+ALL_MODE_HANDLERS = {}
 
 def planesign_mode_handler(mode_int):
 
@@ -28,8 +30,8 @@ def planesign_mode_handler(mode_int):
     Decorator
     """
     def handler(func):
-        print(f"Adding handler from module '{func.__module__}' with name '{func.__name__}' to list of handlers. Setting it to: {mode_int}")
-        ALL_ZE_HANDLERS[mode_int] = func
+        print(f"Mode {mode_int} will be set to: '{func.__name__}' in module '{func.__module__}'")
+        ALL_MODE_HANDLERS[mode_int] = func
 
     return handler
 
@@ -212,41 +214,6 @@ def set_satellite_mode(mode):
     return ""
 
 
-def log_listener_process(queue):
-    root = logging.getLogger()
-    log_filename = "logs/planesign.log"
-    os.makedirs(os.path.dirname(log_filename), exist_ok=True)
-    log_handler = logging.handlers.TimedRotatingFileHandler(log_filename, when="midnight")
-    log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
-    root.addHandler(log_handler)
-
-    while True:
-        try:
-            record = queue.get()
-            if record is None:
-                break
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
-        except Exception:
-            traceback.print_exc(file=sys.stderr)
-
-
-def configure_logging():
-    logging_queue = Queue(-1)
-    listener = Process(target=log_listener_process, args=(logging_queue, ), daemon=True)
-    listener.start()
-
-    queue_handler = logging.handlers.QueueHandler(logging_queue)
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
-    console_handler.setFormatter(console_formatter)
-
-    root = logging.getLogger()
-    root.addHandler(queue_handler)
-    root.addHandler(console_handler)
-    root.setLevel(logging.DEBUG)
-    logging.getLogger('PIL').setLevel(logging.WARNING)
 
 
 def api_server():
@@ -401,8 +368,6 @@ class PlaneSign:
         read_config()
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
-        shared_config.read_static_airport_data()
-
         Process(target=get_data_worker, args=(shared_config.data_dict,), daemon=True).start()
         Process(target=get_weather_data_worker, args=(shared_config.data_dict,), daemon=True).start()
         Process(target=api_server, daemon=True).start()
@@ -478,8 +443,8 @@ class PlaneSign:
                     self.wait_loop(3)
                     continue
 
-                if mode in ALL_ZE_HANDLERS:
-                    ALL_ZE_HANDLERS[mode](self)
+                if mode in ALL_MODE_HANDLERS:
+                    ALL_MODE_HANDLERS[mode](self)
                 else:
                     logging.error(f"Mode currently set to {mode} but no handler exists...")
 
@@ -502,6 +467,6 @@ class PlaneSign:
 # Main function
 if __name__ == "__main__":
     configure_logging()
-    shared_config.read_static_airport_data()
+    read_static_airport_data()
 
     PlaneSign().sign_loop()

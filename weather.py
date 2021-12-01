@@ -26,17 +26,17 @@ def show_weather(sign):
         daily = shared_config.data_dict['weather']['daily']
 
         day = daily[start_index_day]
-        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image = Image.open(f"{shared_config.icons_dir}/{day['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.BICUBIC)
         sign.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 15, 5)
 
         day = daily[start_index_day+1]
-        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image = Image.open(f"{shared_config.icons_dir}/{day['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.BICUBIC)
         sign.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 15, 5)
 
         day = daily[start_index_day+2]
-        image = Image.open(f"/home/pi/PlaneSign/icons/{day['weather'][0]['icon']}.png")
+        image = Image.open(f"{shared_config.icons_dir}/{day['weather'][0]['icon']}.png")
         image.thumbnail((22, 22), Image.BICUBIC)
         sign.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 15, 5)
 
