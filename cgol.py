@@ -2,8 +2,9 @@ import time
 import random
 import shared_config
 from utilities import *
+from __main__ import planesign_mode_handler
 
-
+@planesign_mode_handler(10)
 def cgol(sign):
     sign.canvas.Clear()
 

@@ -9,6 +9,8 @@ from utilities import *
 from rgbmatrix import graphics
 import country_converter as coco
 import numpy as np
+from __main__ import planesign_mode_handler
+
 
 def fix_black(image):
     #brighten black
@@ -144,6 +146,7 @@ def get_flag(selected,satellite_data):
 
     return image
 
+@planesign_mode_handler(17)
 def satellites(sign):
     sign.canvas.Clear()
 

@@ -1,8 +1,9 @@
 import time
 import random
 from utilities import *
+from __main__ import planesign_mode_handler
 
-
+@planesign_mode_handler(12)
 def cca(sign):
     sign.canvas.Clear()
 

@@ -14,6 +14,46 @@ from requests import Session
 from datetime import datetime
 from scipy.interpolate import interp1d
 import shared_config
+from __main__ import planesign_mode_handler
+
+@planesign_mode_handler(13)
+def finance(self):
+    self.canvas.Clear()
+    shared_config.data_dict["ticker"] = None
+    s = None
+
+    while True:
+
+        ddt = shared_config.data_dict["ticker"]
+
+        if ddt != None and ddt != "":
+
+            raw_ticker = ddt.upper()
+
+            if s == None:
+                s = Stock(self, raw_ticker)
+            else:
+                s.setticker(raw_ticker)
+
+            s.drawfullpage()
+
+        else:
+
+            graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
+            graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
+
+            image = Image.open("/home/pi/PlaneSign/icons/finance/money.png")
+            image = image.resize((20, 20), Image.BICUBIC)
+            self.canvas.SetImage(image.convert('RGB'), 10, 14)
+
+            image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
+            self.canvas.SetImage(image.convert('RGB'), 75, -5)
+
+        breakout = self.wait_loop(0.1)
+        if breakout:
+            return
+        self.matrix.SwapOnVSync(self.canvas)
+        self.canvas = self.matrix.CreateFrameCanvas()
 
 def colordista(c1,c2):
     r1=c1[0]/255

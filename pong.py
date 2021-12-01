@@ -1,7 +1,9 @@
 import shared_config
 import random
 from rgbmatrix import graphics
+from __main__ import planesign_mode_handler
 
+@planesign_mode_handler(11)
 def pong(sign):
 
     xball = 64

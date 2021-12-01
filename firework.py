@@ -7,6 +7,9 @@ import math
 import time
 from utilities import *
 import numpy as np
+import shared_config
+from __main__ import planesign_mode_handler
+
 
 TRAIL_PARTICLE = 0
 RING_PARTICLE = 1
@@ -19,6 +22,31 @@ RING_FW = 0
 WILLOW_FW = 1
 TRACER_FW = 2
 CRACKLER_FW = 3
+
+@planesign_mode_handler(16)
+def fireworks(sign):
+    sign.canvas.Clear()
+
+    fireworks = []
+    while shared_config.shared_mode.value == 16:
+        if len(fireworks) == 0 or (len(fireworks) < 10 and random.random() < 0.2):
+            if random.random() < 0.6:
+                ftype = RING_FW
+            elif random.random() < 0.75:
+                ftype = WILLOW_FW
+            else:
+                ftype = CRACKLER_FW
+            fireworks.append(Firework(sign, ftype))
+        for fw in fireworks:
+            if fw.exploded == 2:
+                fireworks.remove(fw)
+        sign.canvas.Clear()
+        for fw in fireworks:
+            fw.draw()
+
+        sign.matrix.SwapOnVSync(sign.canvas)
+
+        sign.wait_loop(0.01)
 
 class Particle:
     def __init__(self,fwlist,ptype,x,y,color,lifetime,speed=0,angle=0):

@@ -1,10 +1,12 @@
 import datetime
 from PIL import Image
 from utilities import *
+import logging
 import shared_config
 from rgbmatrix import graphics
+from __main__ import planesign_mode_handler
 
-
+@planesign_mode_handler(6)
 def show_weather(sign):
 
     while shared_config.shared_mode.value == 6:

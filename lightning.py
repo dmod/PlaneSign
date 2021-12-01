@@ -21,10 +21,32 @@ import PIL.Image as Image
 import _thread as thread
 import os.path
 import shared_config
+from __main__ import planesign_mode_handler
+
 
 USAlong=-96
 USAlat=38
 USAscale=55
+
+@planesign_mode_handler(15)
+def lightning(sign):
+    sign.canvas.Clear()
+
+    LM = LightningManager(sign)
+    LM.connect()
+
+    last_draw = time.perf_counter()
+
+    sign.canvas.Clear()
+    while LM.connected.value:
+        if time.perf_counter()-last_draw > 2 or (LM.last_drawn_zoomind.value != LM.zoomind.value) or (LM.last_drawn_mode.value != LM.mode.value):
+            LM.draw()
+            last_draw = time.perf_counter()
+
+        breakout = sign.wait_loop(0.1)
+        if breakout:
+            LM.close()
+            return
 
 def mercator_proj(lat, lon):
     x = np.radians(lon)

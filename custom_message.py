@@ -5,6 +5,7 @@ from rgbmatrix import graphics
 from PIL import Image, ImageDraw
 import numpy as np
 from utilities import *
+from __main__ import planesign_mode_handler
 
 RGB = namedtuple('RGB', 'r g b')
 
@@ -15,7 +16,7 @@ COLORS[2] = [RGB(12, 169, 12), RGB(206, 13, 13)]  # CHRISTMAS
 COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_OF_JULY
 COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
-
+@planesign_mode_handler(8)
 def show_custom_message(sign):
     starting_color_index = 0
 

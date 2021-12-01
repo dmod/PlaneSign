@@ -5,35 +5,51 @@ import time
 import logging
 import logging.handlers
 import sys
+import subprocess
+import os
 import traceback
 import requests
+import datetime
+
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from datetime import datetime
+
+from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
+from multiprocessing import Process, Manager, Value, Array, Queue
+from flask import Flask, request
+from PIL import Image, ImageDraw
+from flask_cors import CORS
+
+ALL_ZE_HANDLERS = {}
+
+def planesign_mode_handler(mode_int):
+
+    """
+    Decorator
+    """
+    def handler(func):
+        print(f"Adding handler from module '{func.__module__}' with name '{func.__name__}' to list of handlers. Setting it to: {mode_int}")
+        ALL_ZE_HANDLERS[mode_int] = func
+
+    return handler
+
+# All defined mode handlers
 from utilities import *
 from fish import *
 from finance import *
+import weather
 import firework
 import lightning
 import cgol
 import cca
 import custom_message
 import pong
-import weather
 import planes
 import shared_config
 import satellite
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from multiprocessing import Process, Manager, Value, Array, Queue
-import subprocess
-from flask import Flask, request
-from PIL import Image, ImageDraw
-from flask_cors import CORS
-import os
 
 app = Flask(__name__)
 CORS(app)
-
 
 @app.route("/get_config")
 def get_config():
@@ -143,6 +159,7 @@ def get_mode():
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_config.shared_current_brightness.value = int(brightness)
+    shared_config.shared_forced_sign_update.value = 1
     return ""
 
 
@@ -402,6 +419,7 @@ class PlaneSign:
             self.matrix.brightness = shared_config.shared_current_brightness.value
 
             if shared_config.shared_forced_sign_update.value == 1:
+                logging.debug("Forcing breakout")
                 stay_in_loop = False
                 forced_breakout = True
 
@@ -426,116 +444,8 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
-    def aquarium(self):
-        self.canvas.Clear()
 
-        tank = Tank(self)
-
-        clown = Fish(tank, "Clownfish", 2, 0.01)
-        hippo = Fish(tank, "Hippotang", 2, 0.01)
-        queentrigger = Fish(tank, "Queentrigger", 1, 0.005)
-        grouper = Fish(tank, "Coralgrouper", 1, 0.005)
-        anthias = Fish(tank, "Anthias", 2, 0.02)
-        puffer = Fish(tank, "Pufferfish", 1.5, 0.005)
-        regal = Fish(tank, "Regalangel", 1, 0.005)
-        bicolor = Fish(tank, "Bicolorpseudochromis", 3, 0.01)
-        flame = Fish(tank, "Flameangel", 1.5, 0.01)
-        cardinal = Fish(tank, "Cardinal", 1.5, 0.01)
-        copper = Fish(tank, "Copperbanded", 1.5, 0.01)
-        wrasse = Fish(tank, "Wrasse", 3, 0.01)
-
-        while True:
-            tank.swim()
-            tank.draw()
-            breakout = self.wait_loop(0.1)
-            if breakout:
-                return
-
-    def finance(self):
-        self.canvas.Clear()
-        shared_config.data_dict["ticker"] = None
-        s = None
-
-        while True:
-
-            ddt = shared_config.data_dict["ticker"]
-
-            if ddt != None and ddt != "":
-
-                raw_ticker = ddt.upper()
-
-                if s == None:
-                    s = Stock(self, raw_ticker)
-                else:
-                    s.setticker(raw_ticker)
-
-                s.drawfullpage()
-
-            else:
-
-                graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
-                graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
-
-                image = Image.open("/home/pi/PlaneSign/icons/finance/money.png")
-                image = image.resize((20, 20), Image.BICUBIC)
-                self.canvas.SetImage(image.convert('RGB'), 10, 14)
-
-                image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
-                self.canvas.SetImage(image.convert('RGB'), 75, -5)
-
-            breakout = self.wait_loop(0.1)
-            if breakout:
-                return
-            self.matrix.SwapOnVSync(self.canvas)
-            self.canvas = self.matrix.CreateFrameCanvas()
-
-    def lightning(self):
-        self.canvas.Clear()
-
-        LM = lightning.LightningManager(self)
-        LM.connect()
-
-        last_draw = time.perf_counter()
-
-        self.canvas.Clear()
-        while LM.connected.value:
-            if time.perf_counter()-last_draw > 2 or (LM.last_drawn_zoomind.value != lightning.LightningManager.zoomind.value) or (LM.last_drawn_mode.value != lightning.LightningManager.mode.value):
-                LM.draw()
-                last_draw = time.perf_counter()
-
-            breakout = self.wait_loop(0.1)
-            if breakout:
-                LM.close()
-                return
-
-    def fireworks(self):
-        self.canvas.Clear()
-        height = 32
-        width = 128
-
-        fireworks = []
-        while True:
-            if len(fireworks) == 0 or (len(fireworks) < 10 and random.random() < 0.2):
-                if random.random() < 0.6:
-                    ftype = firework.RING_FW
-                elif random.random() < 0.75:
-                    ftype = firework.WILLOW_FW
-                else:
-                    ftype = firework.CRACKLER_FW
-                fireworks.append(firework.Firework(self, ftype))
-            for fw in fireworks:
-                if fw.exploded == 2:
-                    fireworks.remove(fw)
-            self.canvas.Clear()
-            for fw in fireworks:
-                fw.draw()
-
-            self.matrix.SwapOnVSync(self.canvas)
-
-            breakout = self.wait_loop(0.01)
-            if breakout:
-                return
-
+    @planesign_mode_handler(9)
     def welcome(self):
 
         self.canvas.Clear()
@@ -568,62 +478,15 @@ class PlaneSign:
                     self.wait_loop(3)
                     continue
 
-                # This should reallllllly be enum'ed
-                # 1 = default
-                # 2 = always alert closest
-                # 3 = always alert highest
-                # 4 = always alert fastest
-                # 5 = always alert slowest
-                # 6 = weather
-                # 7 = clock
-                # 8 = custom message
-                # 9 = welcome
-                # 10 = CGOL
-                # 11 = PONG
-
-                if mode == 99:
-                    planes.track_a_flight(self)
-
-                if mode == 6:
-                    weather.show_weather(self)
+                if mode in ALL_ZE_HANDLERS:
+                    ALL_ZE_HANDLERS[mode](self)
+                else:
+                    logging.error(f"Mode currently set to {mode} but no handler exists...")
 
                 if mode == 7:
                     self.show_time()
                     self.wait_loop(0.5)
                     continue
-
-                if mode == 8:
-                    custom_message.show_custom_message(self)
-
-                if mode == 9:
-                    self.welcome()
-
-                if mode == 10:
-                    cgol.cgol(self)
-
-                if mode == 11:
-                    pong.pong(self)
-
-                if mode == 12:
-                    cca.cca(self)
-
-                if mode == 13:
-                    self.finance()
-
-                if mode == 14:
-                    self.aquarium()
-
-                if mode == 15:
-                    self.lightning()
-
-                if mode == 16:
-                    self.fireworks()
-
-                if mode == 17:
-                    satellite.satellites(self)
-
-                if mode >= 1 and mode <= 5:
-                    planes.show_planes(self)
 
                 if forced_breakout:
                     continue
