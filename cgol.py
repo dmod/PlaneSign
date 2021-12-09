@@ -1,3 +1,8 @@
+###
+# Conway's Game of Life
+# https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
+###
+
 import time
 import random
 import shared_config

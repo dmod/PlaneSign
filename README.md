@@ -88,3 +88,5 @@ server {
 ## Credits
 We thank the 
 Weather Data OpenWeather (TM)
+ucsusa.org
+n2yo.com

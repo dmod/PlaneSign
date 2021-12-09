@@ -86,14 +86,14 @@ def get_flag(selected,satellite_data):
             if sat[0]["country"].find("/") != -1:
 
                 countries = sat[0]["country"].split("/")
-                llmask = Image.open("/home/pi/PlaneSign/icons/flags/MASK_LL.png").convert('RGBA')
-                cmask = Image.open("/home/pi/PlaneSign/icons/flags/MASK_C.png").convert('RGBA')
+                llmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_LL.png").convert('RGBA')
+                cmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_C.png").convert('RGBA')
 
                 if len(countries)==2:
                     
                     try:
-                        image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        foreground = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        foreground = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
                         image.paste(foreground, (0, 0), llmask)
 
                     except Exception:
@@ -102,9 +102,9 @@ def get_flag(selected,satellite_data):
                 elif len(countries)==3:
 
                     try:
-                        image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[2])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        foreground = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        center =  Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[2])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        foreground = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        center =  Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
 
                         image.paste(foreground, (0, 0), llmask)
                         image.paste(center, (0, 0), cmask)
@@ -113,26 +113,26 @@ def get_flag(selected,satellite_data):
                         pass
 
                 elif len(countries)>3:
-                    image = Image.open('/home/pi/PlaneSign/icons/flags/UN.png').convert('RGBA')
+                    image = Image.open('{shared_config.icons_dir}/flags/UN.png').convert('RGBA')
 
             else:
                 try:
-                    image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(sat[0]["country"])}.png').convert('RGBA')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(sat[0]["country"])}.png').convert('RGBA')
                 except Exception:
                     pass
 
         #can't find in static file lookup, apply known cases
         elif sat_name.find("USA") == 0 or sat_name.find("OPS") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("METEOSAT") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
 
         elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/USR.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/USR.png').convert('RGBA')
 
         elif sat_name.find("DIADEME") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/FRA.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/FRA.png').convert('RGBA')
 
         elif sat_name.find("ANIK") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/CAN.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/CAN.png').convert('RGBA')
         
     if image == None:
 
@@ -152,7 +152,7 @@ def satellites(sign):
 
     satellite_data = []
     try:
-        with open("/home/pi/PlaneSign/satdat.txt",encoding='windows-1252') as f:
+        with open("satdat.txt",encoding='windows-1252') as f:
             pass
     except:
         satdaturl = "https://www.ucsusa.org/media/11490"
@@ -160,11 +160,11 @@ def satellites(sign):
         if file.status_code == requests.codes.ok:
             sat_lines = file.text.splitlines()[1:]
             print(f"Found static data for {len(sat_lines)} satellites")
-            with open("/home/pi/PlaneSign/satdat.txt", 'wb') as f:
+            with open("satdat.txt", 'wb') as f:
                 f.write(file.content)
 
     try:
-        with open("/home/pi/PlaneSign/satdat.txt",encoding='windows-1252') as f:
+        with open("satdat.txt",encoding='windows-1252') as f:
             lines = f.readlines()[1:]
             nline = 0
             for line in lines:
@@ -201,7 +201,7 @@ def satellites(sign):
 
     blip_count = 0
     
-    iss_image = Image.open('/home/pi/PlaneSign/icons/ISS.png').convert("RGB")
+    iss_image = Image.open(f'{shared_config.icons_dir}/ISS.png').convert("RGB")
 
     stars = []
     stars.append(Star(sign, 100, 14))
@@ -470,7 +470,7 @@ def satellites(sign):
             image = None
             if country:
                 if formatted_address.find("Ocean") != -1:
-                    image = Image.open('/home/pi/PlaneSign/icons/flags/OCEAN.png').convert('RGBA')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
                 else:
 
                     if full_country_name == "United States":
@@ -485,19 +485,19 @@ def satellites(sign):
 
                         if state:
                             try:
-                                image = Image.open(f'/home/pi/PlaneSign/icons/flags/states/{state_code}.png').convert('RGBA')
+                                image = Image.open(f'{shared_config.icons_dir}/flags/states/{state_code}.png').convert('RGBA')
                             except Exception:
-                                image = Image.open(f'/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+                                image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
                         else:
-                            image = Image.open(f'/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+                            image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
                     else:
                         try:
-                            image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
+                            image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
                             image = fix_black(image)
                         except Exception:
                             pass
             elif formatted_address.find("Ocean") != -1 or formatted_address.find("Gulf") != -1 or formatted_address.find("Sea") != -1 or formatted_address.find("River") != -1 or formatted_address.find("Bay") != -1 or formatted_address.find("Lake") != -1:
-                    image = Image.open('/home/pi/PlaneSign/icons/flags/OCEAN.png').convert('RGBA')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
                     
             if image:
                 sign.canvas.SetImage(image.resize((15, 10), Image.BICUBIC).convert('RGB'), 113, 0)

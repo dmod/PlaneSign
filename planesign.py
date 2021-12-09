@@ -343,18 +343,16 @@ class PlaneSign:
         self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
 
-        font_dir = "../rpi-rgb-led-matrix/fonts"
-
         self.font57 = graphics.Font()
         self.font46 = graphics.Font()
         self.fontbig = graphics.Font()
         self.fontreallybig = graphics.Font()
         self.fontplanesign = graphics.Font()
-        self.font57.LoadFont(os.path.join(font_dir, "5x7.bdf"))
-        self.font46.LoadFont(os.path.join(font_dir, "4x6.bdf"))
-        self.fontbig.LoadFont(os.path.join(font_dir, "6x13.bdf"))
-        self.fontreallybig.LoadFont(os.path.join(font_dir, "9x18B.bdf"))
-        self.fontplanesign.LoadFont(os.path.join(font_dir, "helvR12.bdf"))
+        self.font57.LoadFont(os.path.join(shared_config.font_dir, "5x7.bdf"))
+        self.font46.LoadFont(os.path.join(shared_config.font_dir, "4x6.bdf"))
+        self.fontbig.LoadFont(os.path.join(shared_config.font_dir, "6x13.bdf"))
+        self.fontreallybig.LoadFont(os.path.join(shared_config.font_dir, "9x18B.bdf"))
+        self.fontplanesign.LoadFont(os.path.join(shared_config.font_dir, "helvR12.bdf"))
 
         self.canvas.brightness = shared_config.shared_current_brightness.value
 

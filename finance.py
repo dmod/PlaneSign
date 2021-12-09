@@ -6,6 +6,7 @@ import re
 from PIL import Image, ImageDraw
 import numpy as np
 import favicon
+import os
 import re
 import json
 import requests
@@ -42,11 +43,11 @@ def finance(self):
             graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
             graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
 
-            image = Image.open("/home/pi/PlaneSign/icons/finance/money.png")
+            image = Image.open(os.path.join(shared_config.icons_dir, "finance/money.png"))
             image = image.resize((20, 20), Image.BICUBIC)
             self.canvas.SetImage(image.convert('RGB'), 10, 14)
 
-            image = Image.open("/home/pi/PlaneSign/icons/finance/increase.png")
+            image = Image.open(os.path.join(shared_config.icons_dir, "finance/increase.png"))
             self.canvas.SetImage(image.convert('RGB'), 75, -5)
 
         breakout = self.wait_loop(0.1)
@@ -222,16 +223,16 @@ def improcess(image):
 def getFavicon(floc,website):
     
     headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-    "Accept": "image/webp,*/*",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Keep-Alive": "timeout=5, max=1",
-    'Sec-Fetch-Dest': 'image',
-    'Sec-Fetch-Mode': 'no-cors',
-    'Sec-Fetch-Site': 'same-origin',
-    "Sec-Fetch-User": "?1"
+        "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+        "Accept": "image/webp,*/*",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Keep-Alive": "timeout=5, max=1",
+        'Sec-Fetch-Dest': 'image',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'same-origin',
+        "Sec-Fetch-User": "?1"
     }
 
     icons = favicon.get(website)
@@ -409,7 +410,7 @@ class Stock:
         self.chart = None
         self.x = None
 
-        self.floc = '/home/pi/PlaneSign/icons/favicons/'
+        self.floc = os.path.join(shared_config.icons_dir, "favicons")
 
         self.last_time = None
 
@@ -478,7 +479,7 @@ class Stock:
                 if logo == None:
                     logo = Image.new("RGB", (20,20), (0, 0, 0))
                 else:
-                    logo.save(self.floc+self.cleaner_ticker+".png")
+                    logo.save(os.path.join(self.floc, self.cleaner_ticker + ".png"))
 
             self.logo = logo
 
@@ -562,9 +563,9 @@ class Stock:
 
         if self.prev_price != None and self.prev_price != self.curr_price:
             if self.curr_price>self.prev_price:
-                image = Image.open("/home/pi/PlaneSign/icons/finance/up.png")
+                image = Image.open(os.path.join(shared_config.icons_dir, "finance/up.png"))
             else:
-                image = Image.open("/home/pi/PlaneSign/icons/finance/down.png")
+                image = Image.open(os.path.join(shared_config.icons_dir, "finance/down.png"))
             self.sign.canvas.SetImage(image.convert('RGB'), 32+6*len(currprice_str), 2)  
                 
     def drawchart(self):

@@ -1,3 +1,8 @@
+###
+# Cyclic cellular automaton
+# https://en.wikipedia.org/wiki/Cyclic_cellular_automaton
+###
+
 import time
 import random
 from utilities import *

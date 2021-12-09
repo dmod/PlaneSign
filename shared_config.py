@@ -15,6 +15,7 @@ shared_satellite_mode = Value('i', 1)
 
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"
+font_dir = "../rpi-rgb-led-matrix/fonts"
 
 # These get set in the PlaneSign constructor
 data_dict = None

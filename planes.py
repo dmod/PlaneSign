@@ -123,6 +123,7 @@ def show_a_plane(sign, plane_to_show):
         prev_stats["speed"] = 0
 
         sign.show_time()
+        sign.wait_loop(0.5)
 
 
 @planesign_mode_handler(99)

@@ -52,7 +52,7 @@ def aquarium(sign):
 
 class Tank:
     def __init__(self, sign):
-        self.background = Image.open(f"/home/pi/PlaneSign/icons/aquarium/Background.png")
+        self.background = Image.open(f"{shared_config.icons_dir}/aquarium/Background.png")
         self.fulltank = None
         self.sign = sign
         self.denizens=[]
@@ -89,10 +89,10 @@ class Fish:
         self.sprite=None
         self.dir=dir #0 front, 1 left, 2 back, 3 right
 
-        self.sprite_right= Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_right.png").convert('RGBA').transpose(PIL.Image.FLIP_LEFT_RIGHT)
-        self.sprite_left= Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_right.png").convert('RGBA')
-        self.sprite_front=Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_front.png").convert('RGBA')
-        self.sprite_back=Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_back.png").convert('RGBA')
+        self.sprite_right= Image.open(f"{shared_config.icons_dir}/aquarium/{name}_right.png").convert('RGBA').transpose(PIL.Image.FLIP_LEFT_RIGHT)
+        self.sprite_left= Image.open(f"{shared_config.icons_dir}/aquarium/{name}_right.png").convert('RGBA')
+        self.sprite_front=Image.open(f"{shared_config.icons_dir}/aquarium/{name}_front.png").convert('RGBA')
+        self.sprite_back=Image.open(f"{shared_config.icons_dir}/aquarium/{name}_back.png").convert('RGBA')
 
         self.width, self.height = self.sprite_right.size
 

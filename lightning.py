@@ -94,7 +94,7 @@ class LightningManager:
         self.ws_server = None
         self.ws_key = None
         self.header = None
-        self.floc = '/home/pi/PlaneSign/icons/lightning/'
+        self.floc = f'{shared_config.icons_dir}/lightning/'
         self.connected = Value('i', 0)
         self.strikes = Manager().list()
         self.sign = sign
@@ -117,7 +117,7 @@ class LightningManager:
         self.genBackgrounds()
 
     def draw_loading(self):
-        image = Image.open("/home/pi/PlaneSign/icons/11d.png")
+        image = Image.open(f"{shared_config.icons_dir}/11d.png")
         image = image.resize((35, 35), Image.BICUBIC)
         self.sign.canvas.SetImage(image.convert('RGB'), 90, -1)
 
