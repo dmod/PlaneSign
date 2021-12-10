@@ -6,5 +6,5 @@ numpy==1.21.4
 pytz==2021.3
 requests==2.21.0
 scipy==1.7.3
-websocket-client==1.2.1
+websocket-client==1.2.3
 yfinance==0.1.67
