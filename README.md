@@ -30,16 +30,15 @@
 
 
 ```sh
-sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pillow
+sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pillow libatlas-base-dev
 git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
 cd rpi-rgb-led-matrix
 make build-python PYTHON=$(which python3)
 sudo make install-python PYTHON=$(which python3)
 cd
-sudo apt install libatlas-base-dev
-sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client country_converter
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
+sudo -H pip3 install -r requirements.txt
 sudo ./planesign.py
 ```
 

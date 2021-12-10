@@ -36,20 +36,10 @@ RUN apt-get update && apt-get install -y \
 
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
 
-RUN pip3 install \
-  pytz \
-  flask \
-  flask_cors \
-  numpy \
-  scipy \
-  yfinance \
-  favicon \
-  country_converter \
-  websocket-client \
-  country_converter
-
 WORKDIR /planesign
 
 COPY . .
+
+RUN pip3 install -r requirements.txt
 
 ENTRYPOINT ./planesign.py
