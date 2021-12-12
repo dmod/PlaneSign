@@ -5,10 +5,10 @@
 
 import time
 import random
-from utilities import *
-from __main__ import planesign_mode_handler
+import utilities
+import __main__
 
-@planesign_mode_handler(12)
+@__main__.planesign_mode_handler(12)
 def cca(sign):
     sign.canvas.Clear()
 
@@ -30,25 +30,25 @@ def cca(sign):
         for col in range(0, 128):
             for row in range(0, 32):
 
-                cs = check_matrix(col, row, current_state)
+                cs = utilities.check_matrix(col, row, current_state)
                 ns = (cs+1) % numstates
                 curr = 0
 
-                if check_matrix(col, row-1, current_state) == ns:
+                if utilities.check_matrix(col, row-1, current_state) == ns:
                     curr += 1
-                if check_matrix(col-1, row, current_state) == ns:
+                if utilities.check_matrix(col-1, row, current_state) == ns:
                     curr += 1
-                if check_matrix(col+1, row, current_state) == ns:
+                if utilities.check_matrix(col+1, row, current_state) == ns:
                     curr += 1
-                if check_matrix(col, row+1, current_state) == ns:
+                if utilities.check_matrix(col, row+1, current_state) == ns:
                     curr += 1
 
                 if curr >= threshold:
-                    set_matrix(col, row, next_state, ns)
-                    r, g, b = hsv_2_rgb(ns/numstates, 1, 1)
+                    utilities.set_matrix(col, row, next_state, ns)
+                    r, g, b = utilities.hsv_2_rgb(ns/numstates, 1, 1)
                 else:
-                    set_matrix(col, row, next_state, cs)
-                    r, g, b = hsv_2_rgb(cs/numstates, 1, 1)
+                    utilities.set_matrix(col, row, next_state, cs)
+                    r, g, b = utilities.hsv_2_rgb(cs/numstates, 1, 1)
 
                 sign.canvas.SetPixel(col, row, r, g, b)
 

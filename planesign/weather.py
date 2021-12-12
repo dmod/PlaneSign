@@ -1,11 +1,11 @@
-import datetime
+from datetime import datetime
 from PIL import Image
-from utilities import *
+import utilities
 import shared_config
+import __main__
 from rgbmatrix import graphics
-from __main__ import planesign_mode_handler
 
-@planesign_mode_handler(6)
+@__main__.planesign_mode_handler(6)
 def show_weather(sign):
 
     while shared_config.shared_mode.value == 6:
@@ -53,29 +53,29 @@ def show_weather(sign):
         sunrise_sunset_start_x = num_horizontal_pixels + 20
 
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise']).strftime('%-H:%M'))
-            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset']).strftime('%-H:%M'))
+            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), utilities.convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise']).strftime('%-H:%M'))
+            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), utilities.convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset']).strftime('%-H:%M'))
         else:
-            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
-            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
+            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), utilities.convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise']).strftime('%-I:%M'))
+            graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), utilities.convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset']).strftime('%-I:%M'))
 
         # Day 0
         day = daily[start_index_day]
-        graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
         graphics.DrawText(sign.canvas, sign.font46, day_0_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         # Day 1
         day = daily[start_index_day + 1]
-        graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
         graphics.DrawText(sign.canvas, sign.font46, day_1_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])
 
         # Day 2
         day = daily[start_index_day + 2]
-        graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), convert_unix_to_local_time(day["dt"]).strftime('%a'))
+        graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day["dt"]).strftime('%a'))
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
         graphics.DrawText(sign.canvas, sign.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day["weather"][0]["main"])

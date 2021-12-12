@@ -4,8 +4,9 @@ import shared_config
 from rgbmatrix import graphics
 from PIL import Image, ImageDraw
 import numpy as np
-from utilities import *
-from __main__ import planesign_mode_handler
+import utilities
+import os
+import __main__
 
 RGB = namedtuple('RGB', 'r g b')
 
@@ -17,7 +18,7 @@ COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_O
 COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
 
-@planesign_mode_handler(8)
+@__main__.planesign_mode_handler(8)
 def show_custom_message(sign):
     starting_color_index = 0
 
@@ -81,7 +82,7 @@ def show_custom_message(sign):
                 width = 9*len(line_1)-2
 
             if x == None or y == None or dx == None or dy == None:
-                (r, g, b) = hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
+                (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
                 if logomode:
                     x = random.randint(1, 126-dvd_width)
                     y = random.randint(1, 30-dvd_height)
@@ -118,7 +119,7 @@ def show_custom_message(sign):
                     dy *= -1
                     hit = True
                 if hit:
-                    (r, g, b) = hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
+                    (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
 
                 dvd = background.copy()
                 rgba = np.array(dvd_text)
@@ -136,7 +137,7 @@ def show_custom_message(sign):
                         dy *= -1
                         hit = True
                     if hit:
-                        (r, g, b) = hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
+                        (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
 
                     graphics.DrawText(sign.canvas, sign.fontreallybig, x, y, graphics.Color(r, g, b), line_1)
 

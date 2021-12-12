@@ -15,9 +15,9 @@ from requests import Session
 from datetime import datetime
 from scipy.interpolate import interp1d
 import shared_config
-from __main__ import planesign_mode_handler
+import __main__
 
-@planesign_mode_handler(13)
+@__main__.planesign_mode_handler(13)
 def finance(self):
     self.canvas.Clear()
     shared_config.data_dict["ticker"] = None

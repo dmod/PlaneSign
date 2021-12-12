@@ -36,7 +36,7 @@ def log_listener_process(queue):
     root = logging.getLogger()
     
     os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
-    log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight")
+    log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight", backupCount=90)
     log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
     root.addHandler(log_handler)
 

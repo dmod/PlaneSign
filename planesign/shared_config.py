@@ -1,5 +1,4 @@
 from multiprocessing import Value
-import logging
 
 shared_flag = Value('i', 1)
 shared_mode = Value('i', 1)
@@ -12,6 +11,9 @@ shared_color_mode = Value('i', 0)
 shared_forced_sign_update = Value('i', 0)
 
 shared_satellite_mode = Value('i', 1)
+
+shared_lighting_zoomind = Value('i', 6)
+shared_lighting_mode = Value('i', 1)
 
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"

@@ -5,7 +5,7 @@ import PIL
 import random
 from PIL import Image, ImageDraw
 import shared_config
-from __main__ import planesign_mode_handler
+import __main__
 
 
 tankxmin = -100
@@ -26,7 +26,7 @@ tanklayout = current_state = [[0 for j in range(32)] for i in range(128)]
 def randomloc():
     return (random.randint(tankxmin,tankxmax),random.randint(tankymin,tankymax),random.randint(tankzmin,tankzmax))
 
-@planesign_mode_handler(14)
+@__main__.planesign_mode_handler(14)
 def aquarium(sign):
     sign.canvas.Clear()
 

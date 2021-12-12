@@ -39,13 +39,13 @@ cd
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
 sudo -H pip3 install -r requirements.txt
-sudo ./planesign.py
+sudo planesign
 ```
 
 crontab -e:
 
 ```sh
-@reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign.py>/dev/null 2>&1
+@reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign>/dev/null 2>&1
 ```
 
 /etc/nginx/sites-available/default:

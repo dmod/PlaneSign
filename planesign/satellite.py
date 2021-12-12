@@ -2,16 +2,18 @@ import time
 from datetime import datetime, timedelta
 import random
 import requests
+import utilities
+from PIL import Image
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import shared_config
-from utilities import *
 from rgbmatrix import graphics
 import country_converter as coco
 import numpy as np
-from __main__ import planesign_mode_handler
+import math
+import __main__
 
-
+ 
 def fix_black(image):
     #brighten black
     rgb = np.array(image.convert('RGB'))
@@ -146,7 +148,7 @@ def get_flag(selected,satellite_data):
 
     return image
 
-@planesign_mode_handler(17)
+@__main__.planesign_mode_handler(17)
 def satellites(sign):
     sign.canvas.Clear()
 
@@ -255,7 +257,7 @@ def satellites(sign):
 
                     above = data["above"]
                     
-                    above = list(map(lambda item: dict(item, dist=get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
+                    above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                     #remove debris from results
                     above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"]and "OBJECT " not in x["satname"], above))
@@ -312,7 +314,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 1, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(closest["dist"]))
                 
                 graphics.DrawText(sign.canvas, sign.font57, 22, 24, graphics.Color(20, 160, 60), "Dir:")
-                close_dir = direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                close_dir = utilities.direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                 if len(close_dir)==1:
                     graphics.DrawText(sign.canvas, sign.font57, 27, 32, graphics.Color(20, 160, 60), close_dir)
                 else:
@@ -322,7 +324,7 @@ def satellites(sign):
                 if dupeflag:
                     for x in range(43,57):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
-                close_alt = closest["satalt"]*KM_2_MI
+                close_alt = closest["satalt"]*utilities.KM_2_MI
                 if close_alt < 10000:
                     graphics.DrawText(sign.canvas, sign.font57, 43, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(close_alt))
                 else:
@@ -355,7 +357,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 66, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(lowest["dist"]))
 
                 graphics.DrawText(sign.canvas, sign.font57, 87, 24, graphics.Color(20, 160, 60), "Dir:")
-                low_dir = direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                low_dir = utilities.direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                 if len(low_dir)==1:
                     graphics.DrawText(sign.canvas, sign.font57, 92, 32, graphics.Color(20, 160, 60), low_dir)
                 else:
@@ -365,7 +367,7 @@ def satellites(sign):
                 if not dupeflag:
                     for x in range(108,122):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
-                low_alt = lowest["satalt"]*KM_2_MI
+                low_alt = lowest["satalt"]*utilities.KM_2_MI
                 if low_alt < 10000:
                     graphics.DrawText(sign.canvas, sign.font57, 108, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(low_alt))
                 else:
@@ -450,10 +452,10 @@ def satellites(sign):
                             # else:
                             #     formatted_address = 'Somewhere'
 
-                    iss_dist = get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
-                    iss_alt = pos["sataltitude"]*KM_2_MI
-                    iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*KM_2_MI
-                    iss_dir = direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    iss_alt = pos["sataltitude"]*utilities.KM_2_MI
+                    iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*utilities.KM_2_MI
+                    iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
 
             else: 
                 formatted_address = 'Somewhere'

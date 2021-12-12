@@ -1,14 +1,14 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-from random import randint, random, randrange
+import random
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 import math
 import time
-from utilities import *
+import utilities
 import numpy as np
 import shared_config
-from __main__ import planesign_mode_handler
+import __main__
 
 
 TRAIL_PARTICLE = 0
@@ -23,7 +23,7 @@ WILLOW_FW = 1
 TRACER_FW = 2
 CRACKLER_FW = 3
 
-@planesign_mode_handler(16)
+@__main__.planesign_mode_handler(16)
 def fireworks(sign):
     sign.canvas.Clear()
 
@@ -194,7 +194,7 @@ class Firework:
         self.launch_time = time.perf_counter()
         self.fuse = 1.5+random.random()*3
         self.speed = 4+random.random()*2 #pixels/second
-        self.x = randint(5,122)
+        self.x = random.randint(5,122)
         self.y0 = 31
         self.y = self.y0
         self.ftype = ftype
@@ -210,7 +210,7 @@ class Firework:
         elif self.exploded==0:
             self.y = self.y0 - self.speed*(time.perf_counter()-self.launch_time)
             if random.random() < 0.6:
-                Particle(self.trail_particles,TRAIL_PARTICLE,self.x,self.y,(randint(230,255),randint(150,230),0),0.5+random.random()*2,3+random.random()*7)
+                Particle(self.trail_particles,TRAIL_PARTICLE,self.x,self.y,(random.randint(230,255),random.randint(150,230),0),0.5+random.random()*2,3+random.random()*7)
         
         for p in self.trail_particles:
             p.update()
@@ -224,14 +224,14 @@ class Firework:
 
     def explode(self):
         self.exploded=1
-        n=randint(6,14)
+        n=random.randint(6,14)
         offset=random.random()*360
         lifetime = 1+random.random()
         speed = 5.5
         if self.ftype == RING_FW or self.ftype == WILLOW_FW:
-            color = hsv_2_rgb(random.random(), 0.6+random.random()*0.4, 1)
+            color = utilities.hsv_2_rgb(random.random(), 0.6+random.random()*0.4, 1)
             for i in range(n):
-                angle=((360*i/n+offset)%360)*DEG_2_RAD
+                angle=((360*i/n+offset)%360)*utilities.DEG_2_RAD
                 
                 if self.ftype == RING_FW:
                     Particle(self.explosion_particles,RING_PARTICLE,self.x,self.y,color,lifetime,speed,angle)
@@ -245,9 +245,9 @@ class Firework:
             for i in range(n):
                 h=(baseh+random.random()*0.2)%1
                 s=bases+random.random()*0.4
-                color = hsv_2_rgb(h, s, 1)
+                color = utilities.hsv_2_rgb(h, s, 1)
                 r=np.sqrt(random.random())*maxsize
-                angle = random.random()*360*DEG_2_RAD
+                angle = random.random()*360*utilities.DEG_2_RAD
                 Particle(self.explosion_particles,CRACKLER_PARTICLE,self.x+math.cos(angle)*r,self.y+math.sin(angle)*r,color,lifetime+random.random())
 
 

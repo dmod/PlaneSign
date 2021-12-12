@@ -5,11 +5,12 @@ import time
 import logging
 import logging.handlers
 import sys
+import json
 import subprocess
 import os
 import traceback
 import requests
-import datetime
+from datetime import datetime
 
 import shared_config
 
@@ -22,36 +23,13 @@ from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 
-ALL_MODE_HANDLERS = {}
-
-def planesign_mode_handler(mode_int):
-
-    """
-    Decorator
-    """
-    def handler(func):
-        print(f"Mode {mode_int} will be set to: '{func.__name__}' in module '{func.__module__}'")
-        ALL_MODE_HANDLERS[mode_int] = func
-
-    return handler
-
 # All defined mode handlers
-from utilities import *
-from fish import *
-from finance import *
-import weather
-import firework
-import lightning
-import cgol
-import cca
-import custom_message
-import pong
-import planes
+import utilities
 import shared_config
-import satellite
 
 app = Flask(__name__)
 CORS(app)
+
 
 @app.route("/get_config")
 def get_config():
@@ -199,21 +177,20 @@ def submit_ticker(ticker):
 
 @app.route("/lightning/<zi>")
 def set_zoom(zi):
-    lightning.LightningManager.zoomind.value = int(zi)
+    shared_config.shared_lighting_zoomind.value = int(zi)
     return ""
 
 
 @app.route("/lightning_mode/<mode>")
 def set_lightning_mode(mode):
-    lightning.LightningManager.mode.value = int(mode)
+    shared_config.shared_lighting_mode.value = int(mode)
     return ""
+
 
 @app.route("/satellite_mode/<mode>")
 def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
-
-
 
 
 def api_server():
@@ -262,7 +239,7 @@ def get_data_worker(data_dict):
                         newguy["typecode"] = result[8]
                         newguy["origin"] = result[11]
                         newguy["destination"] = result[12]
-                        newguy["distance"] = get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (result[1], result[2]))
+                        newguy["distance"] = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (result[1], result[2]))
 
                         # Filter out planes on the ground
                         if newguy["altitude"] < 100:
@@ -332,7 +309,7 @@ def read_config():
 
 
 class PlaneSign:
-    def __init__(self):
+    def __init__(self, defined_mode_handlers):
 
         options = RGBMatrixOptions()
         options.cols = 64
@@ -342,6 +319,8 @@ class PlaneSign:
 
         self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
+
+        self.defined_mode_handlers = defined_mode_handlers
 
         self.font57 = graphics.Font()
         self.font46 = graphics.Font()
@@ -407,17 +386,6 @@ class PlaneSign:
 
         self.matrix.SwapOnVSync(self.canvas)
 
-
-    @planesign_mode_handler(9)
-    def welcome(self):
-
-        self.canvas.Clear()
-        graphics.DrawText(self.canvas, self.fontplanesign, 34, 20, graphics.Color(46, 210, 255), "Plane Sign")
-        self.matrix.SwapOnVSync(self.canvas)
-        self.wait_loop(2)
-        self.canvas.Clear()
-        shared_config.shared_mode.value = 1
-
     def sign_loop(self):
 
         while True:
@@ -441,8 +409,8 @@ class PlaneSign:
                     self.wait_loop(3)
                     continue
 
-                if mode in ALL_MODE_HANDLERS:
-                    ALL_MODE_HANDLERS[mode](self)
+                if mode in self.defined_mode_handlers:
+                    self.defined_mode_handlers[mode](self)
                 else:
                     logging.error(f"Mode currently set to {mode} but no handler exists...")
 
@@ -460,11 +428,3 @@ class PlaneSign:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
                 shared_config.shared_mode.value = 1
-
-
-# Main function
-if __name__ == "__main__":
-    configure_logging()
-    read_static_airport_data()
-
-    PlaneSign().sign_loop()
