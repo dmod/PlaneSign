@@ -15,8 +15,6 @@ import traceback
 import requests
 from datetime import datetime
 
-import shared_config
-
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from timezonefinder import TimezoneFinder
@@ -27,7 +25,6 @@ from flask import Flask, request
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 
-# All defined mode handlers
 import utilities
 import shared_config
 
@@ -283,7 +280,7 @@ def get_data_worker(data_dict):
 def read_config():
     shared_config.CONF.clear()
 
-    logging.info("reading  config...")
+    logging.info("Reading  config...")
 
     with open("sign.conf") as f, open("sign.conf.sample") as s:
         lines = f.readlines()
@@ -360,6 +357,11 @@ class PlaneSign:
         shared_config.arg_dict = manager.dict()
         shared_config.CONF = manager.dict()
 
+        shared_config.data_dict["closest"] = None
+        shared_config.data_dict["highest"] = None
+        shared_config.data_dict["fastest"] = None
+        shared_config.data_dict["slowest"] = None
+
         read_config()
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
@@ -370,6 +372,7 @@ class PlaneSign:
     def exit_gracefully(self, *args):
         logging.debug("Exiting...")
         shared_config.shared_program_shutdown.value = 1
+        shared_config.shared_mode.value = 0
         shared_config.shared_forced_sign_update.value = 1
 
     def wait_loop(self, seconds):
@@ -397,8 +400,6 @@ class PlaneSign:
             try:
 
                 mode = shared_config.shared_mode.value
-
-                logging.info(f"Top of sign loop. Current mode is: {mode}")
 
                 if mode in self.defined_mode_handlers:
                     self.defined_mode_handlers[mode](self)

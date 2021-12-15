@@ -2,9 +2,6 @@ ALL_MODE_HANDLERS = {}
 
 def planesign_mode_handler(mode_int):
 
-    """
-    Decorator
-    """
     def handler(func):
         print(f"Mode {mode_int} will be set to: '{func.__name__}' in module '{func.__module__}'")
         ALL_MODE_HANDLERS[mode_int] = func
@@ -21,6 +18,7 @@ import custom_message
 import pong
 import welcome
 import planes
+import track_a_flight
 import shared_config
 import satellite
 import finance

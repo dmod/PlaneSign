@@ -12,6 +12,8 @@
 
 # Tips:
 # sudo docker info
+# sudo docker image ls
+# sudo docker container ls
 # sudo docker ps --all
 # sudo docker logs planesign
 # sudo docker stats
@@ -42,4 +44,4 @@ COPY . .
 
 RUN pip3 install -r requirements.txt
 
-ENTRYPOINT ./planesign.py
+ENTRYPOINT python3 planesign/
