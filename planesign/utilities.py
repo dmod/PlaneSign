@@ -1,10 +1,11 @@
 import math
 import numpy as np
-import pytz
 import random
 import favicon
 import logging
+import time
 import re
+import pytz
 import sys
 import os
 import __main__
@@ -23,9 +24,6 @@ from datetime import tzinfo, timedelta, datetime
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
 KM_2_MI = 0.6214
-
-local_tz = pytz.timezone('America/New_York')
-
 
 def random_angle():
     return random.randrange(0, 360)
@@ -344,7 +342,7 @@ def direction_lookup(destination, origin):
 
 def convert_unix_to_local_time(unix_timestamp):
     utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
-    local_time = utc_time.astimezone(local_tz)
+    local_time = utc_time.astimezone(shared_config.local_timezone)
     return local_time
 
 
@@ -418,9 +416,9 @@ def only_show_time(sign):
 
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-        print_time = datetime.now().strftime('%-H:%M')
+        print_time = convert_unix_to_local_time(time.time()).strftime('%-H:%M')
     else:
-        print_time = datetime.now().strftime('%-I:%M%p')
+        print_time = convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
 
     if "weather" in shared_config.data_dict and shared_config.data_dict["weather"] and shared_config.data_dict["weather"]["current"] and shared_config.data_dict["weather"]["current"]["temp"]:
         temp = str(round(shared_config.data_dict["weather"]["current"]["temp"]))

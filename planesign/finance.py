@@ -9,6 +9,7 @@ import favicon
 import os
 import re
 import json
+import utilities
 import requests
 from rgbmatrix import graphics
 from requests import Session
@@ -543,9 +544,9 @@ class Stock:
     def drawtime(self):
 
         if shared_config.CONF["MILITARY_TIME"].lower()=='true':
-            print_time = datetime.now().strftime('%-H:%M')
+            print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-H:%M')
         else:
-            print_time = datetime.now().strftime('%-I:%M%p')
+            print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
         graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
 
     def drawticker(self):

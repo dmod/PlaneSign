@@ -17,6 +17,8 @@ shared_satellite_mode = Value('i', 1)
 shared_lighting_zoomind = Value('i', 6)
 shared_lighting_mode = Value('i', 1)
 
+local_timezone = None
+
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"
 font_dir = "../rpi-rgb-led-matrix/fonts"

@@ -8,6 +8,7 @@ import sys
 import json
 import subprocess
 import signal
+import pytz
 import os
 import threading
 import traceback
@@ -18,6 +19,7 @@ import shared_config
 
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from timezonefinder import TimezoneFinder
 
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
@@ -310,6 +312,15 @@ def read_config():
 
     logging.info("Plane Endpoint: " + shared_config.CONF["ENDPOINT"])
     logging.info("Weather Endpoint: " + shared_config.CONF["WEATHER_ENDPOINT"])
+
+    tf = TimezoneFinder()
+    local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
+    if local_tz is None:
+        logging.warning("Cannot find given provided lat/lon! Using UTC...")
+        shared_config.local_timezone = pytz.utc
+    else:
+        logging.info(f"Detected timezone to be {local_tz}")
+        shared_config.local_timezone = pytz.timezone(local_tz)
 
 
 class PlaneSign:
