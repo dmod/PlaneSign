@@ -13,49 +13,54 @@ prev_stats["speed"] = 0
 
 
 @__main__.planesign_mode_handler(1)
-def always_show_closest_plane(sign):
+def show_closest_plane_if_in_alert_radius(sign):
     while shared_config.shared_mode.value == 1:
-        if shared_config.data_dict["closest"] and shared_config.data_dict["closest"]["distance"] <= 2:
-            plane_to_show = shared_config.data_dict["closest"]
+        if "closest" in shared_config.data_dict and shared_config.data_dict["closest"]["distance"] <= 2:
+            plane_key_to_show = "closest"
         else:
             # No closest plane, show time
-            plane_to_show = None
+            plane_key_to_show = None
 
-        show_a_plane(sign, plane_to_show)
+        show_a_plane(sign, plane_key_to_show)
 
 
 @__main__.planesign_mode_handler(2)
 def always_show_closest_plane(sign):
     while shared_config.shared_mode.value == 2:
-        plane_to_show = shared_config.data_dict["closest"]
-        show_a_plane(sign, plane_to_show)
+        plane_key_to_show = "closest"
+        show_a_plane(sign, plane_key_to_show)
 
 
 @__main__.planesign_mode_handler(3)
 def always_show_highest_plane(sign):
     while shared_config.shared_mode.value == 3:
-        plane_to_show = shared_config.data_dict["highest"]
-        show_a_plane(sign, plane_to_show)
+        plane_key_to_show = "highest"
+        show_a_plane(sign, plane_key_to_show)
 
 
 @__main__.planesign_mode_handler(4)
 def always_show_fastest_plane(sign):
     while shared_config.shared_mode.value == 4:
-        plane_to_show = shared_config.data_dict["fastest"]
-        show_a_plane(sign, plane_to_show)
+        plane_key_to_show = "fastest"
+        show_a_plane(sign, plane_key_to_show)
 
 
 @__main__.planesign_mode_handler(5)
 def always_show_slowest_plane(sign):
     while shared_config.shared_mode.value == 5:
-        plane_to_show = shared_config.data_dict["slowest"]
-        show_a_plane(sign, plane_to_show)
+        plane_key_to_show = "slowest"
+        show_a_plane(sign, plane_key_to_show)
 
 
-def show_a_plane(sign, plane_to_show):
+def show_a_plane(sign, plane_key_to_show):
 
     # TODO
     global prev_stats
+
+    if plane_key_to_show in shared_config.data_dict:
+        plane_to_show = shared_config.data_dict[plane_key_to_show]
+    else:
+        plane_to_show = None
 
     if plane_to_show:
 
@@ -122,7 +127,7 @@ def show_a_plane(sign, plane_to_show):
         prev_stats["altitude"] = 0
         prev_stats["speed"] = 0
 
-        sign.show_time()
+        utilities.show_time(sign)
         sign.wait_loop(0.5)
 
 

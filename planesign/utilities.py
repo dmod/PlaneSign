@@ -7,11 +7,14 @@ import logging
 import re
 import sys
 import os
+import __main__
 import traceback
 from multiprocessing import Process, Manager, Value, Array, Queue
 import shared_config
 import json
 import requests
+from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
+from multiprocessing import Process, Manager, Value, Array, Queue
 from requests import Session
 from PIL import Image
 from math import pi, cos, sin
@@ -40,19 +43,16 @@ def log_listener_process(queue):
     log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
     root.addHandler(log_handler)
 
-    while True:
-        try:
-            record = queue.get()
-            if record is None:
-                break
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
-        except Exception:
-            traceback.print_exc(file=sys.stderr)
+    while shared_config.shared_program_shutdown.value != 1:
+        record = queue.get()
+        if record is None:
+            break
+        logger = logging.getLogger(record.name)
+        logger.handle(record)
 
 def configure_logging():
     logging_queue = Queue(-1)
-    listener = Process(target=log_listener_process, args=(logging_queue, ), daemon=True)
+    listener = Process(target=log_listener_process, args=(logging_queue, ))
     listener.start()
 
     queue_handler = logging.handlers.QueueHandler(logging_queue)
@@ -407,3 +407,31 @@ def set_matrix(x, y, matrix, val):
         y = 0
 
     matrix[x][y] = val
+
+@__main__.planesign_mode_handler(7)
+def only_show_time(sign):
+    show_time(sign)
+
+def show_time(sign):
+    if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
+        print_time = datetime.now().strftime('%-H:%M')
+    else:
+        print_time = datetime.now().strftime('%-I:%M%p')
+
+    if "weather" in shared_config.data_dict and shared_config.data_dict["weather"] and shared_config.data_dict["weather"]["current"] and shared_config.data_dict["weather"]["current"]["temp"]:
+        temp = str(round(shared_config.data_dict["weather"]["current"]["temp"]))
+    else:
+        temp = "--"
+
+    sign.canvas.Clear()
+
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
+
+    sign.matrix.SwapOnVSync(sign.canvas)
+
+@__main__.planesign_mode_handler(0)
+def clear_matrix(sign):
+    sign.canvas.Clear()
+    sign.matrix.SwapOnVSync(sign.canvas)
+    sign.wait_loop(0.5)

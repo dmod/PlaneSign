@@ -10,4 +10,4 @@ def welcome(self):
     self.matrix.SwapOnVSync(self.canvas)
     self.wait_loop(2)
     self.canvas.Clear()
-    shared_config.shared_mode.value = 1
+    shared_config.shared_mode.value = 1 # Go back to the default mode after this welcome

@@ -7,7 +7,9 @@ import logging.handlers
 import sys
 import json
 import subprocess
+import signal
 import os
+import threading
 import traceback
 import requests
 from datetime import datetime
@@ -90,19 +92,20 @@ def update_sign():
 
 @app.route("/status")
 def get_status():
-    return str(shared_config.shared_flag.value)
+    return str(shared_config.shared_mode.value)
 
 
 @app.route("/turn_on")
 def turn_on():
-    shared_config.shared_flag.value = 1
+    shared_config.shared_mode.value = shared_config.shared_prev_mode.value
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
 
 @app.route("/turn_off")
 def turn_off():
-    shared_config.shared_flag.value = 0
+    shared_config.shared_prev_mode.value = shared_config.shared_mode.value
+    shared_config.shared_mode.value = 0
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
@@ -198,7 +201,7 @@ def api_server():
 
 
 def get_weather_data_worker(data_dict):
-    while True:
+    while shared_config.shared_program_shutdown.value != 1:
         try:
             with requests.Session() as s:
                 s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
@@ -211,9 +214,10 @@ def get_weather_data_worker(data_dict):
 
 
 def get_data_worker(data_dict):
-    while True:
+    while shared_config.shared_program_shutdown.value != 1:
+
         try:
-            if shared_config.shared_flag.value == 0:
+            if shared_config.shared_mode.value == 0:
                 logging.info("off, skipping FR24 request...")
             else:
 
@@ -311,6 +315,9 @@ def read_config():
 class PlaneSign:
     def __init__(self, defined_mode_handlers):
 
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
         options = RGBMatrixOptions()
         options.cols = 64
         options.gpio_slowdown = 5
@@ -345,9 +352,14 @@ class PlaneSign:
         read_config()
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
-        Process(target=get_data_worker, args=(shared_config.data_dict,), daemon=True).start()
-        Process(target=get_weather_data_worker, args=(shared_config.data_dict,), daemon=True).start()
-        Process(target=api_server, daemon=True).start()
+        Process(target=get_data_worker, args=(shared_config.data_dict,)).start()
+        Process(target=get_weather_data_worker, args=(shared_config.data_dict,)).start()
+        Process(target=api_server).start()
+
+    def exit_gracefully(self, *args):
+        logging.debug("Exiting...")
+        shared_config.shared_program_shutdown.value = 1
+        shared_config.shared_forced_sign_update.value = 1
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -368,63 +380,23 @@ class PlaneSign:
         shared_config.shared_forced_sign_update.value = 0
         return forced_breakout
 
-    def show_time(self):
-        if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-            print_time = datetime.now().strftime('%-H:%M')
-        else:
-            print_time = datetime.now().strftime('%-I:%M%p')
-
-        if "weather" in shared_config.data_dict and shared_config.data_dict["weather"] and shared_config.data_dict["weather"]["current"] and shared_config.data_dict["weather"]["current"]["temp"]:
-            temp = str(round(shared_config.data_dict["weather"]["current"]["temp"]))
-        else:
-            temp = "--"
-
-        self.canvas.Clear()
-
-        graphics.DrawText(self.canvas, self.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
-        graphics.DrawText(self.canvas, self.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
-
-        self.matrix.SwapOnVSync(self.canvas)
-
     def sign_loop(self):
 
-        while True:
+        while shared_config.shared_program_shutdown.value != 1:
             try:
 
                 mode = shared_config.shared_mode.value
 
-                forced_breakout = False
-
-                logging.info(f"Top of loop. Current mode is: {mode}")
-
-                # Sign is off, clear canvas and wait
-                if shared_config.shared_flag.value == 0:
-                    self.canvas.Clear()
-                    self.matrix.SwapOnVSync(self.canvas)
-                    self.wait_loop(0.5)
-                    continue
-
-                if not shared_config.data_dict or "closest" not in shared_config.data_dict:
-                    logging.info("No plane data found, waiting...")
-                    self.wait_loop(3)
-                    continue
+                logging.info(f"Top of sign loop. Current mode is: {mode}")
 
                 if mode in self.defined_mode_handlers:
                     self.defined_mode_handlers[mode](self)
                 else:
                     logging.error(f"Mode currently set to {mode} but no handler exists...")
 
-                if mode == 7:
-                    self.show_time()
-                    self.wait_loop(0.5)
-                    continue
-
-                if forced_breakout:
-                    continue
-
-                # Wait before doing anything
-                self.wait_loop(1)
             except:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
                 shared_config.shared_mode.value = 1
+
+        logging.info("--- END OF SIGN LOOP ---")

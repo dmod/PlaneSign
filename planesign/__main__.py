@@ -1,5 +1,3 @@
-import planesign
-
 ALL_MODE_HANDLERS = {}
 
 def planesign_mode_handler(mode_int):
@@ -13,6 +11,7 @@ def planesign_mode_handler(mode_int):
 
     return handler
 
+import planesign
 import weather
 import firework
 import lightning

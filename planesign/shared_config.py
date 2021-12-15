@@ -1,7 +1,9 @@
 from multiprocessing import Value
 
-shared_flag = Value('i', 1)
+shared_program_shutdown = Value('i', 0)
+
 shared_mode = Value('i', 1)
+shared_prev_mode = Value('i', 0)
 
 shared_pong_player1 = Value('i', 0)
 shared_pong_player2 = Value('i', 0)
