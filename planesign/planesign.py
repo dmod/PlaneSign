@@ -368,7 +368,7 @@ class PlaneSign:
         forced_breakout = False
 
         while stay_in_loop:
-            stay_in_loop = time.perf_counter() < exit_loop_time
+            stay_in_loop = time.perf_counter() < exit_loop_time or seconds == -1
 
             self.matrix.brightness = shared_config.shared_current_brightness.value
 

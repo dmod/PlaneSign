@@ -410,7 +410,11 @@ def set_matrix(x, y, matrix, val):
 
 @__main__.planesign_mode_handler(7)
 def only_show_time(sign):
-    show_time(sign)
+    while shared_config.shared_mode.value == 7:
+        show_time(sign)
+        breakout = sign.wait_loop(1)
+        if breakout:
+            return
 
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
@@ -434,4 +438,4 @@ def show_time(sign):
 def clear_matrix(sign):
     sign.canvas.Clear()
     sign.matrix.SwapOnVSync(sign.canvas)
-    sign.wait_loop(0.5)
+    sign.wait_loop(-1)
