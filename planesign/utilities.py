@@ -420,8 +420,8 @@ def show_time(sign):
     else:
         print_time = convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
 
-    if "weather" in shared_config.data_dict and shared_config.data_dict["weather"] and shared_config.data_dict["weather"]["current"] and shared_config.data_dict["weather"]["current"]["temp"]:
-        temp = str(round(shared_config.data_dict["weather"]["current"]["temp"]))
+    if "weather" in shared_config.data_dict:
+        temp = str(round(shared_config.data_dict["weather"].current.temperature()['temp']))
     else:
         temp = "--"
 

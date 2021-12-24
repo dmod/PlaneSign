@@ -24,6 +24,7 @@ icons_dir = "./icons"
 font_dir = "../rpi-rgb-led-matrix/fonts"
 
 # These get set in the PlaneSign constructor
+shared_shutdown_event = None
 data_dict = None
 arg_dict = None
 CONF = None

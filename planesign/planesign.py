@@ -12,8 +12,11 @@ import pytz
 import os
 import threading
 import traceback
+import weather
 import requests
 from datetime import datetime
+
+import gevent.pywsgi
 
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -196,20 +199,8 @@ def set_satellite_mode(mode):
 
 
 def api_server():
-    app.run(host='0.0.0.0')
-
-
-def get_weather_data_worker(data_dict):
-    while shared_config.shared_program_shutdown.value != 1:
-        try:
-            with requests.Session() as s:
-                s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                response = s.get(shared_config.CONF["WEATHER_ENDPOINT"])
-                data_dict["weather"] = response.json()
-        except:
-            logging.exception("Error getting weather data...")
-
-        time.sleep(600)
+    app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
+    app_server.serve_forever()
 
 
 def get_data_worker(data_dict):
@@ -305,10 +296,8 @@ def read_config():
     logging.info("Config loaded: " + str(shared_config.CONF))
 
     shared_config.CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(shared_config.CONF["SENSOR_LAT"]) + 2},{float(shared_config.CONF["SENSOR_LAT"]) - 2},{float(shared_config.CONF["SENSOR_LON"]) - 2},{float(shared_config.CONF["SENSOR_LON"]) + 2}'
-    shared_config.CONF["WEATHER_ENDPOINT"] = f'http://api.openweathermap.org/data/2.5/onecall?lat={shared_config.CONF["SENSOR_LAT"]}&lon={shared_config.CONF["SENSOR_LON"]}&appid=1615520156f27624562ceace6e3849f3&units=imperial'
 
     logging.info("Plane Endpoint: " + shared_config.CONF["ENDPOINT"])
-    logging.info("Weather Endpoint: " + shared_config.CONF["WEATHER_ENDPOINT"])
 
     tf = TimezoneFinder()
     local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
@@ -356,6 +345,7 @@ class PlaneSign:
         shared_config.data_dict = manager.dict()
         shared_config.arg_dict = manager.dict()
         shared_config.CONF = manager.dict()
+        shared_config.shared_shutdown_event = manager.Event()
 
         shared_config.data_dict["closest"] = None
         shared_config.data_dict["highest"] = None
@@ -365,15 +355,16 @@ class PlaneSign:
         read_config()
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
-        Process(target=get_data_worker, args=(shared_config.data_dict,)).start()
-        Process(target=get_weather_data_worker, args=(shared_config.data_dict,)).start()
-        Process(target=api_server).start()
+        Process(target=get_data_worker, name="Get Plane Data", args=(shared_config.data_dict,)).start()
+        Process(target=weather.get_weather_data_worker, name="Get Weather Data", args=(shared_config.data_dict,)).start()
+        Process(target=api_server, name="API Server").start()
 
     def exit_gracefully(self, *args):
         logging.debug("Exiting...")
         shared_config.shared_program_shutdown.value = 1
         shared_config.shared_mode.value = 0
         shared_config.shared_forced_sign_update.value = 1
+        shared_config.shared_shutdown_event.set()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -409,6 +400,6 @@ class PlaneSign:
             except:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
-                shared_config.shared_mode.value = 1
+                shared_config.shared_mode.value = 1 #Reset to default mode
 
-        logging.info("--- END OF SIGN LOOP ---")
+        print("--- END OF SIGN LOOP ---")

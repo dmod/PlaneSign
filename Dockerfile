@@ -7,7 +7,8 @@
 # sudo docker pull dmod/planesign:latest
 
 # Lifecycle:
-# sudo docker run --privileged --rm --name planesign -p 8080:80/tcp dmod/planesign:latest
+# sudo docker run --privileged --rm --name planesign -p 80:80/tcp dmod/planesign:latest
+# sudo docker run --privileged --rm --name planesign -p 80:80/tcp planesign:latest
 # sudo docker kill planesign
 
 # Tips:
