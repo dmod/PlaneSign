@@ -7,6 +7,7 @@ import shared_config
 import __main__
 from rgbmatrix import graphics
 
+
 @__main__.planesign_mode_handler(6)
 def show_weather(sign):
 
@@ -89,8 +90,8 @@ def get_weather_data_worker(data_dict):
         try:
             one_call_object = mgr.one_call(lat=float(shared_config.CONF["SENSOR_LAT"]), lon=float(shared_config.CONF["SENSOR_LON"]), exclude='minutely,hourly', units='imperial')
             data_dict["weather"] = one_call_object
-            logging.info(f"Temp: {data_dict['weather'].current.temperature()['temp']}")
+            logging.info(f"At: {utilities.convert_unix_to_local_time(data_dict['weather'].current.ref_time)} Temp: {data_dict['weather'].current.temperature()['temp']}")
         except:
             logging.exception("Error getting weather data...")
 
-        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=60)
+        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=300)
