@@ -1,23 +1,23 @@
 # THIS IS A BIG TIME WIP
 
 # Build:
-# sudo docker build -t planesign:latest .
+# docker build -t planesign:latest .
 
 # Pull:
-# sudo docker pull dmod/planesign:latest
+# docker pull dmod/planesign:latest
 
 # Lifecycle:
-# sudo docker run --privileged --rm --name planesign -p 80:80/tcp dmod/planesign:latest
-# sudo docker run --privileged --rm --name planesign -p 80:80/tcp planesign:latest
-# sudo docker kill planesign
+# docker run --privileged --rm --name planesign -p 80:80/tcp dmod/planesign:latest
+# docker run --privileged --rm --name planesign -p 80:80/tcp planesign:latest
+# docker kill planesign
 
 # Tips:
-# sudo docker info
-# sudo docker image ls
-# sudo docker container ls
-# sudo docker ps --all
-# sudo docker logs planesign
-# sudo docker stats
+# docker info
+# docker image ls
+# docker container ls
+# docker ps --all
+# docker logs planesign
+# docker stats
 
 FROM arm32v7/ubuntu:latest
 

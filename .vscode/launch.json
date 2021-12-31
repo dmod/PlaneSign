@@ -18,6 +18,7 @@
         {
             "name": "Run Test Script",
             "type": "python",
+            "justMyCode": false,
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
             "console": "integratedTerminal",
