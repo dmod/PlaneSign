@@ -10,6 +10,7 @@ import utilities
 import math
 import __main__
 
+
 @__main__.planesign_mode_handler(10)
 def cgol(sign):
     sign.canvas.Clear()
@@ -45,7 +46,7 @@ def cgol(sign):
     #r,g,b = random_rgb()
 
     tstart = time.perf_counter()
-    while True:
+    while shared_config.shared_mode.value == 10:
 
         detect2cycle = True
         gen_index += 1

@@ -6,7 +6,9 @@
 import time
 import random
 import utilities
+import shared_config
 import __main__
+
 
 @__main__.planesign_mode_handler(12)
 def cca(sign):
@@ -25,7 +27,7 @@ def cca(sign):
             current_state[i][j] = random.randrange(0, numstates)
 
     tstart = time.perf_counter()
-    while True:
+    while shared_config.shared_mode.value == 12:
 
         for col in range(0, 128):
             for row in range(0, 32):

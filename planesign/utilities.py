@@ -33,38 +33,6 @@ def random_rgb_255_sum():
     _, r, g, b = next_color_rainbow_linear(random_angle())
     return r, g, b
 
-def log_listener_process(queue):
-    root = logging.getLogger()
-    
-    os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
-    log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight", backupCount=90)
-    log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
-    root.addHandler(log_handler)
-
-    while shared_config.shared_program_shutdown.value != 1:
-        record = queue.get()
-        if record is None:
-            break
-        logger = logging.getLogger(record.name)
-        logger.handle(record)
-
-def configure_logging():
-    logging_queue = Queue(-1)
-    listener = Process(target=log_listener_process, args=(logging_queue, ))
-    listener.start()
-
-    queue_handler = logging.handlers.QueueHandler(logging_queue)
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
-    console_handler.setFormatter(console_formatter)
-
-    root = logging.getLogger()
-    root.addHandler(queue_handler)
-    root.addHandler(console_handler)
-    root.setLevel(logging.DEBUG)
-    logging.getLogger('PIL').setLevel(logging.WARNING)
-
 def read_static_airport_data():
     with open("airports.csv") as f:
         lines = f.readlines()

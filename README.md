@@ -26,7 +26,6 @@
 - Set up wpa_supplicant.conf: <https://www.raspberrypi.org/documentation/configuration/wireless/headless.md>
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname to 'planesign' with: sudo raspi-config -> System Options -> Hostname
-- (RECOMMENDED): Change timezone with: sudo raspi-config -> Localisation Options -> Timezone
 
 
 ```sh

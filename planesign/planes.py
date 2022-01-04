@@ -1,20 +1,21 @@
 import logging
 import shared_config
-import time
+import types
 from rgbmatrix import graphics
 import utilities
 import __main__
+from FlightRadar24.api import FlightRadar24API, Flight
 
-prev_stats = {}
-prev_stats["distance"] = 0
-prev_stats["altitude"] = 0
-prev_stats["speed"] = 0
+prev_stats = types.SimpleNamespace()
+prev_stats.distance = 0
+prev_stats.altitude = 0
+prev_stats.ground_speed = 0
 
 
 @__main__.planesign_mode_handler(1)
 def show_closest_plane_if_in_alert_radius(sign):
     while shared_config.shared_mode.value == 1:
-        if shared_config.data_dict["closest"] and shared_config.data_dict["closest"]["distance"] <= 2:
+        if shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= 2:
             plane_to_show = shared_config.data_dict["closest"]
         else:
             # No closest plane, show time
@@ -58,24 +59,24 @@ def show_a_plane(sign, plane_to_show):
 
     if plane_to_show:
 
-        interpol_distance = utilities.interpolate(prev_stats["distance"], plane_to_show["distance"])
-        interpol_alt = utilities.interpolate(prev_stats["altitude"], plane_to_show["altitude"])
-        interpol_speed = utilities.interpolate(prev_stats["speed"], plane_to_show["speed"])
+        interpol_distance = utilities.interpolate(prev_stats.distance, plane_to_show.distance)
+        interpol_alt = utilities.interpolate(prev_stats.altitude, plane_to_show.altitude)
+        interpol_speed = utilities.interpolate(prev_stats.ground_speed, plane_to_show.ground_speed)
 
         prev_stats = plane_to_show
 
         # We only have room to display one full airport name. So pick the one that is further away assuming
         # the user probably hasn't heard of that one
         origin_distance = 0
-        if plane_to_show["origin"]:
-            origin_config = shared_config.code_to_airport.get(plane_to_show["origin"])
+        if plane_to_show.origin_airport_iata:
+            origin_config = shared_config.code_to_airport.get(plane_to_show.origin_airport_iata)
             if origin_config:
                 origin_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
                 logging.info(f"Origin is {origin_distance:.2f} miles away")
 
         destination_distance = 0
-        if plane_to_show["destination"]:
-            destination_config = shared_config.code_to_airport.get(plane_to_show["destination"])
+        if plane_to_show.destination_airport_iata:
+            destination_config = shared_config.code_to_airport.get(plane_to_show.destination_airport_iata)
             if destination_config:
                 destination_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
                 logging.info(f"Destination is {destination_distance:.2f} miles away")
@@ -90,20 +91,20 @@ def show_a_plane(sign, plane_to_show):
         logging.info("Full airport name from code: " + friendly_name)
 
         # Front pad the flight number to a max of 7 for spacing
-        formatted_flight = plane_to_show["flight"].rjust(7, ' ')
+        formatted_flight = plane_to_show.callsign.rjust(7, ' ')
 
-        if not plane_to_show["origin"]:
-            plane_to_show["origin"] = "???"
+        if not plane_to_show.origin_airport_iata:
+            plane_to_show.origin_airport_iata = "???"
 
-        if not plane_to_show["destination"]:
-            plane_to_show["destination"] = "???"
+        if not plane_to_show.destination_airport_iata:
+            plane_to_show.destination_airport_iata = "???"
 
         for i in range(utilities.NUM_STEPS):
             sign.canvas.Clear()
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show["origin"] + "->" + plane_to_show["destination"])
+            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show.origin_airport_iata + "->" + plane_to_show.destination_airport_iata)
             graphics.DrawText(sign.canvas, sign.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
             graphics.DrawText(sign.canvas, sign.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
-            graphics.DrawText(sign.canvas, sign.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show["typecode"])
+            graphics.DrawText(sign.canvas, sign.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show.aircraft_code)
 
             graphics.DrawText(sign.canvas, sign.font57, 78, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
             graphics.DrawText(sign.canvas, sign.font57, 78, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
@@ -117,9 +118,69 @@ def show_a_plane(sign, plane_to_show):
 
     else:
         # NOT ALERT RADIUS
-        prev_stats["distance"] = 0
-        prev_stats["altitude"] = 0
-        prev_stats["speed"] = 0
+        prev_stats.distance = 0
+        prev_stats.altitude = 0
+        prev_stats.ground_speed = 0
 
         utilities.show_time(sign)
         sign.wait_loop(0.5)
+
+
+def get_plane_data_worker(data_dict):
+
+    fr_api = FlightRadar24API()
+
+    bounds = f"{float(shared_config.CONF['SENSOR_LAT']) + 2},{float(shared_config.CONF['SENSOR_LAT']) - 2},{float(shared_config.CONF['SENSOR_LON']) - 2},{float(shared_config.CONF['SENSOR_LON']) + 2}"
+
+    shutdown_flag = False
+
+    while not shutdown_flag:
+
+        try:
+            if shared_config.shared_mode.value == 0:
+                logging.info("Sign off, skipping FR24 request...")
+            else:
+
+                flights = fr_api.get_flights(bounds=bounds)
+
+                closest = None
+                highest = None
+                fastest = None
+                slowest = None
+
+                for flight in flights:
+
+                    # Filter out planes on the ground
+                    if flight.on_ground:
+                        continue
+
+                    # Not included in the API, we calculate this on the fly
+                    flight.distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (flight.latitude, flight.longitude))
+
+                    if (closest is None or (flight.distance < closest.distance and flight.altitude < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"]))):
+                        closest = flight
+
+                    # The rest of these are for fun, filter out the unknown planes
+                    if not flight.origin_airport_iata:
+                        continue
+
+                    if (highest is None or flight.altitude > highest.altitude):
+                        highest = flight
+
+                    if (fastest is None or flight.ground_speed > fastest.ground_speed):
+                        fastest = flight
+
+                    if (slowest is None or flight.ground_speed < slowest.ground_speed):
+                        slowest = flight
+
+                logging.info(f"{closest.distance:.2f} miles away: {closest}")
+
+                data_dict["closest"] = closest
+                data_dict["highest"] = highest
+                data_dict["fastest"] = fastest
+                data_dict["slowest"] = slowest
+
+        except:
+            logging.exception("Error getting FR24 data...")
+
+        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=7)

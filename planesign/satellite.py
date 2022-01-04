@@ -233,7 +233,7 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
 
-    while True:
+    while shared_config.shared_mode.value == 17:
 
         if shared_config.shared_satellite_mode.value == 1:
 

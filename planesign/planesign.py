@@ -13,6 +13,7 @@ import os
 import threading
 import traceback
 import weather
+import planes
 import requests
 from datetime import datetime
 
@@ -203,71 +204,6 @@ def api_server():
     app_server.serve_forever()
 
 
-def get_data_worker(data_dict):
-    while shared_config.shared_program_shutdown.value != 1:
-
-        try:
-            if shared_config.shared_mode.value == 0:
-                logging.info("off, skipping FR24 request...")
-            else:
-
-                with requests.Session() as s:
-                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    response = s.get(shared_config.CONF["ENDPOINT"], headers={'user-agent': 'martian-law-v1.3'})
-                    results = response.json()
-
-                closest = None
-                highest = None
-                fastest = None
-                slowest = None
-
-                for key in results:
-
-                    if key != "full_count" and key != "stats" and key != "version":
-                        result = results[key]
-
-                        newguy = {}
-                        newguy["altitude"] = result[4]
-                        newguy["speed"] = result[5]
-                        newguy["flight"] = result[16] if result[16] else ""
-                        newguy["typecode"] = result[8]
-                        newguy["origin"] = result[11]
-                        newguy["destination"] = result[12]
-                        newguy["distance"] = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (result[1], result[2]))
-
-                        # Filter out planes on the ground
-                        if newguy["altitude"] < 100:
-                            continue
-
-                        if (closest is None or (newguy["distance"] < closest["distance"] and newguy["altitude"] < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"]))):
-                            closest = newguy
-
-                        # The rest of these are for fun, filter out the unknown planes
-                        if not newguy["origin"]:
-                            continue
-
-                        if (highest is None or int(newguy["altitude"]) > int(highest["altitude"])):
-                            highest = newguy
-
-                        if (fastest is None or int(newguy["speed"]) > int(fastest["speed"])):
-                            fastest = newguy
-
-                        if (slowest is None or int(newguy["speed"]) < int(slowest["speed"])):
-                            slowest = newguy
-
-                logging.info(str(closest))
-
-                data_dict["closest"] = closest
-                data_dict["highest"] = highest
-                data_dict["fastest"] = fastest
-                data_dict["slowest"] = slowest
-
-        except:
-            logging.exception("Error getting FR24 data...")
-
-        time.sleep(7)
-
-
 def read_config():
     shared_config.CONF.clear()
 
@@ -295,10 +231,6 @@ def read_config():
 
     logging.info("Config loaded: " + str(shared_config.CONF))
 
-    shared_config.CONF["ENDPOINT"] = f'https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds={float(shared_config.CONF["SENSOR_LAT"]) + 2},{float(shared_config.CONF["SENSOR_LAT"]) - 2},{float(shared_config.CONF["SENSOR_LON"]) - 2},{float(shared_config.CONF["SENSOR_LON"]) + 2}'
-
-    logging.info("Plane Endpoint: " + shared_config.CONF["ENDPOINT"])
-
     tf = TimezoneFinder()
     local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
     if local_tz is None:
@@ -311,9 +243,6 @@ def read_config():
 
 class PlaneSign:
     def __init__(self, defined_mode_handlers):
-
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
 
         options = RGBMatrixOptions()
         options.cols = 64
@@ -341,30 +270,9 @@ class PlaneSign:
 
         self.last_brightness = None
 
-        manager = Manager()
-        shared_config.data_dict = manager.dict()
-        shared_config.arg_dict = manager.dict()
-        shared_config.CONF = manager.dict()
-        shared_config.shared_shutdown_event = manager.Event()
-
-        shared_config.data_dict["closest"] = None
-        shared_config.data_dict["highest"] = None
-        shared_config.data_dict["fastest"] = None
-        shared_config.data_dict["slowest"] = None
-
         read_config()
+
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
-
-        Process(target=get_data_worker, name="Get Plane Data", args=(shared_config.data_dict,)).start()
-        Process(target=weather.get_weather_data_worker, name="Get Weather Data", args=(shared_config.data_dict,)).start()
-        Process(target=api_server, name="API Server").start()
-
-    def exit_gracefully(self, *args):
-        logging.debug("Exiting...")
-        shared_config.shared_program_shutdown.value = 1
-        shared_config.shared_mode.value = 0
-        shared_config.shared_forced_sign_update.value = 1
-        shared_config.shared_shutdown_event.set()
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
@@ -387,7 +295,7 @@ class PlaneSign:
 
     def sign_loop(self):
 
-        while shared_config.shared_program_shutdown.value != 1:
+        while not shared_config.shared_shutdown_event.is_set():
             try:
 
                 mode = shared_config.shared_mode.value
@@ -402,4 +310,4 @@ class PlaneSign:
                 time.sleep(3)
                 shared_config.shared_mode.value = 1 #Reset to default mode
 
-        print("--- END OF SIGN LOOP ---")
+        logging.info("--- END OF SIGN LOOP ---")

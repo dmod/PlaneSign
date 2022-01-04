@@ -30,7 +30,7 @@ def pong(sign):
         for height in range(starting_y_value_2, starting_y_value_2 + 6):
             sign.canvas.SetPixel(width, height, 20, 20, 255)
 
-    while True:
+    while shared_config.shared_mode.value == 11:
         framecount += 1
         sign.canvas.Clear()
 

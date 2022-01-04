@@ -41,7 +41,7 @@ if __name__ == "__main__":
 
     airport_lines = data_request.text.splitlines()[1:]
 
-    print(f"Found {airport_lines} static airport configurations")
+    print(f"Found {len(airport_lines)} static airport configurations")
 
     with open("airports.csv", "w") as f:
 
@@ -62,6 +62,6 @@ if __name__ == "__main__":
     file = requests.get(satdaturl, stream=True, allow_redirects=True)
     if file.status_code == requests.codes.ok:
         sat_lines = file.text.splitlines()[1:]
-        print(f"Found static data for {sat_lines} satellites")
+        print(f"Found static data for {len(sat_lines)} satellites")
         with open("satdat.txt", 'wb') as f:
             f.write(file.content)

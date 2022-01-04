@@ -251,10 +251,10 @@
 
   function update_sign_status() {
     call_endpoint("/status", function (current_status) {
-      if (current_status === "1") {
-        document.getElementById("toggle_switch").checked = true;
-      } else {
+      if (current_status === "0") {
         document.getElementById("toggle_switch").checked = false;
+      } else {
+        document.getElementById("toggle_switch").checked = true;
       }
     });
 

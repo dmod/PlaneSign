@@ -24,7 +24,7 @@ def finance(self):
     shared_config.data_dict["ticker"] = None
     s = None
 
-    while True:
+    while shared_config.shared_mode.value == 13:
 
         ddt = shared_config.data_dict["ticker"]
 

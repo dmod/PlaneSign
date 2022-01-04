@@ -1,7 +1,5 @@
 from multiprocessing import Value
 
-shared_program_shutdown = Value('i', 0)
-
 shared_mode = Value('i', 1)
 shared_prev_mode = Value('i', 0)
 
@@ -23,7 +21,6 @@ log_filename = "logs/planesign.log"
 icons_dir = "./icons"
 font_dir = "../rpi-rgb-led-matrix/fonts"
 
-# These get set in the PlaneSign constructor
 shared_shutdown_event = None
 data_dict = None
 arg_dict = None
