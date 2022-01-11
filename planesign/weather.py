@@ -14,17 +14,6 @@ def show_weather(sign):
     while shared_config.shared_mode.value == 6:
         sign.canvas = sign.matrix.CreateFrameCanvas()
 
-        graphics.DrawText(sign.canvas, sign.font46, 0, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
-
-        # Calculate and draw the horizontal boarder around the WEATHER_CITY_NAME
-        num_horizontal_pixels = (len(shared_config.CONF["WEATHER_CITY_NAME"]) * 4)
-        for x in range(num_horizontal_pixels):
-            sign.canvas.SetPixel(x, 6, 140, 140, 140)
-
-        # Draw the vertical boarder around the WEATHER_CITY_NAME
-        for y in range(7):
-            sign.canvas.SetPixel(num_horizontal_pixels, y, 140, 140, 140)
-
         day_0_xoffset = 2
         day_1_xoffset = 45
         day_2_xoffset = 88
@@ -66,6 +55,17 @@ def show_weather(sign):
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
         graphics.DrawText(sign.canvas, sign.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day.status)
 
+        graphics.DrawText(sign.canvas, sign.font46, 0, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
+
+        # Calculate and draw the horizontal boarder around the WEATHER_CITY_NAME
+        num_horizontal_pixels = (len(shared_config.CONF["WEATHER_CITY_NAME"]) * 4)
+        for x in range(num_horizontal_pixels):
+            sign.canvas.SetPixel(x, 6, 140, 140, 140)
+
+        # Draw the vertical boarder around the WEATHER_CITY_NAME
+        for y in range(7):
+            sign.canvas.SetPixel(num_horizontal_pixels, y, 140, 140, 140)
+
         sunrise_sunset_start_x = num_horizontal_pixels + 20
 
         time_format = '%-I:%M'
@@ -81,7 +81,7 @@ def show_weather(sign):
 
 
 def get_weather_data_worker(data_dict):
-    owm = OWM('1615520156f27624562ceace6e3849f3')
+    owm = OWM(shared_config.CONF["OPENWEATHER_API_KEY"])
     mgr = owm.weather_manager()
 
     shutdown_flag = False

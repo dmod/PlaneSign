@@ -1,19 +1,15 @@
 import math
-import numpy as np
 import random
-import favicon
 import logging
 import time
-import re
 import pytz
 import sys
 import os
 import __main__
-import traceback
-from multiprocessing import Process, Manager, Value, Array, Queue
 import shared_config
 import json
 import requests
+from timezonefinder import TimezoneFinder
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
 from requests import Session
@@ -24,6 +20,41 @@ from datetime import tzinfo, timedelta, datetime
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
 KM_2_MI = 0.6214
+
+def read_config():
+    shared_config.CONF.clear()
+
+    logging.info("Reading  config...")
+
+    if not os.path.exists("sign.conf"):
+        logging.warn("WARNING! No sign.conf found... using default values from sign.conf.sample")
+    else:
+        with open("sign.conf") as f:
+            for line in f.readlines():
+                if line.isspace() or line[0] == "#":
+                    continue
+                key, val = line.split('=')
+                shared_config.CONF[key] = val.rstrip()
+
+    with open("sign.conf.sample") as f:
+        for line in f.readlines():
+            if line.isspace() or line[0] == "#":
+                continue
+            key, val = line.split('=')
+            if key not in shared_config.CONF.keys():
+                logging.warn(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val}' from sign.conf.sample")
+                shared_config.CONF[key] = val.rstrip()
+
+    logging.info("Config loaded: " + str(shared_config.CONF))
+
+    tf = TimezoneFinder()
+    local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
+    if local_tz is None:
+        logging.warning("Cannot find given provided lat/lon! Using UTC...")
+        shared_config.local_timezone = pytz.utc
+    else:
+        logging.info(f"Detected timezone to be {local_tz}")
+        shared_config.local_timezone = pytz.timezone(local_tz)
 
 def random_angle():
     return random.randrange(0, 360)

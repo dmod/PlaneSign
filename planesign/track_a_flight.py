@@ -3,6 +3,7 @@ import shared_config
 import time
 import requests
 from rgbmatrix import graphics
+from FlightRadar24.api import FlightRadar24API, Flight
 import utilities
 import __main__
 

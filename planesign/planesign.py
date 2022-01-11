@@ -39,7 +39,7 @@ CORS(app)
 @app.route("/get_config")
 def get_config():
     shared_config.CONF.clear()
-    read_config()
+    utilities.read_config()
     sample = {}
     sample["DATATYPES"] = []
 
@@ -82,7 +82,7 @@ def write_config():
         f.flush()
         f.close()
 
-        read_config()
+        utilities.read_config()
         shared_config.shared_forced_sign_update.value = 1
     return ""
 
@@ -204,42 +204,6 @@ def api_server():
     app_server.serve_forever()
 
 
-def read_config():
-    shared_config.CONF.clear()
-
-    logging.info("Reading  config...")
-
-    with open("sign.conf") as f, open("sign.conf.sample") as s:
-        lines = f.readlines()
-        lines_s = s.readlines()
-
-        temp = {}
-        for line in lines:
-            if line[0] == "#":
-                continue
-            parts = line.split('=')
-            temp[parts[0]] = parts[1].rstrip()
-
-        for line in lines_s:
-            if line[0] == "#":
-                continue
-            parts = line.split('=')
-            if parts[0] in temp.keys():
-                shared_config.CONF[parts[0]] = temp[parts[0]]
-            else:
-                shared_config.CONF[parts[0]] = parts[1].rstrip()
-
-    logging.info("Config loaded: " + str(shared_config.CONF))
-
-    tf = TimezoneFinder()
-    local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
-    if local_tz is None:
-        logging.warning("Cannot find given provided lat/lon! Using UTC...")
-        shared_config.local_timezone = pytz.utc
-    else:
-        logging.info(f"Detected timezone to be {local_tz}")
-        shared_config.local_timezone = pytz.timezone(local_tz)
-
 
 class PlaneSign:
     def __init__(self, defined_mode_handlers):
@@ -269,8 +233,6 @@ class PlaneSign:
         self.canvas.brightness = shared_config.shared_current_brightness.value
 
         self.last_brightness = None
-
-        read_config()
 
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
