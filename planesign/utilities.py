@@ -3,23 +3,19 @@ import random
 import logging
 import time
 import pytz
-import sys
 import os
 import __main__
 import shared_config
-import json
-import requests
+
 from timezonefinder import TimezoneFinder
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from multiprocessing import Process, Manager, Value, Array, Queue
-from requests import Session
-from PIL import Image
+from rgbmatrix import graphics
 from math import pi, cos, sin
-from datetime import tzinfo, timedelta, datetime
+from datetime import datetime
 
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
 KM_2_MI = 0.6214
+
 
 def read_config():
     shared_config.CONF.clear()
@@ -50,11 +46,12 @@ def read_config():
     tf = TimezoneFinder()
     local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
     if local_tz is None:
-        logging.warning("Cannot find given provided lat/lon! Using UTC...")
+        logging.warn("Cannot find given provided lat/lon! Using UTC...")
         shared_config.local_timezone = pytz.utc
     else:
         logging.info(f"Detected timezone to be {local_tz}")
         shared_config.local_timezone = pytz.timezone(local_tz)
+
 
 def random_angle():
     return random.randrange(0, 360)
@@ -63,6 +60,7 @@ def random_angle():
 def random_rgb_255_sum():
     _, r, g, b = next_color_rainbow_linear(random_angle())
     return r, g, b
+
 
 def read_static_airport_data():
     with open("airports.csv") as f:
@@ -76,6 +74,7 @@ def read_static_airport_data():
             shared_config.code_to_airport[code] = (name, lat, lon)
 
     logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
+
 
 def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):
     rmin %= 256
@@ -405,6 +404,7 @@ def set_matrix(x, y, matrix, val):
 
     matrix[x][y] = val
 
+
 @__main__.planesign_mode_handler(7)
 def only_show_time(sign):
     while shared_config.shared_mode.value == 7:
@@ -412,6 +412,7 @@ def only_show_time(sign):
         breakout = sign.wait_loop(1)
         if breakout:
             return
+
 
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
@@ -430,6 +431,7 @@ def show_time(sign):
     graphics.DrawText(sign.canvas, sign.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
 
     sign.matrix.SwapOnVSync(sign.canvas)
+
 
 @__main__.planesign_mode_handler(0)
 def clear_matrix(sign):

@@ -27,4 +27,3 @@ arg_dict = None
 CONF = None
 
 code_to_airport = {}
-

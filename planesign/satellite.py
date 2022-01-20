@@ -422,7 +422,7 @@ def satellites(sign):
                 if pos:
                     if geotime == None or time.perf_counter()-geotime>60:
                         geotime = time.perf_counter()
-                        reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={pos['satlatitude']},{pos['satlongitude']}&result_type=country|administrative_area_level_1|natural_feature&key=AIzaSyD65DETlTi-o5ymfcSp2Gl8JxBS7fwOl5g").json()
+                        reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={pos['satlatitude']},{pos['satlongitude']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
                 
                         if len(reverse_geocode['results']) != 0:
                             formatted_address = reverse_geocode['results'][0]['formatted_address']

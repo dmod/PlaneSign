@@ -12,10 +12,7 @@ from multiprocessing import Process, Manager, Value
 import numpy as np
 import utilities
 from rgbmatrix import graphics
-from flask import Flask, request
-from flask_cors import CORS
 import requests
-from math import floor
 import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import _thread as thread

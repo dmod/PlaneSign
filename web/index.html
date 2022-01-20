@@ -259,7 +259,7 @@
     });
 
     call_endpoint("/get_mode", function (current_mode) {
-      if (current_mode){
+      if (current_mode && current_mode !== "0") {
         document.getElementById(current_mode).style.backgroundColor = "red";
         global_current_mode = current_mode;
       }

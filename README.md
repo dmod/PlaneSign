@@ -87,5 +87,10 @@ server {
 ## Credits
 We thank the 
 Weather Data OpenWeather (TM)
+FlightRadar24
 ucsusa.org
 n2yo.com
+coinmarketcap.com
+googleapis.com
+ourairports.com
+opendatasoft.com -> map polygons
