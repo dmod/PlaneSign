@@ -38,7 +38,7 @@ cd
 git clone https://github.com/dmod/PlaneSign.git
 cd PlaneSign
 sudo -H pip3 install -r requirements.txt
-sudo planesign
+sudo python3 planesign
 ```
 
 crontab -e:
