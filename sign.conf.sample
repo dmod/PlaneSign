@@ -16,8 +16,11 @@ DEFAULT_BRIGHTNESS=80
 #number min 0 max 100000
 CLOSEST_HEIGHT_LIMIT=10000
 
-#API Keys (no guarantee about this working, best to make your own)
+#text
+PINOUT_HARDWARE_MAPPING=regular
+
+#text
 OPENWEATHER_API_KEY=1615520156f27624562ceace6e3849f3
 
-#API Keys (no guarantee about this working, best to make your own)
+#text
 GOOGLEMAPS_API_KEY=AIzaSyD65DETlTi-o5ymfcSp2Gl8JxBS7fwOl5g
