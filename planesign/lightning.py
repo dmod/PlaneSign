@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-import copy as cp
+
 import random
-import websocket #sudo -H pip3 install websocket-client
+import websocket
 import json
 import time
 import os
@@ -10,21 +10,40 @@ import base64
 import ssl
 from multiprocessing import Process, Manager, Value
 import numpy as np
-from utilities import *
+import utilities
 from rgbmatrix import graphics
-from flask import Flask, request
-from flask_cors import CORS
 import requests
-from math import floor
 import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import _thread as thread
 import os.path
 import shared_config
+import __main__
+
 
 USAlong=-96
 USAlat=38
 USAscale=55
+
+@__main__.planesign_mode_handler(15)
+def lightning(sign):
+    sign.canvas.Clear()
+
+    LM = LightningManager(sign)
+    LM.connect()
+
+    last_draw = time.perf_counter()
+
+    sign.canvas.Clear()
+    while LM.connected.value:
+        if time.perf_counter()-last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lighting_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lighting_mode.value):
+            LM.draw()
+            last_draw = time.perf_counter()
+
+        breakout = sign.wait_loop(0.1)
+        if breakout:
+            LM.close()
+            return
 
 def mercator_proj(lat, lon):
     x = np.radians(lon)
@@ -62,9 +81,6 @@ def draw_power(x,y,radius,sign):
 
 class LightningManager:
 
-    zoomind = Value('i', 6)
-    mode = Value('i', 1)
-
     def __init__(self,sign):
         self.host = ''
         self.ws = None
@@ -72,7 +88,7 @@ class LightningManager:
         self.ws_server = None
         self.ws_key = None
         self.header = None
-        self.floc = '/home/pi/PlaneSign/icons/lightning/'
+        self.floc = f'{shared_config.icons_dir}/lightning/'
         self.connected = Value('i', 0)
         self.strikes = Manager().list()
         self.sign = sign
@@ -95,7 +111,7 @@ class LightningManager:
         self.genBackgrounds()
 
     def draw_loading(self):
-        image = Image.open("/home/pi/PlaneSign/icons/11d.png")
+        image = Image.open(f"{shared_config.icons_dir}/11d.png")
         image = image.resize((35, 35), Image.BICUBIC)
         self.sign.canvas.SetImage(image.convert('RGB'), 90, -1)
 
@@ -225,12 +241,12 @@ class LightningManager:
 
         dets = []
         for det in strike_js["sig"]:
-            dets.append(get_distance((det["lat"],det["lon"]), (strike_js["lat"],strike_js["lon"])))
+            dets.append(utilities.get_distance((det["lat"],det["lon"]), (strike_js["lat"],strike_js["lon"])))
         dets.sort()
         #Median detector distance - use dets[floor(len(dets)/2.0)]
         #Second farthest detector distance - user dets[len(dets)-2]
 
-        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":get_distance((strike_js["lat"],strike_js["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))),"radius":dets[len(dets)-2]}
+        strike={"time":strike_js["time"]/1e9,"lat":strike_js["lat"],"lon":strike_js["lon"],"dist":utilities.get_distance((strike_js["lat"],strike_js["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))),"radius":dets[len(dets)-2]}
         #print(strike)
         self.strikes.append(strike)
 
@@ -274,7 +290,7 @@ class LightningManager:
     
     def draw(self):
 
-        if LightningManager.mode.value == 2:
+        if shared_config.shared_lighting_mode.value == 2:
             local = True
         else:
             local = False
@@ -328,7 +344,7 @@ class LightningManager:
 
         lightningmap = None
         if local:
-            self.background = self.backgrounds[LightningManager.zoomind.value]
+            self.background = self.backgrounds[shared_config.shared_lighting_zoomind.value]
         else:
             self.background =  self.usa
 
@@ -362,8 +378,8 @@ class LightningManager:
                     
                     x,y = mercator_proj(strike["lat"], strike["lon"])
                     if local:
-                        x=self.bgwidth/2+(x-self.x1)*self.zooms[LightningManager.zoomind.value]
-                        y=self.bgheight/2-(y-self.y1)*self.zooms[LightningManager.zoomind.value]
+                        x=self.bgwidth/2+(x-self.x1)*self.zooms[shared_config.shared_lighting_zoomind.value]
+                        y=self.bgheight/2-(y-self.y1)*self.zooms[shared_config.shared_lighting_zoomind.value]
                     else:
                         x=self.bgwidth/2+(x-self.x0)*USAscale
                         y=self.bgheight/2-(y-self.y0)*USAscale
@@ -378,9 +394,9 @@ class LightningManager:
         if closest1:
             r,g,b = get_lightning_color(closest1["time"],now,False)
             if closest1["dist"]<100:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             
             draw_power(0,14,closest1["radius"],self.sign)
         else:
@@ -389,9 +405,9 @@ class LightningManager:
         if closest2:
             r,g,b = get_lightning_color(closest2["time"],now,False)
             if closest2["dist"]<100:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
         
             draw_power(0,22,closest2["radius"],self.sign)
         else:
@@ -400,9 +416,9 @@ class LightningManager:
         if closest3:    
             r,g,b = get_lightning_color(closest3["time"],now,False)
             if closest3["dist"]<100:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
 
             draw_power(0,30,closest3["radius"],self.sign)
         else:
@@ -411,9 +427,9 @@ class LightningManager:
         graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 6, graphics.Color(20, 20, 210), "Recent")
         if recent:
             if recent[0]["dist"]<100:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
 
             draw_power(31,14,recent[0]["radius"],self.sign)
         else:
@@ -453,8 +469,8 @@ class LightningManager:
         self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
         self.sign.canvas.Clear()
 
-        self.last_drawn_zoomind.value = LightningManager.zoomind.value
-        self.last_drawn_mode.value = LightningManager.mode.value
+        self.last_drawn_zoomind.value = shared_config.shared_lighting_zoomind.value
+        self.last_drawn_mode.value = shared_config.shared_lighting_mode.value
 
     def connect(self):
           

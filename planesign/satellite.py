@@ -2,16 +2,19 @@ import time
 from datetime import datetime, timedelta
 import random
 import requests
+import utilities
+from PIL import Image
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import shared_config
-from utilities import *
 from rgbmatrix import graphics
 import country_converter as coco
 import numpy as np
 import logging
+import math
+import __main__
 
-
+ 
 def fix_black(image):
     #brighten black
     rgb = np.array(image.convert('RGB'))
@@ -87,14 +90,14 @@ def get_flag(selected,satellite_data):
             if sat[0]["country"].find("/") != -1:
 
                 countries = sat[0]["country"].split("/")
-                llmask = Image.open("/home/pi/PlaneSign/icons/flags/MASK_LL.png").convert('RGBA')
-                cmask = Image.open("/home/pi/PlaneSign/icons/flags/MASK_C.png").convert('RGBA')
+                llmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_LL.png").convert('RGBA')
+                cmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_C.png").convert('RGBA')
 
                 if len(countries)==2:
                     
                     try:
-                        image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        foreground = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        foreground = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
                         image.paste(foreground, (0, 0), llmask)
 
                     except Exception:
@@ -103,9 +106,9 @@ def get_flag(selected,satellite_data):
                 elif len(countries)==3:
 
                     try:
-                        image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[2])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        foreground = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        center =  Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[2])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        foreground = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                        center =  Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
 
                         image.paste(foreground, (0, 0), llmask)
                         image.paste(center, (0, 0), cmask)
@@ -114,11 +117,11 @@ def get_flag(selected,satellite_data):
                         pass
 
                 elif len(countries)>3:
-                    image = Image.open('/home/pi/PlaneSign/icons/flags/UN.png').convert('RGBA')
+                    image = Image.open('{shared_config.icons_dir}/flags/UN.png').convert('RGBA')
 
             else:
                 try:
-                    image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(sat[0]["country"])}.png').convert('RGBA')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(sat[0]["country"])}.png').convert('RGBA')
                 except Exception:
                     pass
 
@@ -136,7 +139,7 @@ def get_flag(selected,satellite_data):
                 image = Image.open('/home/pi/PlaneSign/icons/flags/RUS.png').convert('RGBA')
 
         elif sat_name.find("DIADEME") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/FRA.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/FRA.png').convert('RGBA')
 
         elif sat_name.find("ANIK") == 0:
             image = Image.open('/home/pi/PlaneSign/icons/flags/CAN.png').convert('RGBA')
@@ -159,12 +162,13 @@ def get_flag(selected,satellite_data):
 
     return image
 
+@__main__.planesign_mode_handler(17)
 def satellites(sign):
     sign.canvas.Clear()
 
     satellite_data = []
     try:
-        with open("/home/pi/PlaneSign/satdat.txt",encoding='windows-1252') as f:
+        with open("satdat.txt",encoding='windows-1252') as f:
             pass
     except:
         satdaturl = "https://www.ucsusa.org/media/11490"
@@ -172,11 +176,11 @@ def satellites(sign):
         if file.status_code == requests.codes.ok:
             sat_lines = file.text.splitlines()[1:]
             print(f"Found static data for {len(sat_lines)} satellites")
-            with open("/home/pi/PlaneSign/satdat.txt", 'wb') as f:
+            with open("satdat.txt", 'wb') as f:
                 f.write(file.content)
 
     try:
-        with open("/home/pi/PlaneSign/satdat.txt",encoding='windows-1252') as f:
+        with open("satdat.txt",encoding='windows-1252') as f:
             lines = f.readlines()[1:]
             nline = 0
             for line in lines:
@@ -215,7 +219,7 @@ def satellites(sign):
 
     blip_count = 0
     
-    iss_image = Image.open('/home/pi/PlaneSign/icons/ISS.png').convert("RGB")
+    iss_image = Image.open(f'{shared_config.icons_dir}/ISS.png').convert("RGB")
 
     stars = []
     stars.append(Star(sign, 100, 14))
@@ -245,7 +249,7 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
 
-    while True:
+    while shared_config.shared_mode.value == 17:
 
         if shared_config.shared_satellite_mode.value == 1:
 
@@ -269,7 +273,7 @@ def satellites(sign):
 
                     above = data["above"]
                     
-                    above = list(map(lambda item: dict(item, dist=get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
+                    above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                     #remove debris from results
                     above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"]and "OBJECT " not in x["satname"], above))
@@ -326,7 +330,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 1, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(closest["dist"]))
                 
                 graphics.DrawText(sign.canvas, sign.font57, 22, 24, graphics.Color(20, 160, 60), "Dir:")
-                close_dir = direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                close_dir = utilities.direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                 if len(close_dir)==1:
                     graphics.DrawText(sign.canvas, sign.font57, 27, 32, graphics.Color(20, 160, 60), close_dir)
                 else:
@@ -336,7 +340,7 @@ def satellites(sign):
                 if dupeflag:
                     for x in range(43,57):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
-                close_alt = closest["satalt"]*KM_2_MI
+                close_alt = closest["satalt"]*utilities.KM_2_MI
                 if close_alt < 10000:
                     graphics.DrawText(sign.canvas, sign.font57, 43, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(close_alt))
                 else:
@@ -369,7 +373,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 66, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(lowest["dist"]))
 
                 graphics.DrawText(sign.canvas, sign.font57, 87, 24, graphics.Color(20, 160, 60), "Dir:")
-                low_dir = direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                low_dir = utilities.direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                 if len(low_dir)==1:
                     graphics.DrawText(sign.canvas, sign.font57, 92, 32, graphics.Color(20, 160, 60), low_dir)
                 else:
@@ -379,7 +383,7 @@ def satellites(sign):
                 if not dupeflag:
                     for x in range(108,122):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
-                low_alt = lowest["satalt"]*KM_2_MI
+                low_alt = lowest["satalt"]*utilities.KM_2_MI
                 if low_alt < 10000:
                     graphics.DrawText(sign.canvas, sign.font57, 108, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(low_alt))
                 else:
@@ -434,7 +438,7 @@ def satellites(sign):
                 if pos:
                     if geotime == None or time.perf_counter()-geotime>60:
                         geotime = time.perf_counter()
-                        reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={pos['satlatitude']},{pos['satlongitude']}&result_type=country|administrative_area_level_1|natural_feature&key=AIzaSyD65DETlTi-o5ymfcSp2Gl8JxBS7fwOl5g").json()
+                        reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={pos['satlatitude']},{pos['satlongitude']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
                 
                         if len(reverse_geocode['results']) != 0:
                             formatted_address = reverse_geocode['results'][0]['formatted_address']
@@ -464,10 +468,10 @@ def satellites(sign):
                             # else:
                             #     formatted_address = 'Somewhere'
 
-                    iss_dist = get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
-                    iss_alt = pos["sataltitude"]*KM_2_MI
-                    iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*KM_2_MI
-                    iss_dir = direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    iss_alt = pos["sataltitude"]*utilities.KM_2_MI
+                    iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*utilities.KM_2_MI
+                    iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
 
             else: 
                 formatted_address = 'Somewhere'
@@ -484,7 +488,7 @@ def satellites(sign):
             image = None
             if country:
                 if formatted_address.find("Ocean") != -1:
-                    image = Image.open('/home/pi/PlaneSign/icons/flags/OCEAN.png').convert('RGBA')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
                 else:
 
                     if full_country_name == "United States":
@@ -499,19 +503,19 @@ def satellites(sign):
 
                         if state:
                             try:
-                                image = Image.open(f'/home/pi/PlaneSign/icons/flags/states/{state_code}.png').convert('RGBA')
+                                image = Image.open(f'{shared_config.icons_dir}/flags/states/{state_code}.png').convert('RGBA')
                             except Exception:
-                                image = Image.open(f'/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+                                image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
                         else:
-                            image = Image.open(f'/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+                            image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
                     else:
                         try:
-                            image = Image.open(f'/home/pi/PlaneSign/icons/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
+                            image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
                             image = fix_black(image)
                         except Exception:
                             pass
             elif formatted_address.find("Ocean") != -1 or formatted_address.find("Gulf") != -1 or formatted_address.find("Sea") != -1 or formatted_address.find("River") != -1 or formatted_address.find("Bay") != -1 or formatted_address.find("Lake") != -1:
-                    image = Image.open('/home/pi/PlaneSign/icons/flags/OCEAN.png').convert('RGBA')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
                     
             if image:
                 sign.canvas.SetImage(image.resize((15, 10), Image.BICUBIC).convert('RGB'), 113, 0)

@@ -63,5 +63,5 @@ if __name__ == "__main__":
     if file.status_code == requests.codes.ok:
         sat_lines = file.text.splitlines()[1:]
         print(f"Found static data for {len(sat_lines)} satellites")
-        with open("/home/pi/PlaneSign/satdat.txt", 'wb') as f:
+        with open("satdat.txt", 'wb') as f:
             f.write(file.content)

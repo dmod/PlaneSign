@@ -1,21 +1,56 @@
 import math
-import numpy as np
-import pytz
 import random
-import favicon
-import re
-import json
-import requests
-from requests import Session
-from PIL import Image
+import logging
+import time
+import pytz
+import os
+import __main__
+import shared_config
+
+from timezonefinder import TimezoneFinder
+from rgbmatrix import graphics
 from math import pi, cos, sin
-from datetime import tzinfo, timedelta, datetime
+from datetime import datetime
 
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
 KM_2_MI = 0.6214
 
-local_tz = pytz.timezone('America/New_York')
+
+def read_config():
+    shared_config.CONF.clear()
+
+    logging.info("Reading  config...")
+
+    if not os.path.exists("sign.conf"):
+        logging.warn("WARNING! No sign.conf found... using default values from sign.conf.sample")
+    else:
+        with open("sign.conf") as f:
+            for line in f.readlines():
+                if line.isspace() or line[0] == "#":
+                    continue
+                key, val = line.split('=')
+                shared_config.CONF[key] = val.rstrip()
+
+    with open("sign.conf.sample") as f:
+        for line in f.readlines():
+            if line.isspace() or line[0] == "#":
+                continue
+            key, val = line.split('=')
+            if key not in shared_config.CONF.keys():
+                logging.warn(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val}' from sign.conf.sample")
+                shared_config.CONF[key] = val.rstrip()
+
+    logging.info("Config loaded: " + str(shared_config.CONF))
+
+    tf = TimezoneFinder()
+    local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
+    if local_tz is None:
+        logging.warn("Cannot find given provided lat/lon! Using UTC...")
+        shared_config.local_timezone = pytz.utc
+    else:
+        logging.info(f"Detected timezone to be {local_tz}")
+        shared_config.local_timezone = pytz.timezone(local_tz)
 
 
 def random_angle():
@@ -25,6 +60,20 @@ def random_angle():
 def random_rgb_255_sum():
     _, r, g, b = next_color_rainbow_linear(random_angle())
     return r, g, b
+
+
+def read_static_airport_data():
+    with open("airports.csv") as f:
+        lines = f.readlines()
+        for line in lines:
+            parts = line.strip().split(',')
+            code = parts[0]
+            name = parts[1]
+            lat = float(parts[2])
+            lon = float(parts[3])
+            shared_config.code_to_airport[code] = (name, lat, lon)
+
+    logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
 
 
 def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):
@@ -291,7 +340,7 @@ def direction_lookup(destination, origin):
 
 def convert_unix_to_local_time(unix_timestamp):
     utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
-    local_time = utc_time.astimezone(local_tz)
+    local_time = utc_time.astimezone(shared_config.local_timezone)
     return local_time
 
 
@@ -354,3 +403,38 @@ def set_matrix(x, y, matrix, val):
         y = 0
 
     matrix[x][y] = val
+
+
+@__main__.planesign_mode_handler(7)
+def only_show_time(sign):
+    while shared_config.shared_mode.value == 7:
+        show_time(sign)
+        breakout = sign.wait_loop(1)
+        if breakout:
+            return
+
+
+def show_time(sign):
+    if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
+        print_time = convert_unix_to_local_time(time.time()).strftime('%-H:%M')
+    else:
+        print_time = convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
+
+    if "weather" in shared_config.data_dict:
+        temp = str(round(shared_config.data_dict["weather"].current.temperature()['temp']))
+    else:
+        temp = "--"
+
+    sign.canvas.Clear()
+
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
+
+    sign.matrix.SwapOnVSync(sign.canvas)
+
+
+@__main__.planesign_mode_handler(0)
+def clear_matrix(sign):
+    sign.canvas.Clear()
+    sign.matrix.SwapOnVSync(sign.canvas)
+    sign.wait_loop(-1)

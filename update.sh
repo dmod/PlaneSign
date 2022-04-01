@@ -23,16 +23,13 @@ else
     echo "Updating..."
 
     sudo apt install libatlas-base-dev
-    sudo -H pip3 install pytz flask flask_cors numpy scipy yfinance favicon websocket-client country_converter
+    sudo -H pip3 install -r requirements.txt
     git fetch
     git reset --hard HEAD
     git pull
 
     touch sign.conf
     touch prices.csv
-    sudo chmod 777 sign.conf
-    sudo chmod 777 prices.csv
-    sudo chmod -R 777 icons/
 
     echo "Finished... Rebooting"
 

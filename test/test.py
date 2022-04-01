@@ -5,6 +5,10 @@ from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from PIL import Image
 import tempfile
 
+blah = {}
+blah["ehre"] = 2
+blah["4"]
+
 options = RGBMatrixOptions()
 options.cols = 64
 options.gpio_slowdown = 4

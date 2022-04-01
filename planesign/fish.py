@@ -4,6 +4,9 @@
 import PIL
 import random
 from PIL import Image, ImageDraw
+import shared_config
+import __main__
+
 
 tankxmin = -100
 tankxmax = 227
@@ -23,10 +26,33 @@ tanklayout = current_state = [[0 for j in range(32)] for i in range(128)]
 def randomloc():
     return (random.randint(tankxmin,tankxmax),random.randint(tankymin,tankymax),random.randint(tankzmin,tankzmax))
 
+@__main__.planesign_mode_handler(14)
+def aquarium(sign):
+    sign.canvas.Clear()
+
+    tank = Tank(sign)
+
+    clown = Fish(tank, "Clownfish", 2, 0.01)
+    hippo = Fish(tank, "Hippotang", 2, 0.01)
+    queentrigger = Fish(tank, "Queentrigger", 1, 0.005)
+    grouper = Fish(tank, "Coralgrouper", 1, 0.005)
+    anthias = Fish(tank, "Anthias", 2, 0.02)
+    puffer = Fish(tank, "Pufferfish", 1.5, 0.005)
+    regal = Fish(tank, "Regalangel", 1, 0.005)
+    bicolor = Fish(tank, "Bicolorpseudochromis", 3, 0.01)
+    flame = Fish(tank, "Flameangel", 1.5, 0.01)
+    cardinal = Fish(tank, "Cardinal", 1.5, 0.01)
+    copper = Fish(tank, "Copperbanded", 1.5, 0.01)
+    wrasse = Fish(tank, "Wrasse", 3, 0.01)
+
+    while shared_config.shared_mode.value == 14:
+        tank.swim()
+        tank.draw()
+        sign.wait_loop(0.1)
 
 class Tank:
     def __init__(self, sign):
-        self.background = Image.open(f"/home/pi/PlaneSign/icons/aquarium/Background.png")
+        self.background = Image.open(f"{shared_config.icons_dir}/aquarium/Background.png")
         self.fulltank = None
         self.sign = sign
         self.denizens=[]
@@ -63,10 +89,10 @@ class Fish:
         self.sprite=None
         self.dir=dir #0 front, 1 left, 2 back, 3 right
 
-        self.sprite_right= Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_right.png").convert('RGBA').transpose(PIL.Image.FLIP_LEFT_RIGHT)
-        self.sprite_left= Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_right.png").convert('RGBA')
-        self.sprite_front=Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_front.png").convert('RGBA')
-        self.sprite_back=Image.open(f"/home/pi/PlaneSign/icons/aquarium/{name}_back.png").convert('RGBA')
+        self.sprite_right= Image.open(f"{shared_config.icons_dir}/aquarium/{name}_right.png").convert('RGBA').transpose(PIL.Image.FLIP_LEFT_RIGHT)
+        self.sprite_left= Image.open(f"{shared_config.icons_dir}/aquarium/{name}_right.png").convert('RGBA')
+        self.sprite_front=Image.open(f"{shared_config.icons_dir}/aquarium/{name}_front.png").convert('RGBA')
+        self.sprite_back=Image.open(f"{shared_config.icons_dir}/aquarium/{name}_back.png").convert('RGBA')
 
         self.width, self.height = self.sprite_right.size
 
