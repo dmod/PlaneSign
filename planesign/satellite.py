@@ -251,6 +251,8 @@ def satellites(sign):
 
     while shared_config.shared_mode.value == 17:
 
+        sign.canvas.Clear()
+
         if shared_config.shared_satellite_mode.value == 1:
 
             if polltime==None or time.perf_counter()-polltime>10*multiplier:
@@ -668,8 +670,8 @@ def satellites(sign):
                     blip_count = 0
                     
 
-        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        sign.canvas.Clear() 
+        sign.canvas=sign.matrix.SwapOnVSync(sign.canvas)
+        
 
         breakout = sign.wait_loop(0.5)
 
