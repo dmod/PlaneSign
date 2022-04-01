@@ -430,8 +430,6 @@ class LightningManager:
 
         graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), str(numstrikes))
 
-        self.sign.matrix.SwapOnVSync(self.sign.canvas)
-
         if closest1 and closest1["dist"]<0.5 and closest1["time"]+30 > now and ("warned" not in closest1):
             self.strikes[self.strikes.index(closest1)]["warned"]=True
             for i in range(6):
@@ -451,9 +449,9 @@ class LightningManager:
                         self.sign.canvas.SetPixel(i, 31, 0, 0, 0)
                 self.sign.matrix.SwapOnVSync(self.sign.canvas)
                 time.sleep(0.2)
-                
 
-        self.sign.canvas = self.sign.matrix.CreateFrameCanvas()
+        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
+        self.sign.canvas.Clear()
 
         self.last_drawn_zoomind.value = LightningManager.zoomind.value
         self.last_drawn_mode.value = LightningManager.mode.value
