@@ -12,7 +12,8 @@ from rgbmatrix import graphics
 def show_weather(sign):
 
     while shared_config.shared_mode.value == 6:
-        sign.canvas = sign.matrix.CreateFrameCanvas()
+
+        sign.canvas.Clear()
 
         day_0_xoffset = 2
         day_1_xoffset = 45
@@ -75,9 +76,11 @@ def show_weather(sign):
         graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.srise_time).strftime(time_format))
         graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.sset_time).strftime(time_format))
 
-        sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-        sign.wait_loop(30)
+        breakout = sign.wait_loop(30)
+        if breakout:
+            return
 
 
 def get_weather_data_worker(data_dict):
@@ -91,7 +94,10 @@ def get_weather_data_worker(data_dict):
             one_call_object = mgr.one_call(lat=float(shared_config.CONF["SENSOR_LAT"]), lon=float(shared_config.CONF["SENSOR_LON"]), exclude='minutely,hourly', units='imperial')
             data_dict["weather"] = one_call_object
             logging.info(f"At: {utilities.convert_unix_to_local_time(data_dict['weather'].current.ref_time)} Temp: {data_dict['weather'].current.temperature()['temp']}")
+            timeout = 300
         except:
             logging.exception("Error getting weather data...")
+            timeout = 5
 
-        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=300)
+        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=timeout)
+        #shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=300)

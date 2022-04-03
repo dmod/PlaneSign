@@ -108,7 +108,7 @@ def show_a_plane(sign, plane_to_show):
             if forced_breakout:
                 return
 
-            sign.matrix.SwapOnVSync(sign.canvas)
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
     else:
         # NOT ALERT RADIUS

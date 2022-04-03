@@ -47,6 +47,8 @@ def get_config():
         lines = f.readlines()
         lastline = None
         for line in lines:
+            if line == '\n':
+                continue
             if line[0] == "#":
                 lastline = line.rstrip()
                 continue
@@ -212,6 +214,7 @@ class PlaneSign:
         options.cols = 64
         options.gpio_slowdown = 5
         options.chain_length = 2
+        options.hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
         options.drop_privileges = False
 
         self.matrix = RGBMatrix(options=options)
@@ -263,6 +266,7 @@ class PlaneSign:
                 mode = shared_config.shared_mode.value
 
                 if mode in self.defined_mode_handlers:
+                    logging.info(f"Setting mode to {mode}")
                     self.defined_mode_handlers[mode](self)
                 else:
                     logging.error(f"Mode currently set to {mode} but no handler exists...")

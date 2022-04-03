@@ -10,6 +10,7 @@ import shared_config
 from rgbmatrix import graphics
 import country_converter as coco
 import numpy as np
+import logging
 import math
 import __main__
 
@@ -31,6 +32,7 @@ def shorten_name(name):
     name = name.replace("Western", "W.").replace("West", "W.")
     name = name.replace("Federated States of ", "").replace("State of ", "").replace(", USA", "")
     name = name.replace("Province", "Prov.").replace("Democratic Republic of", "D.R.")
+    name = name.replace("Saint", "St.")
     return name
 
 class Star:
@@ -124,17 +126,35 @@ def get_flag(selected,satellite_data):
                     pass
 
         #can't find in static file lookup, apply known cases
-        elif sat_name.find("USA") == 0 or sat_name.find("OPS") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("METEOSAT") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0:
+        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("METEOSAT") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0:
             image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
 
-        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/USR.png').convert('RGBA')
+        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("EXPRESS") == 0:
+            if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
+                image = Image.open(f'{shared_config.icons_dir}/flags/USR.png').convert('RGBA')
+            else:
+                image = Image.open(f'{shared_config.icons_dir}/flags/RUS.png').convert('RGBA')
+
+        elif sat_name.find("ONEWEB") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/GBR.png').convert('RGBA')
 
         elif sat_name.find("DIADEME") == 0:
             image = Image.open(f'{shared_config.icons_dir}/flags/FRA.png').convert('RGBA')
 
-        elif sat_name.find("ANIK") == 0:
+        elif sat_name.find("ANIK ") == 0:
             image = Image.open(f'{shared_config.icons_dir}/flags/CAN.png').convert('RGBA')
+
+        elif sat_name.find("SINOSAT") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/CHN.png').convert('RGBA')
+
+        elif sat_name.find("ASTRA") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/LUX.png').convert('RGBA')
+
+        elif sat_name.find("ICEYE") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/FIN.png').convert('RGBA')
+
+        elif sat_name.find("STORK") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/POL.png').convert('RGBA')
         
     if image == None:
 
@@ -150,6 +170,7 @@ def get_flag(selected,satellite_data):
 
 @__main__.planesign_mode_handler(17)
 def satellites(sign):
+
     sign.canvas.Clear()
 
     satellite_data = []
@@ -180,8 +201,10 @@ def satellites(sign):
                     norad = int(parts[25])
                     satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
     except Exception as e:
-        print("Can't read static satellite data")
-        print(e)
+        #print("Can't read static satellite data")
+        #print(e)
+        logging.exception("Can't read static satellite data")
+        logging.exception(e)
 
     satsite = "https://api.n2yo.com/rest/v1/satellite"
     
@@ -639,7 +662,7 @@ def satellites(sign):
             if overhead_flag:
                 blip_loc = left_bar+round((right_bar-left_bar)*(now-flyby["startUTC"])/(flyby["endUTC"]-flyby["startUTC"]))
                 if blip_count == 0:
-                    sign.canvas.SetPixel(left_bar, line_y, 255, 0, 0)
+                    sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
                 elif blip_count == 1:
                     for x in range(blip_loc - 1, blip_loc + 2):
                         for y in range(line_y - 1, line_y + 2):
@@ -651,11 +674,14 @@ def satellites(sign):
                 if blip_count == 3:
                     blip_count = 0
                     
-
-        sign.matrix.SwapOnVSync(sign.canvas)
-        sign.canvas = sign.matrix.CreateFrameCanvas()   
-
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas.Clear()
+        
         breakout = sign.wait_loop(0.5)
 
         if breakout:
             return
+
+        
+
+        
