@@ -430,11 +430,11 @@ def show_time(sign):
     graphics.DrawText(sign.canvas, sign.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
     graphics.DrawText(sign.canvas, sign.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
 
-    sign.matrix.SwapOnVSync(sign.canvas)
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
 
 @__main__.planesign_mode_handler(0)
 def clear_matrix(sign):
     sign.canvas.Clear()
-    sign.matrix.SwapOnVSync(sign.canvas)
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
     sign.wait_loop(-1)

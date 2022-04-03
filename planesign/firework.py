@@ -45,7 +45,7 @@ def fireworks(sign):
         for fw in fireworks:
             fw.draw()
 
-        sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
         sign.wait_loop(0.01)
 

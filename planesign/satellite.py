@@ -126,29 +126,35 @@ def get_flag(selected,satellite_data):
                     pass
 
         #can't find in static file lookup, apply known cases
-        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("OPS") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("METEOSAT") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/USA.png').convert('RGBA')
+        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("METEOSAT") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
+
+        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("EXPRESS") == 0:
+            if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
+                image = Image.open(f'{shared_config.icons_dir}/flags/USR.png').convert('RGBA')
+            else:
+                image = Image.open(f'{shared_config.icons_dir}/flags/RUS.png').convert('RGBA')
 
         elif sat_name.find("ONEWEB") == 0:
-                image = Image.open('/home/pi/PlaneSign/icons/flags/GBR.png').convert('RGBA')
-
-        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0:
-            if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
-                image = Image.open('/home/pi/PlaneSign/icons/flags/USR.png').convert('RGBA')
-            else:
-                image = Image.open('/home/pi/PlaneSign/icons/flags/RUS.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/GBR.png').convert('RGBA')
 
         elif sat_name.find("DIADEME") == 0:
             image = Image.open(f'{shared_config.icons_dir}/flags/FRA.png').convert('RGBA')
 
-        elif sat_name.find("ANIK") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/CAN.png').convert('RGBA')
+        elif sat_name.find("ANIK ") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/CAN.png').convert('RGBA')
 
         elif sat_name.find("SINOSAT") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/CHN.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/CHN.png').convert('RGBA')
 
         elif sat_name.find("ASTRA") == 0:
-            image = Image.open('/home/pi/PlaneSign/icons/flags/LUX.png').convert('RGBA')
+            image = Image.open(f'{shared_config.icons_dir}/flags/LUX.png').convert('RGBA')
+
+        elif sat_name.find("ICEYE") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/FIN.png').convert('RGBA')
+
+        elif sat_name.find("STORK") == 0:
+            image = Image.open(f'{shared_config.icons_dir}/flags/POL.png').convert('RGBA')
         
     if image == None:
 
@@ -164,6 +170,7 @@ def get_flag(selected,satellite_data):
 
 @__main__.planesign_mode_handler(17)
 def satellites(sign):
+
     sign.canvas.Clear()
 
     satellite_data = []
@@ -250,8 +257,6 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
 
     while shared_config.shared_mode.value == 17:
-
-        sign.canvas.Clear()
 
         if shared_config.shared_satellite_mode.value == 1:
 
@@ -669,11 +674,14 @@ def satellites(sign):
                 if blip_count == 3:
                     blip_count = 0
                     
-
-        sign.canvas=sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas.Clear()
         
-
         breakout = sign.wait_loop(0.5)
 
         if breakout:
             return
+
+        
+
+        

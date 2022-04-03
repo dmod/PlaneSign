@@ -266,6 +266,7 @@ class PlaneSign:
                 mode = shared_config.shared_mode.value
 
                 if mode in self.defined_mode_handlers:
+                    logging.info(f"Setting mode to {mode}")
                     self.defined_mode_handlers[mode](self)
                 else:
                     logging.error(f"Mode currently set to {mode} but no handler exists...")

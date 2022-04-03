@@ -55,8 +55,8 @@ def finance(self):
         breakout = self.wait_loop(0.1)
         if breakout:
             return
-        self.matrix.SwapOnVSync(self.canvas)
-        self.canvas = self.matrix.CreateFrameCanvas()
+        self.canvas = self.matrix.SwapOnVSync(self.canvas)
+        self.canvas.Clear()
 
 
 def colordista(c1, c2):
