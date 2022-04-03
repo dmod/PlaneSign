@@ -94,7 +94,10 @@ def get_weather_data_worker(data_dict):
             one_call_object = mgr.one_call(lat=float(shared_config.CONF["SENSOR_LAT"]), lon=float(shared_config.CONF["SENSOR_LON"]), exclude='minutely,hourly', units='imperial')
             data_dict["weather"] = one_call_object
             logging.info(f"At: {utilities.convert_unix_to_local_time(data_dict['weather'].current.ref_time)} Temp: {data_dict['weather'].current.temperature()['temp']}")
+            timeout = 300
         except:
             logging.exception("Error getting weather data...")
+            timeout = 5
 
-        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=300)
+        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=timeout)
+        #shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=300)
