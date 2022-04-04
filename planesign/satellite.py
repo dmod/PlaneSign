@@ -1,3 +1,4 @@
+from http.client import OK
 import time
 from datetime import datetime, timedelta
 import random
@@ -201,10 +202,22 @@ def satellites(sign):
                     norad = int(parts[25])
                     satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
     except Exception as e:
-        #print("Can't read static satellite data")
-        #print(e)
         logging.exception("Can't read static satellite data")
         logging.exception(e)
+
+    elevation = 0
+    with requests.Session() as s:
+        s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
+        response = s.get(f'https://api.open-elevation.com/api/v1/lookup?locations={shared_config.CONF["SENSOR_LAT"]},{shared_config.CONF["SENSOR_LON"]}')
+
+        if response.status_code == requests.codes.ok:
+            data = response.json()
+            elevation = data["results"][0]['elevation']
+            logging.info(f'Got elevation as {elevation}m')
+
+    if response.status_code != requests.codes.ok:
+        logging.warning(f'Could not get elevation data, using {elevation}m')
+            
 
     satsite = "https://api.n2yo.com/rest/v1/satellite"
     
@@ -264,7 +277,7 @@ def satellites(sign):
 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/0/45/0/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
+                    response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/45/0/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
                 #currently assumes 0 elevation - todo: use google api to get elevation from lat/lon
 
