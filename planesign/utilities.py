@@ -7,6 +7,7 @@ import os
 import __main__
 import shared_config
 
+from PIL import Image, ImageDraw, ImageFont
 from timezonefinder import TimezoneFinder
 from rgbmatrix import graphics
 from math import pi, cos, sin
@@ -74,6 +75,158 @@ def read_static_airport_data():
             shared_config.code_to_airport[code] = (name, lat, lon)
 
     logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
+
+class TextScroller:
+    """
+    Scrolling Textfield Object
+
+    Arguments:
+        (Required)
+        sign: Planesign obj
+        x: inteter - horiz. location on matrix (0 left)
+        y: inteter - vert. location on matrix (0 top)
+        color: rgb integer tuple (0-255, 0-255, 0-255)
+        boxdim: (width, height) integer tuple - defines size of scrolling window display area in number of pixels
+
+        (Default)
+        text:   string - text to scroll. Setting to None or "" will display nothing.            Default: None
+        space:  integer or float - number of equiv. space characters to add before wrapping.    Default: 1
+        font:   string - font style. Available: "4x6","5x7","6x13"/"fontbig"/"big",             Default: "5x7"
+                "9x18B"/"fontreallybig"/"reallybig","helvR12"/"fontplanesign"/"planesign"     
+        scrolldir:   string - scroll travel direction. Available: "Left", "Right", "Up", "Down" Default: "Left"
+        scrollspeed: integer - scroll speed in pixels/second.                                   Default: 5
+        holdtime:    integer - seconds to show (re)starting text before scrolling.              Default: 0
+        forcescroll: boolean - if text will fit within display area without scrolling,          Default: False
+                     should we force scrolling anyway?                                      
+
+    Functions:
+        .draw() - draws text at the current scroll position to sign.canvas
+
+    Use:
+        object.text can be updated dynamically by user and scrolling will restart with new text
+
+        DO NOT directly modify:
+            object.holdtimer, object.stopflag, object.lasttext, object.lastdrawtime, object.offset
+    """
+    def __init__(self,sign,x,y,color,boxdim,text=None,space=1,font="5x7",scrolldir='left',scrollspeed=5,holdtime=0,forcescroll=False):
+
+        self.sign=sign
+        self.x=x
+        self.y=y
+
+        self.text=text
+        self.lasttext=None
+        self.space=space
+        self.fontname=font
+        self.color=color
+        self.scrolldir=scrolldir
+        self.scrollspeed=scrollspeed
+        self.forcescroll=forcescroll
+        self.holdtime=holdtime
+        self.holdtimer=0
+        if holdtime==0:
+            self.stopflag=False
+        else:
+            self.stopflag=True
+
+
+        if self.fontname=="6x13" or self.fontname=="fontbig" or self.fontname=="big":
+            self.fontname="6x13"
+            bdffont=self.sign.fontbig
+        elif self.fontname=="9x18B" or self.fontname=="fontreallybig" or self.fontname=="reallybig":
+            self.fontname="9x18B"
+            bdffont=self.sign.fontreallybig
+        elif self.fontname=="helvR12" or self.fontname=="fontplanesign" or self.fontname=="planesign":
+            self.fontname="helvR12"
+            bdffont=self.sign.fontplanesign
+        elif self.fontname=="4x6":
+            bdffont=self.sign.font46
+        else:
+            self.fontname=="5x7"
+            bdffont=self.sign.font57
+
+        self.font = ImageFont.load("./fonts/"+font+".pil")
+            
+        self.cw=bdffont.CharacterWidth(0)
+        self.ch=bdffont.height
+
+        self.w,self.h=boxdim
+
+        self.lastdrawtime=None
+        self.offset = 0
+
+        if text!=None:
+            self.length=len(self.text)
+        else:
+            self.length=None
+
+        self.image = Image.new("RGB", boxdim, (0, 0, 0))
+        self.dr = ImageDraw.Draw(self.image)
+
+    def draw(self):
+
+        if self.text==None:
+            return
+
+        if self.text != self.lasttext:
+            self.lasttext=self.text
+            self.length=len(self.text)
+            self.lastdrawtime=None
+            self.offset = 0
+
+        if self.text=="":
+            return
+
+        self.dr.rectangle([(0,0),self.image.size], fill = (0,0,0) )
+
+        curtime = time.perf_counter()
+
+        #Scroll Text
+        if ((self.scrolldir == "left" or self.scrolldir == "right") and self.length*self.cw>self.w) or ((self.scrolldir == "up" or self.scrolldir == "down") and self.ch>self.h) or self.forcescroll:
+
+            if self.lastdrawtime != None:
+
+                if self.holdtime==0:
+                    self.offset = self.offset+self.scrollspeed*(curtime-self.lastdrawtime)
+                elif round(self.offset)==0 and self.stopflag:
+                    self.holdtimer=self.holdtimer+(curtime-self.lastdrawtime)
+                elif self.holdtimer<self.holdtime or not self.stopflag:
+
+                    tempoffset = self.offset+self.scrollspeed*(curtime-self.lastdrawtime)
+                    if round(tempoffset)*round(self.offset)<0:#make sure we don't skip over 0 by going too fast
+                        self.offset = 0
+                    else:
+                        self.offset = tempoffset
+                        
+                    if not self.stopflag and round(self.offset)!=0:
+                        self.stopflag = True
+
+                if self.holdtimer>=self.holdtime:
+                    self.stopflag=False
+                    self.holdtimer=0
+
+
+            if self.scrolldir=="left" or self.scrolldir=="right":
+                self.offset = self.offset%((self.length+self.space)*self.cw)
+                for o in range(-round((self.length+self.space)*self.cw), self.w+round((self.length+self.space)*self.cw)+1, round((self.length+self.space)*self.cw)):
+                    if self.scrolldir=="left":
+                        self.dr.text((round(-self.offset+o), 0), self.text, font=self.font, fill=self.color)
+                    elif self.scrolldir=="right":  
+                        self.dr.text((round(self.offset+o), 0), self.text, font=self.font, fill=self.color)
+            else:
+                self.offset = self.offset%((1+self.space)*self.ch)
+                for o in range(-round((1+self.space)*self.ch), self.h+round((1+self.space)*self.ch)+1, round((1+self.space)*self.ch)):
+                    if self.scrolldir=="up":
+                        self.dr.text((0, round(-self.offset+o)), self.text, font=self.font, fill=self.color)
+                    elif self.scrolldir=="down":  
+                        self.dr.text((0, round(self.offset+o)), self.text, font=self.font, fill=self.color)
+
+        else:#Text will fit in box, don't need to scroll if we don't have to
+            self.dr.text((0, 0), self.text, font=self.font, fill=self.color)
+
+        self.sign.canvas.SetImage(self.image.convert('RGB'), self.x, self.y-self.h+1)
+
+        self.lastdrawtime=curtime
 
 
 def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):

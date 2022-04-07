@@ -11,9 +11,30 @@ prev_stats.distance = 0
 prev_stats.altitude = 0
 prev_stats.ground_speed = 0
 
+def shorten_airport_name(name,desired_length):
+    name = name.replace(" Airport", "").replace("International International","Intl.")
+    if len(name)<=desired_length: return name
+    name = name.replace("Northeast ","NE ").replace("Northwest ","NW ").replace("Southeast ","SE ").replace("Southwest ","SW ")
+    if len(name)<=desired_length: return name
+    name = name.replace("Air National Guard Base","ANGB")
+    if len(name)<=desired_length: return name
+    name = name.replace("International","Intl.").replace("National","Natl.").replace("Regional","Rgnl.")
+    if len(name)<=desired_length: return name
+    name = name.replace("Memorial","Mem.")
+    if len(name)<=desired_length: return name
+    name = name.replace("Air Force Base","AFB").replace("Air Force","AF")
+    if len(name)<=desired_length: return name
+    name = name.replace("Army Air Field", "AAF").replace("Army Airfield", "AAF")
+    if len(name)<=desired_length: return name
+    name = name.replace("Air Station","AS").replace("Air Base","AB").replace("Airbase","AB")
+    if len(name)<=desired_length: return name
+    name = name.replace("Municipal","Muni.").replace("Fort","Ft.").replace("Saint","St.")
+    return name
+
 
 @__main__.planesign_mode_handler(1)
 def show_closest_plane_if_in_alert_radius(sign):
+    scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
     while shared_config.shared_mode.value == 1:
         if shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= 2:
             plane_to_show = shared_config.data_dict["closest"]
@@ -21,38 +42,42 @@ def show_closest_plane_if_in_alert_radius(sign):
             # No closest plane, show time
             plane_to_show = None
 
-        show_a_plane(sign, plane_to_show)
+        show_a_plane(sign, plane_to_show, scroll)
 
 
 @__main__.planesign_mode_handler(2)
 def always_show_closest_plane(sign):
+    scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
     while shared_config.shared_mode.value == 2:
         plane_to_show = shared_config.data_dict["closest"]
-        show_a_plane(sign, plane_to_show)
+        show_a_plane(sign, plane_to_show, scroll)
 
 
 @__main__.planesign_mode_handler(3)
 def always_show_highest_plane(sign):
+    scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
     while shared_config.shared_mode.value == 3:
         plane_to_show = shared_config.data_dict["highest"]
-        show_a_plane(sign, plane_to_show)
+        show_a_plane(sign, plane_to_show, scroll)
 
 
 @__main__.planesign_mode_handler(4)
 def always_show_fastest_plane(sign):
+    scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
     while shared_config.shared_mode.value == 4:
         plane_to_show = shared_config.data_dict["fastest"]
-        show_a_plane(sign, plane_to_show)
+        show_a_plane(sign, plane_to_show, scroll)
 
 
 @__main__.planesign_mode_handler(5)
 def always_show_slowest_plane(sign):
+    scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
     while shared_config.shared_mode.value == 5:
         plane_to_show = shared_config.data_dict["slowest"]
-        show_a_plane(sign, plane_to_show)
+        show_a_plane(sign, plane_to_show, scroll)
 
 
-def show_a_plane(sign, plane_to_show):
+def show_a_plane(sign, plane_to_show, scroll):
 
     # TODO
     global prev_stats
@@ -81,12 +106,22 @@ def show_a_plane(sign, plane_to_show):
                 destination_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
                 logging.info(f"Destination is {destination_distance:.2f} miles away")
 
-        if origin_distance != 0 and origin_distance > destination_distance:
-            friendly_name = origin_config[0]
-        elif destination_distance != 0:
-            friendly_name = destination_config[0]
-        else:
+
+        if origin_distance == 0 and destination_distance == 0:
             friendly_name = ""
+        elif origin_distance != 0 and destination_distance == 0:
+            friendly_name = shorten_airport_name(origin_config[0],14)
+        elif origin_distance == 0 and destination_distance != 0:
+            friendly_name = shorten_airport_name(destination_config[0],14)
+        else:
+            if shared_config.CONF["AIRPORT_SCROLL"].lower() == 'true':
+                friendly_name = f'{shorten_airport_name(origin_config[0],10)} to {shorten_airport_name(destination_config[0],10)}'
+            else:
+                if origin_distance > destination_distance:
+                    friendly_name = origin_config[0]
+                else:
+                    friendly_name = destination_config[0]
+
 
         logging.info("Full airport name from code: " + friendly_name)
 
@@ -96,7 +131,11 @@ def show_a_plane(sign, plane_to_show):
         for i in range(utilities.NUM_STEPS):
             sign.canvas.Clear()
             graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show.origin_airport_iata + "->" + plane_to_show.destination_airport_iata)
-            graphics.DrawText(sign.canvas, sign.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
+            if shared_config.CONF["AIRPORT_SCROLL"].lower() == 'true':
+                scroll.text=friendly_name
+                scroll.draw()
+            else:
+                graphics.DrawText(sign.canvas, sign.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
             graphics.DrawText(sign.canvas, sign.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
             graphics.DrawText(sign.canvas, sign.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show.aircraft_code)
 

@@ -10,6 +10,9 @@ WEATHER_CITY_NAME=Annapolis
 #checkbox
 MILITARY_TIME=false
 
+#checkbox
+AIRPORT_SCROLL=true
+
 #range min 0 max 100
 DEFAULT_BRIGHTNESS=80
 
