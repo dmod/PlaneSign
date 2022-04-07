@@ -195,6 +195,8 @@ class TextScroller:
                     tempoffset = self.offset+self.scrollspeed*(curtime-self.lastdrawtime)
                     if round(tempoffset)*round(self.offset)<0:#make sure we don't skip over 0 by going too fast
                         self.offset = 0
+                        self.stopflag = True
+                        self.holdtimer=0
                     else:
                         self.offset = tempoffset
                         
