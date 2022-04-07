@@ -94,3 +94,4 @@ coinmarketcap.com
 googleapis.com
 ourairports.com
 opendatasoft.com -> map polygons
+open-elevation.com
