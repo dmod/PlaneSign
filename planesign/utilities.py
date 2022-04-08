@@ -230,6 +230,87 @@ class TextScroller:
 
         self.lastdrawtime=curtime
 
+def fix_chars(name):
+    name = name.replace("–","-")
+    for ch in [u'\u0100',u'\u0102',u'\u0104']:
+        name = name.replace(ch,"A")
+    for ch in [u'\u0101',u'\u0103',u'\u0105']:
+        name = name.replace(ch,"a")
+    for ch in [u'\u0106',u'\u0108',u'\u010A',u'\u010C']:
+        name = name.replace(ch,"C")
+    for ch in [u'\u0107',u'\u0109',u'\u010B',u'\u010D']:
+        name = name.replace(ch,"c")
+    for ch in [u'\u010E',u'\u0110']:
+        name = name.replace(ch,"D")
+    for ch in [u'\u010F',u'\u0111']:
+        name = name.replace(ch,"d")
+    for ch in [u'\u0112',u'\u0114',u'\u0116',u'\u0118',u'\u011A']:
+        name = name.replace(ch,"E")
+    for ch in [u'\u0113',u'\u0115',u'\u0117',u'\u0119',u'\u011B']:
+        name = name.replace(ch,"e")
+    for ch in [u'\u011C',u'\u011E',u'\u0120',u'\u0122']:
+        name = name.replace(ch,"G")
+    for ch in [u'\u011D',u'\u011F',u'\u0121',u'\u0123']:
+        name = name.replace(ch,"g")
+    for ch in [u'\u0124',u'\u0126']:
+        name = name.replace(ch,"H")
+    for ch in [u'\u0125',u'\u0127']:
+        name = name.replace(ch,"h")
+    for ch in [u'\u0128',u'\u012A',u'\u012C',u'\u012E',u'\u0130',u'\u0132']:
+        name = name.replace(ch,"I")
+    for ch in [u'\u0129',u'\u012B',u'\u012D',u'\u012F',u'\u0131',u'\u0133']:
+        name = name.replace(ch,"i")
+    for ch in [u'\u0134']:
+        name = name.replace(ch,"J")
+    for ch in [u'\u0135']:
+        name = name.replace(ch,"j")
+    for ch in [u'\u0136']:
+        name = name.replace(ch,"K")
+    for ch in [u'\u0137',u'\u0138']:
+        name = name.replace(ch,"k")
+    for ch in [u'\u0139',u'\u013B',u'\u013D',u'\u013F',u'\u0141']:
+        name = name.replace(ch,"L")
+    for ch in [u'\u0140',u'\u013C',u'\u013E',u'\u0140',u'\u0142']:
+        name = name.replace(ch,"l")
+    for ch in [u'\u0143',u'\u0145',u'\u0147',u'\u014A']:
+        name = name.replace(ch,"N")
+    for ch in [u'\u0144',u'\u0146',u'\u0148',u'\u0149',u'\u014B']:
+        name = name.replace(ch,"n")
+    for ch in [u'\u014C',u'\u014E',u'\u0150',u'\u0152']:
+        name = name.replace(ch,"O")
+    for ch in [u'\u014D',u'\u014F',u'\u0151',u'\u0153']:
+        name = name.replace(ch,"o")
+    for ch in [u'\u0154',u'\u0156',u'\u0158']:
+        name = name.replace(ch,"R")
+    for ch in [u'\u0155',u'\u0157',u'\u0159']:
+        name = name.replace(ch,"r")
+    for ch in [u'\u015A',u'\u015C',u'\u015E',u'\u0160']:
+        name = name.replace(ch,"S")
+    for ch in [u'\u015B',u'\u015D',u'\u015F',u'\u0161',u"\u017F"]:
+        name = name.replace(ch,"s")       
+    for ch in [u'\u0162',u'\u0164',u'\u0166']:
+        name = name.replace(ch,"T")  
+    for ch in [u'\u0163',u'\u0165',u'\u0167']:
+        name = name.replace(ch,"t") 
+    for ch in [u'\u0168',u'\u016A',u'\u016C',u'\u016E',u'\u0170',u'\u0172']:
+        name = name.replace(ch,"U") 
+    for ch in [u'\u0169',u'\u016B',u'\u016D',u'\u016F',u'\u0171',u'\u0173']:
+        name = name.replace(ch,"U") 
+    for ch in [u'\u0174']:
+        name = name.replace(ch,"W") 
+    for ch in [u'\u0175']:
+        name = name.replace(ch,"w") 
+    for ch in [u'\u0176',u'\u0178']:
+        name = name.replace(ch,"Y") 
+    for ch in [u'\u0177']:
+        name = name.replace(ch,"y") 
+    for ch in [u'\u0179',u'\u017B',u'\u017D']:
+        name = name.replace(ch,"Z") 
+    for ch in [u'\u017A',u'\u017C',u'\u017E']:
+        name = name.replace(ch,"z") 
+
+    return name
+
 
 def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):
     rmin %= 256

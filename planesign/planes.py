@@ -12,6 +12,10 @@ prev_stats.altitude = 0
 prev_stats.ground_speed = 0
 
 def shorten_airport_name(name,desired_length):
+    #Replace unsupported characters
+    name = utilities.fix_chars(name)
+
+    #Shorten
     name = name.replace(" Airport", "").replace("International International","Intl.")
     if len(name)<=desired_length: return name
     name = name.replace("Northeast ","NE ").replace("Northwest ","NW ").replace("Southeast ","SE ").replace("Southwest ","SW ")
