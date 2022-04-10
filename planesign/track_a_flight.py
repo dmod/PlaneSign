@@ -13,7 +13,7 @@ def track_a_flight(sign):
 
     if "track_a_flight_num" not in shared_config.data_dict:
         sign.canvas.Clear()
-        sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         return
 
     requests_limiter = 0
@@ -127,7 +127,7 @@ def track_a_flight(sign):
 
         graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
 
-        sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
         blip_count = blip_count + 1
         if blip_count == 3:

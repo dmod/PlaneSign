@@ -463,7 +463,7 @@ class LightningManager:
                     for i in range(64,127):
                         self.sign.canvas.SetPixel(i, 0, 0, 0, 0)
                         self.sign.canvas.SetPixel(i, 31, 0, 0, 0)
-                self.sign.matrix.SwapOnVSync(self.sign.canvas)
+                self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
                 time.sleep(0.2)
 
         self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)

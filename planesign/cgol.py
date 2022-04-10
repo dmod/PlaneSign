@@ -99,7 +99,7 @@ def cgol(sign):
         else:
             breakout = sign.wait_loop(0)
 
-        sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
         tstart = time.perf_counter()
 

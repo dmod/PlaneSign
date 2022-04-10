@@ -73,7 +73,7 @@ class Tank:
             self.fulltank.paste(waterlayer, (0,0), waterlayer)
 
         self.sign.canvas.SetImage(self.fulltank.convert('RGB'), 0, 0)
-        self.sign.matrix.SwapOnVSync(self.sign.canvas)
+        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
 
 class Fish:
     def __init__(self,tank,name,maxspeed,turnprob,dir=random.randint(0,3)):

@@ -147,11 +147,11 @@ def show_a_plane(sign, plane_to_show, scroll):
             graphics.DrawText(sign.canvas, sign.font57, 78, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
             graphics.DrawText(sign.canvas, sign.font57, 78, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
 
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+
             forced_breakout = sign.wait_loop(0.065)
             if forced_breakout:
                 return
-
-            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
     else:
         # NOT ALERT RADIUS

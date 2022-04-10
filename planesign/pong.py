@@ -102,13 +102,13 @@ def pong(sign):
         if xball <= 0:
             graphics.DrawText(sign.canvas, sign.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
             graphics.DrawText(sign.canvas, sign.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-            sign.matrix.SwapOnVSync(sign.canvas)
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
             sign.wait_loop(0.5)
             sign.canvas.Clear()
             player2_score += 1
             graphics.DrawText(sign.canvas, sign.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
             graphics.DrawText(sign.canvas, sign.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-            sign.matrix.SwapOnVSync(sign.canvas)
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
             sign.wait_loop(3)
             sign.canvas.Clear()
             xball = 64
@@ -119,13 +119,13 @@ def pong(sign):
         if xball >= 127:
             graphics.DrawText(sign.canvas, sign.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
             graphics.DrawText(sign.canvas, sign.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-            sign.matrix.SwapOnVSync(sign.canvas)
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
             sign.wait_loop(0.5)
             sign.canvas.Clear()
             player1_score += 1
             graphics.DrawText(sign.canvas, sign.fontreallybig, 55 - (len(str(player1_score)) * 9), 12, graphics.Color(255, 20, 20), str(player1_score))
             graphics.DrawText(sign.canvas, sign.fontreallybig, 65 + (len(str(player2_score)) * 9), 12, graphics.Color(20, 20, 255), str(player2_score))
-            sign.matrix.SwapOnVSync(sign.canvas)
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
             sign.wait_loop(3)
             sign.canvas.Clear()
             xball = 64
@@ -151,4 +151,4 @@ def pong(sign):
             for height in range(yball-1, yball+2):
                 sign.canvas.SetPixel(width, height, 255, 255, 255)
 
-        sign.matrix.SwapOnVSync(sign.canvas)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
