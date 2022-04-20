@@ -233,11 +233,13 @@ class PlaneSign:
         self.fontreallybig.LoadFont(os.path.join(shared_config.font_dir, "9x18B.bdf"))
         self.fontplanesign.LoadFont(os.path.join(shared_config.font_dir, "helvR12.bdf"))
 
-        self.canvas.brightness = shared_config.shared_current_brightness.value
-
         self.last_brightness = None
 
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
+
+        self.canvas.brightness = shared_config.shared_current_brightness.value
+
+        self.matrix.brightness = shared_config.shared_current_brightness.value
 
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds

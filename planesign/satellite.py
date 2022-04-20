@@ -280,8 +280,6 @@ def satellites(sign):
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
                     response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/45/0/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
-                #currently assumes 0 elevation - todo: use google api to get elevation from lat/lon
-
                 if response.status_code == requests.codes.ok:
                     polltime = time.perf_counter()
                     data = response.json()

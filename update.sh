@@ -22,11 +22,14 @@ if [ -f "disable_update" ]; then
 else
     echo "Updating..."
 
-    sudo apt install libatlas-base-dev
-    sudo -H pip3 install -r requirements.txt
     git fetch
     git reset --hard HEAD
     git pull
+
+    sudo apt install libatlas-base-dev
+    sudo -H pip3 install -r requirements.txt
+
+    sudo ./update_static_cache.py
 
     touch sign.conf
     touch prices.csv

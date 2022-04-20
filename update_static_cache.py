@@ -54,7 +54,7 @@ if __name__ == "__main__":
             code = parts[13]
 
             # If there is acutally a code to look up, then write this config
-            if code:
+            if code and code != "0":
                 f.write(f'{code},{name},{lat},{lon}\n')
 
 
