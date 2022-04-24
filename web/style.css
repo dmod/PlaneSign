@@ -367,13 +367,15 @@ span.configline {
 
 label.configline {
   padding-right: 10px;
+  width: 45%;
+  display: inline-block;
+  overflow: hidden;
 }
 
 input.configline {
-  width: 35%;
-  float: right;
-  margin-right:20%;
-  font-size:40px;
+  width: 25%;
+  margin-right: 20%;
+  font-size: 40px;
 }
 
 input[type='checkbox'].configline {
@@ -410,6 +412,10 @@ input[type=number] {
   height: 60px;
   font-size: 40px;
   margin-top: 5px;
+}
+
+#config_button_span {
+  display: block;
 }
 
 .baritem {

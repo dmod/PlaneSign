@@ -200,7 +200,8 @@
               }
 
               var cln = itm.cloneNode(true);
-              cln.style="display:block";
+              //cln.style="display:block";
+              cln.removeAttribute("style")
               cln.childNodes[1].textContent=String(Object.keys(data)[i]).replaceAll('_', ' ')+": ";
               cln.childNodes[1].for=String(Object.keys(data)[i]);
               cln.childNodes[2].type=form_type;
