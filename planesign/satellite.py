@@ -13,6 +13,9 @@ import country_converter as coco
 import numpy as np
 import logging
 import math
+from bs4 import BeautifulSoup
+from os.path import exists
+import os
 import __main__
 
  
@@ -62,101 +65,182 @@ class Star:
         self.sign.canvas.SetPixel(self.x, self.y, c, c, c)
 
 
-def get_country_code(rawname):
+def get_country_code(rawname,date):
 
-    rawname = rawname.upper()
+    fullcode = ""
 
-    if rawname=="MULTINATIONAL":
-        name = "UN"
-    elif rawname=="ESA":
-        name = "EU"
+    for country in rawname.split("/"):
+
+        country = country.strip()
+
+        if country.upper() == "EU" or country.find("ESA") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
+            code = "EU"
+        elif country.upper() == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1:
+            code = "RUS"
+        elif country.find("(ITSO)") != -1 or country.find("(ASRA)") != -1:
+            code = "USA"
+        elif country.find("INMARSAT") != -1 or country.find("(NICO)") != -1:
+            code = "GBR"
+        elif country.upper() == "UN" or country.upper() == "MULTINATIONAL" or country.find("(AB)") != -1 or country.find("(RASC)") != -1:
+            code = "UN"
+        elif country.find("(TBD)") != -1:
+            code = "ISR"
+        elif country.find("(SES)") != -1:
+            code = "LUX"
+        elif country.upper() == "NATO" or country.find("(NATO)") != -1:
+            code = "NATO"
+        elif country.find("(SWTZ)") != -1:
+            code = "CHE"
+        else:
+            code = coco.convert(names=country.upper().replace("(","").replace(")","").rstrip(), to="ISO3", not_found="UNKNOWN")
+            if isinstance(code, list):
+                code = code[0]
+ 
+        if code == "RUS":
+            if datetime.strptime(date, "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
+                code = "USR"
+
+        if code != "UNKNOWN":
+            fullcode += f'{code}/'
+
+    return fullcode.rstrip("/")
+
+def gen_flag(code):
+
+    image = None
+
+    if code.find("/") != -1:
+        countries = code.split("/")
+        llmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_LL.png").convert('RGBA')
+        cmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_C.png").convert('RGBA')
+
+        if len(countries)==2:
+            
+            try:
+                image = Image.open(f'{shared_config.icons_dir}/flags/{countries[1]}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                foreground = Image.open(f'{shared_config.icons_dir}/flags/{countries[0]}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                image.paste(foreground, (0, 0), llmask)
+
+            except Exception:
+                pass
+
+        elif len(countries)==3:
+
+            try:
+                image = Image.open(f'{shared_config.icons_dir}/flags/{countries[2]}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                foreground = Image.open(f'{shared_config.icons_dir}/flags/{countries[1]}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+                center =  Image.open(f'{shared_config.icons_dir}/flags/{countries[0]}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
+
+                image.paste(foreground, (0, 0), llmask)
+                image.paste(center, (0, 0), cmask)
+
+            except Exception:
+                pass
+
+        elif len(countries)>3:
+            image = Image.open(f'{shared_config.icons_dir}/flags/UN.png').convert('RGBA')
+
     else:
         try:
-            name = coco.convert(names=rawname, to="ISO3", not_found=None)
+            image = Image.open(f'{shared_config.icons_dir}/flags/{code}.png').convert('RGBA')
         except Exception:
-            name = rawname
-        
-    return name
+            pass
+    
+    return image
 
 def get_flag(selected,satellite_data):
-    
+
     image = None
+    
     if satellite_data:
+
+        code = ""
+
         sat_name = selected["satname"]
+
+        #Search by NORAD ID
         sat = [d for d in satellite_data if d["NORAD"] == selected["satid"]]
+
         if len(sat)==0:
+            #Fallback search by COSPAR ID
             sat = [d for d in satellite_data if d["COSPAR"] == selected["intDesignator"]]
+
         if len(sat)>0:
 
-            if sat[0]["country"].find("/") != -1:
-
-                countries = sat[0]["country"].split("/")
-                llmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_LL.png").convert('RGBA')
-                cmask = Image.open(f"{shared_config.icons_dir}/flags/MASK_C.png").convert('RGBA')
-
-                if len(countries)==2:
-                    
-                    try:
-                        image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        foreground = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        image.paste(foreground, (0, 0), llmask)
-
-                    except Exception:
-                        pass
-
-                elif len(countries)==3:
-
-                    try:
-                        image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[2])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        foreground = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[1])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-                        center =  Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(countries[0])}.png').convert('RGBA').resize((13, 9), Image.BICUBIC).convert('RGB')
-
-                        image.paste(foreground, (0, 0), llmask)
-                        image.paste(center, (0, 0), cmask)
-
-                    except Exception:
-                        pass
-
-                elif len(countries)>3:
-                    image = Image.open('{shared_config.icons_dir}/flags/UN.png').convert('RGBA')
-
-            else:
-                try:
-                    image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(sat[0]["country"])}.png').convert('RGBA')
-                except Exception:
-                    pass
+            code = get_country_code(sat[0]["country"],selected["launchDate"])
 
         #can't find in static file lookup, apply known cases
-        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("METEOSAT") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
+        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("WESTFORD NEEDLES") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0 or sat_name.find("SPACEBEE-") == 0 or sat_name.find("ECHOSTAR") == 0:
+            code = "USA"
 
-        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("EXPRESS") == 0:
+        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("RADIO ") == 0 or sat_name.find("EXPRESS") == 0 or sat_name.find("NADEZHDA") == 0 or sat_name.find("KANOPUS") == 0:
             if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
-                image = Image.open(f'{shared_config.icons_dir}/flags/USR.png').convert('RGBA')
+                code = "USR"
             else:
-                image = Image.open(f'{shared_config.icons_dir}/flags/RUS.png').convert('RGBA')
+                code = "RUS"
 
-        elif sat_name.find("ONEWEB") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/GBR.png').convert('RGBA')
+        elif sat_name.find("SINOSAT") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0:
+            code = "CHN"
+
+        elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0:
+            code = "GBR"
+
+        elif sat_name.find("EUTE") == 0 or sat_name.find("METEOSAT") == 0:
+            code = "EU"
+
+        elif sat_name.find("NUSAT") == 0:
+            code = "ARG"
 
         elif sat_name.find("DIADEME") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/FRA.png').convert('RGBA')
+            code = "FRA"
 
         elif sat_name.find("ANIK ") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/CAN.png').convert('RGBA')
-
-        elif sat_name.find("SINOSAT") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/CHN.png').convert('RGBA')
+            code = "CAN"
 
         elif sat_name.find("ASTRA") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/LUX.png').convert('RGBA')
+            code = "LUX"
 
         elif sat_name.find("ICEYE") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/FIN.png').convert('RGBA')
+            code = "FIN"
+        
+        elif sat_name.find("SPACEBEENZ") == 0:
+            code = "NZL"
 
         elif sat_name.find("STORK") == 0:
-            image = Image.open(f'{shared_config.icons_dir}/flags/POL.png').convert('RGBA')
-        
+            code = "POL"
+
+        elif sat_name.find("TEVEL") == 0:
+            code = "ISR"
+
+        #Still can't find country: go scrape country from website
+        else:
+
+            try:
+                with requests.Session() as s:
+                    response = s.get(f'https://www.n2yo.com/satellite/?s={selected["satid"]}',timeout=2)
+            except Exception:
+                response = None
+
+            if response and response.status_code == requests.codes.ok:
+                soup = BeautifulSoup(response.content, "html.parser")
+                info = soup.find('div', {'id':'satinfo'})
+
+                fullcountry = info.find("b",text="Source").next_sibling[2:].strip()
+
+                code = get_country_code(fullcountry,selected["launchDate"])
+
+                if code != "":
+                    logging.debug(f'Found country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}')
+                    with open("satsup.txt", "a+") as suppliment_satfile:
+
+                        suppliment_satfile.write(f'{sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}\n')
+                        satellite_data.append({"COSPAR":selected["intDesignator"], "NORAD":selected["satid"], "country":code})
+                else:
+                    logging.debug(f'Couldn\'t find country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]} from {fullcountry}')
+
+        #Try to find or generate flag from country code
+        image = gen_flag(code)
+    
     if image == None:
 
         image = Image.new("RGB", (13,9), (0, 0, 0))
@@ -201,6 +285,23 @@ def satellites(sign):
                     cospar = parts[24]
                     norad = int(parts[25])
                     satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
+        if exists("satsup.txt"):
+            with open("satsup.txt", "r") as f:
+                lines = f.readlines()
+                nline = 0
+                for line in lines:
+                    nline+=1
+                    parts = line.split('\t')
+                    if len(parts)>3:
+                        norad = int(parts[1])
+                        cospar = parts[2]
+                        country = parts[3]
+                        satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
+        else:
+            with open("satsup.txt", "w+") as f:
+                pass
+            os.chmod("satsup.txt", 0o777)
+
     except Exception as e:
         logging.exception("Can't read static satellite data")
         logging.exception(e)
@@ -218,7 +319,7 @@ def satellites(sign):
             else:
                 logging.warning(f'Could not get elevation data, using {elevation}m')
         except:
-            logging.warning(f'Could not get elevation data, using {elevation}m')
+            logging.warning(f'Could not get elevation data... using {elevation}m')
 
     satsite = "https://api.n2yo.com/rest/v1/satellite"
     
@@ -295,7 +396,7 @@ def satellites(sign):
                     above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                     #remove debris from results
-                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"]and "OBJECT " not in x["satname"], above))
+                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and x["satname"] != "OBJECT", above))
 
                     closest_list = sorted(above, key=lambda k: k["dist"])
                     lowest_list = sorted(above, key=lambda k: k["satalt"])
@@ -415,9 +516,7 @@ def satellites(sign):
                 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    response = s.get(satsite+f'/positions/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/0/300/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
-
-                #currently assumes 0 elevation - todo: use google api to get elevation from lat/lon
+                    response = s.get(satsite+f'/positions/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/300/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
                 if response.status_code == requests.codes.ok:
                     iss_polltime = time.perf_counter()
@@ -429,9 +528,7 @@ def satellites(sign):
                 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/0/5/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
-
-                #currently assumes 0 elevation - todo: use google api to get elevation from lat/lon
+                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/5/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
                 if iss_response.status_code == requests.codes.ok:
                     iss_flyby_polltime = time.perf_counter()
@@ -479,13 +576,8 @@ def satellites(sign):
                                 if len(formatted_address)>17:
                                     formatted_address = shorten_name(formatted_address)
 
-                            # iss_last_loc = formatted_address
                         else:
                             formatted_address = 'Ocean'
-                            # if iss_last_loc != None:
-                            #     formatted_address = iss_last_loc
-                            # else:
-                            #     formatted_address = 'Somewhere'
 
                     iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                     iss_alt = pos["sataltitude"]*utilities.KM_2_MI
@@ -529,7 +621,7 @@ def satellites(sign):
                             image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
                     else:
                         try:
-                            image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(full_country_name)}.png').convert('RGBA')
+                            image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(full_country_name,"2000-01-01")}.png').convert('RGBA')
                             image = fix_black(image)
                         except Exception:
                             pass
@@ -538,10 +630,6 @@ def satellites(sign):
                     
             if image:
                 sign.canvas.SetImage(image.resize((15, 10), Image.BICUBIC).convert('RGB'), 113, 0)
-                # for x in range(113,128):
-                #     sign.canvas.SetPixel(x, 10, 25, 25, 25)
-                # for y in range(11):
-                #     sign.canvas.SetPixel(112, y, 25, 25, 25)
 
             for x in range(25):
                 for y in range(11):
@@ -557,11 +645,6 @@ def satellites(sign):
 
             formatted_address=formatted_address[:17]
             graphics.DrawText(sign.canvas, sign.font57, max(27,round(68-len(formatted_address)*2.5)), 8, graphics.Color(200, 10, 10), formatted_address)
-
-            #if len(formatted_address) < 16:
-            #    graphics.DrawText(sign.canvas, sign.font57, max(27,round(68-len(formatted_address)*2.5)), 8, graphics.Color(200, 10, 10), formatted_address)
-            #else:
-            #    graphics.DrawText(sign.canvas, sign.font57, max(27,round(77.5-len(formatted_address)*2.5)), 8, graphics.Color(200, 10, 10), formatted_address)
 
             graphics.DrawText(sign.canvas, sign.font57, 1, 18, graphics.Color(60, 60, 160), "Dst:")
             if iss_dist<100:
