@@ -35,6 +35,7 @@ sign.conf
 #misc
 prices.csv
 satdat.txt
+satsup.txt
 disable_update
 icons/favicons/*
 !icons/favicons/.gitkeep 
