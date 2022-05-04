@@ -283,6 +283,7 @@ class LightningManager:
     def onClose(self, ws, close_status_code="", close_msg=""):
         logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
         self.connected.value = 0
+        self.connect()
         
     def onOpen(self, ws):
 
@@ -539,7 +540,7 @@ class LightningManager:
                                                  on_open=self.onOpen,
                                                  header = self.header)
 
-                self.ws.on_open = self.onOpen
+                #self.ws.on_open = self.onOpen
         
                 self.thread = Process(target=self.ws.run_forever, kwargs={'host':self.ws_server, 'origin':"https://map.blitzortung.org", 'sslopt':{"cert_reqs": ssl.CERT_NONE}})
                 self.thread.start()
