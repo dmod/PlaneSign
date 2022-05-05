@@ -506,7 +506,7 @@ class LightningManager:
         if not self.connected.value:
             self.connected.value = 2
             try:    
-                ws_servers = ["ws5.blitzortung.org", "ws6.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
+                ws_servers = ["ws1.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
                 
                 self.ws_server = ws_servers[random.randint(0,len(ws_servers)-1)]
                 
