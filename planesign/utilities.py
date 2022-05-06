@@ -230,6 +230,60 @@ class TextScroller:
 
         self.lastdrawtime=curtime
 
+def autocrop(image, bg):
+
+    sizex, sizey = image.size
+
+    flag = False
+    for row in range(sizey):
+        for col in range(sizex):
+            if image.getpixel((col, row)) != bg:
+                flag = True
+            if flag:
+                break
+        if flag:
+            break
+
+    top = row
+
+    flag = False
+    for row in range(sizey-1, top+2, -1):
+        for col in range(sizex):
+            if image.getpixel((col, row)) != bg:
+                flag = True
+            if flag:
+                break
+        if flag:
+            break
+    bot = row
+
+    flag = False
+    for col in range(sizex):
+        for row in range(top+1, bot, 1):
+            if image.getpixel((col, row)) != bg:
+                flag = True
+            if flag:
+                break
+        if flag:
+            break
+
+    left = col
+
+    flag = False
+    for col in range(sizex-1, left+2, -1):
+        for row in range(top+1, bot, 1):
+            if image.getpixel((col, row)) != bg:
+                flag = True
+            if flag:
+                break
+        if flag:
+            break
+
+    right = col
+
+    return image.crop((left, top, right, bot))
+
+
 def fix_chars(name):
     name = name.replace("–","-")
     for ch in [u'\u0100',u'\u0102',u'\u0104']:
