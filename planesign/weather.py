@@ -67,7 +67,7 @@ def show_weather(sign):
         for y in range(7):
             sign.canvas.SetPixel(num_horizontal_pixels, y, 140, 140, 140)
 
-        sunrise_sunset_start_x = num_horizontal_pixels + 20
+        sunrise_sunset_start_x = min(num_horizontal_pixels + 20,70)
 
         time_format = '%-I:%M'
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
