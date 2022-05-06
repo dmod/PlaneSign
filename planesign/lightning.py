@@ -18,6 +18,7 @@ import PIL.Image as Image
 import _thread as thread
 import os.path
 import shared_config
+import logging
 import __main__
 
 
@@ -44,6 +45,8 @@ def lightning(sign):
         if breakout:
             LM.close()
             return
+
+    shared_config.shared_mode.value = 1
 
 def mercator_proj(lat, lon):
     x = np.radians(lon)
@@ -235,9 +238,33 @@ class LightningManager:
             if genmaps:
                 self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
                 loadingind += 1
+
+    def decode(self, b):
+        e = {}
+        g= []
+        d = list(b)
+        c = d[0]
+        f = c
+        g.append(c)
+        h = 256
+        o = h
+        for b in range(1,len(d)):
+            a = ord(d[b])
+            if h > a:
+                a = d[b]
+            elif a in e:
+                a = e[a]
+            else:
+                a = f + c
+            g.append(a)
+            c = a[0]
+            e[o] = f + c
+            o+=1
+            f = a
+        return "".join(g)
         
     def onMessage(self, ws, message):
-        strike_js = json.loads(message)
+        strike_js = json.loads(self.decode(message))
 
         dets = []
         for det in strike_js["sig"]:
@@ -251,11 +278,12 @@ class LightningManager:
         self.strikes.append(strike)
 
     def onError(self, ws, err):
-        print("Got an error: ", err)
+        logging.error(f"Websocket Error: {err}")
     
     def onClose(self, ws, close_status_code="", close_msg=""):
-        print("### closed ###", close_status_code," : ", close_msg)
+        logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
         self.connected.value = 0
+        self.connect()
         
     def onOpen(self, ws):
 
@@ -265,16 +293,17 @@ class LightningManager:
                 time.sleep(25)
                 ws.send(json_data)
 
-        thread.start_new_thread(heartbeat, ())
+        #thread.start_new_thread(heartbeat, ())
     
-        print('Opening Websocket connection to the server ... ')
+        logging.debug('Opening Websocket connection to the server ... ')
     
-        json_data = json.dumps({"time":0})
+        #ws.send('{"a":542}')
+        json_data = json.dumps({"a":542})
         ws.send(json_data)
-        json_data = json.dumps({"wsServer":self.ws_server})
-        ws.send(json_data)
+        #json_data = json.dumps({"wsServer":self.ws_server})
+        #ws.send(json_data)
 
-        print(json_data)
+        #logging.info(json_data)
 
         #json_data = json.dumps({"sig":False})
         #ws.send(json_data)
@@ -477,16 +506,16 @@ class LightningManager:
         if not self.connected.value:
             self.connected.value = 2
             try:    
-                ws_servers = ["ws5.blitzortung.org", "ws6.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
+                ws_servers = ["ws1.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
                 
                 self.ws_server = ws_servers[random.randint(0,len(ws_servers)-1)]
                 
                 self.ws_key = base64.b64encode(os.urandom(16)).decode('ascii')
                 
-                self.host = 'wss://' + self.ws_server + ':3000'
+                self.host = 'wss://' + self.ws_server + '/'#'wss://' + self.ws_server + ':3000'
                 
                 self.header = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0",
                 "Accept": "*/*",
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
@@ -498,7 +527,8 @@ class LightningManager:
                 "Sec-Fetch-Mode": "websocket",
                 "Sec-Fetch-Site": "same-site",
                 "Pragma": "no-cache",
-                "Cache-Control": "no-cache"
+                "Cache-Control": "no-cache",
+                "Upgrade": "websocket"
                 }
         
                 websocket.enableTrace(False)
@@ -510,11 +540,11 @@ class LightningManager:
                                                  on_open=self.onOpen,
                                                  header = self.header)
 
-                self.ws.on_open = self.onOpen
+                #self.ws.on_open = self.onOpen
         
                 self.thread = Process(target=self.ws.run_forever, kwargs={'host':self.ws_server, 'origin':"https://map.blitzortung.org", 'sslopt':{"cert_reqs": ssl.CERT_NONE}})
                 self.thread.start()
 
             except Exception as e:
-                print("### Exception ### ",e)
+                logging.error(f"Websocket Exception: {e}")
                 self.connected.value = 0
