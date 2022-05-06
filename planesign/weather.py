@@ -56,10 +56,10 @@ def show_weather(sign):
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
         graphics.DrawText(sign.canvas, sign.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day.status)
 
-        graphics.DrawText(sign.canvas, sign.font46, 0, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
+        graphics.DrawText(sign.canvas, sign.font46, 1, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
 
         # Calculate and draw the horizontal boarder around the WEATHER_CITY_NAME
-        num_horizontal_pixels = (len(shared_config.CONF["WEATHER_CITY_NAME"]) * 4)
+        num_horizontal_pixels = (len(shared_config.CONF["WEATHER_CITY_NAME"]) * 4)+1
         for x in range(num_horizontal_pixels):
             sign.canvas.SetPixel(x, 6, 140, 140, 140)
 
