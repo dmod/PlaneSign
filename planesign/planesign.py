@@ -147,7 +147,7 @@ def get_mode():
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_config.shared_current_brightness.value = int(brightness)
-    shared_config.shared_forced_sign_update.value = 1
+    #shared_config.shared_forced_sign_update.value = 1
     return ""
 
 
