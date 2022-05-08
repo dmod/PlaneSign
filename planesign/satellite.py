@@ -258,6 +258,15 @@ def satellites(sign):
 
     sign.canvas.Clear()
 
+    image = Image.open(f"{shared_config.icons_dir}/galaxy.png")
+    sign.canvas.SetImage(image.convert('RGB'), 0, 0)
+    for i in range(-1,2):
+        for j in range(-1,2):
+            graphics.DrawText(sign.canvas, sign.fontbig, 3+i, 28+j, graphics.Color(0,0,0), "Loading...")
+    graphics.DrawText(sign.canvas, sign.fontbig, 3, 28, graphics.Color(180,100,180), "Loading...")
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+    sign.canvas.Clear()
+
     satellite_data = []
     try:
         with open("satdat.txt",encoding='windows-1252') as f:
