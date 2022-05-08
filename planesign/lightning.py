@@ -417,12 +417,12 @@ class LightningManager:
         self.sign.canvas.SetImage(lightningmap.convert('RGB'), 64, 0)
 
         for i in range(32):
-            self.sign.canvas.SetPixel(63, i, 50, 50, 200)
+            self.sign.canvas.SetPixel(64, i, 50, 50, 200)
 
         graphics.DrawText(self.sign.canvas, self.sign.font46, 1, 6, graphics.Color(20, 20, 210), "Closest")
         if closest1:
             r,g,b = get_lightning_color(closest1["time"],now,False)
-            if closest1["dist"]<100:
+            if closest1["dist"]<99.95:
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
@@ -433,7 +433,7 @@ class LightningManager:
 
         if closest2:
             r,g,b = get_lightning_color(closest2["time"],now,False)
-            if closest2["dist"]<100:
+            if closest2["dist"]<99.95:
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
@@ -444,7 +444,7 @@ class LightningManager:
 
         if closest3:    
             r,g,b = get_lightning_color(closest3["time"],now,False)
-            if closest3["dist"]<100:
+            if closest3["dist"]<99.95:
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
@@ -453,16 +453,16 @@ class LightningManager:
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(70, 70, 215), "----")
 
-        graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 6, graphics.Color(20, 20, 210), "Recent")
+        graphics.DrawText(self.sign.canvas, self.sign.font46, 34, 6, graphics.Color(20, 20, 210), "Recent")
         if recent:
-            if recent[0]["dist"]<100:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+            if recent[0]["dist"]<99.95:
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
 
-            draw_power(31,14,recent[0]["radius"],self.sign)
+            draw_power(32,14,recent[0]["radius"],self.sign)
         else:
-            graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 14, graphics.Color(70, 70, 215), "----")
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(70, 70, 215), "----")
 
         if local:
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
@@ -475,27 +475,33 @@ class LightningManager:
 
         graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), str(numstrikes))
 
-        if closest1 and closest1["dist"]<0.5 and closest1["time"]+30 > now and ("warned" not in closest1):
+        if closest1 and closest1["dist"]<1 and closest1["time"]+30 > now and ("warned" not in closest1):
+            logging.info(f'LIGHTNING STRIKE DANGER: Strike detected {closest1["dist"]} miles away!')
             self.strikes[self.strikes.index(closest1)]["warned"]=True
-            for i in range(6):
-                if i%2==0:
+            old = self.sign.matrix.SwapOnVSync(self.sign.canvas)
+            for j in range(6):
+                if j%2==0:
                     for i in range(32):
-                        self.sign.canvas.SetPixel(63, i, 200, 0, 0)
+                        self.sign.canvas.SetPixel(64, i, 200, 0, 0)
                         self.sign.canvas.SetPixel(127, i, 200, 0, 0)
-                    for i in range(64,127):
+                    for i in range(65,127):
                         self.sign.canvas.SetPixel(i, 0, 200, 0, 0)
                         self.sign.canvas.SetPixel(i, 31, 200, 0, 0)
                 else:
                     for i in range(32):
-                        self.sign.canvas.SetPixel(63, i, 0, 0, 0)
+                        self.sign.canvas.SetPixel(64, i, 50, 50, 200)
                         self.sign.canvas.SetPixel(127, i, 0, 0, 0)
-                    for i in range(64,127):
+                    for i in range(65,127):
                         self.sign.canvas.SetPixel(i, 0, 0, 0, 0)
                         self.sign.canvas.SetPixel(i, 31, 0, 0, 0)
-                self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
-                time.sleep(0.2)
 
-        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
+                self.sign.wait_loop(0.2)
+            
+            self.sign.canvas = old
+                
+        else:
+            self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
+
         self.sign.canvas.Clear()
 
         self.last_drawn_zoomind.value = shared_config.shared_lighting_zoomind.value
@@ -543,6 +549,7 @@ class LightningManager:
                 #self.ws.on_open = self.onOpen
         
                 self.thread = Process(target=self.ws.run_forever, kwargs={'host':self.ws_server, 'origin':"https://map.blitzortung.org", 'sslopt':{"cert_reqs": ssl.CERT_NONE}})
+                self.thread.daemon=True
                 self.thread.start()
 
             except Exception as e:
