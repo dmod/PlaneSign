@@ -96,6 +96,7 @@ def fixicon(image):
 class SnowReport:
     def __init__(self,sign):
         self.sign = sign
+        self.last_snow_mode = None
         self.resorts = Manager().list()
         self.lastupdate = Value('d',0)
         self.lastdisp = -1
@@ -105,7 +106,6 @@ class SnowReport:
 
     def draw_loading(self):
 
-        #thread = threading.Thread(target=self.getdata)
         thread = Process(target=self.getdata, name="SnowDataWorker")
         thread.start()
         
@@ -135,7 +135,7 @@ class SnowReport:
 
     def drawresort(self):
 
-        if time.perf_counter()-self.lastupdate.value > 3600:
+        if time.perf_counter()-self.lastupdate.value > 1300:
             self.getdata()
 
         if self.resorts:
@@ -236,7 +236,7 @@ class SnowReport:
 
     def drawoverview(self):
 
-        if time.perf_counter()-self.lastupdate.value > 3600:
+        if time.perf_counter()-self.lastupdate.value > 1300:
             self.getdata()
 
         if self.resorts:
@@ -365,19 +365,26 @@ class SnowReport:
 def snow_forcast(sign):
     sign.canvas.Clear()
 
+    last_draw = time.perf_counter()
+
     sr = SnowReport(sign)
 
     while shared_config.shared_mode.value == 420:
 
-        if True:
-            sr.drawresort()
-        else:
-            sr.drawoverview()
-
-        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        sign.canvas.Clear()
-        
-        breakout = sign.wait_loop(30)
+        if ((time.perf_counter()-last_draw > 30) and (shared_config.shared_snow_mode.value == 1)) or time.perf_counter()-last_draw > 15 or (sr.last_snow_mode != shared_config.shared_snow_mode.value):
+                    
+            if shared_config.shared_snow_mode.value == 1:
+                sr.drawresort()
+            else:
+                sr.drawoverview()
+            sr.last_snow_mode = shared_config.shared_snow_mode.value
+                
+            last_draw = time.perf_counter()
+            
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+            sign.canvas.Clear()
+            
+        breakout = sign.wait_loop(0.5)
 
         if breakout:
             return

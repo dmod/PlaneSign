@@ -116,6 +116,9 @@
     if (mode !== 99) {
       document.getElementById('track-a-flight_div').hidden = true;
     }
+    if (mode !== 420) {
+      document.getElementById('snow_div').hidden = true;
+    }
     if (mode == 10){
       var ele = document.getElementsByName('cgolstyle');
       for(i = 0; i < ele.length; i++) {
@@ -131,6 +134,10 @@
 
   function set_lightning_mode(mode){
       call_endpoint("/lightning_mode/" + mode);
+  }
+
+  function set_snow_mode(mode){
+      call_endpoint("/snow_mode/" + mode);
   }
 
   function set_satellite_mode(mode){
@@ -316,7 +323,13 @@
 
     <fieldset class="mode_selector_button_group box2">
       <legend>Informational</legend>
-      <button id="420" class="mode_button" onclick="set_mode(this.id)">Slope Conditions 🏂</button>
+      <button id="420" class="mode_button" onclick="set_mode(this.id); document.getElementById('snow_div').hidden = false">Slope Conditions 🏂</button>
+      <div id="snow_div" hidden>
+        <input type="radio" id="Detail" name="snowstyle" onclick="set_snow_mode(this.value)" value="1" checked="checked">
+        <label for="Detail">Detail</label>
+        <input type="radio" id="Overview" name="snowstyle" onclick="set_snow_mode(this.value)" value="2">
+        <label for="Overview">Overview</label>
+      </div>
       <button id="6" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
       <button id="7" class="mode_button" onclick="set_mode(this.id)">Clock Only 🕓</button>
       <button id="17" class="mode_button" onclick="set_mode(this.id); document.getElementById('satellite_div').hidden = false">Satellites 🛰️</button>
