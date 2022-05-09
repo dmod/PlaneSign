@@ -421,6 +421,8 @@ def satellites(sign):
                     close_name = closest["satname"]
                     if close_name.find("STARLINK") != -1:
                         close_name=close_name.replace("-", "")
+                    elif close_name.find("SPACE STATION") == 0:
+                        close_name="ISS"
                     pindex = close_name.find(' (')
                     if pindex != -1 and len(close_name)>12:
                         clean_close_name = close_name[:pindex]
@@ -430,6 +432,8 @@ def satellites(sign):
                     low_name = lowest["satname"]
                     if low_name.find("STARLINK") != -1:
                         low_name=low_name.replace("-", "").replace(" ", "")
+                    elif low_name.find("SPACE STATION") == 0:
+                        low_name="ISS"
                     pindex = low_name.find(' (')
                     if pindex != -1 and len(low_name)>12:
                         clean_low_name = low_name[:pindex]
