@@ -473,7 +473,9 @@ class LightningManager:
         graphics.DrawText(self.sign.canvas, self.sign.font46, 34, 6, graphics.Color(20, 20, 210), "Recent")
         if recent:
             recent_dist_str = "{0:.1f}".format(recent[0]["dist"])
-            if len(recent_dist_str) > 4:
+            if len(recent_dist_str) > 6:
+                recent_dist_str = f'{round(recent[0]["dist"]/1000)}k'
+            elif len(recent_dist_str) > 4:
                 recent_dist_str = "{0:.0f}".format(recent[0]["dist"])
             #180,180,40
             graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180,180,40), recent_dist_str)
