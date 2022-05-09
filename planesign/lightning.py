@@ -31,19 +31,33 @@ def lightning(sign):
     sign.canvas.Clear()
 
     LM = LightningManager(sign)
-    LM.connect()
-
-    last_draw = time.perf_counter()
 
     sign.canvas.Clear()
-    while LM.connected.value:
-        if time.perf_counter()-last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lighting_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lighting_mode.value):
-            LM.draw()
-            last_draw = time.perf_counter()
+    last_draw = None
+    failed_connections = 0
+    breakout = False
+    while failed_connections < 3:
 
-        breakout = sign.wait_loop(0.1)
-        if breakout:
+        if LM.connected.value==0:
+            LM.connect()
+
+        if LM.connected.value==1:
+            failed_connections = 0
+
+            while LM.connected.value:
+                if last_draw == None or time.perf_counter()-last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lighting_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lighting_mode.value):
+                    LM.draw()
+                    last_draw = time.perf_counter()
+
+                breakout = sign.wait_loop(0.1)
+                if breakout:
+                    return
             LM.close()
+        elif LM.connected.value==0:
+            failed_connections += 1
+            logging.error(f'Websocket failed to connect {failed_connections} times')
+
+        if breakout:
             return
 
     shared_config.shared_mode.value = 1
@@ -279,11 +293,13 @@ class LightningManager:
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
+        self.connected.value = 0
+        self.close()
     
     def onClose(self, ws, close_status_code="", close_msg=""):
         logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
         self.connected.value = 0
-        self.connect()
+        self.close()
         
     def onOpen(self, ws):
 
@@ -418,48 +434,50 @@ class LightningManager:
 
         for i in range(32):
             self.sign.canvas.SetPixel(64, i, 50, 50, 200)
+        #110, 170, 45   110, 45, 170   70, 70, 215  100,100,100
 
         graphics.DrawText(self.sign.canvas, self.sign.font46, 1, 6, graphics.Color(20, 20, 210), "Closest")
         if closest1:
             r,g,b = get_lightning_color(closest1["time"],now,False)
-            if closest1["dist"]<99.95:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.1f}".format(closest1["dist"])+utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-            else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), "{0:.0f}".format(closest1["dist"])+utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-            
+            closest1_dist_str = "{0:.1f}".format(closest1["dist"])
+            if len(closest1_dist_str) > 4:
+                closest1_dist_str = "{0:.0f}".format(closest1["dist"])
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r,g,b), closest1_dist_str)
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2+len(closest1_dist_str)*5, 14, graphics.Color(110, 170, 45), utilities.direction_lookup((closest1["lat"],closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(0,14,closest1["radius"],self.sign)
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(70, 70, 215), "----")
 
         if closest2:
             r,g,b = get_lightning_color(closest2["time"],now,False)
-            if closest2["dist"]<99.95:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.1f}".format(closest2["dist"])+utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-            else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), "{0:.0f}".format(closest2["dist"])+utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-        
+            closest2_dist_str = "{0:.1f}".format(closest2["dist"])
+            if len(closest2_dist_str) > 4:
+                closest2_dist_str = "{0:.0f}".format(closest2["dist"])
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r,g,b), closest2_dist_str)
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2+len(closest2_dist_str)*5, 22, graphics.Color(110, 170, 45), utilities.direction_lookup((closest2["lat"],closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(0,22,closest2["radius"],self.sign)
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(70, 70, 215), "----")
 
         if closest3:    
             r,g,b = get_lightning_color(closest3["time"],now,False)
-            if closest3["dist"]<99.95:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.1f}".format(closest3["dist"])+utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-            else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), "{0:.0f}".format(closest3["dist"])+utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-
+            closest3_dist_str = "{0:.1f}".format(closest3["dist"])
+            if len(closest3_dist_str) > 4:
+                closest3_dist_str = "{0:.0f}".format(closest3["dist"])
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r,g,b), closest3_dist_str)
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 2+len(closest3_dist_str)*5, 30, graphics.Color(110, 170, 45), utilities.direction_lookup((closest3["lat"],closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(0,30,closest3["radius"],self.sign)
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(70, 70, 215), "----")
 
         graphics.DrawText(self.sign.canvas, self.sign.font46, 34, 6, graphics.Color(20, 20, 210), "Recent")
         if recent:
-            if recent[0]["dist"]<99.95:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180,180,40), "{0:.1f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-            else:
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180,180,40), "{0:.0f}".format(recent[0]["dist"])+utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
-
+            recent_dist_str = "{0:.1f}".format(recent[0]["dist"])
+            if len(recent_dist_str) > 4:
+                recent_dist_str = "{0:.0f}".format(recent[0]["dist"])
+            #180,180,40
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180,180,40), recent_dist_str)
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 34+len(recent_dist_str)*5, 14, graphics.Color(110, 170, 45), utilities.direction_lookup((recent[0]["lat"],recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(32,14,recent[0]["radius"],self.sign)
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(70, 70, 215), "----")
