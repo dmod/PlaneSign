@@ -4,7 +4,7 @@ favicon==0.7.0
 Flask==2.1.1
 Flask-Cors==3.0.10
 pytz==2022.1
-numpy==1.21.5
+numpy==1.22.4
 pyowm==3.3.0
 requests==2.27.1
 scipy==1.8.0
