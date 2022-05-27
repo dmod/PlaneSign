@@ -30,7 +30,7 @@ def show_weather(sign):
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day]
         image = Image.open(f"{shared_config.icons_dir}/weather/{day.weather_icon_name}.png")
         iw,ih=image.size
-        sign.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 25 - round(iw/2), 16-round(ih/2))
+        sign.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 25 - round(iw/2), 8)
         graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
         graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
         graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
@@ -40,7 +40,7 @@ def show_weather(sign):
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 1]
         image = Image.open(f"{shared_config.icons_dir}/weather/{day.weather_icon_name}.png")
         iw,ih=image.size
-        sign.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 25 - round(iw/2), 16-round(ih/2))
+        sign.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 25 - round(iw/2), 8)
         graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
         graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
         graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
@@ -50,7 +50,7 @@ def show_weather(sign):
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 2]
         image = Image.open(f"{shared_config.icons_dir}/weather/{day.weather_icon_name}.png")
         iw,ih=image.size
-        sign.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 25 - round(iw/2), 16-round(ih/2))
+        sign.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 25 - round(iw/2), 8)
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
         graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
