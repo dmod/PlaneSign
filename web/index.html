@@ -10,13 +10,34 @@
   <title>Plane Sign</title>
 </head>
 
+
+
 <script type="application/javascript">
 
   var global_current_mode;
+  var recordButton, stopButton, recorder;
 
   window.onload = function () {
     update_sign_status();
     update_brightness_slider();
+
+    recordButton = document.getElementById('record');
+    stopButton = document.getElementById('stop');
+  
+    // get audio stream from user's mic
+    navigator.mediaDevices.getUserMedia({
+      audio: true
+    })
+    .then(function (stream) {
+      recordButton.disabled = false;
+      recordButton.addEventListener('click', startRecording);
+      stopButton.addEventListener('click', stopRecording);
+      recorder = new MediaRecorder(stream);
+  
+      // listen to dataavailable, which gets triggered whenever we have
+      // an audio blob available
+      recorder.addEventListener('dataavailable', onRecordingReady);
+    });
 
   document.getElementById("config").onsubmit = function(e) {
     e.preventDefault();
@@ -66,6 +87,28 @@
       }
     }
 
+  }
+
+  function startRecording() {
+    recordButton.disabled = true;
+    stopButton.disabled = false;
+  
+    recorder.start();
+  }
+  
+  function stopRecording() {
+    recordButton.disabled = false;
+    stopButton.disabled = true;
+  
+    // Stopping the recorder will eventually trigger the `dataavailable` event and we can complete the recording process
+    recorder.stop();
+  }
+  
+  function onRecordingReady(e) {
+    var audio = document.getElementById('audio');
+    // e.data contains a blob representing the recording
+    audio.src = URL.createObjectURL(e.data);
+    audio.play();
   }
 
   function submit_ticker() {

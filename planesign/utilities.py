@@ -39,7 +39,7 @@ def read_config():
                 continue
             key, val = line.split('=')
             if key not in shared_config.CONF.keys():
-                logging.warn(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val}' from sign.conf.sample")
+                logging.warn(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val.rstrip()}' from sign.conf.sample")
                 shared_config.CONF[key] = val.rstrip()
 
     logging.info("Config loaded: " + str(shared_config.CONF))
