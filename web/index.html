@@ -105,10 +105,20 @@
   }
   
   function onRecordingReady(e) {
+    console.log("recording ready")
     var audio = document.getElementById('audio');
     // e.data contains a blob representing the recording
     audio.src = URL.createObjectURL(e.data);
-    audio.play();
+    console.log(e.data)
+    // #audio.play();
+  
+        fetch('api/play_audio', {
+              method: "POST",
+              body: e.data
+        })
+        .then(response => console.log('Blob Uploaded'))
+        .catch(err => alert(err));
+
   }
 
   function submit_ticker() {

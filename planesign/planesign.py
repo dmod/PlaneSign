@@ -200,6 +200,20 @@ def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
 
+@app.route("/play_audio", methods=['POST'])
+def play_audio():
+    print("IN PLAY AUDIO")
+    print(f"Content length: {request.content_length}")
+    request_data = request.get_data()
+    with open("audio", "wb") as f:
+        f.write(request_data)
+
+    my_env = {}
+    my_env["SDL_AUDIODRIVER"] = "alsa"
+    my_env["AUDIODEV"] = "hw:1,0"
+    subprocess.run(["/usr/bin/ffplay", "audio", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
+    return ""
+
 
 def api_server():
     app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
