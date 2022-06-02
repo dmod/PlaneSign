@@ -28,17 +28,14 @@ def show_weather(sign):
 
         # Day 0
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day]
-        day.weather_code=801
         draw_daily_forcast(sign,day,day_0_xoffset)
 
         # Day 1
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 1]
-        day.weather_code=802
         draw_daily_forcast(sign,day,day_1_xoffset)
 
         # Day 2
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 2]
-        day.weather_code=804
         draw_daily_forcast(sign,day,day_2_xoffset)
 
         graphics.DrawText(sign.canvas, sign.font46, 1, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
