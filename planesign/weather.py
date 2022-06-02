@@ -28,33 +28,18 @@ def show_weather(sign):
 
         # Day 0
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day]
-        image = Image.open(f"{shared_config.icons_dir}/weather/{day.weather_icon_name}.png")
-        iw,ih=image.size
-        sign.canvas.SetImage(image.convert('RGB'), day_0_xoffset + 25 - round(iw/2), 16-round(ih/2))
-        graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
-        graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
-        graphics.DrawText(sign.canvas, sign.font57, day_0_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
-        graphics.DrawText(sign.canvas, sign.font46, day_0_xoffset + 15, 30, graphics.Color(52, 235, 183), day.status)
+        day.weather_code=801
+        draw_daily_forcast(sign,day,day_0_xoffset)
 
         # Day 1
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 1]
-        image = Image.open(f"{shared_config.icons_dir}/weather/{day.weather_icon_name}.png")
-        iw,ih=image.size
-        sign.canvas.SetImage(image.convert('RGB'), day_1_xoffset + 25 - round(iw/2), 16-round(ih/2))
-        graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
-        graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
-        graphics.DrawText(sign.canvas, sign.font57, day_1_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
-        graphics.DrawText(sign.canvas, sign.font46, day_1_xoffset + 15, 30, graphics.Color(52, 235, 183), day.status)
+        day.weather_code=802
+        draw_daily_forcast(sign,day,day_1_xoffset)
 
         # Day 2
         day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 2]
-        image = Image.open(f"{shared_config.icons_dir}/weather/{day.weather_icon_name}.png")
-        iw,ih=image.size
-        sign.canvas.SetImage(image.convert('RGB'), day_2_xoffset + 25 - round(iw/2), 16-round(ih/2))
-        graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
-        graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
-        graphics.DrawText(sign.canvas, sign.font57, day_2_xoffset, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
-        graphics.DrawText(sign.canvas, sign.font46, day_2_xoffset + 15, 30, graphics.Color(52, 235, 183), day.status)
+        day.weather_code=804
+        draw_daily_forcast(sign,day,day_2_xoffset)
 
         graphics.DrawText(sign.canvas, sign.font46, 1, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
 
@@ -82,7 +67,6 @@ def show_weather(sign):
         if breakout:
             return
 
-
 def get_weather_data_worker(data_dict):
     owm = OWM(shared_config.CONF["OPENWEATHER_API_KEY"])
     mgr = owm.weather_manager()
@@ -101,3 +85,145 @@ def get_weather_data_worker(data_dict):
 
         shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=timeout)
         #shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=300)
+
+def draw_daily_forcast(sign,day,xloc):
+    code = day.weather_code
+    status = day.status
+    if code==200:
+        icon="thunderrain"
+    elif code==201:
+        icon="thunderrain"
+    elif code==202:
+        icon="thunderrainheavy"
+    elif code==210:
+        icon="thunder"
+    elif code==211:
+        icon="thunder"
+    elif code==212:
+        icon="thunderheavy"
+    elif code==221:
+        icon="thunder"
+    elif code==230:
+        icon="thunderrain"
+    elif code==231:
+        icon="thunderrain"
+    elif code==232:
+        icon="thunderrainheavy"
+    elif code <300:
+        icon="thunder"
+    elif code==300:
+        icon="rainlight"
+    elif code==301:
+        icon="rain"
+    elif code==302:
+        icon="rainheavy"
+    elif code==310:
+        icon="rainlight"
+    elif code==311:
+        icon="rain"
+    elif code==312:
+        icon="rain"
+    elif code==313:
+        icon="rain"
+    elif code==314:
+        icon="rainheavy"
+    elif code==321:
+        icon="rain"
+    elif code <500:
+        icon="rain"
+    elif code==500:
+        icon="rainlight"
+    elif code==501:
+        icon="rainlight"
+    elif code==502:
+        icon="rain"
+    elif code==503:
+        icon="rainheavy"
+    elif code==504:
+        icon="rainheavy"
+    elif code==511:
+        icon="snow"
+        status="FrzRain"
+    elif code==520:
+        icon="rainlight"
+    elif code==521:
+        icon="rain"
+    elif code==522:
+        icon="rainheavy"
+    elif code==531:
+        icon="rainlight"
+    elif code <600:
+        icon="rain"
+    elif code==600:
+        icon="snow"
+    elif code==601:
+        icon="snow"
+    elif code==602:
+        icon="snow"
+    elif code==611:
+        icon="snow"
+        status="Sleet"
+    elif code==612:
+        icon="snow"
+        status="Sleet"
+    elif code==613:
+        icon="snow"
+        status="Sleet"
+    elif code==615:
+        icon="snow"
+        status="RainSno"
+    elif code==616:
+        icon="snow"
+        status="RainSno"
+    elif code==620:
+        icon="snow"
+    elif code==621:
+        icon="snow"
+    elif code==622:
+        icon="snow"
+    elif code <700:
+        icon="snow"
+    elif code==701:
+        icon="haze"
+    elif code==711:
+        icon="haze"
+    elif code==721:
+        icon="haze"
+    elif code==731:
+        icon="haze"
+    elif code==741:
+        icon="haze"
+    elif code==751:
+        icon="haze"
+    elif code==761:
+        icon="haze"
+    elif code==762:
+        icon="haze"
+    elif code==781:
+        icon="tornado"
+    elif code <800:
+        icon="haze"
+    elif code==800:
+        icon="clear"
+    elif code==801:
+        icon="cloudpart"
+    elif code==802:
+        icon="cloud"
+    elif code==803:
+        icon="cloudheavy"
+    elif code==804:
+        icon="cloudheavy"
+        status="Overcst"
+    else:
+        icon="cloud"
+
+    image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
+    iw,ih=image.size
+    sign.canvas.SetImage(image.convert('RGB'), xloc + 25 - round(iw/2), 9)
+
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
+    graphics.DrawText(sign.canvas, sign.font46, xloc + 26 - len(status)*2, 30, graphics.Color(52, 235, 183), status)
+
+    return
