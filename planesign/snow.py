@@ -139,25 +139,28 @@ class SnowReport:
             self.getdata()
 
         if self.resorts:
-            openresorts = list(filter(lambda resort: resort['open'], self.resorts))
+            #openresorts = list(filter(lambda resort: resort['open'], self.resorts))
 
             ind = -1 
             if self.lastresort != None:                
-                for resort in openresorts:
+                for resort in self.resorts:#openresorts:
                     ind+=1
                     if resort['name']==self.lastresort:
                         break
-            ind = (ind+1)%len(openresorts)
+            ind = (ind+1)%len(self.resorts)#len(openresorts)
 
-            resort = openresorts[ind]
+            resort = self.resorts[ind]#openresorts[ind]
             self.lastresort = resort['name']
 
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46-round(len(resort['name'][:15])*3), 10, graphics.Color(10, 150, 10), resort['name'][:15])
+            if resort['open']:
+                graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46-round(len(resort['name'][:15])*3), 10, graphics.Color(10, 150, 10), resort['name'][:15])
+            else:
+                graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46-round(len(resort['name'][:15])*3), 10, graphics.Color(100, 10, 10), resort['name'][:15]) 
 
             sizex, sizey = resort['icon'].size
             self.sign.canvas.SetImage(resort['icon'], 12-round(sizex/2), 22-round(sizey/2))
             
-            graphics.DrawText(self.sign.canvas, self.sign.font57, 24, 21, graphics.Color(150, 7, 7), "New:")
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 24, 21, graphics.Color(100, 10, 10), "New:")#150, 7, 7
             graphics.DrawText(self.sign.canvas, self.sign.font57, 45, 21, snowcolor(resort['new']), resort['new']+'"')
 
 
@@ -249,7 +252,7 @@ class SnowReport:
                 if resort["open"]:
                     graphics.DrawText(self.sign.canvas, self.sign.font57, 1, 7+offset, graphics.Color(40, 167, 69), resort['name'][:15])
                 else:
-                    graphics.DrawText(self.sign.canvas, self.sign.font57, 1, 7+offset, graphics.Color(231, 109, 99), resort['name'][:15])
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 1, 7+offset, graphics.Color(115, 18, 15), resort['name'][:15])#231, 109, 99
                 
                 graphics.DrawLine(self.sign.canvas, 94, 0, 94, 31, graphics.Color(13, 13, 25))
                 
@@ -282,10 +285,13 @@ class SnowReport:
 
                     resort['iconurl'] = resdiv.find('img', {'class' :'location-icon'})['src']
                     try:
-                        image = Image.open(requests.get(resort['iconurl'], stream=True).raw)
-                        image = fixicon(image)
+                        image = Image.open(f'{shared_config.icons_dir}/resorts/{resort["name"].replace(" ","_")}.png').convert('RGB')
                     except:
-                        image = Image.new('RGB', (20, 20), (0, 0, 0))
+                        try:
+                            image = Image.open(requests.get(resort['iconurl'], stream=True).raw)
+                            image = fixicon(image)
+                        except:
+                            image = Image.new('RGB', (20, 20), (0, 0, 0))
 
                     resort['icon'] = image
 
