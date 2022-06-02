@@ -170,9 +170,9 @@ def show_custom_message(sign):
                 if color_index >= len(selected_color_list):
                     color_index = 0
 
-            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-
             starting_color_index += 1
+
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
         if shared_config.shared_color_mode.value == 1:
             sign.wait_loop(0.1)
