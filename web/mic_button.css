@@ -1,0 +1,78 @@
+.box {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+}
+
+.record_button_object {
+	display: flex;
+	flex: 0 1 100%;
+	justify-content: center;
+	align-items: center;
+	align-content: stretch;
+}
+
+.record_button_outline {
+	width: 60px;
+	height: 60px;
+	border-radius: 50%;
+	border: 8px solid #B5A4A4;
+	animation: pulse 3s;
+	animation-timing-function: ease-out;
+	animation-iteration-count: infinite;
+	position: absolute;
+}
+
+.button {
+	width: 120px;
+	height: 120px;
+	border-radius: 50%;
+	background: #50CDDD;
+	box-shadow: 0px 0px 80px #0084F9;
+	position: absolute;
+}
+
+@keyframes pulse {
+	0% {
+		transform: scale(0);
+		opacity: 0;
+		border: 65px solid #0B3082;
+	}
+
+	50% {
+		border: solid #A3FFC2;
+		opacity: 0.8;
+	}
+
+	90% {
+		transform: scale(3.2);
+		opacity: 0.2;
+		border: 3px solid #2E3CFF;
+	}
+
+	100% {
+		transform: scale(3.3);
+		opacity: 0;
+		border: 1px solid #7A89FF;
+	}
+}
+
+#delayed {
+	animation-delay: 1.5s;
+}
+
+#circlein {
+	width: 100px;
+	height: 100px;
+	border-radius: 50%;
+	background: #6BD6E1;
+	box-shadow: 0px -2px 15px #E0FF94;
+	position: absolute;
+}
+
+#mic-icon {
+	height: 60px;
+	position: absolute;
+	margin: 21px;
+	fill:#1E2D70;
+}
