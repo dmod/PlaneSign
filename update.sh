@@ -6,12 +6,12 @@
 #need to save creds one time after executing:
 #git config --global credential.helper 'store --file ~/.my-credentials'
 #git config --global credential.helper store
-#then manually update once and enter credentials manually (these will then be saved to disk... I think)
+#then manually run 'git fetch' and enter credentials manually (these will then be saved to disk)
 
 #TODO:
+#-Need more robust way to handle sudo -H pip3 install -r requirements.txt when pip fails on specific a package version
 #-detect if credentials exist and push prompt to website if they don't
 #-detect if updating is needed before attempting and/or only show update button on website if there is an update available
-#like error checking or something in case the commands don't work idk lol
 
 #can check if an update is needed with:
 #[ $(git rev-parse HEAD) = $(git ls-remote $(git rev-parse --abbrev-ref @{u} | \
