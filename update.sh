@@ -26,7 +26,7 @@ else
     git reset --hard HEAD
     git pull
 
-    sudo apt install libatlas-base-dev
+    sudo apt install libatlas-base-dev ffmpeg
     sudo -H pip3 install -r requirements.txt
 
     sudo ./update_static_cache.py

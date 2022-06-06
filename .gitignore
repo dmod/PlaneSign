@@ -41,3 +41,4 @@ icons/favicons/*
 !icons/favicons/.gitkeep 
 icons/lightning/*
 !icons/lightning/.gitkeep
+.data/audio

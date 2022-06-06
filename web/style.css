@@ -20,6 +20,14 @@
   grid-column-end: 3;
 }
 
+.box4 {
+  border-radius: 25px;
+  margin: 100px;
+
+  grid-column-start: 1;
+  grid-column-end: 3;
+}
+
 .mode_button {
   color: white;
   background-color: black;
