@@ -25,7 +25,7 @@ from timezonefinder import TimezoneFinder
 
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from PIL import Image, ImageDraw
 from flask_cors import CORS
 
@@ -200,18 +200,26 @@ def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
 
+@app.route("/is_audio_supported")
+def is_audio_supported():
+    p = subprocess.run("aplay -l | grep 'USB Audio'", shell=True)
+    audio_supported = p.returncode == 0
+    return jsonify(audio_supported)
+
 @app.route("/play_audio", methods=['POST'])
 def play_audio():
-    print("IN PLAY AUDIO")
-    print(f"Content length: {request.content_length}")
+    logging.info(f"Audio content length: {request.content_length}")
     request_data = request.get_data()
-    with open("audio", "wb") as f:
+
+    temp_audio_file = ".data/audio"
+
+    with open(temp_audio_file, "wb") as f:
         f.write(request_data)
 
     my_env = {}
     my_env["SDL_AUDIODRIVER"] = "alsa"
     my_env["AUDIODEV"] = "hw:1,0"
-    subprocess.run(["/usr/bin/ffplay", "audio", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
+    subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
     return ""
 
 

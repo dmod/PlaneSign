@@ -4,6 +4,7 @@ var recordButton, recorder;
 window.onload = function () {
     update_sign_status();
     update_brightness_slider();
+    get_audio_support();
 
     recordButton = document.getElementById('mic_button');
 
@@ -76,7 +77,7 @@ function startRecording() {
 
     var mic = document.getElementById("mic-icon");
     mic.style.fill = "red"
-    
+
     recorder.start();
 }
 
@@ -118,6 +119,13 @@ function call_endpoint(endpoint, callback) {
 function update_brightness_slider() {
     call_endpoint("/get_brightness", function (value) {
         document.getElementById("brightness_slider").value = value;
+    });
+}
+
+function get_audio_support() {
+    call_endpoint("/is_audio_supported", function (value) {
+        console.log("Is audio supported? " + value);
+        document.getElementById("mic_button").hidden = !value;
     });
 }
 
