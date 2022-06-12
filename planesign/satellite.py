@@ -538,7 +538,7 @@ def satellites(sign):
                     iss_pos = data["positions"]
 
             if iss_flyby_polltime==None or time.perf_counter()-iss_flyby_polltime>86400:
-                
+                iss_flyby = None
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
                     iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/5/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
@@ -547,7 +547,8 @@ def satellites(sign):
                     iss_flyby_polltime = time.perf_counter()
                     iss_data = iss_response.json()
 
-                    iss_flyby = iss_data["passes"]
+                    if iss_data["info"]["passescount"]>0:
+                        iss_flyby = iss_data["passes"]
             
             overhead_flag = 0
             now = time.time()
@@ -673,114 +674,117 @@ def satellites(sign):
             graphics.DrawText(sign.canvas, sign.font57, 1, 32, graphics.Color(160, 160, 200), "Alt:")
             graphics.DrawText(sign.canvas, sign.font57, 21, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(iss_alt))
 
+            if iss_flyby:
+                s = round(flyby["startUTC"]-now)
+                hours = s // 3600 
+                s = s - (hours * 3600)
+                minutes = s // 60
+                seconds = s - (minutes * 60)
+                flyby_time = "{:02}:{:02}:{:02}".format(int(hours),int(minutes),int(seconds))
+                if overhead_flag:
+                    graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), "Overhead")
+                elif hours>=1000:
+                    days = s//86400
+                    graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), str(days)+" Days")
+                else:
+                    graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), flyby_time)
+                
+                graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "El:")
+                graphics.DrawText(sign.canvas, sign.font57, 71, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
 
-            s = round(flyby["startUTC"]-now)
-            hours = s // 3600 
-            s = s - (hours * 3600)
-            minutes = s // 60
-            seconds = s - (minutes * 60)
-            flyby_time = "{:02}:{:02}:{:02}".format(int(hours),int(minutes),int(seconds))
-            if overhead_flag:
-                graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), "Overhead")
-            elif hours>=1000:
-                days = s//86400
-                graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), str(days)+" Days")
+                for x in range(82,84):
+                    for y in range(18,20):
+                        sign.canvas.SetPixel(x, y, 220, 180, 90)
+
+                mx = 88
+                my = 21
+                mag = flyby["mag"]
+                if mag<-4:
+                    sign.canvas.SetPixel(mx, my-1, 255, 255, 255)
+                    sign.canvas.SetPixel(mx-1, my, 255, 255, 255)
+                    sign.canvas.SetPixel(mx, my, 255, 255, 255)
+                    sign.canvas.SetPixel(mx+1, my, 255, 255, 255)
+                    sign.canvas.SetPixel(mx, my+1, 255, 255, 255)
+                    sign.canvas.SetPixel(mx, my-2, 180, 180, 180)
+                    sign.canvas.SetPixel(mx-2, my, 180, 180, 180)
+                    sign.canvas.SetPixel(mx+2, my, 180, 180, 180)
+                    sign.canvas.SetPixel(mx, my+2, 180, 180, 180)
+                    sign.canvas.SetPixel(mx+1, my+1, 180, 180, 180)
+                    sign.canvas.SetPixel(mx-1, my-1, 180, 180, 180)
+                    sign.canvas.SetPixel(mx-1, my+1, 180, 180, 180)
+                    sign.canvas.SetPixel(mx+1, my-1, 180, 180, 180)
+                elif mag<-3:
+                    sign.canvas.SetPixel(mx, my-1, 200, 200, 200)
+                    sign.canvas.SetPixel(mx-1, my, 200, 200, 200)
+                    sign.canvas.SetPixel(mx, my, 255, 255, 255)
+                    sign.canvas.SetPixel(mx+1, my, 200, 200, 200)
+                    sign.canvas.SetPixel(mx, my+1, 200, 200, 200)
+                    sign.canvas.SetPixel(mx+1, my+1, 100, 100, 100)
+                    sign.canvas.SetPixel(mx-1, my-1, 100, 100, 100)
+                    sign.canvas.SetPixel(mx-1, my+1, 100, 100, 100)
+                    sign.canvas.SetPixel(mx+1, my-1, 100, 100, 100)
+                elif mag<-2:
+                    sign.canvas.SetPixel(mx, my-1, 150, 150, 150)
+                    sign.canvas.SetPixel(mx-1, my, 150, 150, 150)
+                    sign.canvas.SetPixel(mx, my, 200, 200, 200)
+                    sign.canvas.SetPixel(mx+1, my, 150, 150, 150)
+                    sign.canvas.SetPixel(mx, my+1, 150, 150, 150)
+                elif mag<-1:
+                    sign.canvas.SetPixel(mx, my-1, 45, 45, 45)
+                    sign.canvas.SetPixel(mx-1, my, 45, 45, 45)
+                    sign.canvas.SetPixel(mx, my, 150, 150, 150)
+                    sign.canvas.SetPixel(mx+1, my, 45, 45, 45)
+                    sign.canvas.SetPixel(mx, my+1, 45, 45, 45)
+                else:
+                    sign.canvas.SetPixel(mx, my-1, 5, 5, 5)
+                    sign.canvas.SetPixel(mx-1, my, 5, 5, 5)
+                    sign.canvas.SetPixel(mx, my, 50, 50, 50)
+                    sign.canvas.SetPixel(mx+1, my, 5, 5, 5)
+                    sign.canvas.SetPixel(mx, my+1, 5, 5, 5)
+
+                startdir = flyby["startAzCompass"]
+                enddir = flyby["endAzCompass"]
+                if overhead_flag:
+                    graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(246, 242, 116), startdir)
+                    graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(246, 242, 116), enddir)
+                else:
+                    graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(142, 140, 68), startdir)
+                    graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(142, 140, 68), enddir)
+
+
+                left_bar = 52
+                right_bar = 83
+                line_y = 28
+
+                if overhead_flag:
+                    val = 255
+                else:
+                    val = 153
+                
+                for y in range(line_y-2, line_y+3):
+                    sign.canvas.SetPixel(left_bar, y, val, val, val)
+                    sign.canvas.SetPixel(right_bar, y, val, val, val)
+                for x in range(left_bar+1,right_bar):
+                    sign.canvas.SetPixel(x, line_y, val, val, val)
+                
+
+                if overhead_flag:
+                    blip_loc = left_bar+round((right_bar-left_bar)*(now-flyby["startUTC"])/(flyby["endUTC"]-flyby["startUTC"]))
+                    if blip_count == 0:
+                        sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
+                    elif blip_count == 1:
+                        for x in range(blip_loc - 1, blip_loc + 2):
+                            for y in range(line_y - 1, line_y + 2):
+                                sign.canvas.SetPixel(x, y, 255, 0, 0)
+                        sign.canvas.SetPixel(blip_loc, line_y, 255, 255, 255)
+                    elif blip_count == 2:
+                        sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
+                    blip_count += 1
+                    if blip_count == 3:
+                        blip_count = 0
             else:
-                graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), flyby_time)
-            
-            graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "El:")
-            graphics.DrawText(sign.canvas, sign.font57, 71, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
-
-            for x in range(82,84):
-                for y in range(18,20):
-                    sign.canvas.SetPixel(x, y, 220, 180, 90)
-
-            mx = 88
-            my = 21
-            mag = flyby["mag"]
-            if mag<-4:
-                sign.canvas.SetPixel(mx, my-1, 255, 255, 255)
-                sign.canvas.SetPixel(mx-1, my, 255, 255, 255)
-                sign.canvas.SetPixel(mx, my, 255, 255, 255)
-                sign.canvas.SetPixel(mx+1, my, 255, 255, 255)
-                sign.canvas.SetPixel(mx, my+1, 255, 255, 255)
-                sign.canvas.SetPixel(mx, my-2, 180, 180, 180)
-                sign.canvas.SetPixel(mx-2, my, 180, 180, 180)
-                sign.canvas.SetPixel(mx+2, my, 180, 180, 180)
-                sign.canvas.SetPixel(mx, my+2, 180, 180, 180)
-                sign.canvas.SetPixel(mx+1, my+1, 180, 180, 180)
-                sign.canvas.SetPixel(mx-1, my-1, 180, 180, 180)
-                sign.canvas.SetPixel(mx-1, my+1, 180, 180, 180)
-                sign.canvas.SetPixel(mx+1, my-1, 180, 180, 180)
-            elif mag<-3:
-                sign.canvas.SetPixel(mx, my-1, 200, 200, 200)
-                sign.canvas.SetPixel(mx-1, my, 200, 200, 200)
-                sign.canvas.SetPixel(mx, my, 255, 255, 255)
-                sign.canvas.SetPixel(mx+1, my, 200, 200, 200)
-                sign.canvas.SetPixel(mx, my+1, 200, 200, 200)
-                sign.canvas.SetPixel(mx+1, my+1, 100, 100, 100)
-                sign.canvas.SetPixel(mx-1, my-1, 100, 100, 100)
-                sign.canvas.SetPixel(mx-1, my+1, 100, 100, 100)
-                sign.canvas.SetPixel(mx+1, my-1, 100, 100, 100)
-            elif mag<-2:
-                sign.canvas.SetPixel(mx, my-1, 150, 150, 150)
-                sign.canvas.SetPixel(mx-1, my, 150, 150, 150)
-                sign.canvas.SetPixel(mx, my, 200, 200, 200)
-                sign.canvas.SetPixel(mx+1, my, 150, 150, 150)
-                sign.canvas.SetPixel(mx, my+1, 150, 150, 150)
-            elif mag<-1:
-                sign.canvas.SetPixel(mx, my-1, 45, 45, 45)
-                sign.canvas.SetPixel(mx-1, my, 45, 45, 45)
-                sign.canvas.SetPixel(mx, my, 150, 150, 150)
-                sign.canvas.SetPixel(mx+1, my, 45, 45, 45)
-                sign.canvas.SetPixel(mx, my+1, 45, 45, 45)
-            else:
-                sign.canvas.SetPixel(mx, my-1, 5, 5, 5)
-                sign.canvas.SetPixel(mx-1, my, 5, 5, 5)
-                sign.canvas.SetPixel(mx, my, 50, 50, 50)
-                sign.canvas.SetPixel(mx+1, my, 5, 5, 5)
-                sign.canvas.SetPixel(mx, my+1, 5, 5, 5)
-
-            startdir = flyby["startAzCompass"]
-            enddir = flyby["endAzCompass"]
-            if overhead_flag:
-                graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(246, 242, 116), startdir)
-                graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(246, 242, 116), enddir)
-            else:
-                graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(142, 140, 68), startdir)
-                graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(142, 140, 68), enddir)
-
-
-            left_bar = 52
-            right_bar = 83
-            line_y = 28
-
-            if overhead_flag:
-                val = 255
-            else:
-                val = 153
-            
-            for y in range(line_y-2, line_y+3):
-                sign.canvas.SetPixel(left_bar, y, val, val, val)
-                sign.canvas.SetPixel(right_bar, y, val, val, val)
-            for x in range(left_bar+1,right_bar):
-                sign.canvas.SetPixel(x, line_y, val, val, val)
-              
-
-            if overhead_flag:
-                blip_loc = left_bar+round((right_bar-left_bar)*(now-flyby["startUTC"])/(flyby["endUTC"]-flyby["startUTC"]))
-                if blip_count == 0:
-                    sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
-                elif blip_count == 1:
-                    for x in range(blip_loc - 1, blip_loc + 2):
-                        for y in range(line_y - 1, line_y + 2):
-                            sign.canvas.SetPixel(x, y, 255, 0, 0)
-                    sign.canvas.SetPixel(blip_loc, line_y, 255, 255, 255)
-                elif blip_count == 2:
-                    sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
-                blip_count += 1
-                if blip_count == 3:
-                    blip_count = 0
+                graphics.DrawText(sign.canvas, sign.font57, 46, 18, graphics.Color(246, 242, 116), "Next Flyby")
+                graphics.DrawText(sign.canvas, sign.font57, 54, 26, graphics.Color(246, 242, 116), "Unknown")
                     
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
