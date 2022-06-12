@@ -29,7 +29,7 @@
 
 
 ```sh
-sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev
+sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg
 git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
 cd rpi-rgb-led-matrix
 make build-python PYTHON=$(which python3)
