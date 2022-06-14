@@ -200,6 +200,7 @@ def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
 
+
 @app.route("/is_audio_supported")
 def is_audio_supported():
     p = subprocess.run("aplay -l | grep 'USB Audio'", shell=True)
@@ -220,6 +221,11 @@ def play_audio():
     my_env["SDL_AUDIODRIVER"] = "alsa"
     my_env["AUDIODEV"] = "hw:1,0"
     subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
+    return ""
+
+@app.route("/snow_mode/<mode>")
+def set_snow_mode(mode):
+    shared_config.shared_snow_mode.value = int(mode)
     return ""
 
 

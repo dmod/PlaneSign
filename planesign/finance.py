@@ -114,61 +114,6 @@ def flood(image, x, y, color, bg):
         if y1 > 1 and image.getpixel((x1, y1-1)) != bg and colordista(imagecolor, image.getpixel((x1, y1-1))) < threshold and colordista(color, image.getpixel((x1, y1-1))) < threshold2:
             q.append((x1, y1-1))
 
-
-def autocrop(image, bg):
-
-    sizex, sizey = image.size
-
-    flag = False
-    for row in range(sizey):
-        for col in range(sizex):
-            if image.getpixel((col, row)) != bg:
-                flag = True
-            if flag:
-                break
-        if flag:
-            break
-
-    top = row
-
-    flag = False
-    for row in range(sizey-1, top+2, -1):
-        for col in range(sizex):
-            if image.getpixel((col, row)) != bg:
-                flag = True
-            if flag:
-                break
-        if flag:
-            break
-    bot = row
-
-    flag = False
-    for col in range(sizex):
-        for row in range(top+1, bot, 1):
-            if image.getpixel((col, row)) != bg:
-                flag = True
-            if flag:
-                break
-        if flag:
-            break
-
-    left = col
-
-    flag = False
-    for col in range(sizex-1, left+2, -1):
-        for row in range(top+1, bot, 1):
-            if image.getpixel((col, row)) != bg:
-                flag = True
-            if flag:
-                break
-        if flag:
-            break
-
-    right = col
-
-    return image.crop((left, top, right, bot))
-
-
 def improcess(image):
     width, height = image.size
 
@@ -207,7 +152,7 @@ def improcess(image):
         flood(image, 0, height-1, None, bg)
 
     # crop out background regions
-    image = autocrop(image, bg)
+    image = utilities.autocrop(image, bg)
 
     width, height = image.size
 
@@ -329,7 +274,7 @@ def getFavicon(floc, website):
             flood(image, 0, height-1, white, bg)
 
         # crop out background regions
-        image = autocrop(image, bg)
+        image = utilities.autocrop(image, bg)
 
         width, height = image.size
 
