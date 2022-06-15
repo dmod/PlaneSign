@@ -26,7 +26,6 @@ import cgol
 import lightning
 import firework
 import weather
-import snow
 import planesign
 import signal
 import sys
