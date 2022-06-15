@@ -541,7 +541,7 @@ def satellites(sign):
                 iss_flyby = None
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/5/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
+                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/10/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
                 if iss_response.status_code == requests.codes.ok:
                     iss_flyby_polltime = time.perf_counter()
