@@ -122,10 +122,16 @@ function update_brightness_slider() {
     });
 }
 
+function play_a_sound(sound_id) {
+    console.log("Sending request to play: " + sound_id)
+    call_endpoint("/play_a_sound/" + sound_id);
+}
+
 function get_audio_support() {
     call_endpoint("/is_audio_supported", function (value) {
         console.log("Is audio supported? " + value);
         document.getElementById("mic_button").hidden = !value;
+        document.getElementById("sounds_div").hidden = !value;
     });
 }
 
