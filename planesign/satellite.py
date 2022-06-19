@@ -541,7 +541,7 @@ def satellites(sign):
                 iss_flyby = None
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
-                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/5/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
+                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/10/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
                 if iss_response.status_code == requests.codes.ok:
                     iss_flyby_polltime = time.perf_counter()
@@ -683,9 +683,10 @@ def satellites(sign):
                 flyby_time = "{:02}:{:02}:{:02}".format(int(hours),int(minutes),int(seconds))
                 if overhead_flag:
                     graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), "Overhead")
-                elif hours>=1000:
-                    days = s//86400
-                    graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), str(days)+" Days")
+                elif int(hours)>=48:
+                    days = hours//24
+                    text = str(days)+" Days"
+                    graphics.DrawText(sign.canvas, sign.font57, 69-round(len(text)*2.5), 16, graphics.Color(246, 242, 116), text)
                 else:
                     graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), flyby_time)
                 
@@ -784,7 +785,7 @@ def satellites(sign):
                         blip_count = 0
             else:
                 graphics.DrawText(sign.canvas, sign.font57, 46, 18, graphics.Color(246, 242, 116), "Next Flyby")
-                graphics.DrawText(sign.canvas, sign.font57, 54, 26, graphics.Color(246, 242, 116), "Unknown")
+                graphics.DrawText(sign.canvas, sign.font57, 51, 26, graphics.Color(246, 242, 116), "10+ Days")
                     
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()

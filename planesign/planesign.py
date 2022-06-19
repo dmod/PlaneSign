@@ -200,6 +200,7 @@ def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
 
+
 @app.route("/is_audio_supported")
 def is_audio_supported():
     p = subprocess.run("aplay -l | grep 'USB Audio'", shell=True)
