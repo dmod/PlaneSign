@@ -10,6 +10,7 @@ import subprocess
 import signal
 import pytz
 import os
+import glob
 import threading
 import traceback
 import weather
@@ -232,6 +233,10 @@ def play_a_sound(sound_id):
     my_env["AUDIODEV"] = "hw:1,0"
     subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
     return ""
+
+@app.route("/get_sounds")
+def get_sounds():
+    return jsonify(sorted(glob.glob(f"{shared_config.sounds_dir}/*.mp3"), key=str.casefold))
 
 
 def api_server():

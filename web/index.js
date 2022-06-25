@@ -108,7 +108,7 @@ function submit_ticker() {
 function call_endpoint(endpoint, callback) {
     var request = new XMLHttpRequest();
     request.onreadystatechange = function () {
-        if (request.status == 200 && callback) {
+        if (this.readyState === 4 && request.status == 200 && callback) {
             callback(request.responseText);
         }
     }
@@ -122,6 +122,15 @@ function update_brightness_slider() {
     });
 }
 
+function play_selected_sound() {
+    e=document.getElementById("sound-list");
+    sound_id = e.options[e.selectedIndex].value;
+    if (sound_id) {
+        console.log("Sending request to play: " + sound_id)
+        call_endpoint("/play_a_sound/" + sound_id);
+    }
+}
+
 function play_a_sound(sound_id) {
     console.log("Sending request to play: " + sound_id)
     call_endpoint("/play_a_sound/" + sound_id);
@@ -132,6 +141,29 @@ function get_audio_support() {
         console.log("Is audio supported? " + value);
         document.getElementById("mic_button").hidden = !value;
         document.getElementById("sounds_div").hidden = !value;
+        if (value) {
+            populate_sound_dropdown();
+        }
+    });
+}
+
+function populate_sound_dropdown() {
+    var e=document.getElementById("sound-list");
+    call_endpoint("/get_sounds",function (value) {
+        console.log("Found files: " + value);
+        
+        var jsn = JSON.parse(value);
+
+        for (let i = 0; i < jsn.length; i++) {
+            var option = document.createElement("option");
+            var fname = jsn[i].split("/");
+            fname = fname[fname.length-1];
+            option.value = fname;
+            fname = fname.split(".");
+            fname = fname[0];
+            option.text = fname;
+            e.add(option);
+        }
     });
 }
 

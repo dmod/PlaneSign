@@ -143,7 +143,10 @@
     </div>
 
     <div id="sounds_div" class="box5" hidden>
-        <button class="a_sound_button" onclick="play_a_sound('airhorn');">🎺</button>
+      <!--<label for="sounds">Choose a dog name:</label>-->
+      <select name="sounds" id="sound-list">
+      </select>
+      <button class="a_sound_button" onclick="play_selected_sound();">🎺</button>
     </div>
 
   </div>
