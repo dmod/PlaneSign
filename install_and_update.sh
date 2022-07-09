@@ -33,13 +33,13 @@ sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil l
 LED_MATRIX_DIR="${INSTALL_DIR}/rpi-rgb-led-matrix"
 if [ ! -d $LED_MATRIX_DIR ] 
 then
-    echo "rpi-rgb-led-matrix not found, installing..."
-    git clone https://github.com/hzeller/rpi-rgb-led-matrix.git $LED_MATRIX_DIR
-    cd $LED_MATRIX_DIR
-    make build-python PYTHON=$(which python3)
-    sudo make install-python PYTHON=$(which python3)
+  echo "rpi-rgb-led-matrix not found, installing..."
+  git clone https://github.com/hzeller/rpi-rgb-led-matrix.git $LED_MATRIX_DIR
+  cd $LED_MATRIX_DIR
+  make build-python PYTHON=$(which python3)
+  sudo make install-python PYTHON=$(which python3)
 else
-    echo "rpi-rgb-led-matrix already installed"
+  echo "rpi-rgb-led-matrix already installed"
 fi
 
 PLANESIGN_DIR="${INSTALL_DIR}/PlaneSign"
@@ -47,7 +47,9 @@ cd $PLANESIGN_DIR
 git pull --rebase --autostash http://dmod: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@github.com/dmod/PlaneSign
 sudo -H pip3 install -r requirements.txt
 
-sudo cp nginx_config.txt /etc/nginx/sites-available/default
+sudo ./update_static_cache.py
+
+sudo cp nginx_planesign.conf /etc/nginx/sites-available/default
 
 (crontab -u pi -l ; echo "@reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign>/dev/null 2>&1") | sort - | uniq - | crontab -u pi -
 

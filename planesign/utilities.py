@@ -53,6 +53,8 @@ def read_config():
         logging.info(f"Detected timezone to be {local_tz}")
         shared_config.local_timezone = pytz.timezone(local_tz)
 
+    shared_config.airport_codes_to_ignore = set(shared_config.CONF["IGNORE_AIRPORT_CODES"].split(","))
+
 
 def random_angle():
     return random.randrange(0, 360)
