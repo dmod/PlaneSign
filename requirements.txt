@@ -9,6 +9,6 @@ pyowm==3.3.0
 requests==2.27.1
 scipy==1.8.0
 websocket-client==1.3.2
-yfinance==0.1.70
+yfinance==0.1.73
 gevent==21.12.0
 FlightRadarAPI==1.2.0
