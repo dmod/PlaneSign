@@ -1,4 +1,4 @@
-timezonefinder==5.2.0
+timezonefinder==6.1.1
 country-converter==0.7.4
 favicon==0.7.0
 Flask==2.1.2
