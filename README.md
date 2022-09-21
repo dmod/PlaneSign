@@ -27,6 +27,10 @@
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname to 'planesign' with: sudo raspi-config -> System Options -> Hostname
 
+### One-step install:
+```sh
+cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
+```
 
 ```sh
 sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg
