@@ -252,6 +252,7 @@ class PlaneSign:
         options.cols = 64
         options.gpio_slowdown = 5
         options.chain_length = 2
+        options.limit_refresh_rate_hz = 120
         options.hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
         options.drop_privileges = False
 
