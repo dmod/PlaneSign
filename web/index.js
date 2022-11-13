@@ -1,5 +1,5 @@
 var global_current_mode;
-var recordButton, recorder;
+var recordButton, recorder, audio_supported;
 
 window.onload = function () {
     update_sign_status();
@@ -8,23 +8,25 @@ window.onload = function () {
 
     recordButton = document.getElementById('mic_button');
 
-    try {
-        // get audio stream from user's mic
-        navigator.mediaDevices.getUserMedia({
-            audio: true
-        })
-            .then(function (stream) {
-                recordButton.disabled = false;
-                recordButton.addEventListener('mousedown', startRecording);
-                recordButton.addEventListener('mouseup', stopRecording);
-                recorder = new MediaRecorder(stream);
+    if (audio_supported) {
+        try {
+            // get audio stream from user's mic
+            navigator.mediaDevices.getUserMedia({
+                audio: true
+            })
+                .then(function (stream) {
+                    recordButton.disabled = false;
+                    recordButton.addEventListener('mousedown', startRecording);
+                    recordButton.addEventListener('mouseup', stopRecording);
+                    recorder = new MediaRecorder(stream);
 
-                // listen to dataavailable, which gets triggered whenever we have
-                // an audio blob available
-                recorder.addEventListener('dataavailable', onRecordingReady);
-            });
-    } catch (e) {
-        console.error(e)
+                    // listen to dataavailable, which gets triggered whenever we have
+                    // an audio blob available
+                    recorder.addEventListener('dataavailable', onRecordingReady);
+                });
+        } catch (e) {
+            console.error(e)
+        }
     }
 
     document.getElementById("config").onsubmit = function (e) {
@@ -143,6 +145,7 @@ function play_a_sound(sound_id) {
 function get_audio_support() {
     call_endpoint("/is_audio_supported", function (value) {
         console.log("Is audio supported? " + value);
+        audio_supported = value;
         document.getElementById("mic_button").hidden = ~value;
         document.getElementById("sounds_div").hidden = ~value;
         if (value) {
