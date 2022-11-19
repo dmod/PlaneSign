@@ -94,17 +94,15 @@ def show_a_plane(sign, plane_to_show, scroll):
 
         prev_stats = plane_to_show
 
-        # We only have room to display one full airport name. So pick the one that is further away assuming
-        # the user probably hasn't heard of that one
         origin_distance = 0
-        if plane_to_show.origin_airport_iata:
+        if plane_to_show.origin_airport_iata and plane_to_show.origin_airport_iata not in shared_config.airport_codes_to_ignore:
             origin_config = shared_config.code_to_airport.get(plane_to_show.origin_airport_iata)
             if origin_config:
                 origin_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
                 logging.info(f"Origin is {origin_distance:.2f} miles away")
 
         destination_distance = 0
-        if plane_to_show.destination_airport_iata:
+        if plane_to_show.destination_airport_iata and plane_to_show.destination_airport_iata not in shared_config.airport_codes_to_ignore:
             destination_config = shared_config.code_to_airport.get(plane_to_show.destination_airport_iata)
             if destination_config:
                 destination_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))

@@ -1,5 +1,5 @@
 var global_current_mode;
-var recordButton, recorder;
+var recordButton, recorder, audio_supported;
 
 window.onload = function () {
     update_sign_status();
@@ -8,20 +8,26 @@ window.onload = function () {
 
     recordButton = document.getElementById('mic_button');
 
-    // get audio stream from user's mic
-    navigator.mediaDevices.getUserMedia({
-        audio: true
-    })
-        .then(function (stream) {
-            recordButton.disabled = false;
-            recordButton.addEventListener('mousedown', startRecording);
-            recordButton.addEventListener('mouseup', stopRecording);
-            recorder = new MediaRecorder(stream);
+    if (audio_supported) {
+        try {
+            // get audio stream from user's mic
+            navigator.mediaDevices.getUserMedia({
+                audio: true
+            })
+                .then(function (stream) {
+                    recordButton.disabled = false;
+                    recordButton.addEventListener('mousedown', startRecording);
+                    recordButton.addEventListener('mouseup', stopRecording);
+                    recorder = new MediaRecorder(stream);
 
-            // listen to dataavailable, which gets triggered whenever we have
-            // an audio blob available
-            recorder.addEventListener('dataavailable', onRecordingReady);
-        });
+                    // listen to dataavailable, which gets triggered whenever we have
+                    // an audio blob available
+                    recorder.addEventListener('dataavailable', onRecordingReady);
+                });
+        } catch (e) {
+            console.error(e)
+        }
+    }
 
     document.getElementById("config").onsubmit = function (e) {
         e.preventDefault();
@@ -123,7 +129,7 @@ function update_brightness_slider() {
 }
 
 function play_selected_sound() {
-    e=document.getElementById("sound-list");
+    e = document.getElementById("sound-list");
     sound_id = e.options[e.selectedIndex].value;
     if (sound_id) {
         console.log("Sending request to play: " + sound_id)
@@ -139,8 +145,9 @@ function play_a_sound(sound_id) {
 function get_audio_support() {
     call_endpoint("/is_audio_supported", function (value) {
         console.log("Is audio supported? " + value);
-        document.getElementById("mic_button").hidden = !value;
-        document.getElementById("sounds_div").hidden = !value;
+        audio_supported = value;
+        document.getElementById("mic_button").hidden = ~value;
+        document.getElementById("sounds_div").hidden = ~value;
         if (value) {
             populate_sound_dropdown();
         }
@@ -148,16 +155,16 @@ function get_audio_support() {
 }
 
 function populate_sound_dropdown() {
-    var e=document.getElementById("sound-list");
-    call_endpoint("/get_sounds",function (value) {
+    var e = document.getElementById("sound-list");
+    call_endpoint("/get_sounds", function (value) {
         console.log("Found files: " + value);
-        
+
         var jsn = JSON.parse(value);
 
         for (let i = 0; i < jsn.length; i++) {
             var option = document.createElement("option");
             var fname = jsn[i].split("/");
-            fname = fname[fname.length-1];
+            fname = fname[fname.length - 1];
             option.value = fname;
             fname = fname.split(".");
             fname = fname[0];

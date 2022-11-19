@@ -112,3 +112,10 @@ googleapis.com
 ourairports.com
 opendatasoft.com -> map polygons
 open-elevation.com
+
+Sounds:
+freesoundslibrary.com
+freesound.org
+zapsplat.com
+myinstants.com
+pixabay.com
