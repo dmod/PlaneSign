@@ -69,6 +69,7 @@
         <input type="radio" id="ISS" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="2">
         <label for="ISS">ISS</label>
       </div>
+      <button id="18" class="mode_button" onclick="set_mode(this.id)">Moon 🌘</button>
       <button id="15" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning ⛈️</button>
       <div id="lightning_div" hidden>
         <div id="lightning_button_div">
@@ -143,7 +144,6 @@
     </div>
 
     <div id="sounds_div" class="box5" hidden>
-      <!--<label for="sounds">Choose a dog name:</label>-->
       <select name="sounds" id="sound-list">
       </select>
       <button class="a_sound_button" onclick="play_selected_sound();">🎺</button>

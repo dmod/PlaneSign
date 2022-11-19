@@ -12,3 +12,4 @@ websocket-client==1.3.2
 yfinance==0.1.70
 gevent==21.12.0
 FlightRadarAPI==1.2.0
+skyfield==1.45

@@ -6,6 +6,7 @@ import pytz
 import os
 import __main__
 import shared_config
+import numpy
 
 from PIL import Image, ImageDraw, ImageFont
 from timezonefinder import TimezoneFinder
@@ -610,18 +611,23 @@ def get_distance(coord1, coord2):
     return (2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
 
-def direction_lookup(destination, origin):
-    destination_y, destination_x = destination
-    origin_y, origin_x = origin
+def direction_lookup(destination, origin=None):
+    
+    if origin==None and (type(destination) is float or type(destination) is numpy.float64 or type(destination) is int):
 
-    deltaX = destination_x - origin_x
+        degrees = destination
 
-    deltaY = destination_y - origin_y
+    else:
+        destination_y, destination_x = destination
+        origin_y, origin_x = origin
 
-    degrees = math.atan2(deltaX, deltaY)/math.pi*180
+        deltaX = destination_x - origin_x
 
-    if degrees < 0:
-        degrees = 360 + degrees
+        deltaY = destination_y - origin_y
+
+        degrees = math.atan2(deltaX, deltaY)/math.pi*180
+
+    degrees = degrees%360
 
     compass_brackets = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"]
 

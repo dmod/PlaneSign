@@ -36,6 +36,7 @@ sign.conf
 prices.csv
 satdat.txt
 satsup.txt
+de421.bsp
 disable_update
 icons/favicons/*
 !icons/favicons/.gitkeep 

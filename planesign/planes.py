@@ -176,7 +176,10 @@ def get_plane_data_worker(data_dict):
                 logging.info("Sign off, skipping FR24 request...")
             else:
 
-                flights = fr_api.get_flights(bounds=bounds)
+                try:
+                    flights = fr_api.get_flights(bounds=bounds)
+                except:
+                    pass
 
                 closest = None
                 highest = None
