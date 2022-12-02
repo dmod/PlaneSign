@@ -23,6 +23,7 @@
 - **In 'boot' folder on the SD card:** 
 - touch ssh
 - Switch off on-board sound `dtparam=audio=off` in /boot/config.txt
+- Add `isolcpus=3` to the end of /boot/cmdline.txt
 - Set up wpa_supplicant.conf: <https://www.raspberrypi.org/documentation/configuration/wireless/headless.md>
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname to 'planesign' with: sudo raspi-config -> System Options -> Hostname
