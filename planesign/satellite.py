@@ -700,48 +700,45 @@ def satellites(sign):
                 mx = 88
                 my = 21
                 mag = flyby["mag"]
-                if mag<-4:
-                    sign.canvas.SetPixel(mx, my-1, 255, 255, 255)
-                    sign.canvas.SetPixel(mx-1, my, 255, 255, 255)
-                    sign.canvas.SetPixel(mx, my, 255, 255, 255)
-                    sign.canvas.SetPixel(mx+1, my, 255, 255, 255)
-                    sign.canvas.SetPixel(mx, my+1, 255, 255, 255)
-                    sign.canvas.SetPixel(mx, my-2, 180, 180, 180)
-                    sign.canvas.SetPixel(mx-2, my, 180, 180, 180)
-                    sign.canvas.SetPixel(mx+2, my, 180, 180, 180)
-                    sign.canvas.SetPixel(mx, my+2, 180, 180, 180)
-                    sign.canvas.SetPixel(mx+1, my+1, 180, 180, 180)
-                    sign.canvas.SetPixel(mx-1, my-1, 180, 180, 180)
-                    sign.canvas.SetPixel(mx-1, my+1, 180, 180, 180)
-                    sign.canvas.SetPixel(mx+1, my-1, 180, 180, 180)
-                elif mag<-3:
-                    sign.canvas.SetPixel(mx, my-1, 200, 200, 200)
-                    sign.canvas.SetPixel(mx-1, my, 200, 200, 200)
-                    sign.canvas.SetPixel(mx, my, 255, 255, 255)
-                    sign.canvas.SetPixel(mx+1, my, 200, 200, 200)
-                    sign.canvas.SetPixel(mx, my+1, 200, 200, 200)
-                    sign.canvas.SetPixel(mx+1, my+1, 100, 100, 100)
-                    sign.canvas.SetPixel(mx-1, my-1, 100, 100, 100)
-                    sign.canvas.SetPixel(mx-1, my+1, 100, 100, 100)
-                    sign.canvas.SetPixel(mx+1, my-1, 100, 100, 100)
-                elif mag<-2:
-                    sign.canvas.SetPixel(mx, my-1, 150, 150, 150)
-                    sign.canvas.SetPixel(mx-1, my, 150, 150, 150)
-                    sign.canvas.SetPixel(mx, my, 200, 200, 200)
-                    sign.canvas.SetPixel(mx+1, my, 150, 150, 150)
-                    sign.canvas.SetPixel(mx, my+1, 150, 150, 150)
-                elif mag<-1:
-                    sign.canvas.SetPixel(mx, my-1, 45, 45, 45)
-                    sign.canvas.SetPixel(mx-1, my, 45, 45, 45)
-                    sign.canvas.SetPixel(mx, my, 150, 150, 150)
-                    sign.canvas.SetPixel(mx+1, my, 45, 45, 45)
-                    sign.canvas.SetPixel(mx, my+1, 45, 45, 45)
-                else:
-                    sign.canvas.SetPixel(mx, my-1, 5, 5, 5)
-                    sign.canvas.SetPixel(mx-1, my, 5, 5, 5)
-                    sign.canvas.SetPixel(mx, my, 50, 50, 50)
-                    sign.canvas.SetPixel(mx+1, my, 5, 5, 5)
-                    sign.canvas.SetPixel(mx, my+1, 5, 5, 5)
+                
+                b0 = -70*mag+80
+                b1 = -60*mag
+                b11 = -40*mag-40
+                b2 = -20*mag-40
+
+                if b0<0:
+                    b0=0
+                elif b0>255:
+                    b0=255
+                
+                if b1<0:
+                    b1=0
+                elif b1>255:
+                    b1=255
+
+                if b11<0:
+                    b11=0
+                elif b11>255:
+                    b11=255
+
+                if b2<0:
+                    b2=0
+                elif b2>255:
+                    b2=255
+
+                sign.canvas.SetPixel(mx, my-1, b1, b1, b1)
+                sign.canvas.SetPixel(mx-1, my, b1, b1, b1)
+                sign.canvas.SetPixel(mx, my, b0, b0, b0)
+                sign.canvas.SetPixel(mx+1, my, b1, b1, b1)
+                sign.canvas.SetPixel(mx, my+1, b1, b1, b1)
+                sign.canvas.SetPixel(mx, my-2, b2, b2, b2)
+                sign.canvas.SetPixel(mx-2, my, b2, b2, b2)
+                sign.canvas.SetPixel(mx+2, my, b2, b2, b2)
+                sign.canvas.SetPixel(mx, my+2, b2, b2, b2)
+                sign.canvas.SetPixel(mx+1, my+1, b11, b11, b11)
+                sign.canvas.SetPixel(mx-1, my-1, b11, b11, b11)
+                sign.canvas.SetPixel(mx-1, my+1, b11, b11, b11)
+                sign.canvas.SetPixel(mx+1, my-1, b11, b11, b11)
 
                 startdir = flyby["startAzCompass"]
                 enddir = flyby["endAzCompass"]
