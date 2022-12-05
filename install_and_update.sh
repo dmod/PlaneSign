@@ -2,9 +2,6 @@
 
 # This aim of this script is to be idempotent
 
-# Stop on first error
-set -e
-
 # to skip any questions from APT
 export DEBIAN_FRONTEND=noninteractive
 
@@ -19,7 +16,7 @@ grep "isolcpus" /boot/cmdline.txt
 if [ $? -ne 0 ]
 then
   echo "Adding isolcpus config to /boot/cmdline.txt"
-  sudo echo " isolcpus=3" >> /boot/cmdline.txt
+  sudo bash -c "echo 'isolcpus=3' >> /boot/cmdline.txt"
 else
   echo "isolcpus config found in /boot/cmdline.txt"
 fi
@@ -44,7 +41,7 @@ fi
 
 PLANESIGN_DIR="${INSTALL_DIR}/PlaneSign"
 cd $PLANESIGN_DIR
-git pull --rebase --autostash http://dmod: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@github.com/dmod/PlaneSign
+git pull --rebase --autostash https://dmod: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@github.com/dmod/PlaneSign
 sudo -H pip3 install -r requirements.txt
 
 sudo ./update_static_cache.py
