@@ -16,7 +16,7 @@ grep "isolcpus" /boot/cmdline.txt
 if [ $? -ne 0 ]
 then
   echo "Adding isolcpus config to /boot/cmdline.txt"
-  sudo bash -c "echo 'isolcpus=3' >> /boot/cmdline.txt"
+  sudo bash -c "echo ' isolcpus=3' >> /boot/cmdline.txt"
 else
   echo "isolcpus config found in /boot/cmdline.txt"
 fi
