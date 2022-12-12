@@ -30,35 +30,37 @@ def track_a_flight(sign):
                 parse_this_to_get_hex = hexreq.json()
             else:
                 parse_this_to_get_hex = None
-                logging.error("Unable to get Hex")
+                logging.exception("Unable to get Hex")
 
             if parse_this_to_get_hex and "results" in parse_this_to_get_hex:
                 live_flight_info = utilities.first(parse_this_to_get_hex["results"], lambda x: x["type"] == "live")
-
                 logging.info(live_flight_info)
+            else:
+                live_flight_info = None
+                logging.exception("No live flight info")
 
+            if live_flight_info and "id" in live_flight_info:
+                
                 flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={live_flight_info['id']}")
                 if flightdatareq and flightdatareq.status_code == requests.codes.ok:
                     flight_data = flightdatareq.json()
                 else:
                     flight_data = None
                 
-                if flight_data and "trail" in flight_data:
-                    current_location = flight_data['trail'][0]
-                    reverse_geocode = requests.get(
-                        f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
+            if flight_data and "trail" in flight_data:
+                current_location = flight_data['trail'][0]
+                reverse_geocode = requests.get(
+                    f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
 
-                    if len(reverse_geocode['results']) != 0:
-                        formatted_address = reverse_geocode['results'][0]['formatted_address']
-                    else:
-                        formatted_address = 'Somewhere'
-
-                    logging.info(current_location)
-                    logging.info(formatted_address)
+                if len(reverse_geocode['results']) != 0:
+                    formatted_address = reverse_geocode['results'][0]['formatted_address']
                 else:
-                    logging.error("No flight data")
+                    formatted_address = 'Somewhere'
+
+                logging.info(current_location)
+                logging.info(formatted_address)
             else:
-                logging.error("No live flight info")
+                logging.exception("No flight data")
 
         requests_limiter = requests_limiter + 1
 
@@ -68,7 +70,7 @@ def track_a_flight(sign):
             flight_number_header = f"- {flight_data['identification']['callsign']} -"
 
             graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
-
+            
             graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
             graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
 
@@ -144,7 +146,8 @@ def track_a_flight(sign):
                 graphics.DrawText(sign.canvas, sign.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
                 graphics.DrawText(sign.canvas, sign.font46, 70, 19, graphics.Color(20, 160, 60), f"Vel:{current_location['spd']}")
 
-            graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
+            if formatted_address:
+                graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
 
             sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
