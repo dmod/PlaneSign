@@ -179,7 +179,10 @@ def get_plane_data_worker(data_dict):
                 try:
                     flights = fr_api.get_flights(bounds=bounds)
                 except:
-                    pass
+                    try:
+                        flights
+                    except NameError:
+                        flights = None
 
                 closest = None
                 highest = None
