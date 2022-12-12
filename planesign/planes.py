@@ -189,38 +189,40 @@ def get_plane_data_worker(data_dict):
                 fastest = None
                 slowest = None
 
-                for flight in flights:
+                if flights:
+                    for flight in flights:
 
-                    # Filter out planes on the ground
-                    if flight.on_ground:
-                        continue
+                        # Filter out planes on the ground
+                        if flight.on_ground:
+                            continue
 
-                    # Not included in the API, we calculate this on the fly
-                    flight.distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (flight.latitude, flight.longitude))
+                        # Not included in the API, we calculate this on the fly
+                        flight.distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (flight.latitude, flight.longitude))
 
-                    if (closest is None or (flight.distance < closest.distance and flight.altitude < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"]))):
-                        closest = flight
+                        if (closest is None or (flight.distance < closest.distance and flight.altitude < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"]))):
+                            closest = flight
 
-                    # The rest of these are for fun, filter out the unknown planes
-                    if not flight.origin_airport_iata:
-                        continue
+                        # The rest of these are for fun, filter out the unknown planes
+                        if not flight.origin_airport_iata:
+                            continue
 
-                    if (highest is None or flight.altitude > highest.altitude):
-                        highest = flight
+                        if (highest is None or flight.altitude > highest.altitude):
+                            highest = flight
 
-                    if (fastest is None or flight.ground_speed > fastest.ground_speed):
-                        fastest = flight
+                        if (fastest is None or flight.ground_speed > fastest.ground_speed):
+                            fastest = flight
 
-                    if (slowest is None or flight.ground_speed < slowest.ground_speed):
-                        slowest = flight
+                        if (slowest is None or flight.ground_speed < slowest.ground_speed):
+                            slowest = flight
 
-                logging.info(f"{closest.distance:.2f} miles away: {closest}")
+                    logging.info(f"{closest.distance:.2f} miles away: {closest}")
 
-                data_dict["closest"] = closest
-                data_dict["highest"] = highest
-                data_dict["fastest"] = fastest
-                data_dict["slowest"] = slowest
-
+                    data_dict["closest"] = closest
+                    data_dict["highest"] = highest
+                    data_dict["fastest"] = fastest
+                    data_dict["slowest"] = slowest
+                else:
+                    logging.exception("No flights found")
         except:
             logging.exception("Error getting FR24 data...")
 
