@@ -146,8 +146,8 @@ function get_audio_support() {
     call_endpoint("/is_audio_supported", function (value) {
         console.log("Is audio supported? " + value);
         audio_supported = value;
-        document.getElementById("mic_button").hidden = ~value;
-        document.getElementById("sounds_div").hidden = ~value;
+        document.getElementById("mic_button").hidden = !value;
+        document.getElementById("sounds_div").hidden = !value;
         if (value) {
             populate_sound_dropdown();
         }
