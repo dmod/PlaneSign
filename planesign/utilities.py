@@ -391,11 +391,13 @@ def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):
 def hsv_2_rgb(h, s, v):
     if s == 0.0:
         v *= 255
+        v = int(v)
         return (v, v, v)
     i = int(h*6.)
     f = (h*6.)-i
     p, q, t = int(255*(v*(1.-s))), int(255*(v*(1.-s*f))), int(255*(v*(1.-s*(1.-f))))
     v *= 255
+    v = int(v)
     i %= 6
     if i == 0:
         return (v, t, p)
@@ -409,6 +411,26 @@ def hsv_2_rgb(h, s, v):
         return (t, p, v)
     if i == 5:
         return (v, p, q)
+
+def rgb_2_hsv(r, g, b):
+    r, g, b = r/255.0, g/255.0, b/255.0
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    df = mx-mn
+    if mx == mn:
+        h = 0
+    elif mx == r:
+        h = (60 * ((g-b)/df) + 360) % 360
+    elif mx == g:
+        h = (60 * ((b-r)/df) + 120) % 360
+    elif mx == b:
+        h = (60 * ((r-g)/df) + 240) % 360
+    if mx == 0:
+        s = 0
+    else:
+        s = (df/mx)*100
+    v = mx*100
+    return h, s, v
 
 
 def next_color_rainbow_linear(angle, dangle=1, bright=255):
@@ -718,18 +740,154 @@ def show_time(sign):
     else:
         print_time = convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
 
+    xloc = 86
     if "weather" in shared_config.data_dict:
-        temp = str(round(shared_config.data_dict["weather"].current.temperature()['temp']))
+        tempval = round(shared_config.data_dict["weather"].current.temperature()['temp'])
+        if tempval<0 or tempval>99:
+            xloc = 77
+        temp = str(tempval)
     else:
         temp = "--"
 
     sign.canvas.Clear()
 
+    tempstr = temp + "°F"
+
     graphics.DrawText(sign.canvas, sign.fontreallybig, 7, 21, graphics.Color(0, 150, 0), print_time)
-    graphics.DrawText(sign.canvas, sign.fontreallybig, 86, 21, graphics.Color(20, 20, 240), temp + "°F")
+    graphics.DrawText(sign.canvas, sign.fontreallybig, xloc, 21, graphics.Color(20, 20, 240), tempstr)
 
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
+def weather_icon_decode(code,status):
+    if code==200:
+        icon="thunderrain"
+    elif code==201:
+        icon="thunderrain"
+    elif code==202:
+        icon="thunderrainheavy"
+    elif code==210:
+        icon="thunder"
+    elif code==211:
+        icon="thunder"
+    elif code==212:
+        icon="thunderheavy"
+    elif code==221:
+        icon="thunder"
+    elif code==230:
+        icon="thunderrain"
+    elif code==231:
+        icon="thunderrain"
+    elif code==232:
+        icon="thunderrainheavy"
+    elif code <300:
+        icon="thunder"
+    elif code==300:
+        icon="rainlight"
+    elif code==301:
+        icon="rain"
+    elif code==302:
+        icon="rainheavy"
+    elif code==310:
+        icon="rainlight"
+    elif code==311:
+        icon="rain"
+    elif code==312:
+        icon="rain"
+    elif code==313:
+        icon="rain"
+    elif code==314:
+        icon="rainheavy"
+    elif code==321:
+        icon="rain"
+    elif code <500:
+        icon="rain"
+    elif code==500:
+        icon="rainlight"
+    elif code==501:
+        icon="rainlight"
+    elif code==502:
+        icon="rain"
+    elif code==503:
+        icon="rainheavy"
+    elif code==504:
+        icon="rainheavy"
+    elif code==511:
+        icon="snow"
+        status="FrzRain"
+    elif code==520:
+        icon="rainlight"
+    elif code==521:
+        icon="rain"
+    elif code==522:
+        icon="rainheavy"
+    elif code==531:
+        icon="rainlight"
+    elif code <600:
+        icon="rain"
+    elif code==600:
+        icon="snow"
+    elif code==601:
+        icon="snow"
+    elif code==602:
+        icon="snow"
+    elif code==611:
+        icon="snow"
+        status="Sleet"
+    elif code==612:
+        icon="snow"
+        status="Sleet"
+    elif code==613:
+        icon="snow"
+        status="Sleet"
+    elif code==615:
+        icon="snow"
+        status="RainSno"
+    elif code==616:
+        icon="snow"
+        status="RainSno"
+    elif code==620:
+        icon="snow"
+    elif code==621:
+        icon="snow"
+    elif code==622:
+        icon="snow"
+    elif code <700:
+        icon="snow"
+    elif code==701:
+        icon="haze"
+    elif code==711:
+        icon="haze"
+    elif code==721:
+        icon="haze"
+    elif code==731:
+        icon="haze"
+    elif code==741:
+        icon="haze"
+    elif code==751:
+        icon="haze"
+    elif code==761:
+        icon="haze"
+    elif code==762:
+        icon="haze"
+    elif code==781:
+        icon="tornado"
+    elif code <800:
+        icon="haze"
+    elif code==800:
+        icon="clear"
+    elif code==801:
+        icon="cloudpart"
+    elif code==802:
+        icon="cloud"
+    elif code==803:
+        icon="cloudheavy"
+    elif code==804:
+        icon="cloudheavy"
+        status="Overcst"
+    else:
+        icon="cloud"
+
+    return icon,status
 
 @__main__.planesign_mode_handler(0)
 def clear_matrix(sign):
