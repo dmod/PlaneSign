@@ -33,10 +33,11 @@
 cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```
 
-###### Sample wpa_supplicant.conf
+### Sample wpa_supplicant.conf
 ```
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
+country=US
 
 network={
     ssid="Network_1_SSID"
@@ -50,7 +51,6 @@ network={
 ```
 
 ## Random Notes
-
 - Update static cache lookup tables: `./update_static_cache.py`
 - Placing text at X Y is the bottom left corner of the character
 - X: 0, Y: 0 is the TOP LEFT of the RGB matrix
@@ -60,7 +60,7 @@ network={
 - Feature request for Google Geocode API to return landmarks: <https://issuetracker.google.com/issues/35822507>
 
 ## Credits
-We thank the 
+We thank the following data providers:
 Weather Data OpenWeather (TM)
 FlightRadar24
 ucsusa.org
