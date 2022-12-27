@@ -24,7 +24,7 @@
 - touch ssh
 - Switch off on-board sound `dtparam=audio=off` in /boot/config.txt
 - Add `isolcpus=3` to the end of /boot/cmdline.txt
-- Set up wpa_supplicant.conf: <https://www.raspberrypi.org/documentation/configuration/wireless/headless.md>
+- Set up wpa_supplicant.conf: <https://www.raspberrypi.com/documentation/computers/configuration.html#adding-the-network-details-to-your-raspberry-pi>
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname to 'planesign' with: sudo raspi-config -> System Options -> Hostname
 
@@ -33,66 +33,19 @@
 cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```
 
-```sh
-sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg
-git clone https://github.com/hzeller/rpi-rgb-led-matrix.git
-cd rpi-rgb-led-matrix
-make build-python PYTHON=$(which python3)
-sudo make install-python PYTHON=$(which python3)
-cd
-git clone https://github.com/dmod/PlaneSign.git
-cd PlaneSign
-sudo -H pip3 install -r requirements.txt
-sudo python3 planesign
-```
-
-crontab -e:
-
-```sh
-@reboot sleep 10 && cd /home/pi/PlaneSign && sudo python3 planesign>/dev/null 2>&1
-```
-
-/etc/nginx/sites-available/default:
-
-```sh
-server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
-
-        root /home/pi/PlaneSign/web;
-
-        index index.html index.htm index.nginx-debian.html;
-
-        server_name _;
-
-        location / {
-                add_header 'Access-Control-Allow-Origin' '*';
-                try_files $uri $uri/ =404;
-        }
-
-        location /api/ {
-                rewrite /api/(.*) /$1  break;
-                proxy_pass         http://localhost:5000;
-                proxy_redirect     off;
-                proxy_set_header   Host $host;
-        }
-}
-```
-
+###### Sample wpa_supplicant.conf
 ```
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
 
 network={
-    ssid="SCHOOLS NETWORK NAME"
-    psk="SCHOOLS PASSWORD"
-    id_str="school"
+    ssid="Network_1_SSID"
+    psk="Network_1_ClearTextPassword"
 }
 
 network={
-    ssid="HOME NETWORK NAME"
-    psk="HOME PASSWORD"
-    id_str="home"
+    ssid="Network_2_SSID"
+    psk="Network_2_ClearTextPassword"
 }
 ```
 
