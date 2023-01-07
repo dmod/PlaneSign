@@ -34,6 +34,7 @@ cd /home/pi && git clone https://dmod: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@g
 ```
 
 ### Sample wpa_supplicant.conf
+Can be found in `/etc/wpa_supplicant/wpa_supplicant.conf` after install
 ```
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
