@@ -94,7 +94,10 @@ def write_config():
 
 @app.route("/update")
 def update_sign():
-    subprocess.call(['sh', './install_and_update.sh', '--reboot', ])
+    p = subprocess.run(['sh', './install_and_update.sh', ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    logging.info("Update sign output:")
+    logging.info(p.stdout)
+    subprocess.run(['reboot'])
     return ""
 
 
