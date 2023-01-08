@@ -94,7 +94,7 @@ def write_config():
 
 @app.route("/update")
 def update_sign():
-    subprocess.call(['sh', './update.sh', ])
+    subprocess.call(['sh', './install_and_update.sh', '--reboot', ])
     return ""
 
 

@@ -139,6 +139,8 @@ function get_audio_support() {
                         recordButton.disabled = false;
                         recordButton.addEventListener('mousedown', startRecording);
                         recordButton.addEventListener('mouseup', stopRecording);
+                        recordButton.addEventListener('touchstart', startRecording);
+                        recordButton.addEventListener('touchend', stopRecording);
                         recorder = new MediaRecorder(stream);
 
                         // listen to dataavailable, which gets triggered whenever we have

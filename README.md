@@ -57,7 +57,6 @@ network={
 - X: 0, Y: 0 is the TOP LEFT of the RGB matrix
 - DEMO TEST: `sudo rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=4 --led-cols=64 --led-chain=2 -D4`
 - 5mm spacing: approx 26 3/4 inches X 8 overall
-- Why planesign.local doesn't work on Android: <https://issuetracker.google.com/issues/140786115>
 - Feature request for Google Geocode API to return landmarks: <https://issuetracker.google.com/issues/35822507>
 
 ## Credits
