@@ -1,3 +1,27 @@
+html {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: inherit;
+  align-items: center;
+}
+
+*:before,
+*:after {
+  box-sizing: inherit;
+}
+
+body {
+  user-select: none;
+  -webkit-user-select: none;
+  display: flex;
+  font-family: "Roboto", Arial;
+  flex-direction: column;
+  background: #fff;
+}
+
 .groups_wrapper {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -50,9 +74,9 @@
   grid-row-start: 4;
   grid-row-end: 5;
 
-  margin-top:auto;
-  margin-bottom:auto;
-  text-align:center;
+  margin-top: auto;
+  margin-bottom: auto;
+  text-align: center;
 }
 
 .a_sound_button {
@@ -118,7 +142,7 @@ legend {
   cursor: pointer;
 }
 
-#brightness_slider::-moz-range-thumb  {
+#brightness_slider::-moz-range-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 150px;
@@ -142,8 +166,10 @@ legend {
 }
 
 #lightning_slider {
-  writing-mode: bt-lr; /* IE */
-  -webkit-appearance: slider-vertical; /* WebKit */
+  writing-mode: bt-lr;
+  /* IE */
+  -webkit-appearance: slider-vertical;
+  /* WebKit */
   margin-right: 10px;
   margin-left: 10px;
   width: 50px;
@@ -169,7 +195,9 @@ legend {
   background: #ffee22;
 }
 
-#satellite_div, #cgol_div, #lightning_div {
+#satellite_div,
+#cgol_div,
+#lightning_div {
   text-align: center
 }
 
@@ -208,7 +236,7 @@ legend {
   cursor: pointer;
 }
 
-#pong_player1_slider::-webkit-slider-thumb{
+#pong_player1_slider::-webkit-slider-thumb {
   background: #ff2222;
 }
 
@@ -216,7 +244,7 @@ legend {
   background: #ff2222;
 }
 
-#pong_player2_slider::-webkit-slider-thumb{
+#pong_player2_slider::-webkit-slider-thumb {
   background: #2222ff
 }
 
@@ -290,7 +318,7 @@ legend {
   background-color: #ccc;
   -webkit-transition: .2s;
   transition: .2s;
-  display:inline-block;
+  display: inline-block;
 }
 
 .slider:before {
@@ -347,8 +375,8 @@ input:checked+.slider:before {
   text-align: center
 }
 
-#centered { 
-  display: inline-block; 
+#centered {
+  display: inline-block;
   width: 300px;
   height: 125px;
   margin-top: 25px;
@@ -358,7 +386,7 @@ input:checked+.slider:before {
   position: relative;
   display: inline-block;
   width: 0;
-  height: 0; 
+  height: 0;
   vertical-align: top;
 }
 
@@ -467,27 +495,4 @@ input[type=number] {
   white-space: normal;
   float: none;
   outline: 0;
-}
-
-html {
-  box-sizing: border-box;
-  -webkit-font-smoothing: antialiased;
-}
-
-* {
-  box-sizing: inherit;
-  align-items: center;
-}
-
-*:before, *:after {
-  box-sizing: inherit;
-}
-
-body {
-  display: flex;
-  font-family: "Roboto", Arial;
-  /*justify-content: center;
-  align-items: center;*/
-  flex-direction: column;
-  background: #fff;
 }
