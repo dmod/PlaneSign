@@ -314,7 +314,7 @@ class LightningManager:
         logging.debug('Opening Websocket connection to the server ... ')
     
         #ws.send('{"a":542}')
-        json_data = json.dumps({"a":542})
+        json_data = json.dumps({"a":418})
         ws.send(json_data)
         #json_data = json.dumps({"wsServer":self.ws_server})
         #ws.send(json_data)
@@ -566,7 +566,7 @@ class LightningManager:
                                                  on_open=self.onOpen,
                                                  header = self.header)
 
-                #self.ws.on_open = self.onOpen
+                self.ws.on_open = self.onOpen
         
                 self.thread = Process(target=self.ws.run_forever, kwargs={'host':self.ws_server, 'origin':"https://map.blitzortung.org", 'sslopt':{"cert_reqs": ssl.CERT_NONE}})
                 self.thread.daemon=True
