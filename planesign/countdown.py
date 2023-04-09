@@ -14,7 +14,9 @@ def countdown(sign):
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
     sign.canvas.Clear()
     while "countdown_datetime" not in shared_config.data_dict:
-        sign.wait_loop(0.5)
+        breakout = sign.wait_loop(0.1)
+        if breakout:
+            return
 
     frame = 0
     while shared_config.shared_mode.value == 21:
@@ -52,5 +54,7 @@ def countdown(sign):
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
-        sign.wait_loop(0.1)
+        breakout = sign.wait_loop(0.1)
+        if breakout:
+            return
         

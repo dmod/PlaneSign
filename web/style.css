@@ -197,7 +197,8 @@ legend {
 
 #satellite_div,
 #cgol_div,
-#lightning_div {
+#lightning_div,
+#countdown_div {
   text-align: center
 }
 
