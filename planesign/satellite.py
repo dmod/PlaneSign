@@ -170,19 +170,19 @@ def get_flag(selected,satellite_data):
             code = get_country_code(sat[0]["country"],selected["launchDate"])
 
         #can't find in static file lookup, apply known cases
-        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("WESTFORD NEEDLES") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0 or sat_name.find("SPACEBEE-") == 0 or sat_name.find("ECHOSTAR") == 0:
+        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("DMSP ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("WESTFORD NEEDLES") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0 or sat_name.find("SPACEBEE-") == 0 or sat_name.find("ECHOSTAR") == 0:
             code = "USA"
 
-        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("RADIO ") == 0 or sat_name.find("EXPRESS") == 0 or sat_name.find("NADEZHDA") == 0 or sat_name.find("KANOPUS") == 0:
+        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("GONETS") == 0 or sat_name.find("GORIZONT") == 0 or sat_name.find("RADIO ") == 0 or sat_name.find("EXPRESS") == 0 or sat_name.find("NADEZHDA") == 0 or sat_name.find("KANOPUS") == 0 or sat_name.find("EKRAN") == 0 or sat_name.find("RADUGA") == 0:
             if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
                 code = "USR"
             else:
                 code = "RUS"
 
-        elif sat_name.find("SINOSAT") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0:
+        elif sat_name.find("SINOSAT") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0 or sat_name.find("JILIN") == 0 or sat_name.find("YAOGAN") == 0:
             code = "CHN"
 
-        elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0:
+        elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0 or sat_name.find("INMARSAT") == 0:
             code = "GBR"
 
         elif sat_name.find("EUTE") == 0 or sat_name.find("METEOSAT") == 0:
@@ -211,6 +211,9 @@ def get_flag(selected,satellite_data):
 
         elif sat_name.find("TEVEL") == 0:
             code = "ISR"
+
+        elif sat_name.find("INSAT ") == 0:
+            code = "IND"
 
         #Still can't find country: go scrape country from website
         else:
