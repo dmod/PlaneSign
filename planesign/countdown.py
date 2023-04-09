@@ -10,11 +10,10 @@ import __main__
 def countdown(sign):
 
     sign.canvas.Clear()
-    graphics.DrawText(sign.canvas, sign.fontreallybig, 24, 21, graphics.Color(150, 0, 0), "Countdown!")
+    graphics.DrawText(sign.canvas, sign.fontreallybig, 19, 21, graphics.Color(150, 0, 0), "Countdown!")
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
     sign.canvas.Clear()
     while "countdown_datetime" not in shared_config.data_dict:
-        print("fuck")
         sign.wait_loop(0.5)
 
     frame = 0
@@ -46,10 +45,10 @@ def countdown(sign):
                 else:
                     string = f'{seconds}s'
 
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 65-len(string)*4, 21, graphics.Color(150, 0, 0), string)
+            graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(string)*4.5), 21, graphics.Color(150, 0, 0), string)
         else:
             if frame<5:
-                graphics.DrawText(sign.canvas, sign.fontreallybig, 55, 21, graphics.Color(0, 150, 0), "!!!")
+                graphics.DrawText(sign.canvas, sign.fontreallybig, 51, 21, graphics.Color(0, 150, 0), "!!!")
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
