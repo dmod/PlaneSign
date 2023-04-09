@@ -197,6 +197,9 @@ function set_mode(mode) {
     if (mode !== 17) {
         document.getElementById('satellite_div').hidden = true;
     }
+    if (mode !== 21) {
+        document.getElementById('countdown_div').hidden = true;
+    }
     if (mode !== 99) {
         document.getElementById('track-a-flight_div').hidden = true;
     }
@@ -223,6 +226,10 @@ function set_satellite_mode(mode) {
 
 function set_color_mode(color) {
     call_endpoint("/set_color_mode/" + color);
+}
+
+function set_countdown(datetime) {
+    call_endpoint("/set_countdown/" + datetime);
 }
 
 function showoptions() {

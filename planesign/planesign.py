@@ -18,6 +18,7 @@ import planes
 #import santa
 import requests
 import snowfall
+import countdown
 from datetime import datetime
 
 import gevent.pywsgi
@@ -124,6 +125,12 @@ def turn_off():
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
     shared_config.shared_color_mode.value = int(color)
+    shared_config.shared_forced_sign_update.value = 1
+    return ""
+
+@app.route("/set_countdown/<datetimestr>")
+def set_countdown(datetimestr):
+    shared_config.data_dict["countdown_datetime"] = datetime.fromisoformat(datetimestr)
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
