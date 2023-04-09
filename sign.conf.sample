@@ -13,6 +13,9 @@ MILITARY_TIME=false
 #checkbox
 AIRPORT_SCROLL=true
 
+#checkbox
+HIDE_STARLINK=false
+
 #range min 0 max 100
 DEFAULT_BRIGHTNESS=80
 

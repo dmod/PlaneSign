@@ -373,11 +373,6 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(28,64), random.randint(0,3), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(65,110), random.randint(0,3), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(65,110), random.randint(0,3), random.randint(50,150), 0))
-    #stars.append(Star(sign, random.randint(28,127), random.randint(0,3), random.randint(50,150), 0))
-    #stars.append(Star(sign, random.randint(28,127), random.randint(0,3), random.randint(50,150), 0))
-    #stars.append(Star(sign, random.randint(28,127), random.randint(0,3), random.randint(50,150), 0))
-    #stars.append(Star(sign, random.randint(100,127), random.randint(0,8), random.randint(50,150), 0))
-    #stars.append(Star(sign, random.randint(100,127), random.randint(0,8), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(28,36), random.randint(0,11), random.randint(50,150), 0))
 
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
@@ -408,7 +403,7 @@ def satellites(sign):
                     above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                     #remove debris from results
-                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and x["satname"] != "OBJECT", above))
+                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and x["satname"] != "OBJECT" and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == 'true' else True), above))
 
                     closest_list = sorted(above, key=lambda k: k["dist"])
                     lowest_list = sorted(above, key=lambda k: k["satalt"])
@@ -423,7 +418,7 @@ def satellites(sign):
 
                     close_name = closest["satname"]
                     if close_name.find("STARLINK") != -1:
-                        close_name=close_name.replace("-", "")
+                        close_name=close_name.replace("-", "").replace(" ", "")
                     elif close_name.find("SPACE STATION") == 0:
                         close_name="ISS"
                     pindex = close_name.find(' (')
