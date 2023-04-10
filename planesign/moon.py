@@ -123,16 +123,20 @@ def moon(sign):
             bg = bg.rotate(moonorient, resample=Image.BICUBIC, expand=False)
             bg = bg.resize((36,36),Image.BICUBIC)
 
+            _, ymonth = almanac.find_discrete(ts.utc(t.utc.year,t.utc.month,1,0), ts.utc(t.utc.year,(t.utc.month%12)+1,1,0), almanac.moon_phases(eph))
 
             phasename = ""
             fullflag = False
             if phase<=19.948 or phase>340.052:
-                if centermoondist.km < 360000:
-                    phasename = "Super New Moon"
-                elif centermoondist.km > 405000:
-                    phasename = "Micro New Moon"
+                if (ymonth==0).sum()>1 and t.utc.day>15:
+                    phasename = "Black Moon"
                 else:
-                    phasename = "New Moon"
+                    if centermoondist.km < 360000:
+                        phasename = "Super New Moon"
+                    elif centermoondist.km > 405000:
+                        phasename = "Micro New Moon"
+                    else:
+                        phasename = "New Moon"
             elif phase<=84.261:
                 phasename = "Waxing Crescent"
             elif phase<=95.739:
@@ -141,12 +145,18 @@ def moon(sign):
                 phasename = "Waxing Gibbous"
             elif phase<=199.948:
                 fullflag = True
-                if centermoondist.km < 360000:
-                    phasename = "Super Full Moon"
-                elif centermoondist.km > 405000:
-                    phasename = "Micro Full Moon"
+                _, ys = almanac.find_discrete(t-timedelta(days=14, hours=18, minutes=22, seconds=1.5), t+timedelta(days=14, hours=18, minutes=22, seconds=1.5), almanac.seasons(eph))
+                if 2 in ys and not ((ymonth==2).sum()>1 and t.utc.day>15):
+                    phasename = "Harvest Moon"
                 else:
-                    phasename = "Full Moon"
+                    if centermoondist.km < 360000:
+                        phasename += "Super "
+                    elif centermoondist.km > 405000:
+                        phasename += "Micro "
+                    if (ymonth==2).sum()>1 and t.utc.day>15:
+                        phasename += "Blue Moon"
+                    else:
+                        phasename += "Full Moon"
             elif phase<=264.261:
                 phasename = "Waning Gibbous"
             elif phase<=275.739:
@@ -154,10 +164,9 @@ def moon(sign):
             elif phase<=340.052:
                 phasename = "Waning Crescent"
 
-            keytimes, y = almanac.find_discrete(t, t+timedelta(days=40), almanac.moon_phases(eph))
+            keytimes, y = almanac.find_discrete(t, t+timedelta(days=30), almanac.moon_phases(eph))
 
             found = 0
-            fullflag = False
             for i in range(len(y)):
                 if y[i]==2:
                     found=found+1
