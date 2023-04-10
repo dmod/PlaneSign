@@ -128,15 +128,17 @@ class LightningManager:
         self.genBackgrounds()
 
     def draw_loading(self):
+        self.sign.canvas.Clear()
         image = Image.open(f"{shared_config.icons_dir}/11d.png")
         image = image.resize((35, 35), Image.BICUBIC)
-        self.sign.canvas.SetImage(image.convert('RGB'), 90, -1)
+        self.sign.canvas.SetImage(image.convert('RGB'), 93, -1)
 
-        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 12, graphics.Color(180,180,40), "Storm")
-        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 55, 18, graphics.Color(180,180,40), "Sign")
-        graphics.DrawText(self.sign.canvas, self.sign.font57, 15, 26, graphics.Color(180,180,40), "Loading...")
+        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 15, graphics.Color(180,180,40), "Storm Sign")
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 10, 26, graphics.Color(180,180,40), "Drawing Maps...")
         for i in range(self.numzooms+1):
             self.sign.canvas.SetPixel(15+i, 28, 180, 20, 0)
+        
+        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
 
     def genBackgrounds(self):
         self.x0,self.y0 = mercator_proj(USAlat, USAlong)
@@ -208,7 +210,7 @@ class LightningManager:
 
         if genmaps:    
             loadingind = 0
-            self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
+            self.sign.matrix.SetPixel(15+loadingind, 28, 20, 180, 0)
             loadingind += 1
 
         i=-1
@@ -250,7 +252,7 @@ class LightningManager:
                 self.backgrounds[i] = Image.open(self.floc+f'local_{shared_config.CONF["SENSOR_LAT"]}_{shared_config.CONF["SENSOR_LON"]}_{scale}.png')  
             
             if genmaps:
-                self.sign.canvas.SetPixel(15+loadingind, 28, 20, 180, 0)
+                self.sign.matrix.SetPixel(15+loadingind, 28, 20, 180, 0)
                 loadingind += 1
 
     def decode(self, b):
