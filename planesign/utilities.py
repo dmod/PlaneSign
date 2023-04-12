@@ -6,7 +6,7 @@ import pytz
 import os
 import __main__
 import shared_config
-import numpy
+import numpy as np
 
 from PIL import Image, ImageDraw, ImageFont
 from timezonefinder import TimezoneFinder
@@ -232,6 +232,15 @@ class TextScroller:
         self.sign.canvas.SetImage(self.image.convert('RGB'), self.x, self.y-self.h+1)
 
         self.lastdrawtime=curtime
+
+def fix_black(image):
+    #brighten black
+    rgb = np.array(image.convert('RGB'))
+    mask = (rgb[:,:,0] < 30) & (rgb[:,:,1] < 30) & (rgb[:,:,2] < 30)
+    rgb[mask] = np.true_divide(rgb[mask],2.0)+[15,15,15]
+    image = Image.fromarray(rgb)    
+
+    return image
 
 def autocrop(image, bg):
 
@@ -635,7 +644,7 @@ def get_distance(coord1, coord2):
 
 def direction_lookup(destination, origin=None):
     
-    if origin==None and (type(destination) is float or type(destination) is numpy.float64 or type(destination) is int):
+    if origin==None and (type(destination) is float or type(destination) is np.float64 or type(destination) is int):
 
         degrees = destination
 

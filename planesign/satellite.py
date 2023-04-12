@@ -18,16 +18,6 @@ from os.path import exists
 import os
 import __main__
 
- 
-def fix_black(image):
-    #brighten black
-    rgb = np.array(image.convert('RGB'))
-    mask = (rgb[:,:,0] < 30) & (rgb[:,:,1] < 30) & (rgb[:,:,2] < 30)
-    rgb[mask] = np.true_divide(rgb[mask],2.0)+[15,15,15]
-    image = Image.fromarray(rgb)    
-
-    return image
-
 def shorten_name(name):
     name = name.replace("French Southern and Antarctic Lands","French S. Lands")
     name = name.replace("Northern", "N.").replace("North", "N.")
@@ -75,16 +65,17 @@ def get_country_code(rawname,date):
 
         if country.upper() == "EU" or country.find("ESA") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
             code = "EU"
-        elif country.upper() == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1:
-            code = "RUS"
+        elif country.upper() == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1 or country.find("(TBD)") != -1:
+            if datetime.strptime(date, "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
+                code = "USR"
+            else:
+                code = "RUS"
         elif country.find("(ITSO)") != -1 or country.find("(ASRA)") != -1:
             code = "USA"
         elif country.find("INMARSAT") != -1 or country.find("(NICO)") != -1:
             code = "GBR"
         elif country.upper() == "UN" or country.upper() == "MULTINATIONAL" or country.find("(AB)") != -1 or country.find("(RASC)") != -1:
             code = "UN"
-        elif country.find("(TBD)") != -1:
-            code = "ISR"
         elif country.find("(SES)") != -1:
             code = "LUX"
         elif country.upper() == "NATO" or country.find("(NATO)") != -1:
@@ -96,10 +87,6 @@ def get_country_code(rawname,date):
             if isinstance(code, list):
                 code = code[0]
  
-        if code == "RUS":
-            if datetime.strptime(date, "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
-                code = "USR"
-
         if code != "UNKNOWN":
             fullcode += f'{code}/'
 
@@ -170,16 +157,16 @@ def get_flag(selected,satellite_data):
             code = get_country_code(sat[0]["country"],selected["launchDate"])
 
         #can't find in static file lookup, apply known cases
-        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("DMSP ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("WESTFORD NEEDLES") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("TELSTAR") == 0 or sat_name.find("SPACEBEE-") == 0 or sat_name.find("ECHOSTAR") == 0:
+        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("HAWK-") == 0 or sat_name.find("DMSP ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("WESTFORD NEEDLES") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("SPACEBEE-") == 0 or sat_name.find("ECHOSTAR") == 0 or sat_name.find("AEROCUBE ") == 0 or sat_name.find("LEASAT ") == 0 or sat_name.find("ESSA ") == 0 or sat_name.find("LES ") == 0 or sat_name.find("SECOR ") == 0 or sat_name.find("TIROS ") == 0:
             code = "USA"
 
-        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("GONETS") == 0 or sat_name.find("GORIZONT") == 0 or sat_name.find("RADIO ") == 0 or sat_name.find("EXPRESS") == 0 or sat_name.find("NADEZHDA") == 0 or sat_name.find("KANOPUS") == 0 or sat_name.find("EKRAN") == 0 or sat_name.find("RADUGA") == 0:
+        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("GONETS") == 0 or sat_name.find("GORIZONT") == 0 or sat_name.find("YUZGU") == 0 or sat_name.find("RADIO ") == 0 or sat_name.find("EXPRESS") == 0 or sat_name.find("NADEZHDA") == 0 or sat_name.find("KANOPUS") == 0 or sat_name.find("EKRAN") == 0 or sat_name.find("RADUGA") == 0 or sat_name.find("OKEAN ") == 0:
             if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
                 code = "USR"
             else:
                 code = "RUS"
 
-        elif sat_name.find("SINOSAT") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0 or sat_name.find("JILIN") == 0 or sat_name.find("YAOGAN") == 0:
+        elif sat_name.find("SINOSAT") == 0 or sat_name.find("SHIYAN") == 0 or sat_name.find("FENGYUN") == 0 or sat_name.find("GAOFEN") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0 or sat_name.find("JILIN") == 0 or sat_name.find("YAOGAN") == 0 or sat_name.find("GEESAT") == 0:
             code = "CHN"
 
         elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0 or sat_name.find("INMARSAT") == 0:
@@ -188,17 +175,32 @@ def get_flag(selected,satellite_data):
         elif sat_name.find("EUTE") == 0 or sat_name.find("METEOSAT") == 0:
             code = "EU"
 
+        elif sat_name.find("INSAT ") == 0 or sat_name.find("GSAT ") == 0 or sat_name.find("GSAT-") == 0 or sat_name.find("IRS ") == 0 or sat_name.find("IRNSS") == 0:
+            code = "IND"
+
+        elif sat_name.find("DIADEME") == 0 or sat_name.find("SPOT ") == 0 or sat_name.find("TELECOM ") == 0 or sat_name.find("BRO-") == 0:
+            code = "FRA"
+        
+        elif sat_name.find("UNISAT") == 0 or sat_name.find("ION SCV") == 0:
+            code = "ITA"
+        
+        elif sat_name.find("SAUDISAT") == 0 or sat_name.find("SAUDICOMSAT") == 0:
+            code = "SAU"
+
         elif sat_name.find("NUSAT") == 0:
             code = "ARG"
 
-        elif sat_name.find("DIADEME") == 0:
-            code = "FRA"
+        elif sat_name.find("ASTROCAST") == 0:
+            code = "CHE"
 
-        elif sat_name.find("ANIK ") == 0:
+        elif sat_name.find("ANIK ") == 0 or sat_name.find("GHGSAT") == 0:
             code = "CAN"
 
         elif sat_name.find("ASTRA") == 0:
             code = "LUX"
+
+        elif sat_name.find("OPTUS") == 0 or sat_name.find("SKYKRAFT") == 0:
+            code = "AUS"
 
         elif sat_name.find("ICEYE") == 0:
             code = "FIN"
@@ -211,9 +213,6 @@ def get_flag(selected,satellite_data):
 
         elif sat_name.find("TEVEL") == 0:
             code = "ISR"
-
-        elif sat_name.find("INSAT ") == 0:
-            code = "IND"
 
         #Still can't find country: go scrape country from website
         else:
@@ -250,9 +249,14 @@ def get_flag(selected,satellite_data):
 
     else:
 
-        image = fix_black(image)  
+        image = utilities.fix_black(image)
 
-        image = image.resize((13, 9), Image.BICUBIC)
+        w, h = image.size
+
+        if round(9*w/h)<13:
+            image = image.resize((round(9*w/h), 9), Image.BICUBIC)
+        else:
+            image = image.resize((13, 9), Image.BICUBIC)
 
     return image
 
@@ -450,7 +454,9 @@ def satellites(sign):
                 sign.canvas.SetPixel(26, 14, 200, 10, 10)
                 sign.canvas.SetPixel(25, 15, 200, 10, 10)
 
-                sign.canvas.SetImage(get_flag(closest,satellite_data), 49, 8)
+                flag = get_flag(closest,satellite_data)
+                w, _ = flag.size
+                sign.canvas.SetImage(flag, round(55.5-w/2), 8)
 
                 graphics.DrawText(sign.canvas, sign.font57, 1, 24, graphics.Color(60, 60, 160), "Dst:")
                 for x in range(1,15):
@@ -493,7 +499,9 @@ def satellites(sign):
                 sign.canvas.SetPixel(91, 14, 200, 10, 10)
                 sign.canvas.SetPixel(90, 15, 200, 10, 10)
 
-                sign.canvas.SetImage(get_flag(lowest,satellite_data), 114, 8)
+                flag = get_flag(lowest,satellite_data)
+                w, _ = flag.size
+                sign.canvas.SetImage(flag, round(120.5-w/2), 8)
 
                 graphics.DrawText(sign.canvas, sign.font57, 66, 24, graphics.Color(60, 60, 160), "Dst:")
                 for x in range(1,15):
@@ -634,7 +642,7 @@ def satellites(sign):
                     else:
                         try:
                             image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(full_country_name,"2000-01-01")}.png').convert('RGBA')
-                            image = fix_black(image)
+                            image = utilities.fix_black(image)
                         except Exception:
                             pass
             elif formatted_address.find("Ocean") != -1 or formatted_address.find("Gulf") != -1 or formatted_address.find("Sea") != -1 or formatted_address.find("River") != -1 or formatted_address.find("Bay") != -1 or formatted_address.find("Lake") != -1:
