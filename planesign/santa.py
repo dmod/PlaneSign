@@ -328,14 +328,14 @@ def santa(sign):
     gift = None
     frame = -1
 
-    now = datetime(2023, 12, 24, 18, 0, tzinfo=pytz.utc)+timedelta(seconds=-60)
+    #now = datetime(2023, 12, 24, 18, 0, tzinfo=pytz.utc)+timedelta(seconds=-60)
     #now = datetime(2023, 12, 25, 9, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
     #now = datetime(2023, 12, 26, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
     #now = datetime(2024, 1, 1, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
     while shared_config.shared_mode.value == 19:
 
-        #now = datetime.now(pytz.utc).astimezone(shared_config.local_timezone)
-        now = now+timedelta(seconds=0.1)
+        now = datetime.now(pytz.utc).astimezone(shared_config.local_timezone)
+        #now = now+timedelta(seconds=0.1)
 
 
         numkids = int(536785866*(1+0.01*(now.year-2019)))
@@ -583,7 +583,7 @@ def santa(sign):
 
                 sign.canvas.SetImage(globe, 100, 12)
 
-                currmiles = "{0:.1f}".format(totaldist*deltasec/santapath_times[-2])
+                currmiles = "{0:.0f}".format(totaldist*deltasec/santapath_times[-2])
                 graphics.DrawText(sign.canvas, sign.font46, 34, 20, graphics.Color(160,160,20), 'Miles Traveled:')
                 graphics.DrawText(sign.canvas, sign.font46, round(63.5-len(currmiles)*2), 27, graphics.Color(160,160,20), currmiles)
             
