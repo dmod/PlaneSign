@@ -1,0 +1,430 @@
+North Pole	NORTH	0
+Ocean	OCEAN	100
+Russia	RUS	210
+Mongolia	MNG	960
+China	CHN	1170
+North Korea	PRK	1440
+South Korea	KOR	1530
+Japan	JPN	1590
+South Korea	KOR	1800
+China	CHN	1980
+Vietnam	VNM	2640
+Laos	LAO	2760
+Thailand	THA	2820
+Cambodia	KHM	2850
+Vietnam	VNM	2940
+Malaysia	MYS	3030
+Singapore	SGP	3150
+Indonesia	IDN	3180
+Ocean	OCEAN	3360
+Cocos Islands	CCK	3510
+Ocean	OCEAN	3540
+Christmas Island	CXR	3720
+Ocean	OCEAN	3750
+Indonesia	IDN	3780
+Malaysia	MYS	4050
+Brunei	BRN	4140
+Malaysia	MYS	4170
+Indonesia	IDN	4200
+Timor-Leste	TLS	4560
+Indonesia	IDN	4620
+Papua New Guinea	PNG	4950
+Solomon Islands	SLB	5280
+Ocean	OCEAN	5550
+Vanuatu	VUT	5610
+New Caledonia	NCL	5700
+Ocean	OCEAN	5820
+Norfolk Island	NFK	5940
+Ocean	OCEAN	5970
+New Caledonia	NCL	6120
+Ocean	OCEAN	6150
+Fiji	FJI	6210
+Tonga	TON	6390
+Ocean	OCEAN	6480
+Niue	NIU	6540
+Ocean	OCEAN	6570
+American Samoa	ASM	6630
+Samoa	WSM	6660
+Ocean	OCEAN	6690
+Tokelau	TKL	6750
+Ocean	OCEAN	6780
+Wallis and Futuna	WLF	6870
+Ocean	OCEAN	6900
+Tuvalu	TUV	6990
+Kiribati	KIR	7140
+Nauru	NRU	7440
+Ocean	OCEAN	7470
+Marshall Islands	MHL	7530
+Ocean	OCEAN	7770
+Micronesia	FSM	7800
+Ocean	OCEAN	8070
+North Mariana Islands	MNP	8250
+Guam	GUM	8280
+Ocean	OCEAN	8310
+Micronesia	FSM	8370
+Palau	PLW	8550
+Ocean	OCEAN	8610
+Philippines	PHL	8730
+Taiwan	TWN	9090
+China	CHN	9180
+Hong Kong	HKG	9270
+Macau	MAC	9300
+China	CHN	9330
+Vietnam	VNM	9450
+Laos	LAO	9540
+Thailand	THA	9570
+Myanmar	MMR	9810
+India	IND	9960
+Bangladesh	BGD	10020
+India	IND	10050
+Bhutan	BTN	10080
+China	CHN	10110
+Nepal	NPL	10140
+India	IND	10230
+Sri Lanka	LKA	10710
+Ocean	OCEAN	10830
+Maldives	MDV	10980
+Ocean	OCEAN	11070
+British Indian O. Terr.	IOT	11190
+Ocean	OCEAN	11250
+Heard & McDonald Isles	HMD	12360
+Ocean	OCEAN	12390
+French Southern Lands	ATF	12420
+Ocean	OCEAN	12540
+Mauritius	MUS	13170
+Réunion	REU	13230
+Ocean	OCEAN	13260
+Madagascar	MDG	13350
+Mayotte	MYT	13590
+Comoros	COM	13620
+French Southern Lands	ATF	13650
+Seychelles	SYC	13680
+Ocean	OCEAN	14010
+Somalia	SOM	14250
+Yemen	YEM	14430
+Oman	OMN	14610
+United Arab Emirates	ARE	14760
+Qatar	QAT	14850
+Bahrain	BHR	14880
+Iran	IRN	14910
+Afghanistan	AFG	15210
+Pakistan	PAK	15360
+Afghanistan	AFG	15510
+Tajikistan	TJK	15600
+Kyrgyzstan	KGZ	15630
+Kazakhstan	KAZ	15750
+Uzbekistan	UZB	16020
+Turkmenistan	TKM	16110
+Azerbaijan	AZE	16320
+Georgia	GEO	16410
+Armenia	ARM	16440
+Iran	IRN	16470
+Turkey	TUR	16500
+Iraq	IRQ	16530
+Kuwait	KWT	16680
+Saudi Arabia	SAU	16710
+Eritrea	ERI	17010
+Ethiopia	ETH	17100
+Djibouti	DJI	17190
+Ethiopia	ETH	17220
+Kenya	KEN	17460
+Tanzania	TZA	17580
+Malawi	MWI	17790
+Zambia	ZMB	17880
+Zimbabwe	ZWE	17970
+Mozambique	MOZ	18090
+Eswatini	SWZ	18330
+South Africa	ZAF	18360
+Lesotho	LSO	18420
+South Africa	ZAF	18450
+Botswana	BWA	18600
+Namibia	NAM	18750
+Angola	AGO	18930
+Dem. Rep. of the Congo	COD	19170
+Burundi	BDI	19440
+Rwanda	RWA	19470
+Uganda	UGA	19500
+South Sudan	SSD	19620
+Sudan	SDN	19770
+Chad	TCD	20040
+Central African Republic	CAF	20250
+Dem. Rep. of the Congo	COD	20340
+Republic of the Congo	COG	20400
+Gabon	GAB	20550
+São Tomé and Príncipe	STP	20700
+Equatorial Guinea	GNQ	20730
+Cameroon	CMR	20790
+Nigeria	NGA	20880
+Niger	NER	21060
+Nigeria	NGA	21180
+Benin	BEN	21270
+Togo	TGO	21330
+Ghana	GHA	21360
+Côte d'Ivoire	CIV	21420
+Liberia	LBR	21540
+Sierra Leone	SLE	21600
+Guinea	GIN	21630
+Senegal	SEN	21720
+Guinea-Bissau	GNB	21810
+Gambia	GMB	21840
+Senegal	SEN	21870
+Ocean	OCEAN	21930
+Cabo Verde	CPV	21990
+Ocean	OCEAN	22080
+Mauritania	MRT	22170
+Western Sahara	ESH	22410
+Morocco	MAR	22530
+Gibraltar	GIB	22740
+Spain	ESP	22770
+Portugal	PRT	22830
+Spain	ESP	22860
+Andorra	AND	23010
+France	FRA	23040
+Jersey	JEY	23160
+Guernsey	GGY	23190
+United Kingdom	GBR	23220
+Ireland	IRL	23280
+Isle of Man	IMN	23340
+United Kingdom	GBR	23370
+Belgium	BEL	23460
+Netherlands	NLD	23520
+Germany	DEU	23550
+Denmark	DNK	23610
+Germany	DEU	23640
+Luxembourg	LUX	23760
+Germany	DEU	23790
+Liechtenstein	LIE	23820
+Switzerland	CHE	23850
+Italy	ITA	23880
+Monaco	MCO	23910
+France	FRA	23940
+Italy	ITA	23970
+Vatican City	VAT	24000
+Italy	ITA	24030
+San Marino	SMR	24060
+Italy	ITA	24090
+Austria	AUT	24120
+Slovenia	SVN	24150
+Croatia	HRV	24180
+Bosnia & Herzegovina	BIH	24210
+Montenegro	MNE	24240
+Albania	ALB	24270
+Greece	GRC	24300
+Italy	ITA	24420
+Malta	MLT	24480
+Italy	ITA	24510
+Tunisia	TUN	24540
+Libya	LBY	24690
+Egypt	EGY	24990
+Israel	ISR	25200
+Jordan	JOR	25230
+Israel	ISR	25260
+Palestine	PSE	25290
+Lebanon	LBN	25320
+Syria	SYR	25350
+Cyprus	CYP	25440
+Turkey	TUR	25470
+Ukraine	UKR	25650
+Moldova	MDA	25830
+Romania	ROU	25860
+Bulgaria	BGR	25950
+North Macedonia	MKD	26010
+Kosovo	XKX	26040
+Serbia	SRB	26070
+Hungary	HUN	26130
+Slovakia	SVK	26160
+Czechia	CZE	26190
+Poland	POL	26250
+Belarus	BLR	26370
+Lithuania	LTU	26490
+Latvia	LVA	26550
+Estonia	EST	26580
+Finland	FIN	26610
+Åland	ALA	26790
+Sweden	SWE	26820
+Norway	NOR	26880
+Ocean	OCEAN	26970
+United Kingdom	GBR	27000
+Ocean	OCEAN	27030
+Faroe Islands	FRO	27060
+Ocean	OCEAN	27090
+Iceland	ISL	27120
+Ocean	OCEAN	27270
+Canada	CAN	27720
+St. Pierre & Miquelon	SPM	27840
+Canada	CAN	27870
+Ocean	OCEAN	27990
+Bermuda	BMU	28230
+Ocean	OCEAN	28260
+Turks & Caicos Islands	TCA	28530
+Dominican Republic	DOM	28560
+Haiti	HTI	28590
+Dominican Republic	DOM	28620
+Puerto Rico	PRI	28680
+US Virgin Islands	VIR	28740
+British Virgin Islands	VGB	28770
+Anguilla	AIA	28800
+Saint-Martin	MAF	28830
+Sint Maarten	SXM	28860
+Saint Barthélemy	BLM	28890
+Saint Kitts and Nevis	KNA	28920
+Montserrat	MSR	28950
+Antigua and Barbuda	ATG	28980
+Guadeloupe	GLP	29010
+Dominica	DMA	29040
+Martinique	MTQ	29070
+Saint Lucia	LCA	29100
+St.Vincent & Grenadines	VCT	29130
+Barbados	BRB	29160
+Ocean	OCEAN	29190
+Trinidad and Tobago	TTO	29220
+Grenada	GRD	29250
+Venezuela	VEN	29280
+Bonaire St.Eust. & Saba	BES	29400
+Curaçao	CUW	29430
+Aruba	ABW	29460
+Venezuela	VEN	29490
+Colombia	COL	29520
+Ocean	OCEAN	29550
+US Minor Outlying Isl	UMI	29610
+Jamaica	JAM	29640
+Ocean	OCEAN	29700
+Cayman Islands	CYM	29730
+Cuba	CUB	29760
+Bahamas	BHS	29850
+Florida	FL	29970
+Georgia	GA	30120
+Alabama	AL	30180
+Tennessee	TN	30270
+Kentucky	KY	30300
+North Carolina	NC	30390
+South Carolina	SC	30420
+North Carolina	NC	30480
+Virginia	VA	30510
+District of Columbia	DC	30570
+Maryland	MD	30600
+Delaware	DE	30630
+New Jersey	NJ	30660
+Connecticut	CT	30690
+Rhode Island	RI	30720
+Massachusetts	MA	30750
+New Hampshire	NH	30780
+Maine	ME	30810
+New Hampshire	NH	30840
+Vermont	VT	30870
+New York	NY	30900
+Pennsylvania	PA	30960
+Maryland	MD	30990
+West Virginia	WV	31020
+Ohio	OH	31050
+Michigan	MI	31080
+Indiana	IN	31170
+Illinois	IL	31230
+Missouri	MO	31290
+Iowa	IA	31350
+Wisconsin	WI	31440
+Minnesota	MN	31500
+North Dakota	ND	31560
+South Dakota	SD	31620
+Nebraska	NE	31680
+Kansas	KS	31740
+Oklahoma	OK	31830
+Arkansas	AR	31890
+Mississippi	MS	31950
+Louisiana	LA	32040
+Texas	TX	32100
+New Mexico	NM	32280
+Colorado	CO	32400
+Wyoming	WY	32490
+Montana	MT	32580
+Idaho	ID	32700
+Oregon	OR	32760
+Washington	WA	32790
+Oregon	OR	32880
+California	CA	32970
+Nevada	NV	33150
+Utah	UT	33210
+Arizona	AZ	33330
+México	MEX	33480
+Guatemala	GTM	34020
+Belize	BLZ	34050
+Guatemala	GTM	34080
+El Salvador	SLV	34110
+Honduras	HND	34140
+Nicaragua	NIC	34230
+Costa Rica	CRI	34290
+Panama	PAN	34350
+Colombia	COL	34440
+Ecuador	ECU	34590
+Peru	PER	34680
+Colombia	COL	35070
+Venezuela	VEN	35280
+Guyana	GUY	35460
+Suriname	SUR	35550
+French Guiana	GUF	35640
+Brazil	BRA	35700
+Bolivia	BOL	36120
+Paraguay	PRY	36360
+Argentina	ARG	36510
+Chile	CHL	36780
+Argentina	ARG	36810
+Uruguay	URY	37050
+Argentina	ARG	37170
+Ocean	OCEAN	37260
+Falkland Islands	FLK	37530
+Ocean	OCEAN	37590
+S.Georgia & S.Sand. Isl	SGS	37770
+Ocean	OCEAN	37950
+Ocean	OCEAN	38040
+Bouvet Island	BVT	38430
+Ocean	OCEAN	38460
+St.Helena, Asc. & Tris	SHN	39360
+Ocean	OCEAN	39450
+Côte d'Ivoire	CIV	39870
+Ghana	GHA	39900
+Côte d'Ivoire	CIV	39990
+Ghana	GHA	40020
+Burkina Faso	BFA	40080
+Mali	MLI	40140
+Algeria	DZA	40350
+Morocco	MAR	40680
+Spain	ESP	40710
+Portugal	PRT	40860
+Spain	ESP	40920
+Ocean	OCEAN	40980
+Greenland	GRL	41580
+Ocean	OCEAN	41700
+Canada	CAN	41790
+Ocean	OCEAN	42120
+Alaska	AK	42750
+Ocean	OCEAN	43140
+US Minor Outlying Isl	UMI	43740
+Ocean	OCEAN	43950
+Hawaii	HI	44070
+United States	USA	44340
+Ocean	OCEAN	44370
+Kiribati	KIR	45000
+Ocean	OCEAN	45090
+French Polynesia	PYF	45120
+Ocean	OCEAN	45600
+Pitcairn Islands	PCN	45660
+Ocean	OCEAN	45780
+French Polynesia	PYF	45810
+Ocean	OCEAN	45960
+Cook Islands	COK	46350
+Ocean	OCEAN	46470
+New Zealand	NZL	47010
+Ocean	OCEAN	47220
+Australia	AUS	47580
+Ocean	OCEAN	48240
+Antarctica	ATA	48960
+Ocean	OCEAN	49890
+S.Georgia & S.Sand. Isl	SGS	50460
+Ocean	OCEAN	50550
+Brazil	BRA	51240
+Ocean	OCEAN	51810
+Greenland	GRL	53370
+Ocean	OCEAN	53820
+Svalbard & Jan Mayen	SJM	53940
+North Pole	NORTH	54030
+North Pole	NORTH	54120
