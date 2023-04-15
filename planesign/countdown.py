@@ -23,7 +23,7 @@ def countdown(sign):
 
         frame = (frame+1)%10
 
-        dt = shared_config.data_dict["countdown_datetime"]-datetime.now()
+        dt = shared_config.data_dict["countdown_datetime"]-datetime.now().astimezone(shared_config.local_timezone)
         dts = round(dt.total_seconds())
 
         if dts>0:

@@ -130,7 +130,7 @@ def set_color_mode(color):
 
 @app.route("/set_countdown/<datetimestr>")
 def set_countdown(datetimestr):
-    shared_config.data_dict["countdown_datetime"] = datetime.fromisoformat(datetimestr)
+    shared_config.data_dict["countdown_datetime"] = datetime.fromisoformat(datetimestr).astimezone(shared_config.local_timezone)
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
