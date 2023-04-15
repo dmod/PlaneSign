@@ -148,7 +148,7 @@ class TextScroller:
             self.fontname=="5x7"
             bdffont=self.sign.font57
 
-        self.font = ImageFont.load("./fonts/"+font+".pil")
+        self.font = ImageFont.load("./fonts/"+self.fontname+".pil")
             
         self.cw=bdffont.CharacterWidth(0)
         self.ch=bdffont.height
