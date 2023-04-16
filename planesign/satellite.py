@@ -169,7 +169,7 @@ def get_flag(selected,satellite_data):
         elif sat_name.find("SINOSAT") == 0 or sat_name.find("SHIYAN") == 0 or sat_name.find("FENGYUN") == 0 or sat_name.find("GAOFEN") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0 or sat_name.find("JILIN") == 0 or sat_name.find("YAOGAN") == 0 or sat_name.find("GEESAT") == 0:
             code = "CHN"
 
-        elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0 or sat_name.find("INMARSAT") == 0:
+        elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0 or sat_name.find("INMARSAT") == 0 or sat_name.find("SKYNET ") == 0:
             code = "GBR"
 
         elif sat_name.find("EUTE") == 0 or sat_name.find("METEOSAT") == 0:
