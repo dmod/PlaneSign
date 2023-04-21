@@ -197,9 +197,10 @@ legend {
 
 #satellite_div,
 #cgol_div,
+#track-a-flight_div,
 #lightning_div,
 #countdown_div {
-  text-align: center
+  text-align: center;
 }
 
 .pong_slider {
