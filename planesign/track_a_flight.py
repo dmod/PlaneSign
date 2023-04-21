@@ -55,7 +55,7 @@ def track_a_flight(sign):
                 if len(reverse_geocode['results']) != 0:
                     formatted_address = reverse_geocode['results'][0]['formatted_address']
                 else:
-                    formatted_address = 'Somewhere'
+                    formatted_address = 'Ocean'
 
                 logging.info(current_location)
                 logging.info(formatted_address)
