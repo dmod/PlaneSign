@@ -706,12 +706,20 @@ def satellites(sign):
                 else:
                     graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), flyby_time)
                 
-                graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "El:")
-                graphics.DrawText(sign.canvas, sign.font57, 71, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
+                startdir = flyby["startAzCompass"]
+                maxdir = flyby["maxAzCompass"]
+                enddir = flyby["endAzCompass"]
 
-                for x in range(82,84):
-                    for y in range(18,20):
-                        sign.canvas.SetPixel(x, y, 220, 180, 90)
+                #graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "El:")
+                #graphics.DrawText(sign.canvas, sign.font57, 71, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
+                graphics.DrawText(sign.canvas, sign.font57, 64, 24, graphics.Color(220, 180, 90), "°")
+                graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
+                graphics.DrawText(sign.canvas, sign.font57, 70, 24, graphics.Color(220,180,90), f'{maxdir}')
+                
+
+                #for x in range(82,84):
+                #    for y in range(18,20):
+                #        sign.canvas.SetPixel(x, y, 220, 180, 90)
 
                 mx = 88
                 my = 21
@@ -756,8 +764,7 @@ def satellites(sign):
                 sign.canvas.SetPixel(mx-1, my+1, b11, b11, b11)
                 sign.canvas.SetPixel(mx+1, my-1, b11, b11, b11)
 
-                startdir = flyby["startAzCompass"]
-                enddir = flyby["endAzCompass"]
+
                 if overhead_flag:
                     graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(246, 242, 116), startdir)
                     graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(246, 242, 116), enddir)
