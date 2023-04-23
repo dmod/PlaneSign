@@ -649,7 +649,17 @@ def satellites(sign):
                     image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
                     
             if image:
-                sign.canvas.SetImage(image.resize((15, 10), Image.BICUBIC).convert('RGB'), 113, 0)
+
+                w, h = image.size
+
+                if round(10*w/h)<15:
+                    image = image.resize((round(10*w/h), 10), Image.BICUBIC)
+                else:
+                    image = image.resize((15, 10), Image.BICUBIC)
+
+                w, _ = image.size
+
+                sign.canvas.SetImage(image.convert('RGB'), 128-w, 0)
 
             for x in range(25):
                 for y in range(11):
