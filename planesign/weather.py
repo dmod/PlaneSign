@@ -11,6 +11,8 @@ from rgbmatrix import graphics
 @__main__.planesign_mode_handler(6)
 def show_weather(sign):
 
+    polltime = None
+
     while shared_config.shared_mode.value == 6:
 
         sign.canvas.Clear()
@@ -26,17 +28,19 @@ def show_weather(sign):
         if (utilities.convert_unix_to_local_time(time.time()).hour >= 18):
             start_index_day = 1
 
-        # Day 0
-        day = shared_config.data_dict['weather'].forecast_daily[start_index_day]
-        draw_daily_forcast(sign,day,day_0_xoffset)
+        if polltime==None or time.perf_counter()-polltime>30:
+            polltime = time.perf_counter()
 
-        # Day 1
-        day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 1]
-        draw_daily_forcast(sign,day,day_1_xoffset)
+            day0 = shared_config.data_dict['weather'].forecast_daily[start_index_day]
+            day1 = shared_config.data_dict['weather'].forecast_daily[start_index_day + 1]
+            day2 = shared_config.data_dict['weather'].forecast_daily[start_index_day + 2]
 
-        # Day 2
-        day = shared_config.data_dict['weather'].forecast_daily[start_index_day + 2]
-        draw_daily_forcast(sign,day,day_2_xoffset)
+            sun_rise = utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.srise_time)
+            sun_set = utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.sset_time)
+
+        draw_daily_forcast(sign,day0,day_0_xoffset)
+        draw_daily_forcast(sign,day1,day_1_xoffset)
+        draw_daily_forcast(sign,day2,day_2_xoffset)
 
         graphics.DrawText(sign.canvas, sign.font46, 1, 5, graphics.Color(20, 20, 210), shared_config.CONF["WEATHER_CITY_NAME"])
 
@@ -55,12 +59,12 @@ def show_weather(sign):
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
             time_format = '%-H:%M'
 
-        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.srise_time).strftime(time_format))
-        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.sset_time).strftime(time_format))
+        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), sun_rise.strftime(time_format))
+        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), sun_set.strftime(time_format))
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-        breakout = sign.wait_loop(30)
+        breakout = sign.wait_loop(0.1)
         if breakout:
             return
 
