@@ -61,11 +61,11 @@ def get_country_code(rawname,date):
 
     for country in rawname.split("/"):
 
-        country = country.strip()
+        country = country.strip().upper()
 
-        if country.upper() == "EU" or country.find("ESA") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
+        if country == "EU" or country.find("(ESA)") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
             code = "EU"
-        elif country.upper() == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1 or country.find("(TBD)") != -1:
+        elif country == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1 or country.find("(TBD)") != -1:
             if datetime.strptime(date, "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
                 code = "USR"
             else:
@@ -74,16 +74,18 @@ def get_country_code(rawname,date):
             code = "USA"
         elif country.find("INMARSAT") != -1 or country.find("(NICO)") != -1:
             code = "GBR"
-        elif country.upper() == "UN" or country.upper() == "MULTINATIONAL" or country.find("(AB)") != -1 or country.find("(RASC)") != -1:
+        elif country == "UN" or country == "MULTINATIONAL" or country.find("(AB)") != -1 or country.find("(RASC)") != -1:
             code = "UN"
         elif country.find("(SES)") != -1:
             code = "LUX"
-        elif country.upper() == "NATO" or country.find("(NATO)") != -1:
+        elif country == "NATO" or country.find("(NATO)") != -1:
             code = "NATO"
         elif country.find("(SWTZ)") != -1:
             code = "CHE"
+        elif country.find("TÜRKIYE") != -1:
+            code = "TUR"
         else:
-            code = coco.convert(names=country.upper().replace("(","").replace(")","").rstrip(), to="ISO3", not_found="UNKNOWN")
+            code = coco.convert(names=country.replace("(","").replace(")","").rstrip(), to="ISO3", not_found="UNKNOWN")
             if isinstance(code, list):
                 code = code[0]
  
