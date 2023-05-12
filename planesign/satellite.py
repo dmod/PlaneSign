@@ -63,7 +63,7 @@ def get_country_code(rawname,date):
 
         country = country.strip().upper()
 
-        if country == "EU" or country.find("(ESA)") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
+        if country == "EU" or country.find("ESA") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
             code = "EU"
         elif country == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1 or country.find("(TBD)") != -1:
             if datetime.strptime(date, "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
