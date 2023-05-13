@@ -24,8 +24,9 @@ def shorten_name(name):
     name = name.replace("Southern", "S.").replace("South", "S.")
     name = name.replace("Eastern", "E.").replace("East", "E.")
     name = name.replace("Western", "W.").replace("West", "W.")
+    name = name.replace("Central", "C.")
     name = name.replace("Federated States of ", "").replace("State of ", "").replace(", USA", "")
-    name = name.replace("Province", "Prov.").replace("Democratic Republic of", "D.R.")
+    name = name.replace("Province", "Prov.").replace("Democratic Republic", "D.R.")
     name = name.replace("Saint", "St.")
     return name
 
