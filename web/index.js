@@ -175,7 +175,9 @@ function populate_sound_dropdown() {
 }
 
 function set_mode(mode) {
-    document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
+    if (global_current_mode) {
+        document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
+    }
     document.getElementById(mode).style.backgroundColor = "red"; // Turn on new button
     global_current_mode = mode;
 
@@ -213,6 +215,7 @@ function set_mode(mode) {
     } else {
         call_endpoint("/set_mode/" + mode);
     }
+    update_sign_status();
 
 }
 
