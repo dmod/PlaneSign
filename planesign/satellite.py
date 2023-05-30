@@ -410,7 +410,7 @@ def satellites(sign):
                     above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                     #remove debris from results
-                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and x["satname"] != "OBJECT" and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == 'true' else True), above))
+                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and "OBJECT-" not in x["satname"] and x["satname"] != "OBJECT" and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == 'true' else True), above))
 
                     closest_list = sorted(above, key=lambda k: k["dist"])
                     lowest_list = sorted(above, key=lambda k: k["satalt"])
