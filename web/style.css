@@ -286,6 +286,13 @@ legend {
   float: none;
 }
 
+#countdown_message {
+  width: 90%;
+  text-align: center;
+  display: inline;
+  float: none;
+}
+
 .lightning_button {
   display: block;
   margin: auto auto 20px auto;

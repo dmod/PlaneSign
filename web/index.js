@@ -231,8 +231,8 @@ function set_color_mode(color) {
     call_endpoint("/set_color_mode/" + color);
 }
 
-function set_countdown(datetime) {
-    call_endpoint("/set_countdown/" + datetime);
+function set_countdown(datetime,msgstr) {
+    call_endpoint("/set_countdown/" + datetime + "/" + msgstr);
 }
 
 function showoptions() {

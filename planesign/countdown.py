@@ -26,6 +26,11 @@ def countdown(sign):
         dt = shared_config.data_dict["countdown_datetime"]-datetime.now().astimezone(shared_config.local_timezone)
         dts = round(dt.total_seconds())
 
+        if "countdown_message" in shared_config.data_dict and shared_config.data_dict["countdown_message"] != "":
+            yloc = 27
+        else:
+            yloc = 21
+
         if dts>0:
             days = dts // 86400
             hours = (dts % 86400) // 3600
@@ -47,10 +52,11 @@ def countdown(sign):
                 else:
                     string = f'{seconds}s'
 
-            graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(string)*4.5), 21, graphics.Color(150, 0, 0), string)
+            graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(shared_config.data_dict["countdown_message"])*4.5), yloc-14, graphics.Color(150, 0, 0), shared_config.data_dict["countdown_message"])
+            graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(string)*4.5), yloc, graphics.Color(150, 0, 0), string)
         else:
             if frame<5:
-                graphics.DrawText(sign.canvas, sign.fontreallybig, 51, 21, graphics.Color(0, 150, 0), "!!!")
+                graphics.DrawText(sign.canvas, sign.fontreallybig, 51, yloc, graphics.Color(0, 150, 0), "!!!")
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
