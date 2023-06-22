@@ -134,8 +134,8 @@ def track_a_flight(sign):
                 sign.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
             if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M', time.localtime(start_time))}")
-                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M', time.localtime(end_time))}")
+                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H%M', time.localtime(start_time))}")
+                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H%M', time.localtime(end_time))}")
             else:
                 graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
                 graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
