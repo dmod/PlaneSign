@@ -495,7 +495,7 @@ class Stock:
     def drawtime(self):
 
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-            print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%H%M')
+            print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%H:%M')
         else:
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
         graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)

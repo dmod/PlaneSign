@@ -745,7 +745,7 @@ def only_show_time(sign):
 
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-        print_time = convert_unix_to_local_time(time.time()).strftime('%H%M')
+        print_time = convert_unix_to_local_time(time.time()).strftime('%H:%M')
     else:
         print_time = convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
 

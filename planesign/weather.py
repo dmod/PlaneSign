@@ -57,7 +57,7 @@ def show_weather(sign):
 
         time_format = '%-I:%M'
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-            time_format = '%H%M'
+            time_format = '%H:%M'
 
         graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), sun_rise.strftime(time_format))
         graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), sun_set.strftime(time_format))
