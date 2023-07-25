@@ -101,6 +101,46 @@ function call_endpoint(endpoint, callback) {
     request.send();
 }
 
+function get_possible_autofill_flights(query_string) {
+    call_endpoint("/get_possible_flights/" + query_string, function (value) {
+        console.log(value)
+        flights = JSON.parse(value)['results']
+        console.log(flights.length)
+        live_flights = flights.filter((flight) => { return flight['type'] == 'live' })
+
+        a = document.createElement("DIV");
+        a.setAttribute("id", this.id + "autocomplete-list");
+        a.setAttribute("class", "autocomplete-items");
+        /*append the DIV element as a child of the autocomplete container:*/
+        this.parentNode.appendChild(a);
+        /*for each item in the array...*/
+        for (i = 0; i < live_flights.length; i++) {
+            console.log(x['detail']['callsign'] + "  " + x['detail']['route'])
+
+            /*check if the item starts with the same letters as the text field value:*/
+            if (live_flights[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
+                /*create a DIV element for each matching element:*/
+                b = document.createElement("DIV");
+                /*make the matching letters bold:*/
+                b.innerHTML = "<strong>" + live_flights[i].substr(0, val.length) + "</strong>";
+                b.innerHTML += live_flights[i].substr(val.length);
+                /*insert a input field that will hold the current array item's value:*/
+                b.innerHTML += "<input type='hidden' value='" + live_flights[i] + "'>";
+                /*execute a function when someone clicks on the item value (DIV element):*/
+                b.addEventListener("click", function (e) {
+                    /*insert the value for the autocomplete text field:*/
+                    inp.value = this.getElementsByTagName("input")[0].value;
+                    /*close the list of autocompleted values,
+                    (or any other open lists of autocompleted values:*/
+                    closeAllLists();
+                });
+                a.appendChild(b);
+            }
+        }
+
+    });
+}
+
 function update_brightness_slider() {
     call_endpoint("/get_brightness", function (value) {
         document.getElementById("brightness_slider").value = value;
@@ -231,7 +271,7 @@ function set_color_mode(color) {
     call_endpoint("/set_color_mode/" + color);
 }
 
-function set_countdown(datetime,msgstr) {
+function set_countdown(datetime, msgstr) {
     call_endpoint("/set_countdown/" + datetime + "/" + msgstr);
 }
 
