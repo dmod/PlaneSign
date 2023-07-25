@@ -316,7 +316,7 @@ class LightningManager:
         logging.debug('Opening Websocket connection to the server ... ')
     
         #ws.send('{"a":542}')
-        json_data = json.dumps({"a":418})
+        json_data = json.dumps({"a":111})
         ws.send(json_data)
         #json_data = json.dumps({"wsServer":self.ws_server})
         #ws.send(json_data)
