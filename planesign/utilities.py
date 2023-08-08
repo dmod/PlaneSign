@@ -117,6 +117,11 @@ class TextScroller:
         self.x=x
         self.y=y
 
+        self.colortimer = time.perf_counter()
+        self.coloroffset = 0
+        self.color_mode_offset = 6
+        self.tempcolor = random_rgb(rmin=10,gmin=10,bmin=10)
+
         self.text=text
         self.lasttext=None
         self.space=space
@@ -136,17 +141,22 @@ class TextScroller:
         if self.fontname=="6x13" or self.fontname=="fontbig" or self.fontname=="big":
             self.fontname="6x13"
             bdffont=self.sign.fontbig
+            self.fontw = 6
         elif self.fontname=="9x18B" or self.fontname=="fontreallybig" or self.fontname=="reallybig":
             self.fontname="9x18B"
             bdffont=self.sign.fontreallybig
+            self.fontw = 9
         elif self.fontname=="helvR12" or self.fontname=="fontplanesign" or self.fontname=="planesign":
             self.fontname="helvR12"
             bdffont=self.sign.fontplanesign
+            self.fontw = 9
         elif self.fontname=="4x6":
             bdffont=self.sign.font46
+            self.fontw = 4
         else:
             self.fontname=="5x7"
             bdffont=self.sign.font57
+            self.fontw = 5
 
         self.font = ImageFont.load("./fonts/"+self.fontname+".pil")
             
@@ -165,6 +175,46 @@ class TextScroller:
 
         self.image = Image.new("RGB", boxdim, (0, 0, 0))
         self.dr = ImageDraw.Draw(self.image)
+
+    def set_text(self,dx,dy):
+
+        if type(self.color) is tuple:
+            self.dr.text((dx, dy), self.text, font=self.font, fill=self.color)
+        else:
+            if self.color==0 or self.color==5:
+
+                self.dr.text((dx, dy), self.text, font=self.font, fill=(3, 194, 255))
+
+            if self.color==1:
+
+                if self.colortimer+0.1<time.perf_counter():
+                    self.colortimer = time.perf_counter()
+                    self.tempcolor = random_rgb(rmin=10,gmin=10,bmin=10)
+                self.dr.text((dx, dy), self.text, font=self.font, fill=self.tempcolor)
+
+            if (self.color>=2 and self.color <=4) or self.color>5:
+
+                if self.color == 2:
+                    colors = [(12, 169, 12),(206, 13, 13)] #CHRISTMAS
+                elif self.color == 3:
+                    colors = [(173, 0, 30),(178, 178, 178),(37, 120, 178)] #4TH OF JULY
+                elif self.color == 4:
+                    colors = [(20, 20, 20),(247, 95, 28)] #HALLOWEEN
+                else:
+                    colors = [(((self.color-self.color_mode_offset) >> 16) & 255, ((self.color-self.color_mode_offset) >> 8) & 255, (self.color-self.color_mode_offset) & 255)]
+
+
+                if self.colortimer+1.1<time.perf_counter():
+                    self.colortimer = time.perf_counter()
+                    self.coloroffset = (self.coloroffset+1)%len(colors)
+
+                self.dr.text((dx, dy), self.text, font=self.font, fill=colors[(0+self.coloroffset)%len(colors)])
+                if len(colors)>1:
+                    for index, letter in enumerate(self.text):
+                        if index % len(colors) == 1:
+                            self.dr.text((dx+self.fontw*index, dy), letter, font=self.font, fill=colors[(1+self.coloroffset)%len(colors)])
+                        if len(colors)>2 and index % len(colors) == 2:
+                            self.dr.text((dx+self.fontw*index, dy), letter, font=self.font, fill=colors[(2+self.coloroffset)%len(colors)])
 
     def draw(self):
 
@@ -215,19 +265,24 @@ class TextScroller:
                 self.offset = self.offset%((self.length+self.space)*self.cw)
                 for o in range(-round((self.length+self.space)*self.cw), self.w+round((self.length+self.space)*self.cw)+1, round((self.length+self.space)*self.cw)):
                     if self.scrolldir=="left":
-                        self.dr.text((round(-self.offset+o), 0), self.text, font=self.font, fill=self.color)
+                        r=-1
                     elif self.scrolldir=="right":  
-                        self.dr.text((round(self.offset+o), 0), self.text, font=self.font, fill=self.color)
+                        r=1
+
+                    self.set_text(round(r*self.offset+o), 0)
             else:
                 self.offset = self.offset%((1+self.space)*self.ch)
                 for o in range(-round((1+self.space)*self.ch), self.h+round((1+self.space)*self.ch)+1, round((1+self.space)*self.ch)):
                     if self.scrolldir=="up":
-                        self.dr.text((0, round(-self.offset+o)), self.text, font=self.font, fill=self.color)
-                    elif self.scrolldir=="down":  
-                        self.dr.text((0, round(self.offset+o)), self.text, font=self.font, fill=self.color)
+                        r=-1
+                    elif self.scrolldir=="down":
+                        r=1
+                    
+                    self.set_text(0, round(r*self.offset+o))
 
         else:#Text will fit in box, don't need to scroll if we don't have to
-            self.dr.text((0, 0), self.text, font=self.font, fill=self.color)
+
+            self.set_text(0, 0)
 
         self.sign.canvas.SetImage(self.image.convert('RGB'), self.x, self.y-self.h+1)
 
