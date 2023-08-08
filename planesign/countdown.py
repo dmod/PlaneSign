@@ -52,9 +52,12 @@ def countdown(sign):
                 else:
                     string = f'{seconds}s'
 
-            graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(shared_config.data_dict["countdown_message"])*4.5), yloc-14, graphics.Color(150, 0, 0), shared_config.data_dict["countdown_message"])
+            if "countdown_message" in shared_config.data_dict and shared_config.data_dict["countdown_message"] != "":
+                graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(shared_config.data_dict["countdown_message"])*4.5), yloc-14, graphics.Color(150, 0, 0), shared_config.data_dict["countdown_message"])
             graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(string)*4.5), yloc, graphics.Color(150, 0, 0), string)
         else:
+            if "countdown_message" in shared_config.data_dict and shared_config.data_dict["countdown_message"] != "":
+                graphics.DrawText(sign.canvas, sign.fontreallybig, round(65-len(shared_config.data_dict["countdown_message"])*4.5), yloc-14, graphics.Color(0, 150, 0), shared_config.data_dict["countdown_message"])
             if frame<5:
                 graphics.DrawText(sign.canvas, sign.fontreallybig, 51, yloc, graphics.Color(0, 150, 0), "!!!")
 
