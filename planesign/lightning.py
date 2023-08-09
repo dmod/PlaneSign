@@ -13,6 +13,7 @@ import numpy as np
 import utilities
 from rgbmatrix import graphics
 import requests
+import re
 import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import _thread as thread
@@ -305,28 +306,104 @@ class LightningManager:
         
     def onOpen(self, ws):
 
-        def heartbeat(*args):
-            while True:
-                json_data = json.dumps({"wsServer":self.ws_server})
-                time.sleep(25)
-                ws.send(json_data)
-
-        #thread.start_new_thread(heartbeat, ())
-    
         logging.debug('Opening Websocket connection to the server ... ')
-    
-        #ws.send('{"a":542}')
-        json_data = json.dumps({"a":111})
-        ws.send(json_data)
-        #json_data = json.dumps({"wsServer":self.ws_server})
-        #ws.send(json_data)
 
-        #logging.info(json_data)
+        #detect connect info
 
-        #json_data = json.dumps({"sig":False})
-        #ws.send(json_data)
-        
-        self.connected.value = 1
+        # Fetch the JavaScript file from the URL
+        url = "https://www.blitzortung.org/en/JS/live_lightning_maps.js"
+        response = requests.get(url)
+
+        heartbeatmode = None
+        heartbeatkey = None
+        heartbeatinterval = None
+        modestrings = None
+        keyvalues = None
+
+        if response and response.status_code == requests.codes.ok:
+            
+            js_code = response.text
+
+            # Define regular expressions to match the patterns
+            onopen_pattern = re.compile(r"ws\.onopen\s*=\s*function\s*\(\s*evt\s*\)\s*{(.*?)};", re.DOTALL)
+            variable_assignment_pattern = re.compile(r"var\s+([\w\d]+)\s*=\s*(.*?);", re.DOTALL)
+            setInterval_pattern = re.compile(r"setInterval\(\s*function\s*\(\)\s*{(.*?)\s*ws\.send\((.*?)\);\s*}\s*,\s*(\d+)\s*\);", re.DOTALL)
+            
+            # Find the onopen function and its contents
+            onopen_match = onopen_pattern.search(js_code)
+            if onopen_match:
+                onopen_contents = onopen_match.group(1)
+            
+                # Check if setInterval is used within onopen as a heartbeat function
+                setInterval_matches = setInterval_pattern.findall(onopen_contents)
+                
+                variable_matches = variable_assignment_pattern.findall(js_code)
+                variable_values = {}
+                for var_name, var_value in variable_matches:
+                    variable_values[var_name] = var_value
+                
+                if setInterval_matches:
+                    for setInterval_match in setInterval_matches:
+                        heartbeat_contents = setInterval_match[1]
+                        heartbeatinterval = int(int(setInterval_match[2])/1000)
+                        
+                        # Replace variable instances in heartbeatkey
+                        for var_name, var_value in variable_values.items():
+                            heartbeat_contents = re.sub(r'(?<=[^a-zA-Z0-9_])' + var_name + r'(?![a-zA-Z0-9_])', str(var_value), heartbeat_contents)
+                        
+                        heartbeatmode = re.findall(r"\{\"(.*?)\"\:", re.sub(r"\'", '', heartbeat_contents))[0]
+                        heartbeatkey = re.findall(r"\:\"(.*?)\"\}", re.sub(r"\'", '', heartbeat_contents))[0]
+                        
+                        heartbeatkey = re.sub(r"['+]", '', heartbeatkey)
+                        
+                        # Convert ints to int and strip extra chars from strings
+                        if "\"" not in heartbeatkey:
+                            try:
+                                heartbeatkey = int(heartbeatkey)
+                            except:
+                                heartbeatkey = re.sub(r"\w*(ws|server)\w*", self.ws_server, heartbeatkey, flags=re.IGNORECASE)
+                        else:
+                            heartbeatkey = re.sub(r"\"", '', heartbeatkey)
+            
+                # Replace variable instances in onopen_contents
+                for var_name, var_value in variable_values.items():
+                    onopen_contents = re.sub(r'(?<=[^a-zA-Z0-9_])' + var_name + r'(?![a-zA-Z0-9_])', str(var_value), onopen_contents)
+            
+                # Find modestrings based on ws.send calls
+                modestrings = re.findall(r"ws\.send\(.*?\"(.*?)\".*?\);(?![^{]*\})", onopen_contents)
+                keyvalues = re.findall(r"ws\.send\(.*?\:(.*?)\}.*?\);(?![^{]*\})", onopen_contents) 
+                
+                # Replace ws_server variable with the selected server url
+                keyvalues = [re.sub(r"\+\w*(ws|server)\w*\+", self.ws_server, k) for k in keyvalues]
+                
+                modestrings = [re.sub(r"['+]", '', m) for m in modestrings]
+                keyvalues = [re.sub(r"['+]", '', k) for k in keyvalues]
+
+                # Convert ints to int and strip extra chars from strings
+                keyvalues = [int(k) if "\"" not in k else re.sub(r"\"", '', k) for k in keyvalues]
+
+        if modestrings:
+            for m,k in zip(modestrings,keyvalues):
+                tmp = {}
+                tmp[m] = k
+                logging.debug(f'Connect string found: {tmp}')
+                json_data = json.dumps(tmp)
+                ws.send(json_data)
+            self.connected.value = 1
+        else:
+            logging.debug('Problem finding connect info')
+            self.connected.value = 0
+
+        if heartbeatmode and heartbeatinterval:
+            def heartbeat(*args):
+                tmp = {}
+                tmp[heartbeatmode] = heartbeatkey
+                while True:
+                    json_data = json.dumps(tmp)
+                    time.sleep(heartbeatinterval)
+                    ws.send(json_data)
+
+            thread.start_new_thread(heartbeat, ())  
     
     def close(self):
         if self.connected.value == 1:
@@ -530,7 +607,7 @@ class LightningManager:
         self.last_drawn_mode.value = shared_config.shared_lighting_mode.value
 
     def connect(self):
-          
+
         if not self.connected.value:
             self.connected.value = 2
             try:    
@@ -568,7 +645,7 @@ class LightningManager:
                                                  on_open=self.onOpen,
                                                  header = self.header)
 
-                self.ws.on_open = self.onOpen
+                #self.ws.on_open = self.onOpen
         
                 self.thread = Process(target=self.ws.run_forever, kwargs={'host':self.ws_server, 'origin':"https://map.blitzortung.org", 'sslopt':{"cert_reqs": ssl.CERT_NONE}})
                 self.thread.daemon=True
