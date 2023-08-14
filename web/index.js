@@ -106,26 +106,28 @@ function get_possible_autofill_flights(query_string) {
         console.log(value)
         flights = JSON.parse(value)['results']
         console.log(flights.length)
+
         live_flights = flights.filter((flight) => { return flight['type'] == 'live' })
 
         a = document.createElement("DIV");
         a.setAttribute("id", this.id + "autocomplete-list");
         a.setAttribute("class", "autocomplete-items");
-        /*append the DIV element as a child of the autocomplete container:*/
-        this.parentNode.appendChild(a);
-        /*for each item in the array...*/
-        for (i = 0; i < live_flights.length; i++) {
-            console.log(x['detail']['callsign'] + "  " + x['detail']['route'])
 
-            /*check if the item starts with the same letters as the text field value:*/
-            if (live_flights[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
-                /*create a DIV element for each matching element:*/
-                b = document.createElement("DIV");
-                /*make the matching letters bold:*/
-                b.innerHTML = "<strong>" + live_flights[i].substr(0, val.length) + "</strong>";
-                b.innerHTML += live_flights[i].substr(val.length);
+        //this.parentNode.appendChild(a);
+
+        live_flights.forEach(flight => {
+            console.log(flight['label'] + " / " + flight['detail']['callsign'] + " / " + flight['detail']['route'])
+
+            if (flight['label'].substr(0, query_string.length).toUpperCase() == query_string.toUpperCase()) {
+
+                b = document.createElement("div");
+
+                b.innerHTML = "<strong>" + flight['label'].substr(0, query_string.length) + "</strong>";
+                b.innerHTML += flight['label'].substr(query_string.length);
+
                 /*insert a input field that will hold the current array item's value:*/
-                b.innerHTML += "<input type='hidden' value='" + live_flights[i] + "'>";
+
+                b.innerHTML += "<input type='hidden' value='" + flight['label'] + "'>";
                 /*execute a function when someone clicks on the item value (DIV element):*/
                 b.addEventListener("click", function (e) {
                     /*insert the value for the autocomplete text field:*/
@@ -136,7 +138,7 @@ function get_possible_autofill_flights(query_string) {
                 });
                 a.appendChild(b);
             }
-        }
+        });
 
     });
 }
