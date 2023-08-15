@@ -1,8 +1,4 @@
-* {
-  box-sizing: border-box;
-}
-
-.autocomplete {
+#track-a-flight_div {
   position: relative;
   display: inline-block;
 }
@@ -14,7 +10,7 @@
   font-size: 16px;
 }
 
-#track-a-flight_flight-num {
+#track-a-flight_flight-num[type=text] {
   background-color: #f1f1f1;
   width: 100%;
 }

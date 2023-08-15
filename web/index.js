@@ -101,6 +101,14 @@ function call_endpoint(endpoint, callback) {
     request.send();
 }
 
+function closeAllLists() {
+    var allitems = document.getElementsByClassName("autocomplete-items");
+
+    for (let x of allitems) {
+        document.getElementById("track-a-flight_div").removeChild(x)
+    }
+}
+
 function get_possible_autofill_flights(query_string) {
     call_endpoint("/get_possible_flights/" + query_string, function (value) {
         console.log(value)
@@ -109,35 +117,34 @@ function get_possible_autofill_flights(query_string) {
 
         live_flights = flights.filter((flight) => { return flight['type'] == 'live' })
 
-        a = document.createElement("DIV");
-        a.setAttribute("id", this.id + "autocomplete-list");
-        a.setAttribute("class", "autocomplete-items");
+        currentFocus = -1
 
-        //this.parentNode.appendChild(a);
+        closeAllLists();
+
+        a = document.createElement("div");
+        a.setAttribute("class", "autocomplete-items");
+        document.getElementById("track-a-flight_div").appendChild(a);
 
         live_flights.forEach(flight => {
             console.log(flight['label'] + " / " + flight['detail']['callsign'] + " / " + flight['detail']['route'])
 
-            if (flight['label'].substr(0, query_string.length).toUpperCase() == query_string.toUpperCase()) {
+            b = document.createElement("div");
 
-                b = document.createElement("div");
+            b.innerHTML = "<strong>" + flight['label'].substr(0, query_string.length) + "</strong>";
 
-                b.innerHTML = "<strong>" + flight['label'].substr(0, query_string.length) + "</strong>";
-                b.innerHTML += flight['label'].substr(query_string.length);
+            b.innerHTML += flight['label'].substr(query_string.length);
 
-                /*insert a input field that will hold the current array item's value:*/
+            b.innerHTML += "<input type='hidden' value='" + flight['label'] + "'>";
 
-                b.innerHTML += "<input type='hidden' value='" + flight['label'] + "'>";
-                /*execute a function when someone clicks on the item value (DIV element):*/
-                b.addEventListener("click", function (e) {
-                    /*insert the value for the autocomplete text field:*/
-                    inp.value = this.getElementsByTagName("input")[0].value;
-                    /*close the list of autocompleted values,
-                    (or any other open lists of autocompleted values:*/
-                    closeAllLists();
-                });
-                a.appendChild(b);
-            }
+            b.addEventListener("click", function (e) {
+                /*insert the value for the autocomplete text field:*/
+                inp.value = this.getElementsByTagName("input")[0].value;
+                /*close the list of autocompleted values,
+                (or any other open lists of autocompleted values:*/
+                closeAllLists();
+            });
+            a.appendChild(b);
+
         });
 
     });
