@@ -1,23 +1,20 @@
-#track-a-flight_flight-num {
-  border: 1px solid transparent;
-  background-color: #f1f1f1;
-  padding: 10px;
-  font-size: 16px;
+.track-a-flight_div {
+  position: relative;
 }
 
-#track-a-flight_flight-num[type=text] {
-  background-color: #f1f1f1;
+#track-a-flight_flight-num-input {
   width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 4px;
 }
 
 .autocomplete-items {
   border: 1px solid #d4d4d4;
-  position: relative;
-  left: 30px;
-  border-bottom: none;
   border-top: none;
+  position: absolute;
   z-index: 99;
-  top: 100%;
 }
 
 .autocomplete-items div {

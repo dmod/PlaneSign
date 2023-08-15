@@ -45,7 +45,7 @@
 
   <div class="groups_wrapper">
 
-    <fieldset id="firstbox" class="mode_selector_button_group box1">
+    <fieldset class="mode_selector_button_group box1">
       <legend>Planes</legend>
       <button id="1" class="mode_button" onclick="set_mode(this.id)">Default Mode</button>
       <button id="2" class="mode_button" onclick="set_mode(this.id)">Show Closest</button>
@@ -54,7 +54,7 @@
       <button id="5" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
       <button id="99" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
       <div id="track-a-flight_div" hidden>
-        <input id="track-a-flight_flight-num" oninput="get_possible_autofill_flights(this.value)"></input>
+        <input id="track-a-flight_flight-num-input" oninput="get_possible_autofill_flights(this.value)"></input>
       </div>
     </fieldset>
 

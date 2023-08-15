@@ -105,7 +105,7 @@ function closeAllLists() {
     var allitems = document.getElementsByClassName("autocomplete-items");
 
     for (let x of allitems) {
-        document.getElementById("firstbox").removeChild(x)
+        document.getElementById("track-a-flight_div").removeChild(x)
     }
 }
 
@@ -123,7 +123,7 @@ function get_possible_autofill_flights(query_string) {
 
         a = document.createElement("div");
         a.setAttribute("class", "autocomplete-items");
-        document.getElementById("firstbox").appendChild(a);
+        document.getElementById("track-a-flight_div").appendChild(a);
 
         live_flights.forEach(flight => {
             console.log(flight['label'] + " / " + flight['detail']['callsign'] + " / " + flight['detail']['route'])
@@ -138,7 +138,7 @@ function get_possible_autofill_flights(query_string) {
 
             b.addEventListener("click", function (e) {
                 closeAllLists();
-                document.getElementById("track-a-flight_flight-num").value = flight['detail']['callsign']
+                document.getElementById("track-a-flight_flight-num-input").value = flight['detail']['callsign']
                 call_endpoint('/set_track_a_flight/' + flight['id'])
             });
             a.appendChild(b);
