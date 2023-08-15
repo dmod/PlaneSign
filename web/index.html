@@ -54,7 +54,7 @@
       <button id="5" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
       <button id="99" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
       <div id="track-a-flight_div" hidden>
-        <input id="track-a-flight_flight-num-input" oninput="get_possible_autofill_flights(this.value)"></input>
+        <input id="track-a-flight_flight-num-input" oninput="this.value=this.value.replace( /[^a-zA-Z0-9]/ , ''); get_possible_autofill_flights(this.value)"></input>
       </div>
     </fieldset>
 
