@@ -50,8 +50,17 @@ window.onload = function () {
     toggle_switch.onchange = function () {
         if (document.getElementById("toggle_switch").checked) {
             call_endpoint('/turn_on')
+            call_endpoint("/get_mode", function (current_mode) {
+                if (current_mode && current_mode !== "0") {
+                    document.getElementById(current_mode).style.backgroundColor = "red";
+                    global_current_mode = current_mode;
+                }
+            });
         } else {
             call_endpoint('/turn_off')
+            if (global_current_mode) {
+                document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
+            }
         }
     }
 
@@ -215,7 +224,6 @@ function set_mode(mode) {
     } else {
         call_endpoint("/set_mode/" + mode);
     }
-    update_sign_status();
 
 }
 
