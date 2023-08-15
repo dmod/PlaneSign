@@ -52,10 +52,9 @@
       <button id="3" class="mode_button" onclick="set_mode(this.id)">Show Highest</button>
       <button id="4" class="mode_button" onclick="set_mode(this.id)">Show Fastest</button>
       <button id="5" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
-      <button id="99" class="mode_button" onclick="document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
+      <button id="99" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
       <div id="track-a-flight_div" hidden>
-        <input id="track-a-flight_flight-num" oninput="get_possible_autofill_flights(this.value)"></input>
-        <button id="track-a-flight_flight-num-button" onclick="set_mode(99); call_endpoint('/set_track_a_flight/' + document.getElementById('track-a-flight_flight-num').value);">Track-It™</button>
+        <input id="track-a-flight_flight-num" oninput="get_possible_autofill_flights(this.value)" inherit></input>
       </div>
     </fieldset>
 

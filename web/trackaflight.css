@@ -1,8 +1,3 @@
-#track-a-flight_div {
-  position: relative;
-  display: inline-block;
-}
-
 #track-a-flight_flight-num {
   border: 1px solid transparent;
   background-color: #f1f1f1;
@@ -15,13 +10,8 @@
   width: 100%;
 }
 
-#track-a-flight_flight-num-button {
-  background-color: DodgerBlue;
-  color: #fff;
-}
-
 .autocomplete-items {
-  position: absolute;
+  position: relative;
   border: 1px solid #d4d4d4;
   border-bottom: none;
   border-top: none;

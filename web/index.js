@@ -137,11 +137,8 @@ function get_possible_autofill_flights(query_string) {
             b.innerHTML += "<input type='hidden' value='" + flight['label'] + "'>";
 
             b.addEventListener("click", function (e) {
-                /*insert the value for the autocomplete text field:*/
-                inp.value = this.getElementsByTagName("input")[0].value;
-                /*close the list of autocompleted values,
-                (or any other open lists of autocompleted values:*/
                 closeAllLists();
+                call_endpoint('/set_track_a_flight/' + flight['id'])
             });
             a.appendChild(b);
 
