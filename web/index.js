@@ -101,6 +101,55 @@ function call_endpoint(endpoint, callback) {
     request.send();
 }
 
+function closeAllLists() {
+    var allitems = document.getElementsByClassName("autocomplete-items");
+
+    for (let x of allitems) {
+        document.getElementById("track-a-flight_div").removeChild(x)
+    }
+}
+
+function get_possible_autofill_flights(query_string) {
+    call_endpoint("/get_possible_flights/" + query_string, function (value) {
+        console.log(value)
+        flights = JSON.parse(value)['results']
+        console.log(flights.length)
+
+        live_flights = flights.filter((flight) => { return flight['type'] == 'live' })
+
+        currentFocus = -1
+
+        closeAllLists();
+
+        a = document.createElement("div");
+        a.setAttribute("class", "autocomplete-items");
+        document.getElementById("track-a-flight_div").appendChild(a);
+
+        live_flights.forEach(flight => {
+            console.log(flight['label'] + " / " + flight['detail']['callsign'] + " / " + flight['detail']['route'])
+
+            b = document.createElement("div");
+
+            let start = flight['label'].toLowerCase().search(query_string.toLowerCase())
+
+            b.innerHTML += flight['label'].substring(0, start);
+            b.innerHTML += "<strong>" + flight['label'].substr(start, query_string.length) + "</strong>";
+            b.innerHTML += flight['label'].substr(start + query_string.length);
+
+            b.innerHTML += "<br>" + flight['detail']['route']
+
+            b.addEventListener("click", function (e) {
+                closeAllLists();
+                document.getElementById("track-a-flight_flight-num-input").value = flight['detail']['callsign']
+                call_endpoint('/set_track_a_flight/' + flight['id'])
+            });
+            a.appendChild(b);
+
+        });
+
+    });
+}
+
 function update_brightness_slider() {
     call_endpoint("/get_brightness", function (value) {
         document.getElementById("brightness_slider").value = value;
@@ -215,8 +264,6 @@ function set_mode(mode) {
     } else {
         call_endpoint("/set_mode/" + mode);
     }
-    update_sign_status();
-
 }
 
 function set_lightning_mode(mode) {
@@ -231,7 +278,7 @@ function set_color_mode(color) {
     call_endpoint("/set_color_mode/" + color);
 }
 
-function set_countdown(datetime,msgstr) {
+function set_countdown(datetime, msgstr) {
     call_endpoint("/set_countdown/" + datetime + "/" + msgstr);
 }
 

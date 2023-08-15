@@ -135,6 +135,10 @@ def set_countdown(datetimestr,countdownmsg):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+@app.route("/get_possible_flights/<query_string>")
+def get_possible_flights(query_string):
+    return requests.get(f'https://www.flightradar24.com/v1/search/web/find?query={query_string}&limit=50').json()
+
 
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):

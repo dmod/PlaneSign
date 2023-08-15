@@ -21,36 +21,19 @@ def track_a_flight(sign):
 
     while shared_config.shared_mode.value == 99:
 
-        flight_num_to_track = shared_config.data_dict["track_a_flight_num"]
+        flight_num_hex = shared_config.data_dict["track_a_flight_num"]
 
         if (requests_limiter % 50 == 0):
-
-            hexreq = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={flight_num_to_track}&limit=10")
-            if hexreq and hexreq.status_code == requests.codes.ok:
-                parse_this_to_get_hex = hexreq.json()
-            else:
-                parse_this_to_get_hex = None
-                logging.exception("Unable to get Hex")
-
-            if parse_this_to_get_hex and "results" in parse_this_to_get_hex:
-                live_flight_info = utilities.first(parse_this_to_get_hex["results"], lambda x: x["type"] == "live")
-                logging.info(live_flight_info)
-            else:
-                live_flight_info = None
-                logging.exception("No live flight info")
-
-            if live_flight_info and "id" in live_flight_info:
                 
-                flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={live_flight_info['id']}")
-                if flightdatareq and flightdatareq.status_code == requests.codes.ok:
-                    flight_data = flightdatareq.json()
-                else:
-                    flight_data = None
+            flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={flight_num_hex}")
+            if flightdatareq and flightdatareq.status_code == requests.codes.ok:
+                flight_data = flightdatareq.json()
+            else:
+                flight_data = None
                 
             if flight_data and "trail" in flight_data:
                 current_location = flight_data['trail'][0]
-                reverse_geocode = requests.get(
-                    f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
+                reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
 
                 if len(reverse_geocode['results']) != 0:
                     formatted_address = reverse_geocode['results'][0]['formatted_address']

@@ -1,0 +1,29 @@
+.track-a-flight_div {
+  position: relative;
+}
+
+#track-a-flight_flight-num-input {
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.autocomplete-items {
+  border: 1px solid #d4d4d4;
+  border-top: none;
+  position: absolute;
+  z-index: 99;
+}
+
+.autocomplete-items div {
+  padding: 10px;
+  cursor: pointer;
+  background-color: #fff;
+  border-bottom: 1px solid #d4d4d4;
+}
+
+.autocomplete-items div:hover {
+  background-color: #e9e9e9;
+}
