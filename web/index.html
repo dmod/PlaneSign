@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
+  <link rel="stylesheet" href="trackaflight.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="index.js"></script>
   <title>Plane Sign</title>
@@ -53,8 +54,7 @@
       <button id="5" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
       <button id="99" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
       <div id="track-a-flight_div" hidden>
-        <input id="track-a-flight_flight-num"></input>
-        <button onclick="call_endpoint('/set_track_a_flight/' + document.getElementById('track-a-flight_flight-num').value);">Track-It™</button>
+        <input id="track-a-flight_flight-num-input" oninput="get_possible_autofill_flights(this.value)"></input>
       </div>
     </fieldset>
 

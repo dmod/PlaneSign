@@ -167,9 +167,6 @@ legend {
 
 #lightning_slider {
   writing-mode: bt-lr;
-  /* IE */
-  -webkit-appearance: slider-vertical;
-  /* WebKit */
   margin-right: 10px;
   margin-left: 10px;
   width: 50px;
