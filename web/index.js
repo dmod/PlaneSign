@@ -105,7 +105,7 @@ function closeAllLists() {
     var allitems = document.getElementsByClassName("autocomplete-items");
 
     for (let x of allitems) {
-        document.getElementById("track-a-flight_div").removeChild(x)
+        document.getElementById("firstbox").removeChild(x)
     }
 }
 
@@ -123,21 +123,22 @@ function get_possible_autofill_flights(query_string) {
 
         a = document.createElement("div");
         a.setAttribute("class", "autocomplete-items");
-        document.getElementById("track-a-flight_div").appendChild(a);
+        document.getElementById("firstbox").appendChild(a);
 
         live_flights.forEach(flight => {
             console.log(flight['label'] + " / " + flight['detail']['callsign'] + " / " + flight['detail']['route'])
 
             b = document.createElement("div");
 
-            b.innerHTML = "<strong>" + flight['label'].substr(0, query_string.length) + "</strong>";
+            let start = flight['label'].toLowerCase().search(query_string.toLowerCase())
 
-            b.innerHTML += flight['label'].substr(query_string.length);
-
-            b.innerHTML += "<input type='hidden' value='" + flight['label'] + "'>";
+            b.innerHTML += flight['label'].substring(0, start);
+            b.innerHTML += "<strong>" + flight['label'].substr(start, query_string.length) + "</strong>";
+            b.innerHTML += flight['label'].substr(start + query_string.length);
 
             b.addEventListener("click", function (e) {
                 closeAllLists();
+                document.getElementById("track-a-flight_flight-num").value = flight['detail']['callsign']
                 call_endpoint('/set_track_a_flight/' + flight['id'])
             });
             a.appendChild(b);
@@ -261,8 +262,6 @@ function set_mode(mode) {
     } else {
         call_endpoint("/set_mode/" + mode);
     }
-    update_sign_status();
-
 }
 
 function set_lightning_mode(mode) {
