@@ -136,6 +136,8 @@ function get_possible_autofill_flights(query_string) {
             b.innerHTML += "<strong>" + flight['label'].substr(start, query_string.length) + "</strong>";
             b.innerHTML += flight['label'].substr(start + query_string.length);
 
+            b.innerHTML += "<br>" + flight['detail']['route']
+
             b.addEventListener("click", function (e) {
                 closeAllLists();
                 document.getElementById("track-a-flight_flight-num-input").value = flight['detail']['callsign']
