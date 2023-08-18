@@ -120,13 +120,7 @@ function closeAllLists() {
 
 function get_possible_autofill_flights(query_string) {
     call_endpoint("/get_possible_flights/" + query_string, function (value) {
-        console.log(value)
-        flights = JSON.parse(value)['results']
-        console.log(flights.length)
-
-        live_flights = flights.filter((flight) => { return flight['type'] == 'live' })
-
-        currentFocus = -1
+        live_flights = JSON.parse(value)['results'].filter((flight) => { return flight['type'] == 'live' })
 
         closeAllLists();
 
@@ -135,8 +129,6 @@ function get_possible_autofill_flights(query_string) {
         document.getElementById("track-a-flight_div").appendChild(a);
 
         live_flights.forEach(flight => {
-            console.log(flight['label'] + " / " + flight['detail']['callsign'] + " / " + flight['detail']['route'])
-
             b = document.createElement("div");
 
             let start = flight['label'].toLowerCase().search(query_string.toLowerCase())
@@ -144,7 +136,6 @@ function get_possible_autofill_flights(query_string) {
             b.innerHTML += flight['label'].substring(0, start);
             b.innerHTML += "<strong>" + flight['label'].substr(start, query_string.length) + "</strong>";
             b.innerHTML += flight['label'].substr(start + query_string.length);
-
             b.innerHTML += "<br>" + flight['detail']['route']
 
             b.addEventListener("click", function (e) {
@@ -153,9 +144,7 @@ function get_possible_autofill_flights(query_string) {
                 call_endpoint('/set_track_a_flight/' + flight['id'])
             });
             a.appendChild(b);
-
         });
-
     });
 }
 

@@ -14,7 +14,7 @@ def track_a_flight(sign):
     if "track_a_flight_num" not in shared_config.data_dict:
         sign.canvas.Clear()
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        return
+        return sign.wait_loop(-1)
 
     requests_limiter = 0
     blip_count = 0
@@ -53,7 +53,7 @@ def track_a_flight(sign):
             flight_number_header = f"- {flight_data['identification']['callsign']} -"
 
             graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
-            
+
             graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
             graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
 
@@ -79,12 +79,14 @@ def track_a_flight(sign):
             else:
                 end_time = scheduled_end_time
 
-            # Current progress divided by total
-            current_time = int(time.time())
-            duration = end_time - start_time
-            current_progress = current_time - start_time
+            origin_distance_to_destination = utilities.get_distance((flight_data['airport']['origin']['position']['latitude'], flight_data['airport']['origin']['position']['longitude']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
+            current_position_to_destination = utilities.get_distance((current_location['lat'], current_location['lng']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
 
-            percent_complete = current_progress / duration
+            # Handle case where origin and destination are the same
+            if origin_distance_to_destination == 0:
+                percent_complete = 0
+            else:
+                percent_complete = round((origin_distance_to_destination - current_position_to_destination) / origin_distance_to_destination, 2)
 
             line_x_start = 30
             line_x_end = 98
@@ -122,8 +124,6 @@ def track_a_flight(sign):
             else:
                 graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
                 graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
-
-            #graphics.DrawText(sign.canvas, sign.font46, 31, 17, graphics.Color(200, 200, 10), flight_data['aircraft']['model']['text'])
 
             if current_location:
                 graphics.DrawText(sign.canvas, sign.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")

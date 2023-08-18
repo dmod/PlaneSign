@@ -297,6 +297,8 @@ class PlaneSign:
 
         self.matrix.brightness = shared_config.shared_current_brightness.value
 
+    # Call this with a positive value to stay within the loop for that specificed amount of time
+    # Call this with -1 to stay in the loop forever or until shared_forced_sign_update is set
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
 
