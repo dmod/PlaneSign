@@ -27,6 +27,7 @@ import lightning
 import firework
 import weather
 import moon
+import mandelbrot
 import planesign
 import signal
 import sys
