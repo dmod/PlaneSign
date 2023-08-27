@@ -46,7 +46,7 @@ cd $PLANESIGN_DIR
 git pull --rebase --autostash https://dmod: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@github.com/dmod/PlaneSign
 
 #Install required junk
-sudo apt install llvm-11
+sudo apt -y install llvm-11
 sudo -H LLVM_CONFIG=/usr/bin/llvm-config-11 pip3 install llvmlite numba
 
 #Install packages: Todo - have fallbacks for failed versions instead of current default action (giving up)
