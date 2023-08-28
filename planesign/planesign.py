@@ -212,6 +212,10 @@ def set_lightning_mode(mode):
     shared_config.shared_lighting_mode.value = int(mode)
     return ""
 
+@app.route("/mandelbrot_color/<mode>")
+def set_mandelbrot_color(mode):
+    shared_config.shared_mandelbrot_color.value = int(mode)
+    return ""
 
 @app.route("/satellite_mode/<mode>")
 def set_satellite_mode(mode):

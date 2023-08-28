@@ -120,7 +120,19 @@
         <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode(10)" value="2">
         <label for="colorshift">Color Shifting</label>
       </div>
-      <button id="22" class="mode_button" onclick="set_mode(this.id)">Mandelbrot</button>
+      <button id="22" class="mode_button" onclick="set_mode(this.id); document.getElementById('mandelbrot_div').hidden = false">Mandelbrot</button>
+      <div id="mandelbrot_div" hidden>
+        <label for="colormap">Colormap:</label>
+        <select name="colormap" id="colormap" onchange="set_mandelbrot_color(this.value);">
+          <option value="0">Rainbow</option>
+          <option value="1">Sunset</option>
+          <option value="2">Nova</option>
+          <option value="3">Vaporwave</option>
+          <option value="4">70's</option>
+          <option value="5">Pastel</option>
+          <option value="6">Greyscale</option>
+        </select> 
+      </div>
       <button id="11" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
       <div id="pong_div" hidden>
         <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">

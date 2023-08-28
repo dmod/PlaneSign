@@ -46,35 +46,50 @@ def is_inside_period_3_bulb(x,y):
 def calculate_max_iter(zoom_factor):
     return int(1000 / np.sqrt(zoom_factor))
 
-def setcolor(index):
+def setcolor(index,mode):
 
-    #Sunset
-    #colors = [(0,0,0),(14,81,181),(18,218,222),(255,255,248),(242,210,82),(207,88,29),(0,0,0)]
-    #keypts = [0,0.16144,0.351671,0.501285,0.620051,0.8,1]
+    if mode == 0:
 
-    #Nova
-    #colors = [(0,0,0),(15,50,190),(255,255,255),(255,200,30),(111,0,255),(0,0,0)]
-    #keypts = [0,0.2,0.4,0.6,0.8,1]
+        #Saturated
+        colors = [(255,0,0),(255,255,0),(0,255,0),(0,255,255),(0,0,255),(255,0,255),(255,0,0)]
+        keypts = [0,0.2,0.33,0.45,0.6,0.83,1]
 
-    #Vaporwave
-    #colors = [(48,3,80),(148,22,127),(246,46,151),(249,172,83),(5,195,221),(21,60,180),(48,3,80)]
-    #keypts = [0,0.15,0.3,0.44,0.73,0.9,1]
+    elif mode == 1:
 
-    #70s
-    #colors = [(0,18,25),(0,95,115),(10,147,150),(148,210,189),(233,216,166),(238,155,0),(202,103,2),(174,32,18),(0,18,25)]
-    #keypts = [0,0.1,0.2,0.35,0.5,0.6,0.7,0.8,1]
+        #Sunset
+        colors = [(0,0,0),(14,81,181),(18,218,222),(255,255,248),(242,210,82),(207,88,29),(0,0,0)]
+        keypts = [0,0.16144,0.351671,0.501285,0.620051,0.8,1]
 
-    #Rainbow
-    #colors = [(255,89,94),(255,202,58),(138,201,38),(25,130,196),(106,76,147),(255,89,94)]
-    #keypts = [0,0.2,0.4,0.6,0.8,1]
+    elif mode == 2:
 
-    #Greyscale
-    #colors = [(0,0,0),(200,200,200),(0,0,0)]
-    #keypts = [0,0.5,1]
+        #Nova
+        colors = [(0,0,0),(15,50,190),(255,255,255),(255,200,30),(111,0,255),(0,0,0)]
+        keypts = [0,0.2,0.4,0.6,0.8,1]
 
-    #Saturated
-    colors = [(255,0,0),(255,255,0),(0,255,0),(0,255,255),(0,0,255),(255,0,255),(255,0,0)]
-    keypts = [0,0.2,0.33,0.45,0.6,0.83,1]
+    elif mode == 3:
+
+        #Vaporwave
+        colors = [(48,3,80),(148,22,127),(246,46,151),(249,172,83),(5,195,221),(21,60,180),(48,3,80)]
+        keypts = [0,0.15,0.3,0.44,0.73,0.9,1]
+
+    elif mode == 4:
+
+        #70s
+        colors = [(0,18,25),(0,95,115),(10,147,150),(148,210,189),(233,216,166),(238,155,0),(202,103,2),(174,32,18),(0,18,25)]
+        keypts = [0,0.1,0.2,0.35,0.5,0.6,0.7,0.8,1]
+
+    elif mode == 5:
+
+        #Rainbow
+        colors = [(255,89,94),(255,202,58),(138,201,38),(25,130,196),(106,76,147),(255,89,94)]
+        keypts = [0,0.2,0.4,0.6,0.8,1]
+
+    else:
+
+        #Greyscale
+        colors = [(0,0,0),(200,200,200),(0,0,0)]
+        keypts = [0,0.5,1]
+
 
     index = index % 1
 
@@ -155,7 +170,6 @@ def mandelbrot_zoom(sign):
 
         while frame<900:
             tstart = time.perf_counter()
-            print(frame)
                 
             # Calculate the bounds of the visible area based on the zoomed frame
             zoom_factor = 2 ** (-0.05 * frame)
@@ -173,6 +187,8 @@ def mandelbrot_zoom(sign):
             mandelbrot_iters = np.zeros((32, 128), dtype=int)
             mandelbrot_modulus = np.zeros((32, 128), dtype=int)
 
+            cmode = shared_config.shared_mandelbrot_color.value
+
             for i in prange(32):
                 for j in prange(128):
                     
@@ -185,7 +201,7 @@ def mandelbrot_zoom(sign):
                             pass
                         else:
                             index = np.log2(mandelbrot_iters - np.log(np.log(mandelbrot_modulus))/np.log(2))/np.log2(10)
-                            r,g,b = setcolor(index)
+                            r,g,b = setcolor(index,cmode)
                             sign.canvas.SetPixel(j, i, r, g, b)
             
             sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)

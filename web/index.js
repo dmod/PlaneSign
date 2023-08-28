@@ -249,6 +249,9 @@ function set_mode(mode) {
     if (mode !== 21) {
         document.getElementById('countdown_div').hidden = true;
     }
+    if (mode !== 22) {
+        document.getElementById('mandelbrot_div').hidden = true;
+    }
     if (mode !== 99) {
         document.getElementById('track-a-flight_div').hidden = true;
     }
@@ -267,6 +270,10 @@ function set_mode(mode) {
 
 function set_lightning_mode(mode) {
     call_endpoint("/lightning_mode/" + mode);
+}
+
+function set_mandelbrot_color(mode) {
+    call_endpoint("/mandelbrot_color/" + mode);
 }
 
 function set_satellite_mode(mode) {
