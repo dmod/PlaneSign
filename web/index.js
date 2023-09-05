@@ -35,6 +35,10 @@ window.onload = function () {
         call_endpoint("/set_custom_message/" + encodeURIComponent(this.value));
     }
 
+    document.getElementById("mandelbrot_slider").oninput = function () {
+        call_endpoint("/set_mandelbrot_colorscale/" + this.value);
+    }
+
     document.getElementById("pong_player1_slider").oninput = function () {
         call_endpoint("/set_pong_player_1/" + encodeURIComponent(this.value));
     }

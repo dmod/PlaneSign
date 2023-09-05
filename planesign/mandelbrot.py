@@ -6,7 +6,6 @@
 import time
 import numpy as np
 from numba import njit, jit, prange
-import utilities
 import shared_config
 import __main__
 import logging
@@ -14,26 +13,48 @@ import logging
 # Function to calculate whether a point is in the Mandelbrot set
 @njit
 def mandelbrot(x0,y0, max_iter):
+    power = lam = 1
     x = 0
     y = 0
+    tortoise = hare = (x,y)
     iteration = 0
+    condition = 1
     while x*x + y*y <= 4 and iteration < max_iter:
+        
+        if iteration > 0:
+            condition = (tortoise[0] - hare[0])*(tortoise[0] - hare[0])+(tortoise[1] - hare[1])*(tortoise[1] - hare[1])
+        
+        if condition < 1e-32: # cycle detected - inside of set
+            return max_iter, np.float32(0)
+        else: # advance tortoise for cycle detection
+            if power == lam:
+                tortoise = hare
+                power *= 2
+                lam = 0
+            
         xtemp = x*x - y*y + x0
         y = 2*x*y + y0
         x = xtemp
+        
+        hare = (x,y)
+        lam += 1
+            
         iteration += 1
+        
     return iteration, np.sqrt(x*x+y*y)
 
-# Main cardioid and period-2 bulb checking
+# Main cardioid checking (exact)
 @njit
 def is_inside_main_cardioid(x,y):
     q = (x - 0.25) ** 2 + y ** 2
     return q * (q + (x - 0.25)) < 0.25 * y ** 2
 
+#Period-2 bulb checking (exact)
 @njit
 def is_inside_period_2_bulb(x,y):
     return (x + 1) ** 2 + y ** 2 < 0.0625
 
+#Period-3 bulb checking (approximate)
 @njit
 def is_inside_period_3_bulb(x,y):
     if (x + 0.12256) ** 2 + (y+0.74486) ** 2 < 0.00925926 or (x + 0.12256) ** 2 + (y-0.74486) ** 2 < 0.00925926:
@@ -153,20 +174,27 @@ def mandelbrot_zoom(sign):
     numba_logger = logging.getLogger('numba')
     numba_logger.setLevel(logging.WARNING)
 
+    # Initialize an empty list to store tuples
+    pois = []
+
+    # Open the file for reading
+    with open("mandelbrot_poi.txt", 'r') as file:
+        # Iterate through each line in the file
+        for line in file:
+            # Split the line into two floats using tab as the delimiter
+            parts = line.strip().split('\t')
+            pois.append((float(parts[0]), float(parts[1])))
+
+
+    lp = len(pois)
+
     # Parameters for the Mandelbrot set and animation
     INIT_WIDTH, INIT_HEIGHT = 7*3, 7*3*32/128
-    NUM_FRAMES = 950
-    PRECISION = 1e-3
 
-    frame = 0
-    
     while shared_config.shared_mode.value == 22:
 
-        # Find a point on the border of the Mandelbrot set
-        border_point = find_border_point(PRECISION)
-
-        xb,yb = border_point
-        
+        xb,yb = pois[np.random.randint(0, high=lp)]#find_border_point(1e-3)
+        frame = 0
 
         while frame<900:
             tstart = time.perf_counter()
@@ -188,21 +216,25 @@ def mandelbrot_zoom(sign):
             mandelbrot_modulus = np.zeros((32, 128), dtype=int)
 
             cmode = shared_config.shared_mandelbrot_color.value
+            cscale = shared_config.shared_mandelbrot_colorscale.value
 
+            iters = np.empty((32,128))
+                        
             for i in prange(32):
                 for j in prange(128):
                     
                     if is_inside_main_cardioid(x[j],y[i]) or is_inside_period_2_bulb(x[j],y[i]):
-                        pass
+                        iters[i][j] = MAX_ITER
                     else:
                         mandelbrot_iters, mandelbrot_modulus = mandelbrot(x[j], y[i], MAX_ITER)
 
                         if mandelbrot_iters == MAX_ITER or mandelbrot_iters <= 1:
-                            pass
+                            iters[i][j] = MAX_ITER
                         else:
-                            index = np.log2(mandelbrot_iters - np.log(np.log(mandelbrot_modulus))/np.log(2))/np.log2(10)
+                            index = np.log2(mandelbrot_iters - np.log(np.log(mandelbrot_modulus))/np.log(2))/cscale
                             r,g,b = setcolor(index,cmode)
                             sign.canvas.SetPixel(j, i, r, g, b)
+                            iters[i][j] = mandelbrot_iters
             
             sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
             sign.canvas.Clear()
@@ -212,9 +244,5 @@ def mandelbrot_zoom(sign):
 
             frame += 1
 
-            if time.perf_counter() - tstart > 1:
-                breakout = 1
+            if time.perf_counter() - tstart > 1 or np.all(np.isclose(iters, iters[0], atol=2)):
                 break
-
-        if breakout:
-            return
