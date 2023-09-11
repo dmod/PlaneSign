@@ -219,7 +219,7 @@ def set_mandelbrot_color(mode):
 
 @app.route("/set_mandelbrot_colorscale/<mode>")
 def set_mandelbrot_colorscale(mode):
-    shared_config.shared_mandelbrot_colorscale.value = int(mode)
+    shared_config.shared_mandelbrot_colorscale.value = float(mode)
     return ""
 
 @app.route("/satellite_mode/<mode>")

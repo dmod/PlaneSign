@@ -244,5 +244,5 @@ def mandelbrot_zoom(sign):
 
             frame += 1
 
-            if time.perf_counter() - tstart > 1 or np.all(np.isclose(iters, iters[0], atol=2)):
+            if time.perf_counter() - tstart > 1 or np.all(np.isclose(iters, iters[0], atol=2)) or np.sum(iters == MAX_ITER)>3900:
                 break
