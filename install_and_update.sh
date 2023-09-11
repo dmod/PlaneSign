@@ -49,8 +49,13 @@ git pull --rebase --autostash https://dmod:ghp_jvMG5awHovYVPxgdp1HBeyRVNlgMf50Z8
 sudo apt -y install llvm-11
 sudo -H LLVM_CONFIG=/usr/bin/llvm-config-11 pip3 install llvmlite numba
 
-#Install packages: Todo - have fallbacks for failed versions instead of current default action (giving up)
-sudo -H pip3 install -r requirements.txt
+#Install packages
+#sudo -H pip3 install -r requirements.txt
+while IFS= read -r package; do
+  if [ -n "$package" ]; then
+    sudo -H pip3 install "$package"
+  fi
+done < requirements.txt
 
 # Update cache
 ./update_static_cache.py
