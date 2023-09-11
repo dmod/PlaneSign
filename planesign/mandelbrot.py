@@ -71,13 +71,13 @@ def setcolor(index,mode):
 
     if mode == 0:
 
-        #Saturated
+        #Saturated Rainbow
         colors = [(255,0,0),(255,255,0),(0,255,0),(0,255,255),(0,0,255),(255,0,255),(255,0,0)]
         keypts = [0,0.2,0.33,0.45,0.6,0.83,1]
 
     elif mode == 1:
 
-        #Sunset
+        #Sunrise
         colors = [(0,0,0),(14,81,181),(18,218,222),(255,255,248),(242,210,82),(207,88,29),(0,0,0)]
         keypts = [0,0.16144,0.351671,0.501285,0.620051,0.8,1]
 
@@ -101,9 +101,27 @@ def setcolor(index,mode):
 
     elif mode == 5:
 
-        #Rainbow
+        #Pastel Rainbow
         colors = [(255,89,94),(255,202,58),(138,201,38),(25,130,196),(106,76,147),(255,89,94)]
         keypts = [0,0.2,0.4,0.6,0.8,1]
+
+    elif mode == 6:
+
+        #Neon
+        colors = [(128, 0, 128), (255, 20, 147), (0, 0, 128), (0, 255, 255), (128, 0, 128)]
+        keypts = [0, 0.2, 0.4, 0.7, 1]
+
+    elif mode == 7:
+
+        #Elemental
+        colors = [(255, 69, 0), (255, 255, 0), (255, 255, 153), (173, 216, 230), (0, 0, 128), (25, 25, 112), (255, 69, 0)]
+        keypts = [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1]
+
+    elif mode == 8:
+
+        #Fire
+        colors = [(255, 69, 0), (255, 128, 0), (255, 191, 0), (255, 215, 0), (255, 239, 204), (255, 204, 0), (255, 153, 0), (255, 102, 0), (255, 51, 0), (204, 0, 0), (153, 0, 0), (102, 0, 0), (51, 0, 0), (0, 0, 0), (255, 69, 0)]
+        keypts = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1]
 
     else:
 
@@ -193,7 +211,11 @@ def mandelbrot_zoom(sign):
 
     while shared_config.shared_mode.value == 22:
 
-        xb,yb = pois[np.random.randint(0, high=lp)]#find_border_point(1e-3)
+        if np.random.rand()<0.1:
+            xb,yb = find_border_point(1e-3)
+        else:
+            xb,yb = pois[np.random.randint(0, high=lp)]
+        
         frame = 0
 
         while frame<900:
