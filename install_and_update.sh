@@ -25,7 +25,7 @@ fi
 sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
 
 # apt install system packages
-sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg
+sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg libffi-dev
 
 # Install rpi-rgb-led-matrix
 LED_MATRIX_DIR="${INSTALL_DIR}/rpi-rgb-led-matrix"
