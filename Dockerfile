@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y \
   build-essential \
   nginx \
   git \
+  cmake \
+  libffi-dev \
   libxml2-dev \
   libxslt-dev \
   python3 \
