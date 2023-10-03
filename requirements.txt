@@ -1,10 +1,11 @@
+numpy==1.22.0
 timezonefinder==5.2.0
 country-converter==0.7.4
 favicon==0.7.0
 Flask==2.1.2
+Werkzeug==2.1.2
 Flask-Cors==3.0.10
 pytz==2022.1
-numpy==1.21.0
 pyowm==3.3.0
 requests==2.27.1
 scipy==1.8.0
