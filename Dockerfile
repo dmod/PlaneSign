@@ -19,24 +19,17 @@
 # docker logs planesign
 # docker stats
 
-FROM arm32v7/ubuntu:latest
+FROM arm64v8/alpine:3.19.0
 
-RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-
-RUN apt-get update && apt-get install -y \
-  build-essential \
+RUN apk update && apk add \
   nginx \
   git \
-  cmake \
-  libffi-dev \
-  libxml2-dev \
-  libxslt-dev \
   python3 \
-  python3-venv \
-  python3-pip \
   python3-dev \
-  python3-pillow \
-  libatlas-base-dev \
+  py3-pip \
+  py3-cmake-build-extension \
+  make \
+  g++ \
   gfortran
 
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
