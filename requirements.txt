@@ -1,4 +1,5 @@
-numpy==1.22.0
+numpy==1.26.2
+scipy==1.11.0
 timezonefinder==5.2.0
 country-converter==0.7.4
 favicon==0.7.0
@@ -8,7 +9,6 @@ Flask-Cors==3.0.10
 pytz==2022.1
 pyowm==3.3.0
 requests==2.27.1
-scipy==1.8.0
 websocket-client==1.3.2
 yfinance==0.1.70
 gevent==21.12.0

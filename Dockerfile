@@ -29,7 +29,9 @@ RUN apk update && apk add \
   py3-pip \
   py3-cmake-build-extension \
   make \
+  cmake \
   g++ \
+  openblas \
   gfortran
 
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
@@ -38,6 +40,6 @@ WORKDIR /planesign
 
 COPY . .
 
-RUN pip3 install -r requirements.txt
+RUN python3 -m venv .venv && source .venv/bin/activate && pip3 install -r requirements.txt
 
 ENTRYPOINT python3 planesign/
