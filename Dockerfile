@@ -30,6 +30,8 @@ RUN apk update && apk add \
   py3-numpy \
   py3-scipy \
   py3-pandas \
+  llvm14 \
+  llvm14-dev \
   make \
   cmake \
   g++
@@ -40,6 +42,6 @@ WORKDIR /planesign
 
 COPY . .
 
-RUN python3 -m venv .venv && source .venv/bin/activate && pip3 install -r requirements.txt
+RUN pip3 install --break-system-packages -r requirements.txt
 
 ENTRYPOINT python3 planesign/
