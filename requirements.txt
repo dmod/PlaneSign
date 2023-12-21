@@ -1,5 +1,3 @@
-numpy==1.26.2
-scipy==1.11.0
 timezonefinder==5.2.0
 country-converter==0.7.4
 favicon==0.7.0
@@ -11,6 +9,5 @@ pyowm==3.3.0
 requests==2.27.1
 websocket-client==1.3.2
 yfinance==0.1.70
-gevent==21.12.0
 FlightRadarAPI==1.2.0
-skyfield==1.45
+skyfield==1.46
