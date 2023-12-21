@@ -28,10 +28,15 @@ RUN apk update && apk add \
   python3-dev \
   py3-pip \
   py3-cmake-build-extension \
+  py3-pkgconfig \
   make \
   cmake \
   g++ \
   openblas \
+  linux-headers \
+  openblas-dev \
+  libffi \
+  libffi-dev \
   gfortran
 
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
