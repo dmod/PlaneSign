@@ -3,7 +3,7 @@ name: CI to Docker Hub
 on:
   push:
     branches:
-      - 'docker-fixes-hopefully-works'
+      - 'main'
     tags:
       - "v*.*.*"
 
