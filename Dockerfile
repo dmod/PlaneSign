@@ -42,6 +42,8 @@ WORKDIR /planesign
 
 COPY . .
 
+ENV LLVM_CONFIG=/usr/lib/llvm14/bin/llvm-config
+
 RUN pip3 install --break-system-packages -r requirements.txt
 
 ENTRYPOINT python3 planesign/
