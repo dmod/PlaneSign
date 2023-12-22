@@ -1,24 +1,3 @@
-# THIS IS A BIG TIME WIP
-
-# Build:
-# docker build -t planesign:latest .
-
-# Pull:
-# docker pull dmod/planesign:latest
-
-# Lifecycle:
-# docker run --privileged --rm --name planesign -p 80:80/tcp dmod/planesign:latest
-# docker run --privileged --rm --name planesign -p 80:80/tcp planesign:latest
-# docker kill planesign
-
-# Tips:
-# docker info
-# docker image ls
-# docker container ls
-# docker ps --all
-# docker logs planesign
-# docker stats
-
 FROM arm64v8/alpine:3.19.0
 
 RUN apk update && apk add \
@@ -39,6 +18,9 @@ RUN apk update && apk add \
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
 
 WORKDIR /planesign
+
+EXPOSE 80/tcp
+EXPOSE 5000/tcp
 
 COPY . .
 
