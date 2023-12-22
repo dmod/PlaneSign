@@ -24,6 +24,8 @@ EXPOSE 5000/tcp
 
 COPY . .
 
+RUN rm /etc/nginx/http.d/default.conf
+
 COPY docker_nginx_planesign.conf /etc/nginx/http.d/
 
 ENV LLVM_CONFIG=/usr/lib/llvm14/bin/llvm-config
