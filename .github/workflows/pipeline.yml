@@ -12,6 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: Output Run ID
+        run: echo ${{ github.run_id }}
+      - name: Output Run Number
+        run: echo ${{ github.run_number }}
+      - name: Output Run Attempt
+        run: echo ${{ github.run_attempt }}
+
       - name: Set up QEMU
         id: qemu
         uses: docker/setup-qemu-action@v3
@@ -41,5 +48,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
+          platforms: linux/arm64,linux/arm/v7
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/planesign:latest
 
