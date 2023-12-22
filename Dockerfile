@@ -20,7 +20,6 @@ RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-le
 WORKDIR /planesign
 
 EXPOSE 80/tcp
-EXPOSE 5000/tcp
 
 COPY . .
 
