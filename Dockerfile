@@ -1,4 +1,4 @@
-FROM arm64v8/alpine:3.19.0
+FROM alpine:3.19.0
 
 RUN apk update && apk add \
   nginx \
