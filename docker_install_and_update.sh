@@ -43,7 +43,7 @@ echo \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
@@ -53,9 +53,3 @@ docker rm --force PlaneSignRuntime # Stops and removes any existing container
 docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
 
 echo "Installation and configuration completed!"
-
-if [[ "$1" == "--reboot" ]]
-then
-  echo "...Rebooting"
-  sudo reboot
-fi
