@@ -1,6 +1,9 @@
 #!/bin/bash
 
-# This aim of this script is to be idempotent
+if [ "$USER" = root ]; then
+    echo "This script shouldn't be run as root. Aborting."
+    exit 1
+fi
 
 # to skip any questions from APT
 export DEBIAN_FRONTEND=noninteractive
@@ -24,12 +27,13 @@ sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
 
 # Stop existing versions of nginx
 sudo systemctl disable nginx
+crontab -r
 
 # Add Docker's official GPG key:
 sudo apt-get update
 sudo apt-get install ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
 # Add the repository to Apt sources:
@@ -41,16 +45,12 @@ sudo apt-get update
 
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-sudo groupadd docker
-sudo usermod -aG docker $USER
-newgrp docker
-
-docker pull dmod/planesign:latest
-
-docker run --detach --restart unless-stopped --privileged -p 80:80 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
-
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
+
+docker pull dmod/planesign:latest
+docker rm --force PlaneSignRuntime # Stops and removes any existing container
+docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
 
 echo "Installation and configuration completed!"
 
