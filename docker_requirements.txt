@@ -9,7 +9,7 @@ Pillow==10.1.0
 pyowm==3.3.0
 requests==2.31.0
 websocket-client==1.3.2
-yfinance==0.1.70
+yfinance==0.2.33
 FlightRadarAPI==1.2.0
 skyfield==1.46
 numba==0.58.1

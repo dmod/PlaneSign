@@ -9,6 +9,7 @@ RUN apk update && apk add \
   py3-numpy \
   py3-scipy \
   py3-pandas \
+  py3-lxml \
   llvm14 \
   llvm14-dev \
   libffi-dev \
