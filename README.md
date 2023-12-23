@@ -28,7 +28,12 @@
 - **Now put it in the actual pi**
 - (RECOMMENDED): Change hostname to 'planesign' with: sudo raspi-config -> System Options -> Hostname
 
-### One-step install:
+### DOCKER one-step install:
+```sh
+cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh
+```
+
+### Classic one-step install:
 ```sh
 cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```

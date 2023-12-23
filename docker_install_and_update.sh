@@ -22,6 +22,9 @@ fi
 # Turn off onboard audio
 sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
 
+# Stop existing versions of nginx
+sudo systemctl disable nginx
+
 # Add Docker's official GPG key:
 sudo apt-get update
 sudo apt-get install ca-certificates curl gnupg
@@ -42,12 +45,12 @@ sudo groupadd docker
 sudo usermod -aG docker $USER
 newgrp docker
 
-docker pull dmod/planesign
+docker pull dmod/planesign:latest
+
+docker run --detach --restart unless-stopped --privileged -p 80:80 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
 
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
-
-# NEED TO MAKE SURE DOCKER CONTAINER STARTS HERE
 
 echo "Installation and configuration completed!"
 
