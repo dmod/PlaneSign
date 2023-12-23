@@ -11,6 +11,7 @@ RUN apk update && apk add \
   py3-pandas \
   llvm14 \
   llvm14-dev \
+  libffi-dev \
   make \
   cmake \
   g++
