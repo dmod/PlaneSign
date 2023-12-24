@@ -52,6 +52,10 @@ sudo usermod -aG docker $USER
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
 
+if [ ! -f /home/pi/PlaneSign/sign.conf ]; then
+  cp /home/pi/PlaneSign/sign.conf.sample /home/pi/PlaneSign/sign.conf
+fi
+
 sudo docker pull dmod/planesign:latest
 sudo docker rm --force PlaneSignRuntime # Stops and removes any existing container
 sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
