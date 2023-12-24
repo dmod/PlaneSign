@@ -30,7 +30,7 @@
 
 ### DOCKER one-step install:
 ```sh
-cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh
+cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh --reboot
 ```
 
 ### Classic one-step install:
