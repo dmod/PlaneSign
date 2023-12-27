@@ -11,6 +11,7 @@ RUN apk update && apk add \
   py3-pandas \
   py3-lxml \
   ffplay \
+  jpeg \
   zlib \
   zlib-dev \
   llvm14 \
