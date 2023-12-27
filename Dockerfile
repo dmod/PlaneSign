@@ -3,7 +3,6 @@ FROM alpine:3.19.0
 RUN apk update && apk add \
   nginx \
   git \
-  build-deps \
   python3 \
   python3-dev \
   py3-pip \
