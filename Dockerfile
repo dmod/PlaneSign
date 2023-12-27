@@ -10,6 +10,7 @@ RUN apk update && apk add \
   py3-scipy \
   py3-pandas \
   py3-lxml \
+  py3-gevent \
   py3-pillow \
   py3-pillow-pyc \
   ffplay \

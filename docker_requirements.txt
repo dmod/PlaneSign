@@ -12,4 +12,3 @@ yfinance==0.2.33
 FlightRadarAPI==1.2.0
 skyfield==1.46
 numba==0.58.1
-gevent==23.9.1
