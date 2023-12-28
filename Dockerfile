@@ -40,6 +40,6 @@ COPY docker_nginx_planesign.conf /etc/nginx/http.d/
 
 ENV LLVM_CONFIG=/usr/lib/llvm14/bin/llvm-config
 
-RUN pip3 install --break-system-packages -r docker_requirements.txt
+RUN pip3 install --break-system-packages -vvv -r docker_requirements.txt
 
 ENTRYPOINT /usr/sbin/nginx && python3 planesign/
