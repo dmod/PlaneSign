@@ -13,6 +13,7 @@ RUN apk update && apk add \
   py3-gevent \
   py3-pillow \
   py3-pillow-pyc \
+  py3-tz \
   ffplay \
   zlib \
   zlib-dev \
