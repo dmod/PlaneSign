@@ -3,6 +3,7 @@ FROM alpine:3.19.0
 RUN apk update && apk add \
   nginx \
   git \
+  openssl \
   python3 \
   python3-dev \
   py3-pip \
@@ -12,7 +13,6 @@ RUN apk update && apk add \
   py3-lxml \
   py3-gevent \
   py3-pillow \
-  py3-pillow-pyc \
   py3-tz \
   ffplay \
   zlib \
@@ -30,12 +30,13 @@ RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-le
 
 WORKDIR /planesign
 
-EXPOSE 80/tcp
+EXPOSE 80/tcp 443/tcp
 
 COPY . .
 
+# Nginx Setup
 RUN rm /etc/nginx/http.d/default.conf
-
+RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
 COPY docker_nginx_planesign.conf /etc/nginx/http.d/
 
 ENV LLVM_CONFIG=/usr/lib/llvm14/bin/llvm-config
