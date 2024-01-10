@@ -57,7 +57,7 @@ if [ ! -f /home/pi/PlaneSign/sign.conf ]; then
 fi
 
 sudo docker pull dmod/planesign:latest
-sudo docker rm --force PlaneSignRuntime # Stops and removes any existing container
+sudo docker top PlaneSignRuntime 1>/dev/null 2>&1 && docker rm --force PlaneSignRuntime # Stops and removes any existing container
 sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 -p 443:443 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
 
 echo "Installation and configuration completed!"
