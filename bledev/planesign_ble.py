@@ -12,57 +12,38 @@ LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_MANAGER_IFACE =           'org.bluez.GattManager1'
 GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
 UART_SERVICE_UUID =            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
-UART_RX_CHARACTERISTIC_UUID =  '6e400002-b5a3-f393-e0a9-e50e24dcca9e'
-UART_TX_CHARACTERISTIC_UUID =  '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
 LOCAL_NAME =                   'rpi-planesign-gatt-server'
 mainloop = None
 
-class TxCharacteristic(Characteristic):
+class SendThemAStaticValue(Characteristic):
+    
+    TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef1'
+
     def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, UART_TX_CHARACTERISTIC_UUID,
-                                ['notify'], service)
-        self.notifying = False
-        GLib.io_add_watch(sys.stdin, GLib.IO_IN, self.on_console_input)
-
-    def on_console_input(self, fd, condition):
-        s = fd.readline()
-        if s.isspace():
-            pass
-        else:
-            self.send_tx(s)
-        return True
-
-    def send_tx(self, s):
-        if not self.notifying:
-            return
-        value = []
+        Characteristic.__init__(
+                self, bus, index,
+                self.TEST_CHRC_UUID,
+                ['read', 'write'],
+                service)
+        self.value = []
+        s = "Test value going out"
         for c in s:
-            value.append(dbus.Byte(c.encode()))
-        self.PropertiesChanged(GATT_CHRC_IFACE, {'Value': value}, [])
+            self.value.append(dbus.Byte(c.encode()))
 
-    def StartNotify(self):
-        if self.notifying:
-            return
-        self.notifying = True
-
-    def StopNotify(self):
-        if not self.notifying:
-            return
-        self.notifying = False
-
-class RxCharacteristic(Characteristic):
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, UART_RX_CHARACTERISTIC_UUID,
-                                ['write'], service)
+    def ReadValue(self, options):
+        print('TestCharacteristic Read: ' + repr(self.value))
+        return self.value
 
     def WriteValue(self, value, options):
-        print('remote: {}'.format(bytearray(value).decode()))
+        print('TestCharacteristic Write: ' + repr(value))
+        mystr = bytes(value).decode()
+        print(mystr)
+        self.value = value
 
 class UartService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, UART_SERVICE_UUID, True)
-        self.add_characteristic(TxCharacteristic(bus, 0, self))
-        self.add_characteristic(RxCharacteristic(bus, 1, self))
+        self.add_characteristic(SendThemAStaticValue(bus, 0, self))
 
 class Application(dbus.service.Object):
     def __init__(self, bus):
@@ -99,8 +80,7 @@ class UartAdvertisement(Advertisement):
         self.include_tx_power = True
 
 def find_adapter(bus):
-    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'),
-                               DBUS_OM_IFACE)
+    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
     objects = remote_om.GetManagedObjects()
     for o, props in objects.items():
         if LE_ADVERTISING_MANAGER_IFACE in props and GATT_MANAGER_IFACE in props:
@@ -117,11 +97,8 @@ def main():
         print('BLE adapter not found')
         return
 
-    service_manager = dbus.Interface(
-                                bus.get_object(BLUEZ_SERVICE_NAME, adapter),
-                                GATT_MANAGER_IFACE)
-    ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter),
-                                LE_ADVERTISING_MANAGER_IFACE)
+    service_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), GATT_MANAGER_IFACE)
+    ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), LE_ADVERTISING_MANAGER_IFACE)
 
     app = UartApplication(bus)
     adv = UartAdvertisement(bus, 0)
