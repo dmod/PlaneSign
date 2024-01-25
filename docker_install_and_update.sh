@@ -29,6 +29,11 @@ sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
 sudo systemctl disable nginx
 crontab -r
 
+# Install bluetooth support
+sudo ln --symbolic /home/pi/PlaneSign/ble/planesign-ble.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable planesign-ble.service
+
 # Add Docker's official GPG key:
 sudo apt-get update
 sudo apt-get -y install ca-certificates curl gnupg

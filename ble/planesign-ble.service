@@ -1,0 +1,9 @@
+[Unit]
+Description=Start the BLE server
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStart=/usr/bin/python /home/pi/PlaneSign/bledev/planesign_ble.py
+[Install]
+WantedBy=multi-user.target
