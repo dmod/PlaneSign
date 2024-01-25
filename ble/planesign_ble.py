@@ -1,10 +1,8 @@
 import sys
 import dbus, dbus.mainloop.glib
 from gi.repository import GLib
-from exampleadvertisement import Advertisement
-from exampleadvertisement import register_ad_cb, register_ad_error_cb
-from examplegattserver import Service, Characteristic
-from examplegattserver import register_app_cb, register_app_error_cb
+from gatt import Application, Advertisement, Service, Characteristic
+from gatt import find_adapter, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
 
 BLUEZ_SERVICE_NAME =           'org.bluez'
 DBUS_OM_IFACE =                'org.freedesktop.DBus.ObjectManager'
@@ -15,7 +13,24 @@ UART_SERVICE_UUID =            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
 LOCAL_NAME =                   'rpi-planesign-gatt-server'
 mainloop = None
 
-class SendThemAStaticValue(Characteristic):
+class PlanesignBLEService(Service):
+    def __init__(self, bus, index):
+        Service.__init__(self, bus, index, UART_SERVICE_UUID, True)
+        self.add_characteristic(PlanesignBLECharacteristic(bus, 0, self))
+
+class PlanesignBLEApplication(Application):
+    def __init__(self, bus):
+        Application.__init__(self, bus)
+        self.add_service(PlanesignBLEService(bus, 0))
+
+class PlanesignBLEAdvertisement(Advertisement):
+    def __init__(self, bus, index):
+        Advertisement.__init__(self, bus, index, 'peripheral')
+        self.add_service_uuid(UART_SERVICE_UUID)
+        self.add_local_name(LOCAL_NAME)
+        self.include_tx_power = True
+
+class PlanesignBLECharacteristic(Characteristic):
     
     TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef1'
 
@@ -40,53 +55,6 @@ class SendThemAStaticValue(Characteristic):
         print(mystr)
         self.value = value
 
-class UartService(Service):
-    def __init__(self, bus, index):
-        Service.__init__(self, bus, index, UART_SERVICE_UUID, True)
-        self.add_characteristic(SendThemAStaticValue(bus, 0, self))
-
-class Application(dbus.service.Object):
-    def __init__(self, bus):
-        self.path = '/'
-        self.services = []
-        dbus.service.Object.__init__(self, bus, self.path)
-
-    def get_path(self):
-        return dbus.ObjectPath(self.path)
-
-    def add_service(self, service):
-        self.services.append(service)
-
-    @dbus.service.method(DBUS_OM_IFACE, out_signature='a{oa{sa{sv}}}')
-    def GetManagedObjects(self):
-        response = {}
-        for service in self.services:
-            response[service.get_path()] = service.get_properties()
-            chrcs = service.get_characteristics()
-            for chrc in chrcs:
-                response[chrc.get_path()] = chrc.get_properties()
-        return response
-
-class UartApplication(Application):
-    def __init__(self, bus):
-        Application.__init__(self, bus)
-        self.add_service(UartService(bus, 0))
-
-class UartAdvertisement(Advertisement):
-    def __init__(self, bus, index):
-        Advertisement.__init__(self, bus, index, 'peripheral')
-        self.add_service_uuid(UART_SERVICE_UUID)
-        self.add_local_name(LOCAL_NAME)
-        self.include_tx_power = True
-
-def find_adapter(bus):
-    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
-    objects = remote_om.GetManagedObjects()
-    for o, props in objects.items():
-        if LE_ADVERTISING_MANAGER_IFACE in props and GATT_MANAGER_IFACE in props:
-            return o
-        print('Skip adapter:', o)
-    return None
 
 def main():
     global mainloop
@@ -100,8 +68,8 @@ def main():
     service_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), GATT_MANAGER_IFACE)
     ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), LE_ADVERTISING_MANAGER_IFACE)
 
-    app = UartApplication(bus)
-    adv = UartAdvertisement(bus, 0)
+    app = PlanesignBLEApplication(bus)
+    adv = PlanesignBLEAdvertisement(bus, 0)
 
     mainloop = GLib.MainLoop()
 

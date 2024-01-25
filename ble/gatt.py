@@ -4,11 +4,7 @@ import dbus.exceptions
 import dbus.mainloop.glib
 import dbus.service
 
-import array
 from gi.repository import GObject
-import sys
-
-from random import randint
 
 mainloop = None
 
@@ -20,6 +16,9 @@ DBUS_PROP_IFACE =    'org.freedesktop.DBus.Properties'
 GATT_SERVICE_IFACE = 'org.bluez.GattService1'
 GATT_CHRC_IFACE =    'org.bluez.GattCharacteristic1'
 GATT_DESC_IFACE =    'org.bluez.GattDescriptor1'
+
+LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
+LE_ADVERTISEMENT_IFACE = 'org.bluez.LEAdvertisement1'
 
 class InvalidArgsException(dbus.exceptions.DBusException):
     _dbus_error_name = 'org.freedesktop.DBus.Error.InvalidArgs'
@@ -37,10 +36,124 @@ class FailedException(dbus.exceptions.DBusException):
     _dbus_error_name = 'org.bluez.Error.Failed'
 
 
+class Advertisement(dbus.service.Object):
+    PATH_BASE = '/org/bluez/example/advertisement'
+
+    def __init__(self, bus, index, advertising_type):
+        self.path = self.PATH_BASE + str(index)
+        self.bus = bus
+        self.ad_type = advertising_type
+        self.service_uuids = None
+        self.manufacturer_data = None
+        self.solicit_uuids = None
+        self.service_data = None
+        self.local_name = None
+        self.include_tx_power = None
+        self.data = None
+        dbus.service.Object.__init__(self, bus, self.path)
+
+    def get_properties(self):
+        properties = dict()
+        properties['Type'] = self.ad_type
+        if self.service_uuids is not None:
+            properties['ServiceUUIDs'] = dbus.Array(self.service_uuids,
+                                                    signature='s')
+        if self.solicit_uuids is not None:
+            properties['SolicitUUIDs'] = dbus.Array(self.solicit_uuids,
+                                                    signature='s')
+        if self.manufacturer_data is not None:
+            properties['ManufacturerData'] = dbus.Dictionary(
+                self.manufacturer_data, signature='qv')
+        if self.service_data is not None:
+            properties['ServiceData'] = dbus.Dictionary(self.service_data,
+                                                        signature='sv')
+        if self.local_name is not None:
+            properties['LocalName'] = dbus.String(self.local_name)
+        if self.include_tx_power is not None:
+            properties['IncludeTxPower'] = dbus.Boolean(self.include_tx_power)
+
+        if self.data is not None:
+            properties['Data'] = dbus.Dictionary(
+                self.data, signature='yv')
+        return {LE_ADVERTISEMENT_IFACE: properties}
+
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
+
+    def add_service_uuid(self, uuid):
+        if not self.service_uuids:
+            self.service_uuids = []
+        self.service_uuids.append(uuid)
+
+    def add_solicit_uuid(self, uuid):
+        if not self.solicit_uuids:
+            self.solicit_uuids = []
+        self.solicit_uuids.append(uuid)
+
+    def add_manufacturer_data(self, manuf_code, data):
+        if not self.manufacturer_data:
+            self.manufacturer_data = dbus.Dictionary({}, signature='qv')
+        self.manufacturer_data[manuf_code] = dbus.Array(data, signature='y')
+
+    def add_service_data(self, uuid, data):
+        if not self.service_data:
+            self.service_data = dbus.Dictionary({}, signature='sv')
+        self.service_data[uuid] = dbus.Array(data, signature='y')
+
+    def add_local_name(self, name):
+        if not self.local_name:
+            self.local_name = ""
+        self.local_name = dbus.String(name)
+
+    def add_data(self, ad_type, data):
+        if not self.data:
+            self.data = dbus.Dictionary({}, signature='yv')
+        self.data[ad_type] = dbus.Array(data, signature='y')
+
+    @dbus.service.method(DBUS_PROP_IFACE,
+                         in_signature='s',
+                         out_signature='a{sv}')
+    def GetAll(self, interface):
+        print('GetAll')
+        if interface != LE_ADVERTISEMENT_IFACE:
+            raise InvalidArgsException()
+        print('returning props')
+        return self.get_properties()[LE_ADVERTISEMENT_IFACE]
+
+    @dbus.service.method(LE_ADVERTISEMENT_IFACE,
+                         in_signature='',
+                         out_signature='')
+    def Release(self):
+        print('%s: Released!' % self.path)
+
+def register_ad_cb():
+    print('Advertisement registered')
+
+
+def register_ad_error_cb(error):
+    print('Failed to register advertisement: ' + str(error))
+    mainloop.quit()
+
+
+def find_adapter(bus):
+    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
+    objects = remote_om.GetManagedObjects()
+    for o, props in objects.items():
+        if LE_ADVERTISING_MANAGER_IFACE in props and GATT_MANAGER_IFACE in props:
+            print('Selecting adapter:', o)
+            return o
+        print('Skip adapter:', o)
+    return None
+
+def register_app_cb():
+    print('GATT application registered')
+
+def register_app_error_cb(error):
+    print('Failed to register application: ' + str(error))
+    mainloop.quit()
+
+
 class Application(dbus.service.Object):
-    """
-    org.bluez.GattApplication1 interface implementation
-    """
     def __init__(self, bus):
         self.path = '/'
         self.services = []
@@ -70,9 +183,6 @@ class Application(dbus.service.Object):
 
 
 class Service(dbus.service.Object):
-    """
-    org.bluez.GattService1 interface implementation
-    """
     PATH_BASE = '/org/bluez/example/service'
 
     def __init__(self, bus, index, uuid, primary):
@@ -120,9 +230,6 @@ class Service(dbus.service.Object):
 
 
 class Characteristic(dbus.service.Object):
-    """
-    org.bluez.GattCharacteristic1 interface implementation
-    """
     def __init__(self, bus, index, uuid, flags, service):
         self.path = service.path + '/char' + str(index)
         self.bus = bus
@@ -197,9 +304,6 @@ class Characteristic(dbus.service.Object):
 
 
 class Descriptor(dbus.service.Object):
-    """
-    org.bluez.GattDescriptor1 interface implementation
-    """
     def __init__(self, bus, index, uuid, flags, characteristic):
         self.path = characteristic.path + '/desc' + str(index)
         self.bus = bus
@@ -241,53 +345,25 @@ class Descriptor(dbus.service.Object):
         print('Default WriteValue called, returning error')
         raise NotSupportedException()
 
-def register_app_cb():
-    print('GATT application registered')
 
+class Application(dbus.service.Object):
+    def __init__(self, bus):
+        self.path = '/'
+        self.services = []
+        dbus.service.Object.__init__(self, bus, self.path)
 
-def register_app_error_cb(error):
-    print('Failed to register application: ' + str(error))
-    mainloop.quit()
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
 
+    def add_service(self, service):
+        self.services.append(service)
 
-def find_adapter(bus):
-    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'),
-                               DBUS_OM_IFACE)
-    objects = remote_om.GetManagedObjects()
-
-    for o, props in objects.items():
-        if GATT_MANAGER_IFACE in props.keys():
-            return o
-
-    return None
-
-def main():
-    global mainloop
-
-    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-
-    bus = dbus.SystemBus()
-
-    adapter = find_adapter(bus)
-    if not adapter:
-        print('GattManager1 interface not found')
-        return
-
-    service_manager = dbus.Interface(
-            bus.get_object(BLUEZ_SERVICE_NAME, adapter),
-            GATT_MANAGER_IFACE)
-
-    app = Application(bus)
-
-    mainloop = GObject.MainLoop()
-
-    print('Registering GATT application...')
-
-    service_manager.RegisterApplication(app.get_path(), {},
-                                    reply_handler=register_app_cb,
-                                    error_handler=register_app_error_cb)
-
-    mainloop.run()
-
-if __name__ == '__main__':
-    main()
+    @dbus.service.method(DBUS_OM_IFACE, out_signature='a{oa{sa{sv}}}')
+    def GetManagedObjects(self):
+        response = {}
+        for service in self.services:
+            response[service.get_path()] = service.get_properties()
+            chrcs = service.get_characteristics()
+            for chrc in chrcs:
+                response[chrc.get_path()] = chrc.get_properties()
+        return response
