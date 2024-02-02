@@ -4,6 +4,7 @@ Description=Start the BLE server
 User=root
 Group=root
 Type=oneshot
+ExecStartPre=/bin/sleep 30
 ExecStart=/usr/bin/python /home/pi/PlaneSign/ble/planesign_ble.py
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,6 @@
 import sys
 import dbus, dbus.mainloop.glib
+import subprocess
 from gi.repository import GLib
 from gatt import Application, Advertisement, Service, Characteristic
 from gatt import find_adapter, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
@@ -17,6 +18,7 @@ class PlanesignBLEService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, UART_SERVICE_UUID, True)
         self.add_characteristic(PlanesignBLECharacteristic(bus, 0, self))
+        self.add_characteristic(PlanesignTempCharacteristic(bus, 1, self))
 
 class PlanesignBLEApplication(Application):
     def __init__(self, bus):
@@ -31,7 +33,7 @@ class PlanesignBLEAdvertisement(Advertisement):
         self.include_tx_power = True
 
 class PlanesignBLECharacteristic(Characteristic):
-    
+
     TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef1'
 
     def __init__(self, bus, index, service):
@@ -54,6 +56,24 @@ class PlanesignBLECharacteristic(Characteristic):
         mystr = bytes(value).decode()
         print(mystr)
         self.value = value
+
+class PlanesignTempCharacteristic(Characteristic):
+
+    TEST_CHRC_UUID = '0x08CD'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(
+                self, bus, index,
+                self.TEST_CHRC_UUID,
+                ['read'],
+                service)
+
+    def ReadValue(self, options):
+        cmd = '/usr/bin/vcgencmd measure_temp'
+        temperature = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+        print('Temp Read: ' + temperature)
+
+        return [dbus.Byte(x.encode()) for x in temperature]
 
 
 def main():
