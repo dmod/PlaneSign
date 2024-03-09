@@ -291,7 +291,7 @@ def satellites(sign):
                 f.write(file.content)
 
     try:
-        with open("satdat.txt",encoding='windows-1252') as f:
+        with open("satdat.txt",encoding='windows-1252',errors='replace') as f:
             lines = f.readlines()[1:]
             nline = 0
             for line in lines:
