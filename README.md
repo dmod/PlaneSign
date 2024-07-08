@@ -41,18 +41,14 @@ cd /home/pi && git clone https://dmod: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@g
 ### Sample wpa_supplicant.conf
 Can be found in `/etc/wpa_supplicant/wpa_supplicant.conf` after install
 ```
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-update_config=1
 country=US
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+ap_scan=1
 
+update_config=1
 network={
-    ssid="Network_1_SSID"
-    psk="Network_1_ClearTextPassword"
-}
-
-network={
-    ssid="Network_2_SSID"
-    psk="Network_2_ClearTextPassword"
+	ssid="PlainTextSSID"
+	psk=Result-Of-NtPasswordHash
 }
 ```
 
