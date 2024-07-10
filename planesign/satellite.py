@@ -327,7 +327,7 @@ def satellites(sign):
 
     elevation = 0
     with requests.Session() as s:
-        s.mount('https://', HTTPAdapter(max_retries=Retry(total=2, backoff_factor=1, respect_retry_after_header=False)))
+        s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, respect_retry_after_header=False)))
         try:
             response = s.get(f'https://api.open-elevation.com/api/v1/lookup?locations={shared_config.CONF["SENSOR_LAT"]},{shared_config.CONF["SENSOR_LON"]}',timeout=1)
  
