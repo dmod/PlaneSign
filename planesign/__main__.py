@@ -57,11 +57,16 @@ def exit_gracefully(*args):
 #signal.signal(signal.SIGINT, exit_gracefully)
 #signal.signal(signal.SIGTERM, exit_gracefully)
 
+def log_file_rotation_namer(default_name):
+    base_filename, ext, date = default_name.split(".")
+    return f"{base_filename}.{date}.{ext}"
+
 def log_listener_process(queue):
     root = logging.getLogger()
 
     os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
     log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight", backupCount=90)
+    log_handler.namer = log_file_rotation_namer
     log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
 
     root.addHandler(log_handler)
