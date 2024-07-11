@@ -6,7 +6,6 @@ RUN apk update && apk add \
   openssl \
   python3 \
   python3-dev \
-  cython3 \
   py3-pip \
   py3-numpy \
   py3-scipy \
@@ -27,7 +26,7 @@ RUN apk update && apk add \
   cmake \
   g++
 
-RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python && make install-python
+RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
 
 WORKDIR /planesign
 
