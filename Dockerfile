@@ -26,7 +26,7 @@ RUN apk update && apk add \
   cmake \
   g++
 
-RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
+RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && git reset --hard 87a9caba561bf94ac15f6fe7e492ed7bcbcb58a2 && make build-python PYTHON=$(which python3) && make install-python PYTHON=$(which python3)
 
 WORKDIR /planesign
 
