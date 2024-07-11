@@ -178,7 +178,7 @@ class LightningManager:
             usapoints=[]
             for feature in usadata["features"]:
                 shape = feature["geometry"]
-                if feature["properties"]["ste_stusps_code"] not in ["AS","AK","VI","GU","HI","MP","PR"]:
+                if int(feature["properties"]["ste_code"]) not in [60,2,78,66,15,69,72]:#["AS","AK","VI","GU","HI","MP","PR"]:
                     if shape["type"]=='Polygon':
                         points=[]
                         for coord in shape["coordinates"][0]:
