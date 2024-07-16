@@ -13,13 +13,20 @@
         },
         {
             "name": "PlaneSign Debug",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/planesign",
             "console": "integratedTerminal",
             "debugOptions": [
                 "Sudo"
             ]
+        },
+        {
+            "name": "Bluetooth Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "ble/planesign_ble.py",
+            "console": "integratedTerminal"
         },
         {
             "name": "Run Test Script",

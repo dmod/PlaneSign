@@ -10,7 +10,7 @@ DBUS_OM_IFACE =                'org.freedesktop.DBus.ObjectManager'
 LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_MANAGER_IFACE =           'org.bluez.GattManager1'
 GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
-UART_SERVICE_UUID =            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+UART_SERVICE_UUID =            '997fbca2-ffa1-4828-9952-0faa398c5fb3'
 LOCAL_NAME =                   'rpi-planesign-gatt-server'
 mainloop = None
 
@@ -34,7 +34,7 @@ class PlanesignBLEAdvertisement(Advertisement):
 
 class PlanesignBLECharacteristic(Characteristic):
 
-    TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef1'
+    TEST_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef1'
 
     def __init__(self, bus, index, service):
         Characteristic.__init__(
@@ -59,12 +59,14 @@ class PlanesignBLECharacteristic(Characteristic):
 
 class PlanesignTempCharacteristic(Characteristic):
 
-    TEST_CHRC_UUID = '0x08CD'
+    # name: Temperature Measurement
+    # id: org.bluetooth.characteristic.temperature_measurement
+    CHRC_UUID = '00002a1c-0000-1000-8000-00805f9b34fb'
 
     def __init__(self, bus, index, service):
         Characteristic.__init__(
                 self, bus, index,
-                self.TEST_CHRC_UUID,
+                self.CHRC_UUID,
                 ['read'],
                 service)
 
