@@ -69,6 +69,7 @@ sudo cp self-signed.conf /etc/nginx/snippets/
 sudo rm -f /etc/nginx/sites-available/default
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo cp nginx_planesign.conf /etc/nginx/conf.d/
+chmod +x /home/pi/PlaneSign/
 sudo systemctl restart nginx
 
 # Cron config for starting the process on boot
