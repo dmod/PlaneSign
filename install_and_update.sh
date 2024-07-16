@@ -34,6 +34,7 @@ then
   echo "rpi-rgb-led-matrix not found, installing..."
   git clone https://github.com/hzeller/rpi-rgb-led-matrix.git $LED_MATRIX_DIR
   cd $LED_MATRIX_DIR
+  git reset --hard 87a9caba561bf94ac15f6fe7e492ed7bcbcb58a2
   make build-python PYTHON=$(which python3)
   sudo make install-python PYTHON=$(which python3)
 else
@@ -46,14 +47,14 @@ cd $PLANESIGN_DIR
 git pull --rebase --autostash https://dmod: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@github.com/dmod/PlaneSign
 
 #Install required junk
-sudo apt -y install llvm-11
-sudo -H LLVM_CONFIG=/usr/bin/llvm-config-11 pip3 install llvmlite numba
+sudo apt -y install llvm-14 llvm14-dev
+sudo -H LLVM_CONFIG=/usr/lib/llvm14/bin/llvm-config pip3 install --break-system-packages llvmlite numba
 
 #Install packages
 #sudo -H pip3 install -r requirements.txt
 while IFS= read -r package; do
   if [ -n "$package" ]; then
-    sudo -H pip3 install "$package"
+    sudo -H pip3 install --break-system-packages "$package"
   fi
 done < requirements.txt
 
