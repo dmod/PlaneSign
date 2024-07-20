@@ -10,6 +10,8 @@ from urllib3.util.retry import Retry
 import shared_config
 from rgbmatrix import graphics
 import country_converter as coco
+import geopandas as gpd
+from shapely.geometry import Point
 import numpy as np
 import logging
 import math
@@ -17,18 +19,6 @@ from bs4 import BeautifulSoup
 from os.path import exists
 import os
 import __main__
-
-def shorten_name(name):
-    name = name.replace("French Southern and Antarctic Lands","French S. Lands")
-    name = name.replace("Northern", "N.").replace("North", "N.")
-    name = name.replace("Southern", "S.").replace("South", "S.")
-    name = name.replace("Eastern", "E.").replace("East", "E.")
-    name = name.replace("Western", "W.").replace("West", "W.")
-    name = name.replace("Central", "C.")
-    name = name.replace("Federated States of ", "").replace("State of ", "").replace(", USA", "")
-    name = name.replace("Province", "Prov.").replace("Democratic Republic", "D.R.")
-    name = name.replace("Saint", "St.")
-    return name
 
 class Star:
     def __init__(self,sign,x,y,period=None,minbright=None):
@@ -237,13 +227,13 @@ def get_flag(selected,satellite_data):
                 code = get_country_code(fullcountry,selected["launchDate"])
 
                 if code != "":
-                    logging.debug(f'Found country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}')
+                    logging.info(f'Found country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}')
                     with open("satsup.txt", "a+") as suppliment_satfile:
 
                         suppliment_satfile.write(f'{sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}\n')
                         satellite_data.append({"COSPAR":selected["intDesignator"], "NORAD":selected["satid"], "country":code})
                 else:
-                    logging.debug(f'Couldn\'t find country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]} from {fullcountry}')
+                    logging.warning(f'Couldn\'t find country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]} from {fullcountry}')
 
         #Try to find or generate flag from country code
         image = gen_flag(code)
@@ -288,7 +278,7 @@ def satellites(sign):
         file = requests.get(satdaturl, stream=True, allow_redirects=True)
         if file.status_code == requests.codes.ok:
             sat_lines = file.text.splitlines()[1:]
-            print(f"Found static data for {len(sat_lines)} satellites")
+            logging.info(f"Found static data for {len(sat_lines)} satellites")
             with open("satdat.txt", 'wb') as f:
                 f.write(file.content)
 
@@ -326,6 +316,11 @@ def satellites(sign):
     except Exception as e:
         logging.exception("Can't read static satellite data")
         logging.exception(e)
+
+    #load static geojson files for local reverse geocoding
+    country_polys = gpd.read_file(f"{shared_config.datafiles_dir}/countries.geojson")
+    state_polys = gpd.read_file(f"{shared_config.datafiles_dir}/states.geojson")
+    water_polys = gpd.read_file(f"{shared_config.datafiles_dir}/water.geojson")
 
     elevation = 0
     with requests.Session() as s:
@@ -577,32 +572,62 @@ def satellites(sign):
                         break
 
                 if pos:
-                    if geotime == None or time.perf_counter()-geotime>60:
+                    if geotime == None or time.perf_counter()-geotime>5: #limit how often we check location
                         geotime = time.perf_counter()
-                        reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={pos['satlatitude']},{pos['satlongitude']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
-                
-                        if len(reverse_geocode['results']) != 0:
-                            formatted_address = reverse_geocode['results'][0]['formatted_address']
-                            full_country_name = None
-                            country = None
-                            comps = reverse_geocode['results'][0]['address_components']
-                            for c in comps:
-                                if "country" in c["types"]:
-                                    country = c
-                                    break
-                            if country != None:
-                                full_country_name = c["long_name"]
+                        
+                        code = None
+                        formatted_address = None
 
-                            if len(formatted_address)>17:
-                                formatted_address = shorten_name(formatted_address)
+                        #Perform reverse geocoding
+                        point = Point(pos['satlongitude'], pos['satlatitude'])
+    
+                        # First check for point in countries
+                        result = country_polys[country_polys.contains(point)]
+                        
+                        if result.shape[0]: #Not in the water
+        
+                            code = result["ADM0_A3"].iloc[0]
+                            formatted_address = result["NAME"].iloc[0]
+                            
+                            if code == "USA": #Check for state
+                                result = state_polys[state_polys.contains(point)]
+                        
+                                if result.shape[0]:  
+                                    code = "states/"+result["ste_area_code"].iloc[0]
+                                    formatted_address = result["ste_name"].iloc[0]
+                        
+                        else: #We're in the water
+                            
+                            #Not on land, check for point in water
+                            result = water_polys[water_polys.contains(point)]
+                            
+                            if result.shape[0]:
+                                                               
+                                result = result.sort_values('scalerank',ascending=False)
+                                
+                                code = "OCEAN"
 
-                            if len(formatted_address)>17:
-                                formatted_address = full_country_name
-                                if len(formatted_address)>17:
-                                    formatted_address = shorten_name(formatted_address)
+                                #special case codes
+                                if result["featurecla"].iloc[0] == "imag":
+                                    code = "IMAG"
+                                elif result["featurecla"].iloc[0] == "nemo":
+                                    code = "NEMO"
+                                elif result["featurecla"].iloc[0] == "trash":
+                                    code = "TRASH"
+                                elif result["featurecla"].iloc[0] == "triangle":
+                                    code = "TRIANG"
+                                elif result["featurecla"].iloc[0] == "PSL":
+                                    code = "PSL"
+                                elif result["featurecla"].iloc[0] == "trench":
+                                    code = "TRENCH"
+                                elif result["featurecla"].iloc[0] == "reef":
+                                    code = "REEF"
 
-                        else:
-                            formatted_address = 'Ocean'
+                                formatted_address = result["name_en"].iloc[0]
+                        
+                        if formatted_address == None:
+                            formatted_address = "Somewhere"
+                            logging.warning(f'Couldn\'t find reverse geocoding for Lat/Lon: ({pos["satlatitude"]},{pos["satlongitude"]})')
 
                     iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                     iss_alt = pos["sataltitude"]*utilities.KM_2_MI
@@ -610,7 +635,8 @@ def satellites(sign):
                     iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
 
             else: 
-                formatted_address = 'Somewhere'
+                formatted_address = "Unknown"
+                logging.warning("No satellite position data found")
                 iss_dist = None
                 iss_alt = None
                 iss_vel = None
@@ -622,37 +648,17 @@ def satellites(sign):
                 s.draw()
 
             image = None
-            if country:
-                if formatted_address.find("Ocean") != -1:
-                    image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
-                else:
+            if code:
 
-                    if full_country_name == "United States":
-                        state = None
-                        comps = reverse_geocode['results'][0]['address_components']
-                        for c in comps:
-                            if "administrative_area_level_1" in c["types"]:
-                                state = c
-                                break
-                        if state != None:
-                            state_code = c["short_name"]
+                try:
+                    image = Image.open(f'{shared_config.icons_dir}/flags/{code}.png').convert('RGBA')
 
-                        if state:
-                            try:
-                                image = Image.open(f'{shared_config.icons_dir}/flags/states/{state_code}.png').convert('RGBA')
-                            except Exception:
-                                image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
-                        else:
-                            image = Image.open(f'{shared_config.icons_dir}/flags/USA.png').convert('RGBA')
-                    else:
-                        try:
-                            image = Image.open(f'{shared_config.icons_dir}/flags/{get_country_code(full_country_name,"2000-01-01")}.png').convert('RGBA')
-                            image = utilities.fix_black(image)
-                        except Exception:
-                            pass
-            elif formatted_address.find("Ocean") != -1 or formatted_address.find("Gulf") != -1 or formatted_address.find("Sea") != -1 or formatted_address.find("River") != -1 or formatted_address.find("Bay") != -1 or formatted_address.find("Lake") != -1:
-                    image = Image.open(f'{shared_config.icons_dir}/flags/OCEAN.png').convert('RGBA')
-                    
+                    if code not in ["OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF"]:
+                        image = utilities.fix_black(image)
+                        
+                except Exception:
+                    logging.warning(f'Couldn\'t find flag for: {code}')
+
             if image:
 
                 w, h = image.size

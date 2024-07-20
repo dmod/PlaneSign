@@ -11,3 +11,4 @@ yfinance==0.2.33
 FlightRadarAPI==1.2.0
 skyfield==1.46
 numba==0.58.1
+geopandas==1.0.1

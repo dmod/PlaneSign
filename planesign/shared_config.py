@@ -24,6 +24,7 @@ log_filename = "logs/planesign.log"
 icons_dir = "./icons"
 font_dir = "../rpi-rgb-led-matrix/fonts"
 sounds_dir = "sounds"
+datafiles_dir = "./datafiles"
 
 shared_shutdown_event = None
 data_dict = None
