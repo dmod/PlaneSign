@@ -85,6 +85,8 @@ def get_country_code(rawname,date):
             code = "CHE"
         elif country.find("TÜRKIYE") != -1:
             code = "TUR"
+        elif country.find("(ASIASAT)") != -1:
+            code = "HKG"
         else:
             code = coco.convert(names=country.replace("(","").replace(")","").rstrip(), to="ISO3", not_found="UNKNOWN")
             if isinstance(code, list):
