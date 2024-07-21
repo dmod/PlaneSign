@@ -70,6 +70,7 @@ coinmarketcap.com
 googleapis.com
 ourairports.com
 opendatasoft.com -> map polygons
+https://github.com/nvkelso/natural-earth-vector/tree/master/geojson -> countries and bodies of water map polygons
 open-elevation.com
 
 Sounds:
