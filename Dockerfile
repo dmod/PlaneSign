@@ -13,7 +13,10 @@ RUN apk update && apk add \
   py3-lxml \
   py3-gevent \
   py3-pillow \
+  py3-shapely \
   py3-tz \
+  geos \
+  geos-dev \
   gdal \
   gdal-dev \
   proj \
