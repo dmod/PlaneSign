@@ -20,6 +20,7 @@ RUN apk update && apk add \
   gdal \
   gdal-dev \
   proj \
+  proj-dev \
   proj-util \
   ffplay \
   zlib \
