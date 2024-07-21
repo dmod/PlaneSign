@@ -16,6 +16,8 @@ RUN apk update && apk add \
   py3-tz \
   gdal \
   gdal-dev \
+  proj \
+  proj-util \
   ffplay \
   zlib \
   zlib-dev \
