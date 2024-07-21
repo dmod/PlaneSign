@@ -12,7 +12,6 @@ from rgbmatrix import graphics
 import country_converter as coco
 import geopandas as gpd
 from shapely.geometry import Point
-import numpy as np
 import logging
 import math
 from bs4 import BeautifulSoup
