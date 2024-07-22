@@ -350,8 +350,7 @@ def satellites(sign):
     iss_dist = None
     iss_alt = None
     iss_vel = None
-    iss_dir = None
-    iss_last_loc = None
+    #iss_dir = None
     geotime = None
 
     blip_count = 0
@@ -580,7 +579,7 @@ def satellites(sign):
                         #Perform reverse geocoding
                         point = Point(pos['satlongitude'], pos['satlatitude'])
     
-                        # First check for point in countries
+                        #First check for point in countries
                         result = country_polys[country_polys.contains(point)]
                         
                         if result.shape[0]: #Not in the water
@@ -595,9 +594,8 @@ def satellites(sign):
                                     code = "states/"+result["ste_area_code"].iloc[0]
                                     formatted_address = result["ste_name"].iloc[0]
                         
-                        else: #We're in the water
+                        else: #Not on land, check for point in water
                             
-                            #Not on land, check for point in water
                             result = water_polys[water_polys.contains(point)]
                             
                             if result.shape[0]:
@@ -631,7 +629,7 @@ def satellites(sign):
                     iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                     iss_alt = pos["sataltitude"]*utilities.KM_2_MI
                     iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*utilities.KM_2_MI
-                    iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    #iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
 
             else: 
                 formatted_address = "Unknown"
@@ -639,7 +637,7 @@ def satellites(sign):
                 iss_dist = None
                 iss_alt = None
                 iss_vel = None
-                iss_dir = None
+                #iss_dir = None
 
             sign.canvas.SetImage(iss_image, 99, 11)
 
@@ -670,6 +668,14 @@ def satellites(sign):
                 w, _ = image.size
 
                 sign.canvas.SetImage(image.convert('RGB'), 128-w, 0)
+
+            #If over Null Island, draw random noise for flag
+            if code and code == "IMAG":
+                
+                for x in range(15):
+                    for y in range(10):
+                        r = random.randint(0,255)
+                        sign.canvas.SetPixel(113+x, y, r, r, r)
 
             for x in range(25):
                 for y in range(11):
@@ -720,16 +726,9 @@ def satellites(sign):
                 maxdir = flyby["maxAzCompass"]
                 enddir = flyby["endAzCompass"]
 
-                #graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "El:")
-                #graphics.DrawText(sign.canvas, sign.font57, 71, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
                 graphics.DrawText(sign.canvas, sign.font57, 64, 24, graphics.Color(220, 180, 90), "°")
                 graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
                 graphics.DrawText(sign.canvas, sign.font57, 70, 24, graphics.Color(220,180,90), f'{maxdir}')
-                
-
-                #for x in range(82,84):
-                #    for y in range(18,20):
-                #        sign.canvas.SetPixel(x, y, 220, 180, 90)
 
                 mx = 88
                 my = 21
@@ -820,7 +819,7 @@ def satellites(sign):
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
         
-        breakout = sign.wait_loop(0.5)
+        breakout = sign.wait_loop(0.1)
 
         if breakout:
             return
