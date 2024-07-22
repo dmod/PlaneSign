@@ -352,6 +352,8 @@ def satellites(sign):
     iss_vel = None
     #iss_dir = None
     geotime = None
+    prev_address = None
+    prev_code = None
 
     blip_count = 0
     
@@ -623,8 +625,19 @@ def satellites(sign):
                                 formatted_address = result["name_en"].iloc[0]
                         
                         if formatted_address == None:
-                            formatted_address = "Somewhere"
-                            logging.warning(f'Couldn\'t find reverse geocoding for Lat/Lon: ({pos["satlatitude"]},{pos["satlongitude"]})')
+
+                            logging.debug(f'Couldn\'t find reverse geocoding for Lat/Lon: ({pos["satlatitude"]},{pos["satlongitude"]})')
+                            
+                            if prev_address and prev_code:
+                                formatted_address = prev_address
+                                code = prev_code
+                                logging.debug(f"Using previous valid location data: {prev_address} ({prev_code})")
+                            else:
+                                formatted_address = "Somewhere"
+
+                        if formatted_address and code:
+                            prev_address = formatted_address
+                            prev_code = code
 
                     iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                     iss_alt = pos["sataltitude"]*utilities.KM_2_MI
@@ -650,7 +663,7 @@ def satellites(sign):
                 try:
                     image = Image.open(f'{shared_config.icons_dir}/flags/{code}.png').convert('RGBA')
 
-                    if code not in ["OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF"]:
+                    if code not in ["states/OH","NPL","OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF"]:
                         image = utilities.fix_black(image)
                         
                 except Exception:
