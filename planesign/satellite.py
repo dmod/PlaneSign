@@ -813,17 +813,17 @@ def satellites(sign):
 
                 if overhead_flag:
                     blip_loc = left_bar+round((right_bar-left_bar)*(now-flyby["startUTC"])/(flyby["endUTC"]-flyby["startUTC"]))
-                    if blip_count == 0:
+                    if blip_count >= 0 and blip_count < 5:
                         sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
-                    elif blip_count == 1:
+                    elif blip_count >= 5 and blip_count < 10:
                         for x in range(blip_loc - 1, blip_loc + 2):
                             for y in range(line_y - 1, line_y + 2):
                                 sign.canvas.SetPixel(x, y, 255, 0, 0)
                         sign.canvas.SetPixel(blip_loc, line_y, 255, 255, 255)
-                    elif blip_count == 2:
+                    elif blip_count >= 10 and blip_count < 17:
                         sign.canvas.SetPixel(blip_loc, line_y, 255, 0, 0)
                     blip_count += 1
-                    if blip_count == 3:
+                    if blip_count == 17:
                         blip_count = 0
             else:
                 graphics.DrawText(sign.canvas, sign.font57, 46, 18, graphics.Color(246, 242, 116), "Next Flyby")
