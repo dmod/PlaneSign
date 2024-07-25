@@ -398,7 +398,8 @@ def satellites(sign):
 
                     #slow down requests as we approach limit
                     if data["info"]["transactionscount"]>500:
-                        multiplier = 1+2*(data["info"]["transactionscount"]-500)/400
+                        #multiplier = 1+2*(data["info"]["transactionscount"]-500)/200
+                        multiplier = (500/(1000-min(data["info"]["transactionscount"],998)))
                     else:
                         multiplier = 1
 
