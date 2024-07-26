@@ -602,6 +602,8 @@ def satellites(sign):
                                 code = "TRIANG"
                             elif result["featurecla"].iloc[0] == "PSL":
                                 code = "PSL"
+                            elif result["featurecla"].iloc[0] == "EAS":
+                                code = "EAS"
                             elif result["featurecla"].iloc[0] == "trench":
                                 code = "TRENCH"
                             elif result["featurecla"].iloc[0] == "reef":
