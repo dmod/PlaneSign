@@ -582,11 +582,37 @@ def satellites(sign):
                         #Perform reverse geocoding
                         point = Point(pos['satlongitude'], pos['satlatitude'])
     
-                        #First check for point in countries
-                        result = country_polys[country_polys.contains(point)]
+                        #First check for point in water (75% by area)
+                        result = water_polys[water_polys.contains(point)]
                         
-                        if result.shape[0]: #Not in the water
+                        if result.shape[0]:
+
+                            result = result.sort_values('scalerank',ascending=False)
+                            
+                            code = "OCEAN"
+
+                            #special case codes
+                            if result["featurecla"].iloc[0] == "imag":
+                                code = "IMAG"
+                            elif result["featurecla"].iloc[0] == "nemo":
+                                code = "NEMO"
+                            elif result["featurecla"].iloc[0] == "trash":
+                                code = "TRASH"
+                            elif result["featurecla"].iloc[0] == "triangle":
+                                code = "TRIANG"
+                            elif result["featurecla"].iloc[0] == "PSL":
+                                code = "PSL"
+                            elif result["featurecla"].iloc[0] == "trench":
+                                code = "TRENCH"
+                            elif result["featurecla"].iloc[0] == "reef":
+                                code = "REEF"
+
+                            formatted_address = result["name_en"].iloc[0]
         
+                        else: #We're on land
+                            
+                            result = country_polys[country_polys.contains(point)]
+
                             code = result["ADM0_A3"].iloc[0]
                             formatted_address = result["NAME"].iloc[0]
                             
@@ -595,35 +621,8 @@ def satellites(sign):
                         
                                 if result.shape[0]:  
                                     code = "states/"+result["ste_area_code"].iloc[0]
-                                    formatted_address = result["ste_name"].iloc[0]
-                        
-                        else: #Not on land, check for point in water
-                            
-                            result = water_polys[water_polys.contains(point)]
-                            
-                            if result.shape[0]:
-                                                               
-                                result = result.sort_values('scalerank',ascending=False)
-                                
-                                code = "OCEAN"
+                                    formatted_address = result["ste_name"].iloc[0]       
 
-                                #special case codes
-                                if result["featurecla"].iloc[0] == "imag":
-                                    code = "IMAG"
-                                elif result["featurecla"].iloc[0] == "nemo":
-                                    code = "NEMO"
-                                elif result["featurecla"].iloc[0] == "trash":
-                                    code = "TRASH"
-                                elif result["featurecla"].iloc[0] == "triangle":
-                                    code = "TRIANG"
-                                elif result["featurecla"].iloc[0] == "PSL":
-                                    code = "PSL"
-                                elif result["featurecla"].iloc[0] == "trench":
-                                    code = "TRENCH"
-                                elif result["featurecla"].iloc[0] == "reef":
-                                    code = "REEF"
-
-                                formatted_address = result["name_en"].iloc[0]
                         
                         if formatted_address == None:
 
