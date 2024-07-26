@@ -17,6 +17,7 @@ from datetime import datetime
 from scipy.interpolate import interp1d
 import shared_config
 import __main__
+import logging
 
 
 @__main__.planesign_mode_handler(13)
@@ -202,7 +203,7 @@ def getFavicon(floc, website):
 
         req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
         if req.status_code == requests.codes.ok:
-            image = open(floc+"favicon."+icon.format, "wb")
+            image = open(os.path.join(floc, "favicon."+icon.format), "wb")
             image.write(req.content)
             image.close()
             # with open(floc+"favicon."+icon.format, 'wb') as image:
@@ -211,7 +212,7 @@ def getFavicon(floc, website):
             #             image.write(chunk)
             #             image.flush()
 
-            image = Image.open(floc+"favicon."+icon.format)
+            image = Image.open(os.path.join(floc, "favicon."+icon.format))
 
             width, height = image.size
             if width <= 200 and height <= 200:
@@ -361,6 +362,7 @@ class Stock:
         self.logo = None
         self.chart = None
         self.x = None
+        self.polltime = None
 
         self.floc = os.path.join(shared_config.icons_dir, "favicons")
 
@@ -372,7 +374,7 @@ class Stock:
         try:
             self.setticker(raw_ticker)
         except Exception as e:
-            print(e)
+            logging.error(f"Ticker Error: {e}")
 
     def setticker(self, raw_ticker):
         clean_ticker, cleaner_ticker, ticker_data = self.validate(raw_ticker)
@@ -395,10 +397,14 @@ class Stock:
         self.prev_price = self.curr_price
         if newticker:
             self.ticker_data = yf.Ticker(self.clean_ticker)
-        self.curr_price = self.ticker_data.info["regularMarketPrice"]
-        self.open_price = self.ticker_data.info["regularMarketOpen"]
-        self.prev_close = self.ticker_data.info["previousClose"]
-        self.perc_change = 100*(self.curr_price-self.prev_close)/self.prev_close
+
+        if self.polltime==None or time.perf_counter()-self.polltime>5 or newticker:
+            
+            self.polltime = time.perf_counter()
+            self.curr_price = self.ticker_data.info["currentPrice"]
+            self.open_price = self.ticker_data.info["regularMarketOpen"]
+            self.prev_close = self.ticker_data.info["previousClose"]
+            self.perc_change = 100*(self.curr_price-self.prev_close)/self.prev_close
 
         # avoid image processing after the first time unless ticker changes
         if self.logo == None or self.isnew:
@@ -407,26 +413,11 @@ class Stock:
 
             if logo == None:  # logo not saved, go get it from the web
 
-                logourl = self.ticker_data.info["logo_url"]
-
                 if self.ticker_data.info["quoteType"] == "CRYPTOCURRENCY":  # go get this logo somewhere else
                     logo = get_crypto(self.ticker_data.info["fromCurrency"], self.ticker_data.info["name"])
-                elif logourl != "":
-                    #website = self.ticker_data.info["website"]
-                    try:
-                        website = self.ticker_data.info["website"]
-                    except:
-                        website = re.findall(r"([^\/]*)$", logourl)[0]
-
-                    req = requests.get(logourl, stream=True, timeout=5)
-                    if req.status_code == requests.codes.ok:
-                        image = Image.open(req.raw)
-                        logo = improcess(image.convert("RGBA")).convert("RGB")
-                        width, height = logo.size
-                        if height < 6:  # not enough detail on scaled logo, get favicon instead
-                            logo = getFavicon(self.floc, website)
-                    else:  # logourl failed, get favicon instead
-                        logo = getFavicon(self.floc, website)
+                else:
+                    website = self.ticker_data.info["website"]
+                    logo = getFavicon(self.floc, website)
 
                 if logo == None:
                     logo = Image.new("RGB", (20, 20), (0, 0, 0))
@@ -476,7 +467,7 @@ class Stock:
         parts = clean_ticker.split('-')
         cleaner_ticker = parts[0]
 
-        if ticker_data.info["regularMarketPrice"] != None:
+        if ticker_data.info["currentPrice"] != None:
 
             if self.clean_ticker != clean_ticker:
                 self.isnew = True
