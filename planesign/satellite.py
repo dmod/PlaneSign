@@ -613,15 +613,17 @@ def satellites(sign):
                             
                             result = country_polys[country_polys.contains(point)]
 
-                            code = result["ADM0_A3"].iloc[0]
-                            formatted_address = result["NAME"].iloc[0]
+                            if result.shape[0]:
+
+                                code = result["ADM0_A3"].iloc[0]
+                                formatted_address = result["NAME"].iloc[0]
+                                
+                                if code == "USA": #Check for state
+                                    result = state_polys[state_polys.contains(point)]
                             
-                            if code == "USA": #Check for state
-                                result = state_polys[state_polys.contains(point)]
-                        
-                                if result.shape[0]:  
-                                    code = "states/"+result["ste_area_code"].iloc[0]
-                                    formatted_address = result["ste_name"].iloc[0]       
+                                    if result.shape[0]:  
+                                        code = "states/"+result["ste_area_code"].iloc[0]
+                                        formatted_address = result["ste_name"].iloc[0]       
 
                         
                         if formatted_address == None:
