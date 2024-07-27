@@ -40,8 +40,6 @@ RUN unlink /etc/nginx/sites-enabled/default
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
 COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 
-#ENV LLVM_CONFIG=/usr/lib/llvm14/bin/llvm-config
-
 RUN pip3 install --break-system-packages -v -r docker_requirements.txt
 
 ENTRYPOINT /usr/sbin/nginx && python3 planesign/
