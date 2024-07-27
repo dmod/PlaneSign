@@ -16,15 +16,17 @@ def shorten_airport_name(name,desired_length):
     name = utilities.fix_chars(name)
 
     #Shorten
-    name = name.replace(" Airport", "").replace("International International","Intl.")
+    name = name.replace("International International","Intl.")
+    if len(name)<=desired_length: return name
+    name = name.replace(" Airport", "")
     if len(name)<=desired_length: return name
     name = name.replace("Northeast ","NE ").replace("Northwest ","NW ").replace("Southeast ","SE ").replace("Southwest ","SW ")
     if len(name)<=desired_length: return name
     name = name.replace("Air National Guard Base","ANGB")
     if len(name)<=desired_length: return name
-    name = name.replace("International","Intl.").replace("National","Natl.").replace("Regional","Rgnl.")
+    name = name.replace("International","Intl.").replace("Internacional","Intl.").replace("Intercontinental","Intcl.").replace("National","Natl.").replace("Regional","Rgnl.")
     if len(name)<=desired_length: return name
-    name = name.replace("Memorial","Mem.")
+    name = name.replace("Memorial","Mem.").replace("Municipal","Muni.").replace("Metropolitan","Metro.").replace("University","Univ.")
     if len(name)<=desired_length: return name
     name = name.replace("Air Force Base","AFB").replace("Air Force","AF")
     if len(name)<=desired_length: return name
@@ -32,7 +34,9 @@ def shorten_airport_name(name,desired_length):
     if len(name)<=desired_length: return name
     name = name.replace("Air Station","AS").replace("Air Base","AB").replace("Airbase","AB")
     if len(name)<=desired_length: return name
-    name = name.replace("Municipal","Muni.").replace("Fort","Ft.").replace("Saint","St.")
+    name = name.replace("Fort","Ft.").replace("Saint","St.")
+    if len(name)<=desired_length: return name
+    name = name.replace("Executive","Exec.")
     return name
 
 
