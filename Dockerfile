@@ -18,6 +18,7 @@ RUN apt update && apt -y install \
   python3-tz \
   llvm-14 \
   llvm-14-dev \
+  ffmpeg \
   cython3 \
   file \
   musl-dev \
