@@ -27,7 +27,7 @@ RUN apt update && apt -y install \
   cmake \
   g++
 
-RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python && make install-python
+RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python && make install-python
 
 WORKDIR /planesign
 
@@ -40,6 +40,6 @@ RUN unlink /etc/nginx/sites-enabled/default
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
 COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 
-RUN pip3 install --break-system-packages -v -r docker_requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
 
 ENTRYPOINT /usr/sbin/nginx && python3 planesign/
