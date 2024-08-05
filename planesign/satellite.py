@@ -389,59 +389,65 @@ def satellites(sign):
             if polltime==None or time.perf_counter()-polltime>10*multiplier:
 
                 with requests.Session() as s:
-                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
+                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
                     response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/45/0/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
-                if response.status_code == requests.codes.ok:
-                    polltime = time.perf_counter()
-                    data = response.json()
+                    if response.status_code == requests.codes.ok:
+                        try:
+                            data = response.json()
+                            polltime = time.perf_counter()
+                        except:
+                            data = None
+                    else:
+                        data = None
 
                     #slow down requests as we approach limit
-                    if data["info"]["transactionscount"]>500:
+                    if data and data["info"]["transactionscount"]>500:
                         #multiplier = 1+2*(data["info"]["transactionscount"]-500)/200
                         multiplier = (500/(1000-min(data["info"]["transactionscount"],998)))
                     else:
                         multiplier = 1
 
-                    above = data["above"]
-                    
-                    above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
+                    if data:
+                        above = data["above"]
+                        
+                        above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
-                    #remove debris from results
-                    above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and "OBJECT-" not in x["satname"] and x["satname"] != "OBJECT" and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == 'true' else True), above))
+                        #remove debris from results
+                        above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and "OBJECT-" not in x["satname"] and x["satname"] != "OBJECT" and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == 'true' else True), above))
 
-                    closest_list = sorted(above, key=lambda k: k["dist"])
-                    lowest_list = sorted(above, key=lambda k: k["satalt"])
+                        closest_list = sorted(above, key=lambda k: k["dist"])
+                        lowest_list = sorted(above, key=lambda k: k["satalt"])
 
-                    closest = closest_list[0]
-                    lowest = lowest_list[0]
+                        closest = closest_list[0]
+                        lowest = lowest_list[0]
 
-                    dupeflag = False
-                    if closest == lowest:
-                        dupeflag = True
-                        lowest=closest_list[random.randint(1,len(closest_list)-1)]
+                        dupeflag = False
+                        if closest == lowest:
+                            dupeflag = True
+                            lowest=closest_list[random.randint(1,len(closest_list)-1)]
 
-                    close_name = closest["satname"]
-                    if close_name.find("STARLINK") != -1:
-                        close_name=close_name.replace("-", "").replace(" ", "")
-                    elif close_name.find("SPACE STATION") == 0:
-                        close_name="ISS"
-                    pindex = close_name.find(' (')
-                    if pindex != -1 and len(close_name)>12:
-                        clean_close_name = close_name[:pindex]
-                    else:
-                        clean_close_name = close_name
+                        close_name = closest["satname"]
+                        if close_name.find("STARLINK") != -1:
+                            close_name=close_name.replace("-", "").replace(" ", "")
+                        elif close_name.find("SPACE STATION") == 0:
+                            close_name="ISS"
+                        pindex = close_name.find(' (')
+                        if pindex != -1 and len(close_name)>12:
+                            clean_close_name = close_name[:pindex]
+                        else:
+                            clean_close_name = close_name
 
-                    low_name = lowest["satname"]
-                    if low_name.find("STARLINK") != -1:
-                        low_name=low_name.replace("-", "").replace(" ", "")
-                    elif low_name.find("SPACE STATION") == 0:
-                        low_name="ISS"
-                    pindex = low_name.find(' (')
-                    if pindex != -1 and len(low_name)>12:
-                        clean_low_name = low_name[:pindex]
-                    else:
-                        clean_low_name = low_name
+                        low_name = lowest["satname"]
+                        if low_name.find("STARLINK") != -1:
+                            low_name=low_name.replace("-", "").replace(" ", "")
+                        elif low_name.find("SPACE STATION") == 0:
+                            low_name="ISS"
+                        pindex = low_name.find(' (')
+                        if pindex != -1 and len(low_name)>12:
+                            clean_low_name = low_name[:pindex]
+                        else:
+                            clean_low_name = low_name
 
             if closest:
                 graphics.DrawText(sign.canvas, sign.font57, 1, 7, graphics.Color(20, 200, 20), clean_close_name[:12])
@@ -533,29 +539,46 @@ def satellites(sign):
         else:
 
             if iss_polltime==None or time.perf_counter()-iss_polltime>270:
-                
+                iss_pos = None
                 with requests.Session() as s:
-                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
+                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
                     response = s.get(satsite+f'/positions/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/300/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
-                if response.status_code == requests.codes.ok:
-                    iss_polltime = time.perf_counter()
-                    data = response.json()
+                    if response.status_code == requests.codes.ok:
+                        try:
+                            data = response.json()
+                            iss_polltime = time.perf_counter()
+                        except Exception as e:
+                            logging.error(f"ISS Position request error: {response.text}")
+                            logging.exception(e)
+                            data = None
+                    else:
+                        data = None
 
-                    iss_pos = data["positions"]
+                if data and "positions" in data:
+                    iss_pos = data["positions"]                    
 
             if iss_flyby_polltime==None or time.perf_counter()-iss_flyby_polltime>86400:
                 iss_flyby = None
+                iss_pass_error_flag = False
                 with requests.Session() as s:
-                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.1)))
+                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1)))
                     iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/10/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
 
-                if iss_response.status_code == requests.codes.ok:
-                    iss_flyby_polltime = time.perf_counter()
-                    iss_data = iss_response.json()
+                    if iss_response.status_code == requests.codes.ok:
+                        try:
+                            iss_data = iss_response.json()
+                            iss_flyby_polltime = time.perf_counter()
+                        except Exception as e:
+                            logging.error(f"ISS Visual Passes request error: {iss_response.text}")
+                            logging.exception(e)
+                            iss_data = None
+                            iss_pass_error_flag = True
+                    else:
+                        iss_data = None
 
-                    if iss_data["info"]["passescount"]>0:
-                        iss_flyby = iss_data["passes"]
+                if iss_data and "info" in iss_data and "passes" in iss_data and "passescount" in iss_data["info"] and iss_data["info"]["passescount"]>0:
+                    iss_flyby = iss_data["passes"]
             
             overhead_flag = 0
             now = time.time()
@@ -648,13 +671,18 @@ def satellites(sign):
                     iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*utilities.KM_2_MI
                     #iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
 
-            else: 
-                formatted_address = "Unknown"
-                logging.warning("No satellite position data found")
+            else:
+                logging.error("No satellite position data found")
                 iss_dist = None
                 iss_alt = None
                 iss_vel = None
                 #iss_dir = None
+
+            if formatted_address == None:
+                formatted_address = "Unknown"
+            
+            if code == None:
+                code = "UNKNOWN"
 
             sign.canvas.SetImage(iss_image, 99, 11)
 
@@ -667,7 +695,7 @@ def satellites(sign):
                 try:
                     image = Image.open(f'{shared_config.icons_dir}/flags/{code}.png').convert('RGBA')
 
-                    if code not in ["states/OH","NPL","OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF"]:
+                    if code not in ["states/OH","NPL","OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","UNKNOWN"]:
                         image = utilities.fix_black(image)
                         
                 except Exception:
@@ -694,10 +722,12 @@ def satellites(sign):
                         r = random.randint(0,255)
                         sign.canvas.SetPixel(113+x, y, r, r, r)
 
+            #Grey name background
             for x in range(25):
                 for y in range(11):
                     sign.canvas.SetPixel(x, y, 5, 5, 5)
             
+            #Name framing
             for x in range(25):
                 sign.canvas.SetPixel(x, 10, 25, 25, 25)
             for y in range(11):
@@ -706,22 +736,29 @@ def satellites(sign):
             graphics.DrawText(sign.canvas, sign.fontreallybig, -1, 10, graphics.Color(20, 20, 200), "I")
             graphics.DrawText(sign.canvas, sign.fontreallybig, 7, 10, graphics.Color(20, 20, 200), "SS")
 
+            #draw country name which ISS is currently above
             formatted_address=formatted_address[:17]
             graphics.DrawText(sign.canvas, sign.font57, max(27,round(68-len(formatted_address)*2.5)), 8, graphics.Color(200, 10, 10), formatted_address)
 
+            #distance from ISS to planesign (along great circle arc in miles)
             graphics.DrawText(sign.canvas, sign.font57, 1, 18, graphics.Color(60, 60, 160), "Dst:")
-            if iss_dist<100:
-                graphics.DrawText(sign.canvas, sign.font57, 21, 18, graphics.Color(60, 60, 160), "{0:.1f}".format(iss_dist))
-            elif iss_dist>=10000:
-                graphics.DrawText(sign.canvas, sign.font57, 21, 18, graphics.Color(60, 60, 160), str(round(iss_dist/1000))+"k")
-            else:
-                graphics.DrawText(sign.canvas, sign.font57, 21, 18, graphics.Color(60, 60, 160), "{0:.0f}".format(iss_dist))
+            if iss_dist:
+                if iss_dist<100:
+                    graphics.DrawText(sign.canvas, sign.font57, 21, 18, graphics.Color(60, 60, 160), "{0:.1f}".format(iss_dist))
+                elif iss_dist>=10000:
+                    graphics.DrawText(sign.canvas, sign.font57, 21, 18, graphics.Color(60, 60, 160), str(round(iss_dist/1000))+"k")
+                else:
+                    graphics.DrawText(sign.canvas, sign.font57, 21, 18, graphics.Color(60, 60, 160), "{0:.0f}".format(iss_dist))
 
+            #speed of ISS (miles/sec)
             graphics.DrawText(sign.canvas, sign.font57, 1, 25, graphics.Color(20, 160, 60), "Vel:")
-            graphics.DrawText(sign.canvas, sign.font57, 21, 25, graphics.Color(20, 160, 60), "{0:.2f}".format(iss_vel))
+            if iss_vel:
+                graphics.DrawText(sign.canvas, sign.font57, 21, 25, graphics.Color(20, 160, 60), "{0:.2f}".format(iss_vel))
 
+            #altitude of ISS (miles)
             graphics.DrawText(sign.canvas, sign.font57, 1, 32, graphics.Color(160, 160, 200), "Alt:")
-            graphics.DrawText(sign.canvas, sign.font57, 21, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(iss_alt))
+            if iss_alt:
+                graphics.DrawText(sign.canvas, sign.font57, 21, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(iss_alt))
 
             if iss_flyby:
                 s = round(flyby["startUTC"]-now)
@@ -730,6 +767,8 @@ def satellites(sign):
                 minutes = s // 60
                 seconds = s - (minutes * 60)
                 flyby_time = "{:02}:{:02}:{:02}".format(int(hours),int(minutes),int(seconds))
+
+                #draw countdown time until next visual pass
                 if overhead_flag:
                     graphics.DrawText(sign.canvas, sign.font57, 49, 16, graphics.Color(246, 242, 116), "Overhead")
                 elif int(hours)>=48:
@@ -743,10 +782,12 @@ def satellites(sign):
                 maxdir = flyby["maxAzCompass"]
                 enddir = flyby["endAzCompass"]
 
+                #draw max elevation degrees (above horizon)
                 graphics.DrawText(sign.canvas, sign.font57, 64, 24, graphics.Color(220, 180, 90), "°")
                 graphics.DrawText(sign.canvas, sign.font57, 55, 24, graphics.Color(220, 180, 90), "{0:.0f}".format(flyby["maxEl"]))
                 graphics.DrawText(sign.canvas, sign.font57, 70, 24, graphics.Color(220,180,90), f'{maxdir}')
 
+                #draw the visual pass brightness star indicator - linearly scales size/brightness of indicator star to pass mag.
                 mx = 88
                 my = 21
                 mag = flyby["mag"]
@@ -790,15 +831,17 @@ def satellites(sign):
                 sign.canvas.SetPixel(mx-1, my+1, b11, b11, b11)
                 sign.canvas.SetPixel(mx+1, my-1, b11, b11, b11)
 
-
+                #draw start/end directions
                 if overhead_flag:
-                    graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(246, 242, 116), startdir)
-                    graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(246, 242, 116), enddir)
+                    dir_color = graphics.Color(246, 242, 116)
                 else:
-                    graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, graphics.Color(142, 140, 68), startdir)
-                    graphics.DrawText(sign.canvas, sign.font57, 85, 32, graphics.Color(142, 140, 68), enddir)
+                    dir_color = graphics.Color(142, 140, 68)
+                
+                graphics.DrawText(sign.canvas, sign.font57, 47-(len(startdir)-1)*5, 32, dir_color, startdir)
+                graphics.DrawText(sign.canvas, sign.font57, 85, 32, dir_color, enddir)
 
 
+                #draw overhead progress tracker bar
                 left_bar = 52
                 right_bar = 83
                 line_y = 28
@@ -814,7 +857,7 @@ def satellites(sign):
                 for x in range(left_bar+1,right_bar):
                     sign.canvas.SetPixel(x, line_y, val, val, val)
                 
-
+                #overhead tracker indicator blip marker
                 if overhead_flag:
                     blip_loc = left_bar+round((right_bar-left_bar)*(now-flyby["startUTC"])/(flyby["endUTC"]-flyby["startUTC"]))
                     if blip_count >= 0 and blip_count < 5:
@@ -830,8 +873,12 @@ def satellites(sign):
                     if blip_count == 17:
                         blip_count = 0
             else:
+                #No visual passes found
                 graphics.DrawText(sign.canvas, sign.font57, 46, 18, graphics.Color(246, 242, 116), "Next Flyby")
-                graphics.DrawText(sign.canvas, sign.font57, 51, 26, graphics.Color(246, 242, 116), "10+ Days")
+                if iss_pass_error_flag: #error getting data from api
+                    graphics.DrawText(sign.canvas, sign.font57, 51, 26, graphics.Color(246, 242, 116), "Unknown")
+                else: #no visual passes found in next 10 days
+                    graphics.DrawText(sign.canvas, sign.font57, 51, 26, graphics.Color(246, 242, 116), "10+ Days")
                     
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
