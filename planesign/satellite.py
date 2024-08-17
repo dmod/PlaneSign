@@ -639,22 +639,24 @@ def satellites(sign):
                             
                             result = water_polys[water_polys.contains(point)]
 
-                            code = "OCEAN"
-            
-                            index = 0
-                            if result.shape[0] > 1:
-                                smallest_area = None
-                                for j in range(result.shape[0]):
-                                    new_area = result["geometry"].iloc[j].area
-                                    if smallest_area == None or (new_area < smallest_area):
-                                        smallest_area = new_area
-                                        index = j
+                            if result.shape[0]:
+                                
+                                code = "OCEAN"
+                
+                                index = 0
+                                if result.shape[0] > 1:
+                                    smallest_area = None
+                                    for j in range(result.shape[0]):
+                                        new_area = result["geometry"].iloc[j].area
+                                        if smallest_area == None or (new_area < smallest_area):
+                                            smallest_area = new_area
+                                            index = j
 
-                            #special case codes
-                            if result["CODE"].iloc[index] in ["IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","NEMO","SHIP"]:
-                                code = result["CODE"].iloc[index]
+                                #special case codes
+                                if result["CODE"].iloc[index] in ["IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","NEMO","SHIP"]:
+                                    code = result["CODE"].iloc[index]
 
-                            formatted_address = result["NAME"].iloc[index]
+                                formatted_address = result["NAME"].iloc[index]
 
                         
                         if formatted_address == None:
