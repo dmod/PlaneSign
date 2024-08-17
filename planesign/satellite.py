@@ -323,7 +323,7 @@ def satellites(sign):
 
     elevation = 0
     with requests.Session() as s:
-        s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, respect_retry_after_header=False)))
+        s.mount('https://', HTTPAdapter(max_retries=Retry(total=10, backoff_factor=0.5, respect_retry_after_header=False)))
         try:
             response = s.get(f'https://api.open-elevation.com/api/v1/lookup?locations={shared_config.CONF["SENSOR_LAT"]},{shared_config.CONF["SENSOR_LON"]}',timeout=1)
  
@@ -558,7 +558,11 @@ def satellites(sign):
                 if data and "positions" in data:
                     iss_pos = data["positions"]                    
 
-            if iss_flyby_polltime==None or time.perf_counter()-iss_flyby_polltime>86400:
+            if iss_flyby == None:
+                iss_flyby_pollperiod = 3600 #1 hour
+            else:
+                iss_flyby_pollperiod = 86400 #24 hrs
+            if iss_flyby_polltime==None or time.perf_counter()-iss_flyby_polltime>iss_flyby_pollperiod:
                 iss_flyby = None
                 iss_pass_error_flag = False
                 with requests.Session() as s:
@@ -589,6 +593,8 @@ def satellites(sign):
                         break
                     if flyby["startUTC"]>now:
                         break
+                if flyby["endUTC"]<now:
+                    iss_flyby = None
 
             if iss_pos:
                 for pos in iss_pos:
@@ -605,50 +611,50 @@ def satellites(sign):
                         #Perform reverse geocoding
                         point = Point(pos['satlongitude'], pos['satlatitude'])
     
-                        #First check for point in water (75% by area)
-                        result = water_polys[water_polys.contains(point)]
+                        #First check for point in countries (water is more probable but you'll miss small islands)
+                        result = country_polys[country_polys.contains(point)]
                         
                         if result.shape[0]:
 
-                            result = result.sort_values('scalerank',ascending=False)
+                            index = 0
+                            if result.shape[0] > 1:
+                                smallest_area = None
+                                for j in range(result.shape[0]):
+                                    new_area = result["geometry"].iloc[j].area
+                                    if smallest_area == None or (new_area < smallest_area):
+                                        smallest_area = new_area
+                                        index = j
+
+                            code = result["CODE"].iloc[index]
+                            formatted_address = result["NAME"].iloc[index]
+
+                            if code == "USA": #Check for state
+                                result = state_polys[state_polys.contains(point)]
+                        
+                                if result.shape[0]:  
+                                    code = "states/"+result["CODE"].iloc[0]
+                                    formatted_address = result["NAME"].iloc[0]     
+        
+                        else: #We're in the water
                             
+                            result = water_polys[water_polys.contains(point)]
+
                             code = "OCEAN"
+            
+                            index = 0
+                            if result.shape[0] > 1:
+                                smallest_area = None
+                                for j in range(result.shape[0]):
+                                    new_area = result["geometry"].iloc[j].area
+                                    if smallest_area == None or (new_area < smallest_area):
+                                        smallest_area = new_area
+                                        index = j
 
                             #special case codes
-                            if result["featurecla"].iloc[0] == "imag":
-                                code = "IMAG"
-                            elif result["featurecla"].iloc[0] == "nemo":
-                                code = "NEMO"
-                            elif result["featurecla"].iloc[0] == "trash":
-                                code = "TRASH"
-                            elif result["featurecla"].iloc[0] == "triangle":
-                                code = "TRIANG"
-                            elif result["featurecla"].iloc[0] == "PSL":
-                                code = "PSL"
-                            elif result["featurecla"].iloc[0] == "EAS":
-                                code = "EAS"
-                            elif result["featurecla"].iloc[0] == "trench":
-                                code = "TRENCH"
-                            elif result["featurecla"].iloc[0] == "reef":
-                                code = "REEF"
+                            if result["CODE"].iloc[index] in ["IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","NEMO","SHIP"]:
+                                code = result["CODE"].iloc[index]
 
-                            formatted_address = result["name_en"].iloc[0]
-        
-                        else: #We're on land
-                            
-                            result = country_polys[country_polys.contains(point)]
-
-                            if result.shape[0]:
-
-                                code = result["ADM0_A3"].iloc[0]
-                                formatted_address = result["NAME"].iloc[0]
-                                
-                                if code == "USA": #Check for state
-                                    result = state_polys[state_polys.contains(point)]
-                            
-                                    if result.shape[0]:  
-                                        code = "states/"+result["ste_area_code"].iloc[0]
-                                        formatted_address = result["ste_name"].iloc[0]       
+                            formatted_address = result["NAME"].iloc[index]
 
                         
                         if formatted_address == None:
@@ -695,11 +701,12 @@ def satellites(sign):
                 try:
                     image = Image.open(f'{shared_config.icons_dir}/flags/{code}.png').convert('RGBA')
 
-                    if code not in ["states/OH","NPL","OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","UNKNOWN"]:
+                    if code not in ["states/OH","NPL","OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","UNKNOWN","NUKE"]:
                         image = utilities.fix_black(image)
                         
                 except Exception:
                     logging.warning(f'Couldn\'t find flag for: {code}')
+                    image = Image.open(f'{shared_config.icons_dir}/flags/UNKNOWN.png').convert('RGBA')
 
             if image:
 
