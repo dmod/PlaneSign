@@ -17,17 +17,19 @@ RUN apt update && apt -y install \
   python3-shapely \
   python3-tz \
   llvm-14 \
-  llvm-14-dev \
   ffmpeg \
   cython3 \
   file \
-  musl-dev \
-  libffi-dev \
   make \
   cmake \
-  g++
+  g++ \
+  && apt clean \
+  && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git && cd rpi-rgb-led-matrix && make build-python && make install-python
+RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git \
+  && cd rpi-rgb-led-matrix \
+  && make build-python \
+  && make install-python
 
 WORKDIR /planesign
 
@@ -42,4 +44,4 @@ COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 
 RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
 
-ENTRYPOINT /usr/sbin/nginx && python3 planesign/
+CMD service nginx start && python3 planesign/

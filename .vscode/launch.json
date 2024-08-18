@@ -12,6 +12,13 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "PlaneSign Debug - devcontainer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/planesign",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "PlaneSign Debug",
             "type": "debugpy",
             "request": "launch",
