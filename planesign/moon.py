@@ -128,7 +128,7 @@ def moon(sign):
             phasename = ""
             fullflag = False
             if phase<=19.948 or phase>340.052:
-                if (ymonth==0).sum()>1 and t.utc.day>15:
+                if ((ymonth==0).sum()>1 and t.utc.day>15) or ((yseason==0).sum()>3 and np.argmin(abs(tseason_events[yseason==0]-t))==2):
                     phasename = "Black Moon"
                 else:
                     if centermoondist.km < 360000:
