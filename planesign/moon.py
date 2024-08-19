@@ -123,7 +123,7 @@ def moon(sign):
             bg = bg.rotate(moonorient, resample=Image.BICUBIC, expand=False)
             bg = bg.resize((36,36),Image.BICUBIC)
 
-            _, ymonth = almanac.find_discrete(ts.utc(t.utc.year,t.utc.month,1,0), ts.utc(t.utc.year,(t.utc.month%12)+1,1,0), almanac.moon_phases(eph))
+            _, ymonth = almanac.find_discrete(ts.utc(t.utc.year,t.utc.month,1,0), ts.utc(t.utc.year+1 if t.utc.month==12 else t.utc.year,(t.utc.month%12)+1,1,0), almanac.moon_phases(eph))
 
             phasename = ""
             fullflag = False
