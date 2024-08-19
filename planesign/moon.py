@@ -60,6 +60,9 @@ def moon(sign):
     stars.append(Star(sign, random.randint(122,127), random.randint(27,31), random.randint(50,150), 0))
 
     lastcalc = None
+    
+    perigee_dist = 360000
+    apogee_dist = 405000
 
     while shared_config.shared_mode.value == 18:
 
@@ -124,19 +127,24 @@ def moon(sign):
             bg = bg.resize((36,36),Image.BICUBIC)
 
             _, ymonth = almanac.find_discrete(ts.utc(t.utc.year,t.utc.month,1,0), ts.utc(t.utc.year+1 if t.utc.month==12 else t.utc.year,(t.utc.month%12)+1,1,0), almanac.moon_phases(eph))
-
+            tseason,_ = almanac.find_discrete(t-timedelta(days=92), t+timedelta(days=92), almanac.seasons(eph))
+            tseason_events, yseason = almanac.find_discrete(tseason[0],tseason[1],almanac.moon_phases(eph))
+            
             phasename = ""
             fullflag = False
             if phase<=19.948 or phase>340.052:
                 if ((ymonth==0).sum()>1 and t.utc.day>15) or ((yseason==0).sum()>3 and np.argmin(abs(tseason_events[yseason==0]-t))==2):
-                    phasename = "Black Moon"
+                    if centermoondist.km < perigee_dist:
+                        phasename = "Sup. "
+                    elif centermoondist.km > apogee_dist:
+                        phasename = "Mic. "
+                    phasename += "Black Moon"
                 else:
-                    if centermoondist.km < 360000:
-                        phasename = "Super New Moon"
-                    elif centermoondist.km > 405000:
-                        phasename = "Micro New Moon"
-                    else:
-                        phasename = "New Moon"
+                    if centermoondist.km < perigee_dist:
+                        phasename = "Super "
+                    elif centermoondist.km > apogee_dist:
+                        phasename = "Micro "
+                    phasename += "New Moon"
             elif phase<=84.261:
                 phasename = "Waxing Crescent"
             elif phase<=95.739:
@@ -146,15 +154,17 @@ def moon(sign):
             elif phase<=199.948:
                 fullflag = True
                 _, ys = almanac.find_discrete(t-timedelta(days=14, hours=18, minutes=22, seconds=1.5), t+timedelta(days=14, hours=18, minutes=22, seconds=1.5), almanac.seasons(eph))
-                tseason,_ = almanac.find_discrete(t-timedelta(days=92), t+timedelta(days=92), almanac.seasons(eph))
-                tseason_events, yseason = almanac.find_discrete(tseason[0],tseason[1],almanac.moon_phases(eph))
                 if 2 in ys and not (((ymonth==2).sum()>1 and t.utc.day>15) or ((yseason==2).sum()>3 and np.argmin(abs(tseason_events[yseason==2]-t))==2)):
-                    phasename = "Harvest Moon"
+                    if centermoondist.km < perigee_dist:
+                        phasename = "S. "
+                    elif centermoondist.km > apogee_dist:
+                        phasename = "M. "
+                    phasename += "Harvest Moon"
                 else:
-                    if centermoondist.km < 360000:
-                        phasename += "Super "
-                    elif centermoondist.km > 405000:
-                        phasename += "Micro "
+                    if centermoondist.km < perigee_dist:
+                        phasename = "Super "
+                    elif centermoondist.km > apogee_dist:
+                        phasename = "Micro "
                     if ((ymonth==2).sum()>1 and t.utc.day>15) or ((yseason==2).sum()>3 and np.argmin(abs(tseason_events[yseason==2]-t))==2):
                         phasename += "Blue Moon"
                     else:
