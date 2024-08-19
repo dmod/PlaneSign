@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw
 import shared_config
 from rgbmatrix import graphics
 import logging
-import math
+import numpy as np
 import __main__
 from skyfield.api import load, wgs84
 from skyfield.trigonometry import position_angle_of
@@ -99,18 +99,18 @@ def moon(sign):
             w, h = 300, 300
             major = 250
 
-            angle = phase*math.pi/180
-            minor = major*abs(math.cos(angle))
+            angle = phase*np.pi/180
+            minor = major*abs(np.cos(angle))
 
             bg = Image.open("./icons/moon/moonbg.png").convert('RGBA')
             moon = Image.open("./icons/moon/moon.png").convert('RGBA')
 
-            if angle<math.pi:
+            if angle<np.pi:
                 mask = Image.open("./icons/moon/moonmaskright.png").convert('L')
             else:
                 mask = Image.open("./icons/moon/moonmaskleft.png").convert('L')
 
-            if angle<math.pi/2 or angle>math.pi*3/2:
+            if angle<np.pi/2 or angle>np.pi*3/2:
                 maskcolor = "black"
             else:
                 maskcolor = "white"
@@ -146,14 +146,16 @@ def moon(sign):
             elif phase<=199.948:
                 fullflag = True
                 _, ys = almanac.find_discrete(t-timedelta(days=14, hours=18, minutes=22, seconds=1.5), t+timedelta(days=14, hours=18, minutes=22, seconds=1.5), almanac.seasons(eph))
-                if 2 in ys and not ((ymonth==2).sum()>1 and t.utc.day>15):
+                tseason,_ = almanac.find_discrete(t-timedelta(days=92), t+timedelta(days=92), almanac.seasons(eph))
+                tseason_events, yseason = almanac.find_discrete(tseason[0],tseason[1],almanac.moon_phases(eph))
+                if 2 in ys and not (((ymonth==2).sum()>1 and t.utc.day>15) or ((yseason==2).sum()>3 and np.argmin(abs(tseason_events[yseason==2]-t))==2)):
                     phasename = "Harvest Moon"
                 else:
                     if centermoondist.km < 360000:
                         phasename += "Super "
                     elif centermoondist.km > 405000:
                         phasename += "Micro "
-                    if (ymonth==2).sum()>1 and t.utc.day>15:
+                    if ((ymonth==2).sum()>1 and t.utc.day>15) or ((yseason==2).sum()>3 and np.argmin(abs(tseason_events[yseason==2]-t))==2):
                         phasename += "Blue Moon"
                     else:
                         phasename += "Full Moon"
