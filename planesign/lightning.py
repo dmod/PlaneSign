@@ -574,7 +574,7 @@ class LightningManager:
 
         graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180,180,40), str(numstrikes))
 
-        if closest1 and closest1["dist"]<1 and closest1["time"]+30 > now and ("warned" not in closest1):
+        if closest1 and closest1["dist"]<2 and closest1["time"]+30 > now and ("warned" not in closest1):
             logging.info(f'LIGHTNING STRIKE DANGER: Strike detected {closest1["dist"]} miles away!')
             self.strikes[self.strikes.index(closest1)]["warned"]=True
             old = self.sign.matrix.SwapOnVSync(self.sign.canvas)
