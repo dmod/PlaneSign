@@ -297,12 +297,12 @@ class LightningManager:
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
         self.connected.value = 0
-        self.close()
+        #self.close()
     
     def onClose(self, ws, close_status_code="", close_msg=""):
         logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
         self.connected.value = 0
-        self.close()
+        #self.close()
         
     def onOpen(self, ws):
 
@@ -406,8 +406,8 @@ class LightningManager:
             thread.start_new_thread(heartbeat, ())  
     
     def close(self):
-        if self.connected.value == 1:
-            self.ws.close()
+        #if self.connected.value == 1:
+        #    self.ws.close()
         if self.thread and self.thread.is_alive():
             self.thread.terminate()
 
