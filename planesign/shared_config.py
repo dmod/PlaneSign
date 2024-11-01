@@ -1,4 +1,5 @@
 from multiprocessing import Value
+import os
 
 shared_mode = Value('i', 1)
 shared_prev_mode = Value('i', 0)
@@ -22,7 +23,18 @@ local_timezone = None
 
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"
-font_dir = "../rpi-rgb-led-matrix/fonts"
+
+possible_font_dirs = [
+    "../rpi-rgb-led-matrix/fonts",
+    "../../rpi-rgb-led-matrix/fonts"
+]
+font_dir = None
+for path in possible_font_dirs:
+    if os.path.exists(path):
+        print(f"Found font directory at {path}")
+        font_dir = path
+        break
+
 sounds_dir = "sounds"
 datafiles_dir = "./datafiles"
 
