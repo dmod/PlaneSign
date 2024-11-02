@@ -151,20 +151,16 @@ def set_track_a_flight(flight_num):
 
 @app.route('/set_mode/<mode>')
 def set_mode(mode):
-    try:
-        new_mode = DisplayMode[mode]
-        shared_config.shared_mode.value = new_mode.value
-        return jsonify({"success": True, "mode": new_mode.name})
-    except KeyError:
-        return jsonify({
-            "success": False, 
-            "error": f"Invalid mode. Valid modes are: {[m.name for m in DisplayMode]}"
-        }), 400
+    shared_config.shared_mode.value = DisplayMode[mode].value
+    if request.args:
+        shared_config.arg_dict.update(request.args)
+    shared_config.shared_forced_sign_update.value = 1
+    return ""
 
 
 @app.route("/get_mode")
 def get_mode():
-    return str(shared_config.shared_mode.value)
+    return DisplayMode(shared_config.shared_mode.value).name
 
 
 @app.route("/set_brightness/<brightness>")
