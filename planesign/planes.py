@@ -54,34 +54,34 @@ def show_closest_plane_if_in_alert_radius(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANES_ALWAYS)
+@__main__.planesign_mode_handler(DisplayMode.PLANES_CLOSEST)
 def always_show_closest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.PLANES_ALWAYS.value:
+    while shared_config.shared_mode.value == DisplayMode.PLANES_CLOSEST.value:
         plane_to_show = shared_config.data_dict["closest"]
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.WEATHER)
+@__main__.planesign_mode_handler(DisplayMode.PLANES_HIGHEST)
 def always_show_highest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.WEATHER.value:
+    while shared_config.shared_mode.value == DisplayMode.PLANES_HIGHEST.value:
         plane_to_show = shared_config.data_dict["highest"]
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PONG)
+@__main__.planesign_mode_handler(DisplayMode.PLANES_FASTEST)
 def always_show_fastest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.PONG.value:
+    while shared_config.shared_mode.value == DisplayMode.PLANES_FASTEST.value:
         plane_to_show = shared_config.data_dict["fastest"]
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.SATELLITE)
+@__main__.planesign_mode_handler(DisplayMode.PLANES_SLOWEST)
 def always_show_slowest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.SATELLITE.value:
+    while shared_config.shared_mode.value == DisplayMode.PLANES_SLOWEST.value:
         plane_to_show = shared_config.data_dict["slowest"]
         show_a_plane(sign, plane_to_show, scroll)
 

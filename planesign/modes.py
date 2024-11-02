@@ -4,7 +4,10 @@ class DisplayMode(Enum):
     SIGN_OFF = auto()              # Sign off
     TIME_ONLY = auto()             # Time only
     PLANES_ALERT = auto()          # Show planes when in alert radius
-    PLANES_ALWAYS = auto()         # Always show closest plane
+    PLANES_CLOSEST = auto()        # Show closest plane
+    PLANES_HIGHEST = auto()        # Show highest plane
+    PLANES_FASTEST = auto()        # Show fastest plane
+    PLANES_SLOWEST = auto()        # Show slowest plane
     WEATHER = auto()               # Weather display
     WELCOME = auto()               # Welcome screen
     PONG = auto()                  # Pong game

@@ -149,10 +149,10 @@ def set_track_a_flight(flight_num):
     return ""
 
 
-@app.route('/set_mode')
-def set_mode():
+@app.route('/set_mode/<mode>')
+def set_mode(mode):
     try:
-        new_mode = DisplayMode[request.args.get('mode')]
+        new_mode = DisplayMode[mode]
         shared_config.shared_mode.value = new_mode.value
         return jsonify({"success": True, "mode": new_mode.name})
     except KeyError:
@@ -344,6 +344,7 @@ class PlaneSign:
                         self.defined_mode_handlers[display_mode](self)
                     else:
                         logging.error(f"Mode {display_mode.name} has no handler defined...")
+                        shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
                 except ValueError:
                     logging.error(f"Invalid mode value: {mode}. Must be one of {[m.value for m in DisplayMode]}")
 
