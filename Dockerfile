@@ -44,4 +44,4 @@ COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 
 RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
 
-CMD service nginx start && python3 planesign/
+CMD ["sh", "-c", "service nginx start && python3 planesign/"]
