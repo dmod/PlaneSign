@@ -16,7 +16,8 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/planesign",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "preLaunchTask": "Start nginx"
         },
         {
             "name": "PlaneSign Debug",

@@ -6,6 +6,7 @@ import random
 from PIL import Image, ImageDraw
 import shared_config
 import __main__
+from modes import DisplayMode
 
 
 tankxmin = -100
@@ -26,7 +27,7 @@ tanklayout = current_state = [[0 for j in range(32)] for i in range(128)]
 def randomloc():
     return (random.randint(tankxmin,tankxmax),random.randint(tankymin,tankymax),random.randint(tankzmin,tankzmax))
 
-@__main__.planesign_mode_handler(14)
+@__main__.planesign_mode_handler(DisplayMode.AQUARIUM)
 def aquarium(sign):
     sign.canvas.Clear()
 
@@ -45,7 +46,7 @@ def aquarium(sign):
     copper = Fish(tank, "Copperbanded", 1.5, 0.01)
     wrasse = Fish(tank, "Wrasse", 3, 0.01)
 
-    while shared_config.shared_mode.value == 14:
+    while shared_config.shared_mode.value == DisplayMode.AQUARIUM.value:
         tank.swim()
         tank.draw()
         sign.wait_loop(0.1)

@@ -2,8 +2,9 @@ import shared_config
 from rgbmatrix import graphics
 import __main__
 
+from modes import DisplayMode
 
-@__main__.planesign_mode_handler(9)
+@__main__.planesign_mode_handler(DisplayMode.WELCOME)
 def welcome(self):
 
     self.canvas.Clear()
@@ -11,4 +12,4 @@ def welcome(self):
     self.canvas = self.matrix.SwapOnVSync(self.canvas)
     self.wait_loop(2)
     self.canvas.Clear()
-    shared_config.shared_mode.value = 1  # Go back to the default mode after this welcome
+    shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value  # Go back to the default mode after this welcome

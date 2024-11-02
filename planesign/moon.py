@@ -14,8 +14,9 @@ from skyfield.framelib import ecliptic_frame
 from skyfield import almanac
 from satellite import Star
 
+from modes import DisplayMode
 
-@__main__.planesign_mode_handler(18)
+@__main__.planesign_mode_handler(DisplayMode.MOON)
 def moon(sign):
 
     i=0
@@ -64,7 +65,7 @@ def moon(sign):
     perigee_dist = 360000
     apogee_dist = 405000
 
-    while shared_config.shared_mode.value == 18:
+    while shared_config.shared_mode.value == DisplayMode.MOON.value:
 
         i=(i+1)%25
 

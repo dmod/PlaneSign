@@ -5,6 +5,7 @@ from rgbmatrix import graphics
 import utilities
 import __main__
 from FlightRadar24.api import FlightRadar24API, Flight
+from modes import DisplayMode
 
 prev_stats = types.SimpleNamespace()
 prev_stats.distance = 0
@@ -40,10 +41,10 @@ def shorten_airport_name(name,desired_length):
     return name
 
 
-@__main__.planesign_mode_handler(1)
+@__main__.planesign_mode_handler(DisplayMode.PLANES_ALERT)
 def show_closest_plane_if_in_alert_radius(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == 1:
+    while shared_config.shared_mode.value == DisplayMode.PLANES_ALERT.value:
         if shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= 2:
             plane_to_show = shared_config.data_dict["closest"]
         else:
@@ -53,34 +54,34 @@ def show_closest_plane_if_in_alert_radius(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(2)
+@__main__.planesign_mode_handler(DisplayMode.PLANES_ALWAYS)
 def always_show_closest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == 2:
+    while shared_config.shared_mode.value == DisplayMode.PLANES_ALWAYS.value:
         plane_to_show = shared_config.data_dict["closest"]
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(3)
+@__main__.planesign_mode_handler(DisplayMode.WEATHER)
 def always_show_highest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == 3:
+    while shared_config.shared_mode.value == DisplayMode.WEATHER.value:
         plane_to_show = shared_config.data_dict["highest"]
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(4)
+@__main__.planesign_mode_handler(DisplayMode.PONG)
 def always_show_fastest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == 4:
+    while shared_config.shared_mode.value == DisplayMode.PONG.value:
         plane_to_show = shared_config.data_dict["fastest"]
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(5)
+@__main__.planesign_mode_handler(DisplayMode.SATELLITE)
 def always_show_slowest_plane(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
-    while shared_config.shared_mode.value == 5:
+    while shared_config.shared_mode.value == DisplayMode.SATELLITE.value:
         plane_to_show = shared_config.data_dict["slowest"]
         show_a_plane(sign, plane_to_show, scroll)
 
@@ -176,7 +177,7 @@ def get_plane_data_worker(data_dict):
     while not shutdown_flag:
 
         try:
-            if shared_config.shared_mode.value == 0:
+            if shared_config.shared_mode.value == DisplayMode.SIGN_OFF.value:
                 logging.info("Sign off, skipping FR24 request...")
             else:
 

@@ -7,7 +7,7 @@ import numpy as np
 import utilities
 import os
 import __main__
-
+from modes import DisplayMode
 RGB = namedtuple('RGB', 'r g b')
 
 COLORS = {}
@@ -18,7 +18,7 @@ COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_O
 COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
 
-@__main__.planesign_mode_handler(8)
+@__main__.planesign_mode_handler(DisplayMode.CUSTOM_MESSAGE)
 def show_custom_message(sign):
     starting_color_index = 0
 
@@ -37,7 +37,7 @@ def show_custom_message(sign):
 
     color_mode_offset = 6
 
-    while shared_config.shared_mode.value == 8:
+    while shared_config.shared_mode.value == DisplayMode.CUSTOM_MESSAGE.value:
         sign.canvas.Clear()
 
         raw_message = ""

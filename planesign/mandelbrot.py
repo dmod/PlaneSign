@@ -9,7 +9,7 @@ from numba import njit, jit, prange
 import shared_config
 import __main__
 import logging
-
+from modes import DisplayMode
 # Function to calculate whether a point is in the Mandelbrot set
 @njit
 def mandelbrot(x0,y0, max_iter):
@@ -185,7 +185,7 @@ def find_border_point(precision, max_iterations=100000):
     #print(m)
     return tx,ty
 
-@__main__.planesign_mode_handler(22)
+@__main__.planesign_mode_handler(DisplayMode.MANDELBROT)
 def mandelbrot_zoom(sign):
     sign.canvas.Clear()
     
@@ -209,7 +209,7 @@ def mandelbrot_zoom(sign):
     # Parameters for the Mandelbrot set and animation
     INIT_WIDTH, INIT_HEIGHT = 7*3, 7*3*32/128
 
-    while shared_config.shared_mode.value == 22:
+    while shared_config.shared_mode.value == DisplayMode.MANDELBROT.value:
 
         if np.random.rand()<0.1:
             xb,yb = find_border_point(1e-3)

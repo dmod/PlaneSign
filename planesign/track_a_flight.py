@@ -7,8 +7,9 @@ from FlightRadar24.api import FlightRadar24API, Flight
 import utilities
 import __main__
 
+from modes import DisplayMode
 
-@__main__.planesign_mode_handler(99)
+@__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
 def track_a_flight(sign):
 
     if "track_a_flight_num" not in shared_config.data_dict:
@@ -19,7 +20,7 @@ def track_a_flight(sign):
     requests_limiter = 0
     blip_count = 0
 
-    while shared_config.shared_mode.value == 99:
+    while shared_config.shared_mode.value == DisplayMode.TRACK_A_FLIGHT.value:
 
         flight_num_hex = shared_config.data_dict["track_a_flight_num"]
 

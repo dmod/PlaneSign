@@ -9,6 +9,7 @@ import utilities
 import numpy as np
 import shared_config
 import __main__
+from modes import DisplayMode
 
 
 TRAIL_PARTICLE = 0
@@ -24,12 +25,12 @@ TRACER_FW = 2
 CRACKLER_FW = 3
 
 
-@__main__.planesign_mode_handler(16)
+@__main__.planesign_mode_handler(DisplayMode.FIREWORKS)
 def fireworks(sign):
     sign.canvas.Clear()
 
     fireworks = []
-    while shared_config.shared_mode.value == 16:
+    while shared_config.shared_mode.value == DisplayMode.FIREWORKS.value:
         if len(fireworks) == 0 or (len(fireworks) < 10 and random.random() < 0.2):
             if random.random() < 0.6:
                 ftype = RING_FW

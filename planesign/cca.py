@@ -8,9 +8,9 @@ import random
 import utilities
 import shared_config
 import __main__
+from modes import DisplayMode
 
-
-@__main__.planesign_mode_handler(12)
+@__main__.planesign_mode_handler(DisplayMode.CCA)
 def cca(sign):
     sign.canvas.Clear()
 
@@ -27,7 +27,7 @@ def cca(sign):
             current_state[i][j] = random.randrange(0, numstates)
 
     tstart = time.perf_counter()
-    while shared_config.shared_mode.value == 12:
+    while shared_config.shared_mode.value == DisplayMode.CCA.value:
 
         for col in range(0, 128):
             for row in range(0, 32):

@@ -2,8 +2,9 @@ import shared_config
 import random
 from rgbmatrix import graphics
 import __main__
+from modes import DisplayMode
 
-@__main__.planesign_mode_handler(11)
+@__main__.planesign_mode_handler(DisplayMode.PONG)
 def pong(sign):
 
     xball = 64
@@ -30,7 +31,7 @@ def pong(sign):
         for height in range(starting_y_value_2, starting_y_value_2 + 6):
             sign.canvas.SetPixel(width, height, 20, 20, 255)
 
-    while shared_config.shared_mode.value == 11:
+    while shared_config.shared_mode.value == DisplayMode.PONG.value:
         framecount += 1
         sign.canvas.Clear()
 

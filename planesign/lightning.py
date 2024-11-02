@@ -21,13 +21,13 @@ import os.path
 import shared_config
 import logging
 import __main__
-
+from modes import DisplayMode
 
 USAlong=-96
 USAlat=38
 USAscale=55
 
-@__main__.planesign_mode_handler(15)
+@__main__.planesign_mode_handler(DisplayMode.LIGHTNING)
 def lightning(sign):
     sign.canvas.Clear()
 
@@ -61,7 +61,7 @@ def lightning(sign):
         if breakout:
             return
 
-    shared_config.shared_mode.value = 1
+    shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
 
 def mercator_proj(lat, lon):
     x = np.radians(lon)

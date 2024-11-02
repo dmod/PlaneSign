@@ -8,7 +8,7 @@ import time
 import random
 import shared_config
 import __main__
-
+from modes import DisplayMode
 RGB = namedtuple('RGB', 'r g b')
 
 COLORS = {}
@@ -18,7 +18,7 @@ COLORS[2] = [RGB(12, 169, 12), RGB(206, 13, 13)]  # CHRISTMAS
 COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_OF_JULY
 COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
-@__main__.planesign_mode_handler(21)
+@__main__.planesign_mode_handler(DisplayMode.COUNTDOWN)
 def countdown(sign):
 
     sign.canvas.Clear()
@@ -34,7 +34,7 @@ def countdown(sign):
     # color_cycle_time = 0
     # color_period = 0.01
 
-    while shared_config.shared_mode.value == 21:
+    while shared_config.shared_mode.value == DisplayMode.COUNTDOWN.value:
 
         #enable_blink = False
         enable_blink = True
