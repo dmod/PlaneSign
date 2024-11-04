@@ -24,4 +24,5 @@ class DisplayMode(Enum):
     CCA = auto()                   # Cellular automaton
     CGOL = auto()                  # Conway's Game of Life
     MOON = auto()                  # Moon phase display
+    SPORTS_BALL = auto()           # Sports ball display
     CUSTOM_MESSAGE = auto()        # Custom message display
