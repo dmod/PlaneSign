@@ -47,7 +47,7 @@ def cgol(sign):
     #r,g,b = random_rgb()
 
     tstart = time.perf_counter()
-    while shared_config.shared_mode.value == DisplayMode.CGOL:
+    while shared_config.shared_mode.value == DisplayMode.CGOL.value:
 
         detect2cycle = True
         gen_index += 1

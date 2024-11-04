@@ -232,34 +232,34 @@ function set_mode(mode) {
     document.getElementById(mode).style.backgroundColor = "red"; // Turn on new button
     global_current_mode = mode;
 
-    if (mode !== 8) {
+    if (mode !== 'CUSTOM_MESSAGE') {
         document.getElementById('custom_message_div').hidden = true;
     }
-    if (mode !== 10) {
+    if (mode !== 'CGOL') {
         document.getElementById('cgol_div').hidden = true;
     }
-    if (mode !== 11) {
+    if (mode !== 'PONG') {
         document.getElementById('pong_div').hidden = true;
     }
-    if (mode !== 13) {
+    if (mode !== 'FINANCE') {
         document.getElementById('finance_div').hidden = true;
     }
-    if (mode !== 15) {
+    if (mode !== 'LIGHTNING') {
         document.getElementById('lightning_div').hidden = true;
     }
-    if (mode !== 17) {
+    if (mode !== 'SATELLITE') {
         document.getElementById('satellite_div').hidden = true;
     }
-    if (mode !== 21) {
+    if (mode !== 'COUNTDOWN') {
         document.getElementById('countdown_div').hidden = true;
     }
-    if (mode !== 22) {
+    if (mode !== 'MANDELBROT') {
         document.getElementById('mandelbrot_div').hidden = true;
     }
-    if (mode !== 99) {
+    if (mode !== 'TRACK_A_FLIGHT') {
         document.getElementById('track-a-flight_div').hidden = true;
     }
-    if (mode == 10) {
+    if (mode == 'CGOL') {
         var ele = document.getElementsByName('cgolstyle');
         for (i = 0; i < ele.length; i++) {
             if (ele[i].checked)
