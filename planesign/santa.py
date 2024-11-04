@@ -12,7 +12,7 @@ import PIL.Image as Image
 import shared_config
 import utilities
 import __main__
-
+from modes import DisplayMode
 
 class SleighParticle:
 
@@ -131,7 +131,7 @@ def assign_role(i,now):
 
     return r
 
-@__main__.planesign_mode_handler(19)
+@__main__.planesign_mode_handler(DisplayMode.SANTA)
 def santa(sign):
     sign.canvas.Clear()
 
@@ -332,7 +332,7 @@ def santa(sign):
     #now = datetime(2023, 12, 25, 9, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
     #now = datetime(2023, 12, 26, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
     #now = datetime(2024, 1, 1, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
-    while shared_config.shared_mode.value == 19:
+    while shared_config.shared_mode.value == DisplayMode.SANTA.value:
 
         now = datetime.now(pytz.utc).astimezone(shared_config.local_timezone)
         #now = now+timedelta(seconds=0.1)

@@ -19,14 +19,15 @@ import shared_config
 import __main__
 import logging
 
+from modes import DisplayMode
 
-@__main__.planesign_mode_handler(13)
+@__main__.planesign_mode_handler(DisplayMode.FINANCE)
 def finance(self):
     self.canvas.Clear()
     shared_config.data_dict["ticker"] = None
     s = None
 
-    while shared_config.shared_mode.value == 13:
+    while shared_config.shared_mode.value == DisplayMode.FINANCE.value:
 
         ddt = shared_config.data_dict["ticker"]
 

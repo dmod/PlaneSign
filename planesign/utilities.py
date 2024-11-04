@@ -16,8 +16,9 @@ from datetime import datetime
 
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
-KM_2_MI = 0.6214
+KM_2_MI = 0.6214    
 
+from modes import DisplayMode
 
 def read_config():
     shared_config.CONF.clear()
@@ -789,9 +790,9 @@ def set_matrix(x, y, matrix, val):
     matrix[x][y] = val
 
 
-@__main__.planesign_mode_handler(7)
+@__main__.planesign_mode_handler(DisplayMode.TIME_ONLY)
 def only_show_time(sign):
-    while shared_config.shared_mode.value == 7:
+    while shared_config.shared_mode.value == DisplayMode.TIME_ONLY.value:
         show_time(sign)
         breakout = sign.wait_loop(1)
         if breakout:
@@ -953,7 +954,7 @@ def weather_icon_decode(code,status):
 
     return icon,status
 
-@__main__.planesign_mode_handler(0)
+@__main__.planesign_mode_handler(DisplayMode.SIGN_OFF)
 def clear_matrix(sign):
     sign.canvas.Clear()
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)

@@ -10,6 +10,7 @@ import PIL.Image as Image
 import shared_config
 import utilities
 import __main__
+from modes import DisplayMode
 
 class SnowFlake:
         def __init__(self):
@@ -61,7 +62,7 @@ class SnowFlake:
                 self.y-=50
                 self.load()
             
-@__main__.planesign_mode_handler(20)
+@__main__.planesign_mode_handler(DisplayMode.SNOWFALL)
 def snowfall(sign):
 
     sign.canvas.Clear()
@@ -70,7 +71,7 @@ def snowfall(sign):
     for i in range(30):
         flakes.append(SnowFlake())
 
-    while shared_config.shared_mode.value == 20:
+    while shared_config.shared_mode.value == DisplayMode.SNOWFALL.value:
         background = Image.new('RGB', (128, 32), (0, 0, 0)) 
         for f in flakes:
             if f.layer==2:

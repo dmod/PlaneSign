@@ -9,9 +9,10 @@ import shared_config
 import utilities
 import math
 import __main__
+from modes import DisplayMode
 
 
-@__main__.planesign_mode_handler(10)
+@__main__.planesign_mode_handler(DisplayMode.CGOL)
 def cgol(sign):
     sign.canvas.Clear()
 
@@ -46,7 +47,7 @@ def cgol(sign):
     #r,g,b = random_rgb()
 
     tstart = time.perf_counter()
-    while shared_config.shared_mode.value == 10:
+    while shared_config.shared_mode.value == DisplayMode.CGOL.value:
 
         detect2cycle = True
         gen_index += 1

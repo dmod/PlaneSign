@@ -1,12 +1,17 @@
-ALL_MODE_HANDLERS = {}
+from functools import wraps
+from modes import DisplayMode
 
-def planesign_mode_handler(mode_int):
+defined_mode_handlers = {}
 
-    def handler(func):
-        print(f"Mode {mode_int} will be set to: '{func.__name__}' in module '{func.__module__}'")
-        ALL_MODE_HANDLERS[mode_int] = func
-
-    return handler
+def planesign_mode_handler(mode: DisplayMode):
+    """Decorator to register mode handlers"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+        defined_mode_handlers[mode] = wrapper
+        return wrapper
+    return decorator
 
 
 from multiprocessing import Process, Manager, Queue
@@ -33,7 +38,7 @@ import signal
 import sys
 import os
 import logging
-
+from modes import DisplayMode
 
 manager = Manager()
 shared_config.data_dict = manager.dict()
@@ -49,7 +54,7 @@ shared_config.data_dict["slowest"] = None
 
 def exit_gracefully(*args):
     logging.debug("Exiting...")
-    shared_config.shared_mode.value = 0
+    shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
     shared_config.shared_forced_sign_update.value = 1
     shared_config.shared_shutdown_event.set()
 
@@ -107,7 +112,7 @@ api_server_process.start()
 plane_data_process.start()
 weather_data_process.start()
 
-planesign.PlaneSign(ALL_MODE_HANDLERS).sign_loop()
+planesign.PlaneSign(defined_mode_handlers).sign_loop()
 
 api_server_process.join()
 plane_data_process.join()

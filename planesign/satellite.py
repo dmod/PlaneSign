@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 from os.path import exists
 import os
 import __main__
-
+from modes import DisplayMode
 class Star:
     def __init__(self,sign,x,y,period=None,minbright=None):
         self.x=x
@@ -254,7 +254,7 @@ def get_flag(selected,satellite_data):
 
     return image
 
-@__main__.planesign_mode_handler(17)
+@__main__.planesign_mode_handler(DisplayMode.SATELLITE)
 def satellites(sign):
 
     sign.canvas.Clear()
@@ -382,7 +382,7 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
     stars.append(Star(sign, random.randint(112,127), random.randint(0,12), random.randint(50,150), 0))
 
-    while shared_config.shared_mode.value == 17:
+    while shared_config.shared_mode.value == DisplayMode.SATELLITE.value:
 
         if shared_config.shared_satellite_mode.value == 1:
 

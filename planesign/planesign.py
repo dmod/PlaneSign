@@ -35,6 +35,7 @@ from flask_cors import CORS
 
 import utilities
 import shared_config
+from modes import DisplayMode
 
 app = Flask(__name__)
 CORS(app)
@@ -117,7 +118,7 @@ def turn_on():
 @app.route("/turn_off")
 def turn_off():
     shared_config.shared_prev_mode.value = shared_config.shared_mode.value
-    shared_config.shared_mode.value = 0
+    shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
@@ -143,14 +144,14 @@ def get_possible_flights(query_string):
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
     shared_config.data_dict["track_a_flight_num"] = flight_num
-    shared_config.shared_mode.value = 99
+    shared_config.shared_mode.value = DisplayMode.TRACK_A_FLIGHT.value
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
 
-@app.route("/set_mode/<mode>")
+@app.route('/set_mode/<mode>')
 def set_mode(mode):
-    shared_config.shared_mode.value = int(mode)
+    shared_config.shared_mode.value = DisplayMode[mode].value
     if request.args:
         shared_config.arg_dict.update(request.args)
     shared_config.shared_forced_sign_update.value = 1
@@ -159,7 +160,7 @@ def set_mode(mode):
 
 @app.route("/get_mode")
 def get_mode():
-    return str(shared_config.shared_mode.value)
+    return DisplayMode(shared_config.shared_mode.value).name
 
 
 @app.route("/set_brightness/<brightness>")
@@ -332,17 +333,20 @@ class PlaneSign:
         while not shared_config.shared_shutdown_event.is_set():
             try:
 
-                mode = shared_config.shared_mode.value
-
-                if mode in self.defined_mode_handlers:
-                    logging.info(f"Setting mode to {mode}")
-                    self.defined_mode_handlers[mode](self)
-                else:
-                    logging.error(f"Mode currently set to {mode} but no handler exists...")
+                try:
+                    display_mode = DisplayMode(shared_config.shared_mode.value)  # Convert int to enum
+                    if display_mode in self.defined_mode_handlers:
+                        logging.info(f"Setting mode to {display_mode.name}")
+                        self.defined_mode_handlers[display_mode](self)
+                    else:
+                        logging.error(f"Mode {display_mode.name} has no handler defined...")
+                        shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
+                except ValueError:
+                    logging.error(f"Invalid mode value: {mode}. Must be one of {[m.value for m in DisplayMode]}")
 
             except:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
-                shared_config.shared_mode.value = 1 #Reset to default mode
+                shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value #Reset to default mode
 
         logging.info("--- END OF SIGN LOOP ---")

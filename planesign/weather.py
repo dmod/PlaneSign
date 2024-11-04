@@ -7,13 +7,14 @@ import shared_config
 import __main__
 from rgbmatrix import graphics
 
+from modes import DisplayMode
 
-@__main__.planesign_mode_handler(6)
+@__main__.planesign_mode_handler(DisplayMode.WEATHER)
 def show_weather(sign):
 
     polltime = None
 
-    while shared_config.shared_mode.value == 6:
+    while shared_config.shared_mode.value == DisplayMode.WEATHER.value:
 
         sign.canvas.Clear()
 

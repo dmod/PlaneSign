@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start nginx",
+            "type": "shell",
+            "command": "service nginx start",
+            "presentation": {
+                "reveal": "silent"
+            }
+        }
+    ]
+} 
