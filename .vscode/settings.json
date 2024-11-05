@@ -1,4 +1,23 @@
 {
     "python.pythonPath": "/usr/bin/python3",
-    "python.formatting.autopep8Args": ["--max-line-length", "240"]
+    "python.formatting.autopep8Args": ["--max-line-length", "240"],
+    "editor.wordWrap": "off",
+    "editor.rulers": [120],
+    "diffEditor.wordWrap": "off",
+    "html.format.wrapLineLength": 0,
+    "python.analysis.typeCheckingMode": "strict",
+    "python.linting.enabled": true,
+    "python.formatting.provider": "black",
+    "[python]": {
+        "editor.wordWrap": "off",
+        "editor.formatOnSave": true
+    },
+    "[javascript]": {
+        "editor.wordWrap": "off",
+        "editor.formatOnSave": true
+    },
+    "[html]": {
+        "editor.wordWrap": "off",
+        "editor.formatOnSave": true
+    }
 }

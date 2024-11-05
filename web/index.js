@@ -70,7 +70,7 @@ window.onload = function () {
 
 }
 
-function startRecording() {
+function start_recording() {
     console.log("Starting recording...")
 
     var mic = document.getElementById("mic-icon");
@@ -79,7 +79,7 @@ function startRecording() {
     recorder.start();
 }
 
-function stopRecording() {
+function stop_recording() {
     console.log("Stopping recording...")
 
     var mic = document.getElementById("mic-icon");
@@ -89,7 +89,7 @@ function stopRecording() {
     recorder.stop();
 }
 
-function onRecordingReady(e) {
+function on_recording_ready(e) {
     fetch('api/play_audio', {
         method: "POST",
         body: e.data
@@ -114,7 +114,7 @@ function call_endpoint(endpoint, callback) {
     request.send();
 }
 
-function closeAllLists() {
+function close_all_lists() {
     var allitems = document.getElementsByClassName("autocomplete-items");
 
     for (let x of allitems) {
@@ -126,7 +126,7 @@ function get_possible_autofill_flights(query_string) {
     call_endpoint("/get_possible_flights/" + query_string, function (value) {
         live_flights = JSON.parse(value)['results'].filter((flight) => { return flight['type'] == 'live' })
 
-        closeAllLists();
+        close_all_lists();
 
         a = document.createElement("div");
         a.setAttribute("class", "autocomplete-items");
@@ -143,7 +143,7 @@ function get_possible_autofill_flights(query_string) {
             b.innerHTML += "<br>" + flight['detail']['route']
 
             b.addEventListener("click", function (e) {
-                closeAllLists();
+                close_all_lists();
                 document.getElementById("track-a-flight_flight-num-input").value = flight['detail']['callsign']
                 call_endpoint('/set_track_a_flight/' + flight['id'])
             });
@@ -188,15 +188,15 @@ function get_audio_support() {
                 })
                     .then(function (stream) {
                         recordButton.disabled = false;
-                        recordButton.addEventListener('mousedown', startRecording);
-                        recordButton.addEventListener('mouseup', stopRecording);
-                        recordButton.addEventListener('touchstart', startRecording);
-                        recordButton.addEventListener('touchend', stopRecording);
+                        recordButton.addEventListener('mousedown', start_recording);
+                        recordButton.addEventListener('mouseup', stop_recording);
+                        recordButton.addEventListener('touchstart', start_recording);
+                        recordButton.addEventListener('touchend', stop_recording);
                         recorder = new MediaRecorder(stream);
 
                         // listen to dataavailable, which gets triggered whenever we have
                         // an audio blob available
-                        recorder.addEventListener('dataavailable', onRecordingReady);
+                        recorder.addEventListener('dataavailable', on_recording_ready);
                     });
             } catch (e) {
                 console.error(e)
@@ -292,12 +292,12 @@ function set_countdown(datetime, msgstr) {
     call_endpoint("/set_countdown/" + datetime + "/" + msgstr);
 }
 
-function showoptions() {
+function show_options() {
     read_conf()
     document.getElementById("optionsSidebar").style.display = "block";
 }
 
-function hideoptions() {
+function hide_options() {
     document.getElementById("optionsSidebar").style.display = "none";
 }
 
