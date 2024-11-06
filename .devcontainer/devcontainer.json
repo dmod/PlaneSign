@@ -16,6 +16,6 @@
 		}
 	},
 	"containerEnv": {
-		"PLANESIGN_ROOT": "/workspaces/planesign"
+		"PLANESIGN_ROOT": "/workspaces/PlaneSign"
 	}
 }
