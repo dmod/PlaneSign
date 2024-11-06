@@ -14,5 +14,8 @@
 				"ms-azuretools.vscode-docker"
 			]
 		}
+	},
+	"containerEnv": {
+		"PLANESIGN_ROOT": "/workspaces/planesign"
 	}
 }

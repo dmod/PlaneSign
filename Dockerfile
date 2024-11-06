@@ -1,5 +1,8 @@
 FROM ubuntu:24.04
 
+ARG BUILD_VERSION=unknown
+RUN echo ${BUILD_VERSION} > /version.txt
+
 RUN apt update && apt -y install \
   nginx \
   git \
@@ -40,8 +43,14 @@ COPY . .
 # Nginx Setup
 RUN unlink /etc/nginx/sites-enabled/default
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
+
+# Add environment variable for nginx root path
+ENV PLANESIGN_ROOT=/planesign
+
 COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 
 RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
+
+COPY version.txt /version.txt
 
 CMD ["sh", "-c", "service nginx start && python3 planesign/"]
