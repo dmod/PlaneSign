@@ -1,8 +1,5 @@
 FROM ubuntu:24.04
 
-ARG BUILD_VERSION=unknown
-RUN echo ${BUILD_VERSION} > /version.txt
-
 RUN apt update && apt -y install \
   nginx \
   git \
@@ -48,6 +45,7 @@ COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 
 RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
 
-COPY version.txt /version.txt
+ARG BUILD_VERSION=argnotset
+RUN echo ${BUILD_VERSION} > version.txt
 
 CMD ["sh", "-c", "service nginx start && python3 planesign/"]
