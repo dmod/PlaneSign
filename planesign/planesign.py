@@ -265,6 +265,14 @@ def play_a_sound(sound_id):
 def get_sounds():
     return jsonify(sorted(glob.glob(f"{shared_config.sounds_dir}/*.mp3"), key=str.casefold))
 
+@app.route("/version")
+def get_version():
+    try:
+        with open("version.txt", "r") as f:
+            version = f.read().strip()
+        return version
+    except:
+        return "unknown"
 
 def api_server():
     app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
