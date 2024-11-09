@@ -4,7 +4,7 @@ var recordButton, recorder;
 window.onload = function () {
     update_sign_status();
     update_brightness_slider();
-    update_version();
+    set_version();
     get_audio_support();
 
     recordButton = document.getElementById('mic_button');
@@ -71,7 +71,7 @@ window.onload = function () {
 
 }
 
-function update_version() {
+function set_version() {
     call_endpoint("/version", function (version) {
         document.getElementById('version').textContent = version;
     });
