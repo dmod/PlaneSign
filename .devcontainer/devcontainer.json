@@ -2,7 +2,10 @@
 	"name": "Existing Dockerfile",
 	"build": {
 		"context": "..",
-		"dockerfile": "../Dockerfile"
+		"dockerfile": "../Dockerfile",
+		"args": {
+			"PLANESIGN_ROOT": "/workspaces/PlaneSign"
+		}
 	},
 	"runArgs": ["--privileged"],
 	"appPort": ["80:80", "443:443"],

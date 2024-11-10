@@ -41,7 +41,12 @@ COPY . .
 RUN unlink /etc/nginx/sites-enabled/default
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
 
+# Define build argument with default value
+ARG PLANESIGN_ROOT=/planesign
+
+# Copy and substitute nginx config using the build arg directly
 COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
+RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_nginx_planesign.conf
 
 RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
 
