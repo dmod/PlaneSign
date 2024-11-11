@@ -341,16 +341,13 @@ class PlaneSign:
         while not shared_config.shared_shutdown_event.is_set():
             try:
 
-                try:
-                    display_mode = DisplayMode(shared_config.shared_mode.value)  # Convert int to enum
-                    if display_mode in self.defined_mode_handlers:
-                        logging.info(f"Setting mode to {display_mode.name}")
-                        self.defined_mode_handlers[display_mode](self)
-                    else:
-                        logging.error(f"Mode {display_mode.name} has no handler defined...")
-                        shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
-                except ValueError:
-                    logging.error(f"Invalid mode value: {mode}. Must be one of {[m.value for m in DisplayMode]}")
+                display_mode = DisplayMode(shared_config.shared_mode.value)  # Convert int to enum
+                if display_mode in self.defined_mode_handlers:
+                    logging.info(f"Setting mode to {display_mode.name}")
+                    self.defined_mode_handlers[display_mode](self)
+                else:
+                    logging.error(f"Mode {display_mode.name} has no handler defined...")
+                    shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
 
             except:
                 logging.exception("General error in main loop, waiting...")
