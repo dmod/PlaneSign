@@ -4,42 +4,53 @@
 
 ![Image](.data/planesign.jpeg)
 
-## Hardware To Buy
+## Hardware Requirements
 
-- Raspberry Pi 4 (2GB is fine)
-- 2x 64x32 RGB LED Matrix = EITHER the 4mm or 5mm pitch <https://www.adafruit.com/product/2277>
-- 5V 10A 50W Power Supply 100V-240V AC to DC Adapter
-- 15 female-to-female breadboard jumper wires (150mm is best)
-- 3D print [this L-bracket](.data/adjustable_L_bracket.stl) which will allow you to attach the panel to the frame
-- 3D print a rectangle spacer, ~4mm back from front of wood to help with spacing the panel away from front of frame
-- 1 inch x 4 inch >= 6ft board - Cut board top piece is 25 inch 3/16 inch, side piece is 6 and 5/16 inch (for 5 MM pitch)
-- Socket cap screw M3-0.5 x 16mm to secure sign (you can find these at a hardware store)
-- #4S flat washers for fine spacing
-- Wire it up using jumper cables: <https://github.com/hzeller/rpi-rgb-led-matrix/blob/master/wiring.md>
+- Raspberry Pi 4 (2GB is sufficient)
+- 2x 64x32 RGB LED Matrix - Either 4mm or 5mm pitch ([Adafruit Link](https://www.adafruit.com/product/2277))
+- 5V 10A 50W Power Supply (100V-240V AC to DC Adapter)
+- 15 female-to-female breadboard jumper wires (150mm recommended)
+- 3D printed components:
+  - [L-bracket](.data/adjustable_L_bracket.stl) for panel attachment
+  - Rectangle spacer (~4mm) for panel spacing
+- Wood components:
+  - 1" x 4" board (minimum 6ft length)
+  - Top piece: 25 3/16"
+  - Side piece: 6 5/16" (for 5mm pitch)
+- Hardware:
+  - Socket cap screws (M3-0.5 x 16mm)
+  - #4S flat washers for spacing
+- [Wiring Instructions](https://github.com/hzeller/rpi-rgb-led-matrix/blob/master/wiring.md)
 
-## Software Setup Steps
+## Software Setup
 
-- Flash SD card with Raspberry PI OS Lite - <https://peppe8o.com/install-raspberry-pi-os-lite-in-your-raspberry-pi/>
-- **In 'boot' folder on the SD card:** 
-- touch ssh
-- Switch off on-board sound `dtparam=audio=off` in /boot/config.txt
-- Add `isolcpus=3` to the end of /boot/cmdline.txt
-- Set up wpa_supplicant.conf: <https://www.raspberrypi.com/documentation/computers/configuration.html#adding-the-network-details-to-your-raspberry-pi>
-- **Now put it in the actual pi**
-- (RECOMMENDED): Change hostname to 'planesign' with: sudo raspi-config -> System Options -> Hostname
+### Initial SD Card Setup
+1. Flash SD card with [Raspberry PI OS Lite](https://peppe8o.com/install-raspberry-pi-os-lite-in-your-raspberry-pi/)
+2. In the 'boot' folder on the SD card:
+   - Create empty `ssh` file
+   - Disable on-board sound by adding `dtparam=audio=off` to `/boot/config.txt`
+   - Add `isolcpus=3` to the end of `/boot/cmdline.txt`
+   - Set up [wpa_supplicant.conf](https://www.raspberrypi.com/documentation/computers/configuration.html#adding-the-network-details-to-your-raspberry-pi)
+3. Insert SD card into Raspberry Pi
+4. (Recommended) Change hostname to 'planesign':
+   ```
+   sudo raspi-config -> System Options -> Hostname
+   ```
 
-### DOCKER one-step install:
+### Installation Options
+
+#### Docker Installation
 ```sh
 cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh --reboot
 ```
 
-### Classic one-step install:
+#### Classic Installation
 ```sh
 cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```
 
 ### Sample wpa_supplicant.conf
-Can be found in `/etc/wpa_supplicant/wpa_supplicant.conf` after install
+Location: `/etc/wpa_supplicant/wpa_supplicant.conf`
 ```
 country=US
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
@@ -47,35 +58,40 @@ ap_scan=1
 
 update_config=1
 network={
-	ssid="PlainTextSSID"
-	psk=Result-Of-NtPasswordHash
+    ssid="PlainTextSSID"
+    psk=Result-Of-NtPasswordHash
 }
 ```
 
-## Random Notes
-- Update static cache lookup tables: `./update_static_cache.py`
-- Placing text at X Y is the bottom left corner of the character
-- X: 0, Y: 0 is the TOP LEFT of the RGB matrix
-- DEMO TEST: `sudo rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=4 --led-cols=64 --led-chain=2 -D4`
-- 5mm spacing: approx 26 3/4 inches X 8 overall
-- Feature request for Google Geocode API to return landmarks: <https://issuetracker.google.com/issues/35822507>
+## Technical Notes
+- Update static cache: `./update_static_cache.py`
+- Text positioning:
+  - X,Y coordinates represent bottom-left corner of characters
+  - (0,0) is top-left of RGB matrix
+- Demo test command:
+  ```sh
+  sudo rpi-rgb-led-matrix/examples-api-use/demo --led-slowdown-gpio=4 --led-cols=64 --led-chain=2 -D4
+  ```
+- 5mm spacing: approximately 26¾" × 8" overall
+- [Feature request](https://issuetracker.google.com/issues/35822507) for Google Geocode API landmark returns
 
 ## Credits
-We thank the following data providers:
-Weather Data OpenWeather (TM)
-FlightRadar24
-ucsusa.org
-n2yo.com
-coinmarketcap.com
-googleapis.com
-ourairports.com
-opendatasoft.com -> map polygons
-https://github.com/nvkelso/natural-earth-vector/tree/master/geojson -> countries and bodies of water map polygons
-open-elevation.com
 
-Sounds:
-freesoundslibrary.com
-freesound.org
-zapsplat.com
-myinstants.com
-pixabay.com
+### Data Providers
+- OpenWeather™
+- FlightRadar24
+- ucsusa.org
+- n2yo.com
+- coinmarketcap.com
+- googleapis.com
+- ourairports.com
+- opendatasoft.com (map polygons)
+- [Natural Earth Vector](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson) (countries and water bodies)
+- open-elevation.com
+
+### Sound Resources
+- freesoundslibrary.com
+- freesound.org
+- zapsplat.com
+- myinstants.com
+- pixabay.com
