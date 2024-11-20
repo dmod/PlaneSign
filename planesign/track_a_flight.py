@@ -11,7 +11,11 @@ from modes import DisplayMode
 
 @__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
 def track_a_flight(sign):
-
+    # Check if Google Maps API key is configured
+    if not shared_config.CONF.get("GOOGLEMAPS_API_KEY"):
+        logging.error("Google Maps API key is not configured. Location names will not be available.")
+        formatted_address = "No API key"
+    
     if "track_a_flight_num" not in shared_config.data_dict:
         sign.canvas.Clear()
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
@@ -34,12 +38,17 @@ def track_a_flight(sign):
                 
             if flight_data and "trail" in flight_data:
                 current_location = flight_data['trail'][0]
-                reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
-
-                if len(reverse_geocode['results']) != 0:
-                    formatted_address = reverse_geocode['results'][0]['formatted_address']
+                
+                # Only attempt reverse geocoding if we have an API key
+                if shared_config.CONF.get("GOOGLEMAPS_API_KEY"):
+                    reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
+                    if len(reverse_geocode['results']) != 0:
+                        formatted_address = reverse_geocode['results'][0]['formatted_address']
+                    else:
+                        formatted_address = 'Ocean'
                 else:
-                    formatted_address = 'Ocean'
+                    # Show coordinates when no API key is available
+                    formatted_address = f"({current_location['lat']:.1f}, {current_location['lng']:.1f})"
 
                 logging.info(current_location)
                 logging.info(formatted_address)
