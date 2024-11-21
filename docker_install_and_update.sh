@@ -23,6 +23,10 @@ else
 fi
 
 # Turn off onboard audio
+if lsmod | grep -wq "snd_bcm2835"; then
+  echo "snd_bcm2835 is loaded!"
+  sudo rmmod snd_bcm2835
+fi
 sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
 
 # Stop existing versions of nginx
