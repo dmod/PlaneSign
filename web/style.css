@@ -391,10 +391,9 @@ input:checked+.slider:before {
 
 #floating {
   position: relative;
-  display: inline-block;
+  float: right;
   width: 0;
   height: 0;
-  vertical-align: top;
 }
 
 #optionsbutton {
