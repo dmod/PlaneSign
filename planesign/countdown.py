@@ -7,6 +7,7 @@ from collections import namedtuple
 import time
 import random
 import shared_config
+import logging
 import __main__
 from modes import DisplayMode
 RGB = namedtuple('RGB', 'r g b')
@@ -33,6 +34,12 @@ def countdown(sign):
     # color_frame_time = time.perf_counter()
     # color_cycle_time = 0
     # color_period = 0.01
+
+    if "countdown_datetime" in shared_config.data_dict:
+        now = datetime.now().astimezone(shared_config.local_timezone)
+        logging.info(f'Countdown datetime set to: {shared_config.data_dict["countdown_datetime"]}')
+        logging.info(f'Current datetime: {now}')
+        logging.info(f'Delta datetime: {shared_config.data_dict["countdown_datetime"]-now}')
 
     while shared_config.shared_mode.value == DisplayMode.COUNTDOWN.value:
 
@@ -89,7 +96,7 @@ def countdown(sign):
                     color_index = 0
 
         else:
-            dt = shared_config.data_dict["countdown_datetime"]-datetime.now().astimezone(shared_config.local_timezone)
+            dt = shared_config.data_dict["countdown_datetime"]-(datetime.now().astimezone(shared_config.local_timezone))
             dts = round(dt.total_seconds())
 
             if "countdown_message" in shared_config.data_dict and shared_config.data_dict["countdown_message"] != "":
