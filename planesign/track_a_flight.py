@@ -6,6 +6,8 @@ from rgbmatrix import graphics
 from FlightRadar24.api import FlightRadar24API, Flight
 import utilities
 import __main__
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from modes import DisplayMode
 
@@ -128,12 +130,18 @@ def track_a_flight(sign):
             elif blip_count == 2:
                 sign.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
+            # Convert Unix timestamp to local time at origin airport
+            origin_timezone = flight_data['airport']['origin']['timezone']['name']
+            origin_local_time = datetime.fromtimestamp(start_time, tz=timezone.utc).astimezone(ZoneInfo(origin_timezone))
+            destination_timezone = flight_data['airport']['destination']['timezone']['name']
+            destination_local_time = datetime.fromtimestamp(end_time, tz=timezone.utc).astimezone(ZoneInfo(destination_timezone))
+
             if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M', time.localtime(start_time))}")
-                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), f"{time.strftime('%H:%M', time.localtime(end_time))}")
+                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), origin_local_time.strftime('%H:%M'))
+                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), destination_local_time.strftime('%H:%M'))
             else:
-                graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(start_time))}")
-                graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), f"{time.strftime('%I:%M%p', time.localtime(end_time))}")
+                graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), origin_local_time.strftime('%I:%M%p'))
+                graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), destination_local_time.strftime('%I:%M%p'))
 
             if current_location:
                 graphics.DrawText(sign.canvas, sign.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
