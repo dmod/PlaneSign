@@ -34,6 +34,7 @@ sudo systemctl disable nginx
 crontab -r
 
 # Install bluetooth support
+sudo apt install -y python3-dbus
 sudo ln --force --symbolic /home/pi/PlaneSign/ble/planesign-ble.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
