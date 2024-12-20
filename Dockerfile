@@ -1,35 +1,38 @@
 FROM ubuntu:24.04
 
 RUN apt update && apt -y install \
-  nginx \
-  git \
-  openssl \
-  python3 \
-  python3-dev \
-  python3-setuptools \
-  python3-pip \
-  python3-numpy \
-  python3-scipy \
-  python3-pandas \
-  python3-lxml \
-  python3-gevent \
-  python3-pillow \
-  python3-shapely \
-  python3-tz \
-  llvm-14 \
-  ffmpeg \
-  cython3 \
-  file \
-  make \
-  cmake \
-  g++ \
+  nginx=1.24.0-2ubuntu7.1 \
+  git=1:2.43.0-1ubuntu7.1 \
+  openssl=3.0.13-0ubuntu3.4 \
+  python3=3.12.3-0ubuntu2 \
+  python3-dev=3.12.3-0ubuntu2 \
+  python3-setuptools=68.1.2-2ubuntu1.1 \
+  python3-pip=24.0+dfsg-1ubuntu1.1 \
+  python3-numpy=1:1.26.4+ds-6ubuntu1 \
+  python3-scipy=1.11.4-6build1 \
+  python3-pandas=2.1.4+dfsg-7 \
+  python3-lxml=5.2.1-1 \
+  python3-gevent=24.2.1-0.1ubuntu2 \
+  python3-pil=10.2.0-1ubuntu1 \
+  python3-shapely=2.0.3-1build2 \
+  python3-tz=2024.1-2 \
+  llvm-14=1:14.0.6-19build4 \
+  ffmpeg=7:6.1.1-3ubuntu5 \
+  cython3=3.0.8-1ubuntu3 \
+  file=1:5.45-3build1 \
+  make=4.3-4.1build2 \
+  cmake=3.28.3-1build7 \
+  g++=4:13.2.0-7ubuntu1 \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git \
-  && cd rpi-rgb-led-matrix \
-  && make build-python \
-  && make install-python
+RUN git init rpi-rgb-led-matrix \
+    && cd rpi-rgb-led-matrix \
+    && git remote add origin https://github.com/hzeller/rpi-rgb-led-matrix.git \
+    && git fetch --depth 1 origin 0ff6a6973f95d14e3206bcef1201237097fa8edd \
+    && git checkout FETCH_HEAD \
+    && make build-python \
+    && make install-python
 
 WORKDIR /planesign
 
