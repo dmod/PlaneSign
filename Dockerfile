@@ -6,6 +6,8 @@ RUN apt update && apt -y install \
   openssl=3.0.13-0ubuntu3.4 \
   python3=3.12.3-0ubuntu2 \
   python3-dev=3.12.3-0ubuntu2 \
+  python3-flask=3.0.2-1ubuntu1 \
+  python3-flask-cors=4.0.0-1 \
   python3-setuptools=68.1.2-2ubuntu1.1 \
   python3-pip=24.0+dfsg-1ubuntu1.1 \
   python3-numpy=1:1.26.4+ds-6ubuntu1 \
