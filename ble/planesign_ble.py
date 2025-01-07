@@ -11,85 +11,75 @@ DBUS_OM_IFACE =                'org.freedesktop.DBus.ObjectManager'
 LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_MANAGER_IFACE =           'org.bluez.GattManager1'
 GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
-UART_SERVICE_UUID =            '997fbca2-ffa1-4828-9952-0faa398c5fb3'
-LOCAL_NAME =                   'rpi-planesign-gatt-server'
-COMMAND_SERVICE_UUID = '997fbca2-ffa1-4828-9953-0faa398c5fb3'
-WIFI_SCAN_SERVICE_UUID = '997fbca2-ffa1-4828-9954-0faa398c5fb3'
+PLANESIGN_MASTER_UUID =        '3d951a35-76c5-4207-a150-2d0cf7d2bfdd'
 mainloop = None
 
-class PlanesignBLEService(Service):
+class PlanesignBLEInfoService(Service):
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, UART_SERVICE_UUID, True)
-        self.add_characteristic(PlanesignBLECharacteristic(bus, 0, self))
-        self.add_characteristic(PlanesignTempCharacteristic(bus, 1, self))
+        Service.__init__(self, bus, index, '97164323-9362-4883-a30d-45b2f400fd3c', True)
+        self.add_characteristic(PlanesignTempCharacteristic(bus, 0, self))
+        self.add_characteristic(PlanesignHostnameCharacteristic(bus, 1, self))
+        self.add_characteristic(PlanesignUptimeCharacteristic(bus, 2, self))
 
 class CommandExecutionService(Service):
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, COMMAND_SERVICE_UUID, True)
+        Service.__init__(self, bus, index, '312f08be-a717-40b0-9730-6d3d7c929856', True)
         self.add_characteristic(CommandCharacteristic(bus, 0, self))
 
 class WiFiScanService(Service):
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, WIFI_SCAN_SERVICE_UUID, True)
+        Service.__init__(self, bus, index, '755f57c4-1d85-4676-9dfb-bafcacbb2915', True)
         self.add_characteristic(WiFiScanCharacteristic(bus, 0, self))
 
 class PlanesignBLEApplication(Application):
     def __init__(self, bus):
         Application.__init__(self, bus)
-        self.add_service(PlanesignBLEService(bus, 0))
+        self.add_service(PlanesignBLEInfoService(bus, 0))
         self.add_service(CommandExecutionService(bus, 1))
         self.add_service(WiFiScanService(bus, 2))
 
 class PlanesignBLEAdvertisement(Advertisement):
     def __init__(self, bus, index):
         Advertisement.__init__(self, bus, index, 'peripheral')
-        self.add_service_uuid(UART_SERVICE_UUID)
-        self.add_local_name(LOCAL_NAME)
+        self.add_service_uuid(PLANESIGN_MASTER_UUID)
+        self.add_local_name(f"PlaneSign-BLE-{get_mac_suffix()}")
         self.include_tx_power = True
 
-class PlanesignBLECharacteristic(Characteristic):
-
-    TEST_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef1'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.TEST_CHRC_UUID,
-                ['read', 'write'],
-                service)
-        self.value = []
-        s = "Test value going out"
-        for c in s:
-            self.value.append(dbus.Byte(c.encode()))
-
-    def ReadValue(self, options):
-        return self.value
-
-    def WriteValue(self, value, options):
-        print('TestCharacteristic Write: ' + repr(value))
-        mystr = bytes(value).decode()
-        print(mystr)
-        self.value = value
-
 class PlanesignTempCharacteristic(Characteristic):
-
-    # name: Temperature Measurement
-    # id: org.bluetooth.characteristic.temperature_measurement
-    CHRC_UUID = '00002a1c-0000-1000-8000-00805f9b34fb'
+    CHRC_UUID = 'abbd155c-e9d1-4d9d-ae9e-6871b20880e4'
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.CHRC_UUID,
-                ['read'],
-                service)
+        Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        cmd = '/usr/bin/vcgencmd measure_temp'
-        temperature = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+        temperature = subprocess.check_output('/usr/bin/vcgencmd measure_temp', shell=True).decode("utf-8").strip()
         print('Temp Read: ' + temperature)
 
         return [dbus.Byte(x.encode()) for x in temperature]
+    
+class PlanesignHostnameCharacteristic(Characteristic):
+    CHRC_UUID = '7e60d076-d3fd-496c-8460-63a0454d94d9'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        hostname = subprocess.check_output('/bin/hostname', shell=True).decode("utf-8").strip()
+        print('Hostname Read: ' + hostname)
+
+        return [dbus.Byte(x.encode()) for x in hostname]
+    
+class PlanesignUptimeCharacteristic(Characteristic):
+    CHRC_UUID = 'a77a6077-7302-486e-9087-853ac5899335'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        uptime = subprocess.check_output('/usr/bin/uptime', shell=True).decode("utf-8").strip()
+        print('Uptime Read: ' + uptime)
+
+        return [dbus.Byte(x.encode()) for x in uptime]
 
 class CommandCharacteristic(Characteristic):
     COMMAND_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef2'
@@ -101,14 +91,11 @@ class CommandCharacteristic(Characteristic):
         'temp': '/usr/bin/vcgencmd measure_temp',
         'hostname': '/bin/hostname',
         'reboot': 'sudo /usr/sbin/reboot',
+        'update': '/home/pi/PlaneSign/docker_install_and_update.sh --reboot > /home/pi/PlaneSign/logs/ble_update.log 2>&1',
     }
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(
-            self, bus, index,
-            self.COMMAND_CHRC_UUID,
-            ['read', 'write'],
-            service)
+        Characteristic.__init__(self, bus, index, self.COMMAND_CHRC_UUID, ['read', 'write'], service)
         self.value = []
         self.last_result = "No command executed yet"
 
@@ -136,11 +123,7 @@ class WiFiScanCharacteristic(Characteristic):
     WIFI_SCAN_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef3'
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(
-            self, bus, index,
-            self.WIFI_SCAN_CHRC_UUID,
-            ['read', 'write'],
-            service)
+        Characteristic.__init__(self, bus, index, self.WIFI_SCAN_CHRC_UUID, ['read', 'write'], service)
         self.value = []
         self.last_scan = "Waiting..."
 
@@ -214,6 +197,11 @@ def main():
         mainloop.run()
     except KeyboardInterrupt:
         adv.Release()
+
+def get_mac_suffix(interface='wlan0'):
+    cmd = f"cat /sys/class/net/{interface}/address"
+    mac_address = subprocess.check_output(cmd, shell=True).decode().strip()
+    return mac_address.replace(":", "")[-4:].upper()
 
 if __name__ == '__main__':
     main()
