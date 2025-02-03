@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 RUN apt update && apt -y install \
   nginx=1.24.0-2ubuntu7.1 \
-  git=1:2.43.0-1ubuntu7.1 \
+  git=1:2.43.0-1ubuntu7.2 \
   openssl=3.0.13-0ubuntu3.4 \
   python3=3.12.3-0ubuntu2 \
   python3-dev=3.12.3-0ubuntu2 \
