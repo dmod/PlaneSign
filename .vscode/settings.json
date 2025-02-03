@@ -1,5 +1,4 @@
 {
-    "python.pythonPath": "/usr/bin/python3",
     "editor.wordWrap": "off",
     "editor.rulers": [120],
     "diffEditor.wordWrap": "off",
@@ -8,7 +7,6 @@
     "[python]": {
         "editor.wordWrap": "off",
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "ms-python.python"
     },
     "[javascript]": {
         "editor.wordWrap": "off",

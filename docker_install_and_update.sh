@@ -28,6 +28,12 @@ if lsmod | grep -wq "snd_bcm2835"; then
   sudo rmmod snd_bcm2835
 fi
 sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
+if [ ! -f /etc/modprobe.d/alsa-blacklist.conf ] || ! grep -q "blacklist snd_bcm2835" /etc/modprobe.d/alsa-blacklist.conf; then
+  echo "Blacklisting snd_bcm2835 module..."
+  echo "blacklist snd_bcm2835" | sudo tee -a /etc/modprobe.d/alsa-blacklist.conf
+else
+  echo "snd_bcm2835 already blacklisted"
+fi
 
 # Stop existing versions of nginx
 sudo systemctl disable nginx
