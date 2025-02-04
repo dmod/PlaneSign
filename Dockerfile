@@ -1,30 +1,30 @@
 FROM ubuntu:24.04
 
 RUN apt update && apt -y install \
-  nginx=1.24.0-2ubuntu7.1 \
-  git=1:2.43.0-1ubuntu7.2 \
-  openssl=3.0.13-0ubuntu3.4 \
-  python3=3.12.3-0ubuntu2 \
-  python3-dev=3.12.3-0ubuntu2 \
-  python3-flask=3.0.2-1ubuntu1 \
-  python3-flask-cors=4.0.0-1 \
-  python3-setuptools=68.1.2-2ubuntu1.1 \
-  python3-pip=24.0+dfsg-1ubuntu1.1 \
-  python3-numpy=1:1.26.4+ds-6ubuntu1 \
-  python3-scipy=1.11.4-6build1 \
-  python3-pandas=2.1.4+dfsg-7 \
-  python3-lxml=5.2.1-1 \
-  python3-gevent=24.2.1-0.1ubuntu2 \
-  python3-pil=10.2.0-1ubuntu1 \
-  python3-shapely=2.0.3-1build2 \
-  python3-tz=2024.1-2 \
-  llvm-14=1:14.0.6-19build4 \
-  ffmpeg=7:6.1.1-3ubuntu5 \
-  cython3=3.0.8-1ubuntu3 \
-  file=1:5.45-3build1 \
-  make=4.3-4.1build2 \
-  cmake=3.28.3-1build7 \
-  g++=4:13.2.0-7ubuntu1 \
+  nginx \
+  git \
+  openssl \
+  python3 \
+  python3-dev \
+  python3-flask \
+  python3-flask-cors \
+  python3-setuptools \
+  python3-pip \
+  python3-numpy \
+  python3-scipy \
+  python3-pandas \
+  python3-lxml \
+  python3-gevent \
+  python3-pil \
+  python3-shapely \
+  python3-tz \
+  llvm-14 \
+  ffmpeg \
+  cython3 \
+  file \
+  make \
+  cmake \
+  g++ \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
