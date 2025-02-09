@@ -30,6 +30,55 @@ class WiFiScanService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, '755f57c4-1d85-4676-9dfb-bafcacbb2915', True)
         self.add_characteristic(WiFiScanCharacteristic(bus, 0, self))
+        self.add_characteristic(WiFiConfigCharacteristic(bus, 1, self))
+
+class WiFiConfigCharacteristic(Characteristic):
+    WIFI_CONFIG_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef4'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.WIFI_CONFIG_CHRC_UUID, ['write'], service)
+        self.value = []
+
+    def WriteValue(self, value, options):
+        try:
+            # Convert the received bytes to string
+            credentials = bytes(value).decode().strip()
+            print('WiFiConfigCharacteristic Write: Received credentials')
+            
+            # Expected format: "SSID|PASSWORD"
+            if '|' not in credentials:
+                raise ValueError("Invalid format. Expected 'SSID|PASSWORD'")
+                
+            ssid, password = credentials.split('|', 1)
+            
+            # Delete existing connection with the same SSID if it exists
+            subprocess.run(['sudo', 'nmcli', 'connection', 'delete', ssid], 
+                         stderr=subprocess.DEVNULL)  # Ignore errors if connection doesn't exist
+            
+            # Add new connection
+            subprocess.run([
+                'sudo', 'nmcli', 'connection', 'add',
+                'type', 'wifi',
+                'con-name', ssid,
+                'ifname', 'wlan0',
+                'ssid', ssid,
+                'wifi-sec.key-mgmt', 'wpa-psk',
+                'wifi-sec.psk', password
+            ], check=True)
+            
+            # Enable and bring up the connection
+            subprocess.run(['sudo', 'nmcli', 'connection', 'up', ssid], check=True)
+            
+            print(f'Successfully configured WiFi network: {ssid}')
+            
+        except subprocess.CalledProcessError as e:
+            error_msg = f"NetworkManager error: {str(e)}"
+            print(error_msg)
+            raise dbus.exceptions.DBusException(error_msg)
+        except Exception as e:
+            error_msg = f"Error configuring WiFi: {str(e)}"
+            print(error_msg)
+            raise dbus.exceptions.DBusException(error_msg)
 
 class PlanesignBLEApplication(Application):
     def __init__(self, bus):
@@ -130,28 +179,34 @@ class WiFiScanCharacteristic(Characteristic):
     def scan_wifi(self):
         try:
             print("Scanning WiFi...")
-            subprocess.run(['sudo', 'iwlist', 'wlan0', 'scan'], capture_output=True)
-            # Get scan results
-            cmd_output = subprocess.check_output(['sudo', 'iwlist', 'wlan0', 'scan'], 
+            # Use iw to scan
+            cmd_output = subprocess.check_output(['sudo', 'iw', 'dev', 'wlan0', 'scan'], 
                                               stderr=subprocess.STDOUT).decode('utf-8')
             
             # Parse the output to get networks
             networks = []
-            for cell in cmd_output.split('Cell ')[1:]:
-                ssid_match = re.search(r'ESSID:"([^"]*)"', cell)
-                signal_match = re.search(r'Quality=(\d+/\d+).*Signal level=([-\d]+) dBm', cell)
-                encryption_match = re.search(r'Encryption key:(\w+)', cell)
-                
-                if ssid_match and signal_match and encryption_match:
-                    ssid = ssid_match.group(1)
-                    quality = signal_match.group(1)
-                    signal = signal_match.group(2)
-                    encrypted = encryption_match.group(1)
-                    print(f"Found: {ssid} | Sig: {signal}dBm | Qual: {quality} | Enc: {encrypted}")
-                    networks.append(f"{ssid} | Sig: {signal}dBm | Qual: {quality} | Enc: {encrypted}")
+            current_network = {}
+            
+            for line in cmd_output.split('\n'):
+                line = line.strip()
+                if 'BSS' in line and '(' in line:  # New network found
+                    if current_network.get('ssid'):  # Save previous network if it had an SSID
+                        networks.append(f"{current_network['ssid']}|{current_network.get('signal', 'N/A')}|{current_network.get('quality', 'N/A')}|{current_network.get('encrypted', 'yes')}")
+                    current_network = {}
+                elif 'SSID:' in line:
+                    ssid = line.split('SSID:', 1)[1].strip()
+                    if ssid:  # Only store non-empty SSIDs
+                        current_network['ssid'] = ssid
+                elif 'signal:' in line:
+                    current_network['signal'] = line.split('signal:', 1)[1].strip().split()[0]  # Gets the dBm value
+            
+            # Add the last network if it exists
+            if current_network.get('ssid'):
+                networks.append(f"{current_network['ssid']}|{current_network.get('signal', 'N/A')}|{current_network.get('quality', 'N/A')}|{current_network.get('encrypted', 'yes')}")
             
             print(f"Found {len(networks)} networks")
-            self.last_scan = "\n".join(networks)[:30] if networks else "No networks found"
+            self.last_scan = "\n".join(networks[:6]) if networks else "No networks found"
+            
         except subprocess.CalledProcessError as e:
             self.last_scan = f"Error scanning WiFi: {str(e)}"
         except Exception as e:
@@ -159,6 +214,7 @@ class WiFiScanCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         print('WiFiScanCharacteristic Read requested')
+        print(f'LastScan size: {len(self.last_scan)}')
         return [dbus.Byte(x.encode()) for x in self.last_scan]
 
     def WriteValue(self, value, options):

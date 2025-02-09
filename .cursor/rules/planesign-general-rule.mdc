@@ -1,0 +1,8 @@
+---
+description: Giving the AI an idea about the projects pourpose especially around how to write to an RGB matrix
+globs: *
+---
+This project is designed to interface with an physical RGB LED matrix. This code itself is running on a Raspberry PI in a docker container.
+
+The RGB LED matrix is 32 pixels high by 128 pixels wide. The primary way to interface with this RGB LED matrix is through the python bindings of the rpi-rgb-led-matrix library on GitHub.
+
