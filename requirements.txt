@@ -4,7 +4,7 @@ country-converter==0.7.4
 favicon==0.7.0
 Flask==2.2.5
 Werkzeug==2.1.2
-Flask-Cors==3.0.10
+Flask-Cors==4.0.2
 pytz==2022.1
 pyowm==3.3.0
 requests==2.31.0
