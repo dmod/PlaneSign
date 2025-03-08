@@ -13,6 +13,9 @@ RUN apt update && apt -y install \
   python3-numpy \
   python3-scipy \
   python3-pandas \
+  python3-geopandas \
+  python3-requests \
+  python3-pyproj \
   python3-lxml \
   python3-gevent \
   python3-pil \
