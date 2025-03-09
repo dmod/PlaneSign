@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM arm64v8/ubuntu:24.04
 
 RUN apt update && apt -y install \
   nginx \

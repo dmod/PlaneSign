@@ -40,13 +40,13 @@ sudo systemctl disable nginx
 crontab -r
 
 # Install bluetooth support
+sudo apt-get update
 sudo apt install -y python3-dbus
 sudo ln --force --symbolic /home/pi/PlaneSign/ble/planesign-ble.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
 
 # Add Docker's official GPG key:
-sudo apt-get update
 sudo apt-get -y install ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
