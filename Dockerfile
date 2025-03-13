@@ -61,4 +61,10 @@ RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirement
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
 
+# Set Numba environment variables for better ARM64 compatibility
+ENV NUMBA_DISABLE_JIT=1
+ENV OPENBLAS_CORETYPE=ARMV8
+ENV NUMBA_CPU_NAME=generic
+ENV NUMBA_CPU_FEATURES=+neon
+
 CMD ["sh", "-c", "service nginx start && python3 planesign/"]
