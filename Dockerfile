@@ -31,17 +31,10 @@ RUN apt update && apt -y install \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Set compilation flags for ARM64
-ENV CFLAGS="-march=armv8-a -mtune=cortex-a72"
-ENV CXXFLAGS="-march=armv8-a -mtune=cortex-a72"
-
-RUN git init rpi-rgb-led-matrix \
-    && cd rpi-rgb-led-matrix \
-    && git remote add origin https://github.com/hzeller/rpi-rgb-led-matrix.git \
-    && git fetch --depth 1 origin 0ff6a6973f95d14e3206bcef1201237097fa8edd \
-    && git checkout FETCH_HEAD \
-    && make build-python HARDWARE_DESC=2 \
-    && make install-python
+RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git \
+  && cd rpi-rgb-led-matrix \
+  && make build-python \
+  && make install-python
 
 WORKDIR /planesign
 
@@ -64,11 +57,5 @@ RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirement
 
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
-
-# Set Numba environment variables for better ARM64 compatibility
-ENV NUMBA_DISABLE_JIT=1
-ENV OPENBLAS_CORETYPE=ARMV8
-ENV NUMBA_CPU_NAME=generic
-ENV NUMBA_CPU_FEATURES=+neon
 
 CMD ["sh", "-c", "service nginx start && python3 planesign/"]
