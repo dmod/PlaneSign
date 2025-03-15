@@ -31,12 +31,16 @@ RUN apt update && apt -y install \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
+# Set compilation flags for ARM64
+ENV CFLAGS="-march=armv8-a -mtune=cortex-a72"
+ENV CXXFLAGS="-march=armv8-a -mtune=cortex-a72"
+
 RUN git init rpi-rgb-led-matrix \
     && cd rpi-rgb-led-matrix \
     && git remote add origin https://github.com/hzeller/rpi-rgb-led-matrix.git \
     && git fetch --depth 1 origin 0ff6a6973f95d14e3206bcef1201237097fa8edd \
     && git checkout FETCH_HEAD \
-    && make build-python \
+    && make build-python HARDWARE_DESC=2 \
     && make install-python
 
 WORKDIR /planesign
