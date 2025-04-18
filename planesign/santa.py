@@ -5,9 +5,9 @@ from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from datetime import datetime, timedelta, timezone
 import random
 import pytz
+import requests
 import time
 import math
-from pyowm import OWM
 import PIL.Image as Image
 import shared_config
 import utilities
@@ -146,9 +146,6 @@ def santa(sign):
     changetime = time.perf_counter()
 
     weatherpoll = None
-
-    owm = OWM(shared_config.CONF["OPENWEATHER_API_KEY"])
-    mgr = owm.weather_manager()
 
     lights = []    
     lights.append(XmasLight(sign, 2, 29))
@@ -439,8 +436,8 @@ def santa(sign):
 
                 if weatherpoll==None or time.perf_counter()-weatherpoll>900:
                     weatherpoll = time.perf_counter()
-                    npweather = mgr.one_call(lat=90, lon=0, exclude='minutely,hourly', units='imperial')
-                    icon,_ = utilities.weather_icon_decode(npweather.forecast_daily[0].weather_code,npweather.forecast_daily[0].status)
+                    weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat=90&lon=0&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial").json()
+                    icon,_ = utilities.weather_icon_decode(weather_data['daily'][0]['weather'][0]['id'],weather_data['daily'][0]['weather'][0]['main'])
 
                 image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
                 iw,ih=image.size
@@ -448,7 +445,7 @@ def santa(sign):
                 iw,ih=image.size
                 sign.canvas.SetImage(image.convert('RGB'), 6, 20-int(iw/2))
 
-                weatherstring = f"N Pole: {npweather.forecast_daily[0].status} {round(npweather.current.temperature()['temp'])}°F"
+                weatherstring = f"N Pole: {weather_data['daily'][0]['weather'][0]['main']} {round(weather_data['weather']['current']['temp'])}°F"
                 graphics.DrawText(sign.canvas, sign.font46, max(7+iw,60-len(weatherstring)*2), 24, graphics.Color(160,160,20), weatherstring)
 
 

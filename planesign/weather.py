@@ -1,9 +1,9 @@
-from pyowm import OWM
 from PIL import Image
 import utilities
 import logging
 import time
 import shared_config
+import requests
 import __main__
 from rgbmatrix import graphics
 
@@ -32,12 +32,12 @@ def show_weather(sign):
         if polltime==None or time.perf_counter()-polltime>30:
             polltime = time.perf_counter()
 
-            day0 = shared_config.data_dict['weather'].forecast_daily[start_index_day]
-            day1 = shared_config.data_dict['weather'].forecast_daily[start_index_day + 1]
-            day2 = shared_config.data_dict['weather'].forecast_daily[start_index_day + 2]
+            day0 = shared_config.data_dict['weather']['daily'][start_index_day]
+            day1 = shared_config.data_dict['weather']['daily'][start_index_day + 1]
+            day2 = shared_config.data_dict['weather']['daily'][start_index_day + 2]
 
-            sun_rise = utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.srise_time)
-            sun_set = utilities.convert_unix_to_local_time(shared_config.data_dict['weather'].current.sset_time)
+            sunrise_time = utilities.convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunrise'])
+            sunset_time = utilities.convert_unix_to_local_time(shared_config.data_dict['weather']['current']['sunset'])
 
         draw_daily_forcast(sign,day0,day_0_xoffset)
         draw_daily_forcast(sign,day1,day_1_xoffset)
@@ -60,8 +60,8 @@ def show_weather(sign):
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
             time_format = '%H:%M'
 
-        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), sun_rise.strftime(time_format))
-        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), sun_set.strftime(time_format))
+        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x, 6, graphics.Color(210, 190, 0), sunrise_time.strftime(time_format))
+        graphics.DrawText(sign.canvas, sign.font57, sunrise_sunset_start_x + 30, 6, graphics.Color(255, 158, 31), sunset_time.strftime(time_format))
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
@@ -76,26 +76,23 @@ def get_weather_data_worker(data_dict):
         shared_config.shared_shutdown_event.wait()
         return
 
-    owm = OWM(shared_config.CONF["OPENWEATHER_API_KEY"])
-    mgr = owm.weather_manager()
-
     shutdown_flag = False
 
     while not shutdown_flag:
         try:
-            one_call_object = mgr.one_call(lat=float(shared_config.CONF["SENSOR_LAT"]), lon=float(shared_config.CONF["SENSOR_LON"]), exclude='minutely,hourly', units='imperial')
-            data_dict["weather"] = one_call_object
-            logging.info(f"At: {utilities.convert_unix_to_local_time(data_dict['weather'].current.ref_time)} Temp: {data_dict['weather'].current.temperature()['temp']}")
+            weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial")
+            data_dict["weather"] = weather_data.json()
+            logging.info(f"At: {utilities.convert_unix_to_local_time(data_dict['weather']['current']['dt'])} Temp: {data_dict['weather']['current']['temp']}")
             timeout = 900
-        except:
-            logging.exception("Error getting weather data...")
+        except Exception as e:
+            logging.exception("Error getting weather data...", exc_info=e)
             timeout = 15
 
         shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=timeout)
 
 def draw_daily_forcast(sign,day,xloc):
-    code = day.weather_code
-    status = day.status
+    code = day['weather'][0]['id']
+    status = day['weather'][0]['main']
 
     icon,status = utilities.weather_icon_decode(code,status)
 
@@ -103,9 +100,9 @@ def draw_daily_forcast(sign,day,xloc):
     iw,ih=image.size
     sign.canvas.SetImage(image.convert('RGB'), xloc + 25 - round(iw/2), 9)
 
-    graphics.DrawText(sign.canvas, sign.font57, xloc, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day.ref_time).strftime('%a'))
-    graphics.DrawText(sign.canvas, sign.font57, xloc, 22, graphics.Color(210, 20, 20), str(round(day.temp['max'])))
-    graphics.DrawText(sign.canvas, sign.font57, xloc, 30, graphics.Color(20, 20, 210), str(round(day.temp['min'])))
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day['dt']).strftime('%a'))
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 22, graphics.Color(210, 20, 20), str(round(day['temp']['max'])))
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 30, graphics.Color(20, 20, 210), str(round(day['temp']['min'])))
     graphics.DrawText(sign.canvas, sign.font46, xloc + 26 - len(status)*2, 30, graphics.Color(52, 235, 183), status)
 
     return

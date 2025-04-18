@@ -5,7 +5,6 @@ from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from datetime import datetime, timedelta, timezone
 import random
 import numpy as np
-from pyowm import OWM
 import PIL.Image as Image
 import shared_config
 import utilities

@@ -807,7 +807,7 @@ def show_time(sign):
 
     xloc = 86
     if "weather" in shared_config.data_dict:
-        tempval = round(shared_config.data_dict["weather"].current.temperature()['temp'])
+        tempval = round(shared_config.data_dict['weather']['current']['temp'])
         if tempval<0 or tempval>99:
             xloc = 77
         temp = str(tempval)
