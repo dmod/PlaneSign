@@ -41,12 +41,12 @@
 
 #### Docker Installation
 ```sh
-cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh --reboot
+cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh --reboot
 ```
 
 #### Classic Installation
 ```sh
-cd /home/pi && git clone https://dmod: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@github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
+cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```
 
 ### Sample wpa_supplicant.conf
