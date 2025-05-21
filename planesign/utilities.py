@@ -68,7 +68,7 @@ def random_rgb_255_sum():
 
 
 def read_static_airport_data():
-    with open("airports.csv") as f:
+    with open("datafiles/airports.csv") as f:
         lines = f.readlines()
         for line in lines:
             parts = line.strip().split(',')

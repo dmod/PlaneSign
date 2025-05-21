@@ -295,7 +295,7 @@ def santa(sign):
     santapath_codes = []
     santapath_names = []
     totlandtime = 0
-    with open("santapath.txt", "r", encoding='utf8') as f:
+    with open("datafiles/santapath.txt", "r", encoding='utf8') as f:
         lines = f.readlines()
         nline = 0
         for line in lines:

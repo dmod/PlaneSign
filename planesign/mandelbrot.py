@@ -196,7 +196,7 @@ def mandelbrot_zoom(sign):
     pois = []
 
     # Open the file for reading
-    with open("mandelbrot_poi.txt", 'r') as file:
+    with open("datafiles/mandelbrot_poi.txt", 'r') as file:
         # Iterate through each line in the file
         for line in file:
             # Split the line into two floats using tab as the delimiter

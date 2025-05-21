@@ -270,7 +270,7 @@ def satellites(sign):
 
     satellite_data = []
     try:
-        with open("satdat.txt",encoding='windows-1252') as f:
+        with open("datafiles/satdat.txt",encoding='windows-1252') as f:
             pass
     except:
         satdaturl = "https://www.ucsusa.org/media/11490"
@@ -278,11 +278,11 @@ def satellites(sign):
         if file.status_code == requests.codes.ok:
             sat_lines = file.text.splitlines()[1:]
             logging.info(f"Found static data for {len(sat_lines)} satellites")
-            with open("satdat.txt", 'wb') as f:
+            with open("datafiles/satdat.txt", 'wb') as f:
                 f.write(file.content)
 
     try:
-        with open("satdat.txt",encoding='windows-1252',errors='replace') as f:
+        with open("datafiles/satdat.txt",encoding='windows-1252',errors='replace') as f:
             lines = f.readlines()[1:]
             nline = 0
             for line in lines:

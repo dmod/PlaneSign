@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     print(f"Found {len(airport_lines)} static airport configurations")
 
-    with open("airports.csv", "w") as f:
+    with open("datafiles/airports.csv", "w") as f:
 
         for line in airport_lines:
             parts = csv_superparser(line)
@@ -63,5 +63,5 @@ if __name__ == "__main__":
     if file.status_code == requests.codes.ok:
         sat_lines = file.text.splitlines()[1:]
         print(f"Found static data for {len(sat_lines)} satellites")
-        with open("satdat.txt", 'wb') as f:
+        with open("datafiles/satdat.txt", 'wb') as f:
             f.write(file.content)
