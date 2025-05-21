@@ -33,7 +33,7 @@ RUN apt update && apt -y install \
 
 RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git \
   && cd rpi-rgb-led-matrix \
-  && make build-python CXXFLAGS="-march=armv8-a -mtune=cortex-a72" \
+  && make build-python \
   && make install-python
 
 WORKDIR /planesign
