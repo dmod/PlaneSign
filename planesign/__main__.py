@@ -101,6 +101,7 @@ logging.getLogger('PIL').setLevel(logging.WARNING)
 logging.getLogger('yfinance').disabled = True
 
 utilities.read_static_airport_data()
+utilities.detect_usb_audio_device()
 
 api_server_process = Process(target=planesign.api_server, name="APIServer")
 plane_data_process = Process(target=planes.get_plane_data_worker, name="PlaneData", args=(shared_config.data_dict,))

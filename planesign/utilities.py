@@ -7,6 +7,7 @@ import os
 import __main__
 import shared_config
 import numpy as np
+import subprocess
 
 from PIL import Image, ImageDraw, ImageFont
 from timezonefinder import TimezoneFinder
@@ -66,6 +67,20 @@ def random_rgb_255_sum():
     _, r, g, b = next_color_rainbow_linear(random_angle())
     return r, g, b
 
+
+def detect_usb_audio_device():
+    result = subprocess.run(['aplay', '-l'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    lines = result.stdout.splitlines()
+    for line in lines:
+        if 'USB Audio' in line and 'card' in line and 'device' in line:
+            # Example line: card 0: UACDemoV10 [UACDemoV1.0], device 0: USB Audio [USB Audio]
+            parts = line.split()
+            card_index = parts.index('card') + 1
+            device_index = parts.index('device') + 1
+            card_num = parts[card_index].replace(':', '')
+            device_num = parts[device_index].replace(':', '')
+            shared_config.audio_device = f"hw:{card_num},{device_num}"
+            logging.info(f"Detected USB Audio device: {shared_config.audio_device}")
 
 def read_static_airport_data():
     with open("datafiles/airports.csv") as f:

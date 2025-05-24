@@ -44,7 +44,7 @@ fi
 # Install PlaneSign git repo
 PLANESIGN_DIR="${INSTALL_DIR}/PlaneSign"
 cd $PLANESIGN_DIR
-git pull --rebase --autostash https://dmod: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@github.com/dmod/PlaneSign
+git pull --rebase --autostash https://github.com/dmod/PlaneSign
 
 #Install required junk
 sudo apt -y install llvm-14 llvm14-dev

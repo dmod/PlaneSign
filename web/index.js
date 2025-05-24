@@ -97,7 +97,7 @@ function stop_recording() {
 }
 
 function on_recording_ready(e) {
-    fetch('api/play_audio', {
+    fetch('api/play_mic_audio', {
         method: "POST",
         body: e.data
     })

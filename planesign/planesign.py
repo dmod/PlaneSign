@@ -235,8 +235,8 @@ def is_audio_supported():
     audio_supported = p.returncode == 0
     return jsonify(audio_supported)
 
-@app.route("/play_audio", methods=['POST'])
-def play_audio():
+@app.route("/play_mic_audio", methods=['POST'])
+def play_mic_audio():
     logging.info(f"Audio content length: {request.content_length}")
     request_data = request.get_data()
 
@@ -247,7 +247,7 @@ def play_audio():
 
     my_env = {}
     my_env["SDL_AUDIODRIVER"] = "alsa"
-    my_env["AUDIODEV"] = "hw:1,0"
+    my_env["AUDIODEV"] = shared_config.audio_device
     subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
     return ""
 
@@ -257,7 +257,7 @@ def play_a_sound(sound_id):
 
     my_env = {}
     my_env["SDL_AUDIODRIVER"] = "alsa"
-    my_env["AUDIODEV"] = "hw:1,0"
+    my_env["AUDIODEV"] = shared_config.audio_device
     subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
     return ""
 
@@ -282,7 +282,6 @@ def api_server():
 
 class PlaneSign:
     def __init__(self, defined_mode_handlers):
-
         options = RGBMatrixOptions()
         options.cols = 64
         options.gpio_slowdown = int(shared_config.CONF["GPIO_SLOWDOWN"])

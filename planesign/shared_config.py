@@ -22,6 +22,8 @@ shared_mandelbrot_colorscale = Value('d', 3)
 
 local_timezone = None
 
+audio_device = None
+
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"
 

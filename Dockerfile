@@ -23,6 +23,7 @@ RUN apt update && apt -y install \
   python3-tz \
   llvm-14 \
   ffmpeg \
+  alsa-utils \
   cython3 \
   file \
   make \
