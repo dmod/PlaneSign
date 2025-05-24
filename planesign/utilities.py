@@ -81,6 +81,43 @@ def detect_usb_audio_device():
             device_num = parts[device_index].replace(':', '')
             shared_config.audio_device = f"hw:{card_num},{device_num}"
             logging.info(f"Detected USB Audio device: {shared_config.audio_device}")
+            set_usb_audio_volume(card_num)
+            return
+
+def set_usb_audio_volume(card_num):
+    try:
+        # First, get list of available controls
+        result = subprocess.run(['amixer', '-c', card_num, 'controls'], 
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            logging.error(f"Failed to get controls: {result.stderr}")
+            return
+
+        # Look for common volume control names
+        volume_controls = ['Master', 'PCM', 'Speaker', 'Headphone', 'Playback']
+        found_control = None
+        
+        for line in result.stdout.splitlines():
+            for control in volume_controls:
+                if control in line:
+                    found_control = control
+                    break
+            if found_control:
+                break
+
+        if not found_control:
+            logging.error("No suitable volume control found")
+            return
+
+        volume_percent = "90%"
+        result = subprocess.run(['amixer', '-c', card_num, 'set', found_control, volume_percent], 
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            logging.info(f"Successfully set USB audio volume to {volume_percent} using {found_control} control")
+        else:
+            logging.error(f"Failed to set volume: {result.stderr}")
+    except Exception as e:
+        logging.error(f"Error setting USB audio volume: {e}")
 
 def read_static_airport_data():
     with open("datafiles/airports.csv") as f:

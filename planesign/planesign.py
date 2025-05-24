@@ -237,7 +237,7 @@ def is_audio_supported():
 
 @app.route("/play_mic_audio", methods=['POST'])
 def play_mic_audio():
-    logging.info(f"Audio content length: {request.content_length}")
+    logging.info(f"Mic audio content length: {request.content_length}")
     request_data = request.get_data()
 
     temp_audio_file = ".data/audio"
