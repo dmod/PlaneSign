@@ -7,6 +7,10 @@
     "[python]": {
         "editor.wordWrap": "off",
         "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll": "explicit"
+        }
     },
     "[javascript]": {
         "editor.wordWrap": "off",
@@ -15,5 +19,5 @@
     "[html]": {
         "editor.wordWrap": "off",
         "editor.formatOnSave": true
-    }
+    },
 }

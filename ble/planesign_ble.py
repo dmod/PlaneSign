@@ -20,6 +20,7 @@ class PlanesignBLEInfoService(Service):
         self.add_characteristic(PlanesignTempCharacteristic(bus, 0, self))
         self.add_characteristic(PlanesignHostnameCharacteristic(bus, 1, self))
         self.add_characteristic(PlanesignUptimeCharacteristic(bus, 2, self))
+        self.add_characteristic(PlanesignWiFiStatusCharacteristic(bus, 3, self))
 
 class CommandExecutionService(Service):
     def __init__(self, bus, index):
@@ -129,6 +130,73 @@ class PlanesignUptimeCharacteristic(Characteristic):
         print('Uptime Read: ' + uptime)
 
         return [dbus.Byte(x.encode()) for x in uptime]
+
+class PlanesignWiFiStatusCharacteristic(Characteristic):
+    CHRC_UUID = 'f2a3b4c5-6d7e-8f90-a1b2-c3d4e5f6a7b8'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        wifi_status = self.get_wifi_status()
+        print('WiFi Status Read: ' + wifi_status)
+        return [dbus.Byte(x.encode()) for x in wifi_status]
+
+    def get_wifi_status(self):
+        try:
+            # Get current WiFi connection info using nmcli
+            connection_info = subprocess.check_output(
+                ['nmcli', '-t', '-f', 'ACTIVE,SSID,SIGNAL', 'dev', 'wifi', 'list', '--rescan', 'no'],
+                stderr=subprocess.DEVNULL
+            ).decode('utf-8').strip()
+            
+            # Find the currently connected network (marked as active)
+            connected_network = None
+            for line in connection_info.split('\n'):
+                if line.startswith('yes:'):
+                    parts = line.split(':')
+                    if len(parts) >= 3:
+                        ssid = parts[1] if parts[1] else 'Hidden Network'
+                        signal = parts[2] if parts[2] else '0'
+                        connected_network = f"{ssid}|{signal}"
+                        break
+            
+            if connected_network:
+                return f"Connected|{connected_network}"
+            else:
+                return "Disconnected|None|0"
+                
+        except subprocess.CalledProcessError:
+            # Fallback to iwconfig if nmcli fails
+            try:
+                iwconfig_output = subprocess.check_output(
+                    ['iwconfig', 'wlan0'], 
+                    stderr=subprocess.DEVNULL
+                ).decode('utf-8')
+                
+                # Extract SSID and signal strength from iwconfig output
+                ssid = 'Unknown'
+                signal = '0'
+                
+                # Parse ESSID
+                import re
+                essid_match = re.search(r'ESSID:"([^"]*)"', iwconfig_output)
+                if essid_match:
+                    ssid = essid_match.group(1)
+                
+                # Parse signal level
+                signal_match = re.search(r'Signal level=(-?\d+)', iwconfig_output)
+                if signal_match:
+                    signal = signal_match.group(1)
+                
+                # Check if connected (has an IP address)
+                if 'Access Point:' in iwconfig_output and 'Not-Associated' not in iwconfig_output:
+                    return f"Connected|{ssid}|{signal}"
+                else:
+                    return "Disconnected|None|0"
+                    
+            except subprocess.CalledProcessError:
+                return "Error|Unable to get WiFi status|0"
 
 class CommandCharacteristic(Characteristic):
     COMMAND_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef2'
