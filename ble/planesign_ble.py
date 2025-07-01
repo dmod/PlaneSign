@@ -3,8 +3,9 @@ import dbus, dbus.mainloop.glib
 import subprocess
 from gi.repository import GLib
 from gatt import Application, Advertisement, Service, Characteristic
-from gatt import find_adapter, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
+from gatt import find_adapter, set_adapter_name, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
 import re
+from wifi import get_wifi_status, scan_wifi, configure_wifi
 
 BLUEZ_SERVICE_NAME =           'org.bluez'
 DBUS_OM_IFACE =                'org.freedesktop.DBus.ObjectManager'
@@ -14,20 +15,20 @@ GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
 PLANESIGN_MASTER_UUID =        '3d951a35-76c5-4207-a150-2d0cf7d2bfdd'
 mainloop = None
 
-class PlanesignBLEInfoService(Service):
+class DeviceInfoService(Service):
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, '97164323-9362-4883-a30d-45b2f400fd3c', True)
+        Service.__init__(self, bus, index, '180A', True)  # Standard Device Information Service
         self.add_characteristic(PlanesignTempCharacteristic(bus, 0, self))
         self.add_characteristic(PlanesignHostnameCharacteristic(bus, 1, self))
         self.add_characteristic(PlanesignUptimeCharacteristic(bus, 2, self))
         self.add_characteristic(PlanesignWiFiStatusCharacteristic(bus, 3, self))
 
-class CommandExecutionService(Service):
+class SystemControlService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, '312f08be-a717-40b0-9730-6d3d7c929856', True)
-        self.add_characteristic(CommandCharacteristic(bus, 0, self))
+        self.add_characteristic(SafeCommandCharacteristic(bus, 0, self))
 
-class WiFiScanService(Service):
+class WiFiManagementService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, '755f57c4-1d85-4676-9dfb-bafcacbb2915', True)
         self.add_characteristic(WiFiScanCharacteristic(bus, 0, self))
@@ -41,58 +42,22 @@ class WiFiConfigCharacteristic(Characteristic):
         self.value = []
 
     def WriteValue(self, value, options):
-        try:
-            # Convert the received bytes to string
-            credentials = bytes(value).decode().strip()
-            print('WiFiConfigCharacteristic Write: Received credentials')
-            
-            # Expected format: "SSID|PASSWORD"
-            if '|' not in credentials:
-                raise ValueError("Invalid format. Expected 'SSID|PASSWORD'")
-                
-            ssid, password = credentials.split('|', 1)
-            
-            # Delete existing connection with the same SSID if it exists
-            subprocess.run(['sudo', 'nmcli', 'connection', 'delete', ssid], 
-                         stderr=subprocess.DEVNULL)  # Ignore errors if connection doesn't exist
-            
-            # Add new connection
-            subprocess.run([
-                'sudo', 'nmcli', 'connection', 'add',
-                'type', 'wifi',
-                'con-name', ssid,
-                'ifname', 'wlan0',
-                'ssid', ssid,
-                'wifi-sec.key-mgmt', 'wpa-psk',
-                'wifi-sec.psk', password
-            ], check=True)
-            
-            # Enable and bring up the connection
-            subprocess.run(['sudo', 'nmcli', 'connection', 'up', ssid], check=True)
-            
-            print(f'Successfully configured WiFi network: {ssid}')
-            
-        except subprocess.CalledProcessError as e:
-            error_msg = f"NetworkManager error: {str(e)}"
-            print(error_msg)
-            raise dbus.exceptions.DBusException(error_msg)
-        except Exception as e:
-            error_msg = f"Error configuring WiFi: {str(e)}"
-            print(error_msg)
-            raise dbus.exceptions.DBusException(error_msg)
+        credentials = bytes(value).decode().strip()
+        print('WiFiConfigCharacteristic Write: Received credentials')
+        configure_wifi(credentials)
 
 class PlanesignBLEApplication(Application):
     def __init__(self, bus):
         Application.__init__(self, bus)
-        self.add_service(PlanesignBLEInfoService(bus, 0))
-        self.add_service(CommandExecutionService(bus, 1))
-        self.add_service(WiFiScanService(bus, 2))
+        self.add_service(DeviceInfoService(bus, 0))
+        self.add_service(WiFiManagementService(bus, 1))
+        self.add_service(SystemControlService(bus, 2))
 
 class PlanesignBLEAdvertisement(Advertisement):
-    def __init__(self, bus, index):
+    def __init__(self, bus, index, device_name):
         Advertisement.__init__(self, bus, index, 'peripheral')
         self.add_service_uuid(PLANESIGN_MASTER_UUID)
-        self.add_local_name(f"PlaneSign-BLE-{get_mac_suffix()}")
+        self.add_local_name(device_name)
         self.include_tx_power = True
 
 class PlanesignTempCharacteristic(Characteristic):
@@ -138,77 +103,21 @@ class PlanesignWiFiStatusCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        wifi_status = self.get_wifi_status()
+        wifi_status = get_wifi_status()
         print('WiFi Status Read: ' + wifi_status)
         return [dbus.Byte(x.encode()) for x in wifi_status]
 
-    def get_wifi_status(self):
-        try:
-            # Get current WiFi connection info using nmcli
-            connection_info = subprocess.check_output(
-                ['nmcli', '-t', '-f', 'ACTIVE,SSID,SIGNAL', 'dev', 'wifi', 'list', '--rescan', 'no'],
-                stderr=subprocess.DEVNULL
-            ).decode('utf-8').strip()
-            
-            # Find the currently connected network (marked as active)
-            connected_network = None
-            for line in connection_info.split('\n'):
-                if line.startswith('yes:'):
-                    parts = line.split(':')
-                    if len(parts) >= 3:
-                        ssid = parts[1] if parts[1] else 'Hidden Network'
-                        signal = parts[2] if parts[2] else '0'
-                        connected_network = f"{ssid}|{signal}"
-                        break
-            
-            if connected_network:
-                return f"Connected|{connected_network}"
-            else:
-                return "Disconnected|None|0"
-                
-        except subprocess.CalledProcessError:
-            # Fallback to iwconfig if nmcli fails
-            try:
-                iwconfig_output = subprocess.check_output(
-                    ['iwconfig', 'wlan0'], 
-                    stderr=subprocess.DEVNULL
-                ).decode('utf-8')
-                
-                # Extract SSID and signal strength from iwconfig output
-                ssid = 'Unknown'
-                signal = '0'
-                
-                # Parse ESSID
-                import re
-                essid_match = re.search(r'ESSID:"([^"]*)"', iwconfig_output)
-                if essid_match:
-                    ssid = essid_match.group(1)
-                
-                # Parse signal level
-                signal_match = re.search(r'Signal level=(-?\d+)', iwconfig_output)
-                if signal_match:
-                    signal = signal_match.group(1)
-                
-                # Check if connected (has an IP address)
-                if 'Access Point:' in iwconfig_output and 'Not-Associated' not in iwconfig_output:
-                    return f"Connected|{ssid}|{signal}"
-                else:
-                    return "Disconnected|None|0"
-                    
-            except subprocess.CalledProcessError:
-                return "Error|Unable to get WiFi status|0"
-
-class CommandCharacteristic(Characteristic):
+class SafeCommandCharacteristic(Characteristic):
     COMMAND_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef2'
 
-    # List of allowed commands
+    # List of safe, read-only commands
     ALLOWED_COMMANDS = {
         'date': '/bin/date',
         'uptime': '/usr/bin/uptime',
         'temp': '/usr/bin/vcgencmd measure_temp',
         'hostname': '/bin/hostname',
-        'reboot': 'sudo /usr/sbin/reboot',
-        'update': '/home/pi/PlaneSign/docker_install_and_update.sh --reboot > /home/pi/PlaneSign/logs/ble_update.log 2>&1',
+        'disk': '/bin/df -h /',
+        'memory': '/usr/bin/free -h',
     }
 
     def __init__(self, bus, index, service):
@@ -217,12 +126,12 @@ class CommandCharacteristic(Characteristic):
         self.last_result = "No command executed yet"
 
     def ReadValue(self, options):
-        print('CommandCharacteristic Read: ' + self.last_result)
+        print('SafeCommandCharacteristic Read: ' + self.last_result)
         return [dbus.Byte(x.encode()) for x in self.last_result]
 
     def WriteValue(self, value, options):
         command = bytes(value).decode().strip()
-        print('CommandCharacteristic Write: ' + command)
+        print('SafeCommandCharacteristic Write: ' + command)
 
         if command in self.ALLOWED_COMMANDS:
             try:
@@ -240,59 +149,14 @@ class WiFiScanCharacteristic(Characteristic):
     WIFI_SCAN_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef3'
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, self.WIFI_SCAN_CHRC_UUID, ['read', 'write'], service)
-        self.value = []
-        self.last_scan = "Waiting..."
-
-    def scan_wifi(self):
-        try:
-            print("Scanning WiFi...")
-            # Use iw to scan
-            cmd_output = subprocess.check_output(['sudo', 'iw', 'dev', 'wlan0', 'scan'], 
-                                              stderr=subprocess.STDOUT).decode('utf-8')
-            
-            # Parse the output to get networks
-            networks = []
-            current_network = {}
-            
-            for line in cmd_output.split('\n'):
-                line = line.strip()
-                if 'BSS' in line and '(' in line:  # New network found
-                    if current_network.get('ssid'):  # Save previous network if it had an SSID
-                        networks.append(f"{current_network['ssid']}|{current_network.get('signal', 'N/A')}|{current_network.get('quality', 'N/A')}|{current_network.get('encrypted', 'yes')}")
-                    current_network = {}
-                elif 'SSID:' in line:
-                    ssid = line.split('SSID:', 1)[1].strip()
-                    if ssid:  # Only store non-empty SSIDs
-                        current_network['ssid'] = ssid
-                elif 'signal:' in line:
-                    current_network['signal'] = line.split('signal:', 1)[1].strip().split()[0]  # Gets the dBm value
-            
-            # Add the last network if it exists
-            if current_network.get('ssid'):
-                networks.append(f"{current_network['ssid']}|{current_network.get('signal', 'N/A')}|{current_network.get('quality', 'N/A')}|{current_network.get('encrypted', 'yes')}")
-            
-            print(f"Found {len(networks)} networks")
-            self.last_scan = "\n".join(networks[:6]) if networks else "No networks found"
-            
-        except subprocess.CalledProcessError as e:
-            self.last_scan = f"Error scanning WiFi: {str(e)}"
-        except Exception as e:
-            self.last_scan = f"Unexpected error: {str(e)}"
+        Characteristic.__init__(self, bus, index, self.WIFI_SCAN_CHRC_UUID, ['read'], service)
+        self.scan_result = scan_wifi()
 
     def ReadValue(self, options):
-        print('WiFiScanCharacteristic Read requested')
-        print(f'LastScan size: {len(self.last_scan)}')
-        return [dbus.Byte(x.encode()) for x in self.last_scan]
-
-    def WriteValue(self, value, options):
-        command = bytes(value).decode().strip()
-        print('WifiCharacteristic Write: ' + command)
-
-        if command == "scan":
-            self.scan_wifi()  # Perform a new scan on each read
-        else:
-            self.last_scan = f"Command '{command}' not scan"
+        print('WiFiScanCharacteristic Read requested - auto-scanning...')
+        # Auto-trigger scan on read
+        print(f'Scan result size: {len(self.scan_result)}')
+        return [dbus.Byte(x.encode()) for x in self.scan_result]
 
 def main():
     global mainloop
@@ -302,12 +166,18 @@ def main():
     if not adapter:
         print('BLE adapter not found')
         return
+    
+    # Set device name consistently
+    device_name = f"PlaneSign-BLE-{get_mac_suffix()}"
+    
+    # Set the Bluetooth device name
+    set_adapter_name(bus, adapter, device_name)
 
     service_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), GATT_MANAGER_IFACE)
     ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), LE_ADVERTISING_MANAGER_IFACE)
 
     app = PlanesignBLEApplication(bus)
-    adv = PlanesignBLEAdvertisement(bus, 0)
+    adv = PlanesignBLEAdvertisement(bus, 0, device_name)
 
     mainloop = GLib.MainLoop()
 

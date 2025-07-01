@@ -16,6 +16,7 @@ GATT_DESC_IFACE =    'org.bluez.GattDescriptor1'
 
 LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 LE_ADVERTISEMENT_IFACE = 'org.bluez.LEAdvertisement1'
+ADAPTER_IFACE = 'org.bluez.Adapter1'
 
 class InvalidArgsException(dbus.exceptions.DBusException):
     _dbus_error_name = 'org.freedesktop.DBus.Error.InvalidArgs'
@@ -141,6 +142,10 @@ def find_adapter(bus):
             return o
         print('Skip adapter:', o)
     return None
+
+def set_adapter_name(bus, adapter, name):
+    adapter_props = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), DBUS_PROP_IFACE)
+    adapter_props.Set(ADAPTER_IFACE, 'Alias', name)
 
 def register_app_cb():
     print('GATT application registered')
