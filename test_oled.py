@@ -9,16 +9,24 @@ import os
 # Add the planesign directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'planesign'))
 
-# Initialize shared_config with test configuration
-class MockSharedConfig:
-    CONF = {
-        "PINOUT_HARDWARE_MAPPING": "adafruit-oled",
-        "DEFAULT_BRIGHTNESS": "80",
-        "GPIO_SLOWDOWN": "5"
-    }
+# Initialize shared_config properly like in __main__.py
+from multiprocessing import Manager
 
+# Import and set up shared_config
 import shared_config
-shared_config.CONF = MockSharedConfig.CONF
+
+# Set up the manager and dictionaries
+manager = Manager()
+shared_config.data_dict = manager.dict()
+shared_config.arg_dict = manager.dict()
+shared_config.CONF = manager.dict()
+
+# Set test configuration
+shared_config.CONF["PINOUT_HARDWARE_MAPPING"] = "adafruit-oled"
+shared_config.CONF["DEFAULT_BRIGHTNESS"] = "80"
+shared_config.CONF["GPIO_SLOWDOWN"] = "5"
+
+print("✓ Shared config initialized")
 
 # Initialize OLED
 try:
@@ -43,7 +51,8 @@ try:
         
         # Test drawing
         canvas.Clear()
-        graphics.DrawText(canvas, graphics.Font(), 10, 10, graphics.Color(255, 255, 255), "Test")
+        font = graphics.Font()
+        graphics.DrawText(canvas, font, 10, 10, graphics.Color(255, 255, 255), "Test")
         matrix.SwapOnVSync(canvas)
         
         print("✓ Successfully drew text to OLED")

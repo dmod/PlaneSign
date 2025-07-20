@@ -282,37 +282,45 @@ def api_server():
 
 class PlaneSign:
     def __init__(self, defined_mode_handlers):
-        options = RGBMatrixOptions()
-        options.cols = 64
-        options.gpio_slowdown = int(shared_config.CONF["GPIO_SLOWDOWN"])
-        options.chain_length = 2
-        options.limit_refresh_rate_hz = 120
-        options.hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
-        options.drop_privileges = False
-
-        self.matrix = RGBMatrix(options=options)
-        self.canvas = self.matrix.CreateFrameCanvas()
-
-        self.defined_mode_handlers = defined_mode_handlers
-
-        self.font57 = graphics.Font()
-        self.font46 = graphics.Font()
-        self.fontbig = graphics.Font()
-        self.fontreallybig = graphics.Font()
-        self.fontplanesign = graphics.Font()
-        self.font57.LoadFont(os.path.join(shared_config.font_dir, "5x7.bdf"))
-        self.font46.LoadFont(os.path.join(shared_config.font_dir, "4x6.bdf"))
-        self.fontbig.LoadFont(os.path.join(shared_config.font_dir, "6x13.bdf"))
-        self.fontreallybig.LoadFont(os.path.join(shared_config.font_dir, "9x18B.bdf"))
-        self.fontplanesign.LoadFont(os.path.join(shared_config.font_dir, "helvR12.bdf"))
 
         self.last_brightness = None
-
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
-        self.canvas.brightness = shared_config.shared_current_brightness.value
+        hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
 
-        self.matrix.brightness = shared_config.shared_current_brightness.value
+        if hardware_mapping.lower() == "adafruit-oled":
+            import oled_adapter
+            oled_adapter.should_use_oled()
+            oled_adapter.monkey_patch_for_oled()
+            logging.info("Using OLED display")
+        else:
+
+            options = RGBMatrixOptions()
+            options.cols = 64
+            options.gpio_slowdown = int(shared_config.CONF["GPIO_SLOWDOWN"])
+            options.chain_length = 2
+            options.limit_refresh_rate_hz = 120
+            options.hardware_mapping = hardware_mapping
+            options.drop_privileges = False
+
+            self.matrix = RGBMatrix(options=options)
+            self.canvas = self.matrix.CreateFrameCanvas()
+
+            self.defined_mode_handlers = defined_mode_handlers
+
+            self.font57 = graphics.Font()
+            self.font46 = graphics.Font()
+            self.fontbig = graphics.Font()
+            self.fontreallybig = graphics.Font()
+            self.fontplanesign = graphics.Font()
+            self.font57.LoadFont(os.path.join(shared_config.font_dir, "5x7.bdf"))
+            self.font46.LoadFont(os.path.join(shared_config.font_dir, "4x6.bdf"))
+            self.fontbig.LoadFont(os.path.join(shared_config.font_dir, "6x13.bdf"))
+            self.fontreallybig.LoadFont(os.path.join(shared_config.font_dir, "9x18B.bdf"))
+            self.fontplanesign.LoadFont(os.path.join(shared_config.font_dir, "helvR12.bdf"))
+
+            self.canvas.brightness = shared_config.shared_current_brightness.value
+            self.matrix.brightness = shared_config.shared_current_brightness.value
 
     # Call this with a positive value to stay within the loop for that specificed amount of time
     # Call this with -1 to stay in the loop forever or until shared_forced_sign_update is set

@@ -243,6 +243,10 @@ def should_use_oled():
     """Check if OLED should be used based on configuration"""
     if not OLED_AVAILABLE:
         return False
+    
+    # Handle case where CONF might not be initialized yet
+    if not hasattr(shared_config, 'CONF') or shared_config.CONF is None:
+        return False
         
     return (shared_config.CONF.get("PINOUT_HARDWARE_MAPPING", "").lower() == "adafruit-oled")
 
@@ -250,15 +254,7 @@ def should_use_oled():
 def initialize_oled_if_needed():
     """Initialize OLED display if configured to use it"""
     if should_use_oled():
-        if not OLED_AVAILABLE:
-            logging.error("OLED mode requested but libraries not available!")
-            logging.error("Install with: pip install adafruit-circuitpython-ssd1305")
-            logging.error("Falling back to console output mode...")
-            
-            # Apply a mock console adapter instead of crashing
-            monkey_patch_for_console()
-            return False
-            
+
         try:
             # Apply monkey patches before any RGB matrix imports
             monkey_patch_for_oled()
@@ -266,98 +262,7 @@ def initialize_oled_if_needed():
             return True
         except Exception as e:
             logging.error(f"Failed to initialize OLED: {e}")
-            logging.error("Falling back to console output mode...")
-            monkey_patch_for_console()
             return False
     else:
         logging.info("RGB matrix mode enabled")
         return False
-
-
-def monkey_patch_for_console():
-    """Apply console-only monkey patches when OLED hardware is not available"""
-    import sys
-    
-    class ConsoleCanvas:
-        """Console-only canvas for debugging"""
-        def __init__(self):
-            self.width = 128
-            self.height = 32
-            self._brightness = 255
-            
-        @property 
-        def brightness(self):
-            return self._brightness
-            
-        @brightness.setter
-        def brightness(self, value):
-            self._brightness = value
-            logging.debug(f"Console brightness set to {value}")
-            
-        def Clear(self):
-            logging.debug("Console: Clear canvas")
-            
-        def SetPixel(self, x, y, r, g, b):
-            logging.debug(f"Console: SetPixel({x}, {y}, {r}, {g}, {b})")
-            
-        def Fill(self, r, g, b):
-            logging.debug(f"Console: Fill({r}, {g}, {b})")
-    
-    class ConsoleMatrix:
-        """Console-only matrix for debugging"""
-        def __init__(self, options=None):
-            self.width = 128
-            self.height = 32
-            self._brightness = 255
-            logging.info("Initialized console mode (OLED hardware not available)")
-            
-        @property
-        def brightness(self):
-            return self._brightness
-            
-        @brightness.setter
-        def brightness(self, value):
-            self._brightness = value
-            logging.debug(f"Console matrix brightness set to {value}")
-            
-        def CreateFrameCanvas(self):
-            return ConsoleCanvas()
-            
-        def SwapOnVSync(self, canvas):
-            logging.debug("Console: SwapOnVSync - display updated")
-            return canvas
-    
-    class ConsoleGraphics:
-        """Console-only graphics for debugging"""
-        @staticmethod
-        def Color(r, g, b):
-            return OLEDColor(r, g, b)
-            
-        @staticmethod
-        def DrawText(canvas, font, x, y, color, text):
-            logging.debug(f"Console: DrawText({x}, {y}, '{text}')")
-            
-        @staticmethod
-        def Font():
-            return OLEDFont()
-    
-    class ConsoleRGBMatrixOptions:
-        def __init__(self):
-            self.cols = 128
-            self.rows = 32
-            self.gpio_slowdown = 0
-            self.chain_length = 1
-            self.limit_refresh_rate_hz = 60
-            self.hardware_mapping = "console"
-            self.drop_privileges = False
-    
-    # Create mock rgbmatrix module for console
-    class ConsoleRGBMatrixModule:
-        RGBMatrix = ConsoleMatrix
-        RGBMatrixOptions = ConsoleRGBMatrixOptions
-        graphics = ConsoleGraphics()
-    
-    # Install the console mock module
-    sys.modules['rgbmatrix'] = ConsoleRGBMatrixModule()
-    
-    logging.info("Applied console monkey patches - all display output will go to logs")
