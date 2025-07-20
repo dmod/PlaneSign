@@ -17,10 +17,10 @@ def planesign_mode_handler(mode: DisplayMode):
 from multiprocessing import Process, Manager, Queue
 
 import utilities
-import shared_config
 import fish
 import finance
 import satellite
+import shared_config
 import track_a_flight
 import planes
 import welcome

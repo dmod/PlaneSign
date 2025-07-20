@@ -285,11 +285,22 @@ class PlaneSign:
 
         self.last_brightness = None
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
+        self.defined_mode_handlers = defined_mode_handlers
 
         hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
 
+        self.font57 = graphics.Font()
+        self.font46 = graphics.Font()
+        self.fontbig = graphics.Font()
+        self.fontreallybig = graphics.Font()
+        self.fontplanesign = graphics.Font()
+
         if hardware_mapping.lower() == "adafruit-oled":
             import oled_adapter
+
+            self.matrix = RGBMatrix(options=RGBMatrixOptions())
+            self.canvas = self.matrix.CreateFrameCanvas()
+
             oled_adapter.should_use_oled()
             oled_adapter.monkey_patch_for_oled()
             logging.info("Using OLED display")
@@ -306,13 +317,6 @@ class PlaneSign:
             self.matrix = RGBMatrix(options=options)
             self.canvas = self.matrix.CreateFrameCanvas()
 
-            self.defined_mode_handlers = defined_mode_handlers
-
-            self.font57 = graphics.Font()
-            self.font46 = graphics.Font()
-            self.fontbig = graphics.Font()
-            self.fontreallybig = graphics.Font()
-            self.fontplanesign = graphics.Font()
             self.font57.LoadFont(os.path.join(shared_config.font_dir, "5x7.bdf"))
             self.font46.LoadFont(os.path.join(shared_config.font_dir, "4x6.bdf"))
             self.fontbig.LoadFont(os.path.join(shared_config.font_dir, "6x13.bdf"))
