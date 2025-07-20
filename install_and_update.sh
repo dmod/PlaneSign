@@ -22,7 +22,17 @@ else
 fi
 
 # Turn off onboard audio
+if lsmod | grep -wq "snd_bcm2835"; then
+  echo "snd_bcm2835 is loaded!"
+  sudo rmmod snd_bcm2835
+fi
 sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
+if [ ! -f /etc/modprobe.d/alsa-blacklist.conf ] || ! grep -q "blacklist snd_bcm2835" /etc/modprobe.d/alsa-blacklist.conf; then
+  echo "Blacklisting snd_bcm2835 module..."
+  echo "blacklist snd_bcm2835" | sudo tee -a /etc/modprobe.d/alsa-blacklist.conf
+else
+  echo "snd_bcm2835 already blacklisted"
+fi
 
 # apt install system packages
 sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg libffi-dev
