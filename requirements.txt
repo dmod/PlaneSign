@@ -14,3 +14,5 @@ gevent==23.9.1
 FlightRadarAPI==1.2.0
 skyfield==1.45
 geopandas==1.0.1
+# OLED Support (optional - only needed when PINOUT_HARDWARE_MAPPING=adafruit-oled)
+adafruit-circuitpython-ssd1305>=1.0.0

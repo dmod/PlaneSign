@@ -17,10 +17,18 @@ def planesign_mode_handler(mode: DisplayMode):
 from multiprocessing import Process, Manager, Queue
 
 import utilities
+import shared_config
+
+# Read config first to determine display type
+utilities.read_config()
+
+# Initialize OLED if needed (must be done before any rgbmatrix imports)
+import oled_adapter
+oled_adapter.initialize_oled_if_needed()
+
 import fish
 import finance
 import satellite
-import shared_config
 import track_a_flight
 import planes
 import welcome
@@ -106,8 +114,6 @@ utilities.detect_usb_audio_device()
 api_server_process = Process(target=planesign.api_server, name="APIServer")
 plane_data_process = Process(target=planes.get_plane_data_worker, name="PlaneData", args=(shared_config.data_dict,))
 weather_data_process = Process(target=weather.get_weather_data_worker, name="WeatherData", args=(shared_config.data_dict,))
-
-utilities.read_config()
 
 api_server_process.start()
 plane_data_process.start()

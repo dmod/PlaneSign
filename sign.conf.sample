@@ -22,7 +22,7 @@ DEFAULT_BRIGHTNESS=80
 #number min 0 max 100000
 CLOSEST_HEIGHT_LIMIT=10000
 
-#text
+#text (adafruit-hat for RGB matrix, adafruit-oled for SSD1305 OLED display)
 PINOUT_HARDWARE_MAPPING=adafruit-hat
 
 #number min 0 max 5

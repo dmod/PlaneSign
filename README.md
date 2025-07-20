@@ -6,6 +6,7 @@
 
 ## Hardware Requirements
 
+### RGB LED Matrix Option (Original)
 - Raspberry Pi 4 (2GB is sufficient)
 - 2x 64x32 RGB LED Matrix - Either 4mm or 5mm pitch ([Adafruit Link](https://www.adafruit.com/product/2277))
 - 5V 10A 50W Power Supply (100V-240V AC to DC Adapter)
@@ -21,6 +22,12 @@
   - Socket cap screws (M3-0.5 x 16mm)
   - #4S flat washers for spacing
 - [Wiring Instructions](https://github.com/hzeller/rpi-rgb-led-matrix/blob/master/wiring.md)
+
+### OLED Display Option (Alternative)
+- Raspberry Pi (any model with I2C support)
+- Adafruit SSD1305 OLED Display (128x32 or 128x64)
+- I2C wiring (VCC, GND, SCL, SDA)
+- See [OLED_README.md](OLED_README.md) for detailed setup instructions
 
 ## Software Setup
 
