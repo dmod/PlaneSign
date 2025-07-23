@@ -34,6 +34,13 @@ else
   echo "snd_bcm2835 already blacklisted"
 fi
 
+# Install bluetooth support
+sudo apt-get update
+sudo apt install -y python3-dbus
+sudo ln --force --symbolic /home/pi/PlaneSign/ble/planesign-ble.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable planesign-ble.service
+
 # apt install system packages
 sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg libffi-dev
 
