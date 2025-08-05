@@ -133,12 +133,14 @@ def show_a_plane(sign, plane_to_show, scroll):
         logging.info("Full airport name from code: " + friendly_name)
 
         # Front pad the flight number to a max of 7 for spacing
-        formatted_flight = plane_to_show.callsign.rjust(7, ' ')
+
+        from_airport = plane_to_show.origin_airport_iata if plane_to_show.origin_airport_iata else " ? "
+        to_airport = plane_to_show.destination_airport_iata if plane_to_show.destination_airport_iata else " ? "
 
         for i in range(utilities.NUM_STEPS):
             sign.canvas.Clear()
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 12, graphics.Color(20, 200, 20), plane_to_show.origin_airport_iata + "->" + plane_to_show.destination_airport_iata)
-            if shared_config.CONF["AIRPORT_SCROLL"].lower() == 'true':
+            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 12, graphics.Color(20, 200, 20), from_airport + "->" + to_airport)
+            if shared_config.CONF["AIRPORT_SCROLL"].lower() == "true":
                 scroll.text=friendly_name
                 scroll.draw()
             else:
