@@ -32,7 +32,7 @@ def track_a_flight(sign):
 
         if (requests_limiter % 50 == 0):
                 
-            flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={flight_num_hex}")
+            flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={flight_num_hex}", headers = {'User-Agent': ''})
             if flightdatareq and flightdatareq.status_code == requests.codes.ok:
                 flight_data = flightdatareq.json()
             else:

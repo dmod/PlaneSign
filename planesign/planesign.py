@@ -138,8 +138,8 @@ def set_countdown(datetimestr,countdownmsg):
 
 @app.route("/get_possible_flights/<query_string>")
 def get_possible_flights(query_string):
-    return requests.get(f'https://www.flightradar24.com/v1/search/web/find?query={query_string}&limit=50').json()
-
+    query_result = requests.get(f'https://www.flightradar24.com/v1/search/web/find?query={query_string}&limit=50', headers = {'User-Agent': ''})
+    return query_result.json()
 
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
