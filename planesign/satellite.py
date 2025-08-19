@@ -227,7 +227,7 @@ def get_flag(selected,satellite_data):
 
                 if code != "":
                     logging.info(f'Found country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}')
-                    with open("satsup.txt", "a+") as suppliment_satfile:
+                    with open("datafiles/satsup.txt", "a+") as suppliment_satfile:
 
                         suppliment_satfile.write(f'{sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}\n')
                         satellite_data.append({"COSPAR":selected["intDesignator"], "NORAD":selected["satid"], "country":code})
@@ -295,8 +295,8 @@ def satellites(sign):
                     cospar = parts[24]
                     norad = int(parts[25])
                     satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
-        if exists("satsup.txt"):
-            with open("satsup.txt", "r") as f:
+        if exists("datafiles/satsup.txt"):
+            with open("datafiles/satsup.txt", "r") as f:
                 lines = f.readlines()
                 nline = 0
                 for line in lines:
@@ -308,9 +308,9 @@ def satellites(sign):
                         country = parts[3]
                         satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
         else:
-            with open("satsup.txt", "w+") as f:
+            with open("datafiles/satsup.txt", "w+") as f:
                 pass
-            os.chmod("satsup.txt", 0o777)
+            os.chmod("datafiles/satsup.txt", 0o666)
 
     except Exception as e:
         logging.exception("Can't read static satellite data")
@@ -341,7 +341,10 @@ def satellites(sign):
     polltime = None
     closest = None
     lowest = None
-    multiplier=1
+    multiplier = 1.0
+    above_pollperiod = 45 #seconds - Limit 100/hour -> 36s/call
+    iss_pollperiod = 270 #seconds - Limit 1000/hour but each call gets us 300 seconds worth of data
+    geo_pollperiod = 5 #seconds - Don't do too much geometry crunching
 
     iss_polltime = None
     iss_flyby_polltime = None
@@ -386,7 +389,7 @@ def satellites(sign):
 
         if shared_config.shared_satellite_mode.value == 1:
 
-            if polltime==None or time.perf_counter()-polltime>10*multiplier:
+            if polltime==None or (time.perf_counter()-polltime) > (above_pollperiod*multiplier):
 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
@@ -401,12 +404,18 @@ def satellites(sign):
                     else:
                         data = None
 
-                    #slow down requests as we approach limit
-                    if data and data["info"]["transactionscount"]>500:
+                    # Slow down requests as we approach limit
+                    if data and "info" not in data:
+                        # No info returned (rate limit reached)
+                        multiplier = 3600/above_pollperiod
+                    elif data and data["info"]["transactionscount"]:
                         #multiplier = 1+2*(data["info"]["transactionscount"]-500)/200
-                        multiplier = (500/(1000-min(data["info"]["transactionscount"],998)))
+                        #multiplier = (500/(1000-min(data["info"]["transactionscount"],998)))
+
+                        # Rate limit was changed to 100 from 1000 by n2yo
+                        multiplier = max(100/(100-min(data["info"]["transactionscount"], 98)), 1)
                     else:
-                        multiplier = 1
+                        multiplier = 1.0
 
                     if data:
                         above = data["above"]
@@ -538,7 +547,7 @@ def satellites(sign):
         #ISS data
         else:
 
-            if iss_polltime==None or time.perf_counter()-iss_polltime>270:
+            if iss_polltime==None or (time.perf_counter()-iss_polltime) > iss_pollperiod:
                 iss_pos = None
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
@@ -562,7 +571,7 @@ def satellites(sign):
                 iss_flyby_pollperiod = 3600 #1 hour
             else:
                 iss_flyby_pollperiod = 86400 #24 hrs
-            if iss_flyby_polltime==None or time.perf_counter()-iss_flyby_polltime>iss_flyby_pollperiod:
+            if iss_flyby_polltime==None or (time.perf_counter()-iss_flyby_polltime) > iss_flyby_pollperiod:
                 iss_flyby = None
                 iss_pass_error_flag = False
                 with requests.Session() as s:
@@ -602,7 +611,7 @@ def satellites(sign):
                         break
 
                 if pos:
-                    if geotime == None or time.perf_counter()-geotime>5: #limit how often we check location
+                    if geotime == None or time.perf_counter()-geotime > geo_pollperiod: #limit how often we check location
                         geotime = time.perf_counter()
                         
                         code = None
