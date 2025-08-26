@@ -55,13 +55,15 @@ def get_country_code(rawname,date):
 
         if country == "EU" or country.find("ESA") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
             code = "EU"
-        elif country == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1 or country.find("(TBD)") != -1:
+        elif country == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1:
             if datetime.strptime(date, "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
                 code = "USR"
             else:
                 code = "RUS"
         elif country.find("(ITSO)") != -1 or country.find("(ASRA)") != -1:
             code = "USA"
+        elif country.find("(PRC)") != -1:
+            code = "CHN"
         elif country.find("INMARSAT") != -1 or country.find("(NICO)") != -1:
             code = "GBR"
         elif country == "UN" or country == "MULTINATIONAL" or country.find("(AB)") != -1 or country.find("(RASC)") != -1:
@@ -132,7 +134,39 @@ def gen_flag(code):
 def get_flag(selected,satellite_data):
 
     image = None
+
+    USA_names = ["AEROCUBE ", "COMSTAR", "DIRECTV", "DMSP ", "DOVE ", "ECHOSTAR", "ESSA ",
+                 "EXPLORER", "FLOCK", "GALAXY", "GLOBAL-", "GLOBALSTAR", "GOES ", "HAWK-",
+                 "INTELSAT", "IRIDIUM", "KUIPER", "LANDSAT", "LEASAT ", "LEMUR 2", "LES ",
+                 "NAVSTAR", "NOAA", "OPS ", "ORBCOMM", "SATCOM", "SECOR ", "SPACEBEE-",
+                 "STARLINK", "TIROS ", "USA", "WESTFORD NEEDLES"]
+
+    RUS_names = ["COSMOS", "EKRAN", "EXPRESS", "GONETS", "GORIZONT", "KANOPUS",
+                 "MOLNIYA", "METEOR", "NADEZHDA", "OKEAN ", "RADIO ", "RADUGA",
+                 "SITRO-", "YUZGU"]
+
+    CHN_names = ["BEIDOU", "CENTISPACE", "CHINASAT", "FENGYUN", "GAOFEN", "GEESAT",
+                 "HULIANWANG", "JILIN", "QIANFAN", "SINOSAT", "SHIYAN", "TIANHUI",
+                 "TIANLIAN", "TIANMU", "TIANQI", "TIANZHOU", "YAOGAN", "YUNHAI", ]
+
+    GBR_names = ["INMARSAT", "O3B", "ONEWEB", "SKYNET "]
+
+    EU_names = ["EUTE", "METEOSAT"]
+
+    IND_names = ["GSAT ", "GSAT-", "INSAT ", "IRNSS", "IRS "]
+
+    FRA_names = ["BRO-", "DIADEME", "KINEIS", "SPOT ", "TELECOM "]
+
+    ITA_names = ["ION SCV", "IRIDE-", "PICO-", "UNISAT"]
+
+    SAU_names = ["SAUDISAT", "SAUDICOMSAT"]
+
+    TUR_names = ["CONNECTA", "TURKSAT"]
+
+    CAN_names = ["ANIK ", "GHGSAT"]
     
+    AUS_names = ["OPTUS", "SKYKRAFT"]
+
     if satellite_data:
 
         code = ""
@@ -151,35 +185,44 @@ def get_flag(selected,satellite_data):
             code = get_country_code(sat[0]["country"],selected["launchDate"])
 
         #can't find in static file lookup, apply known cases
-        elif sat_name.find("USA") == 0 or sat_name.find("STARLINK") == 0 or sat_name.find("SATCOM") == 0 or sat_name.find("DIRECTV") == 0 or sat_name.find("NOAA") == 0 or sat_name.find("GOES ") == 0 or sat_name.find("OPS ") == 0 or sat_name.find("HAWK-") == 0 or sat_name.find("DMSP ") == 0 or sat_name.find("GALAXY") == 0 or sat_name.find("INTELSAT") == 0 or sat_name.find("WESTFORD NEEDLES") == 0 or sat_name.find("FLOCK") == 0 or sat_name.find("DOVE ") == 0 or sat_name.find("IRIDIUM") == 0 or sat_name.find("NAVSTAR") == 0 or sat_name.find("EXPLORER") == 0 or sat_name.find("GLOBALSTAR") == 0 or sat_name.find("ORBCOMM") == 0 or sat_name.find("LANDSAT") == 0 or sat_name.find("COMSTAR") == 0 or sat_name.find("SPACEBEE-") == 0 or sat_name.find("GLOBAL-") == 0 or sat_name.find("ECHOSTAR") == 0 or sat_name.find("AEROCUBE ") == 0 or sat_name.find("LEASAT ") == 0 or sat_name.find("ESSA ") == 0 or sat_name.find("LES ") == 0 or sat_name.find("SECOR ") == 0 or sat_name.find("TIROS ") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in USA_names):
             code = "USA"
 
-        elif sat_name.find("COSMOS") == 0  or sat_name.find("MOLNIYA") == 0 or sat_name.find("METEOR") == 0 or sat_name.find("GONETS") == 0 or sat_name.find("GORIZONT") == 0 or sat_name.find("YUZGU") == 0 or sat_name.find("RADIO ") == 0 or sat_name.find("EXPRESS") == 0 or sat_name.find("NADEZHDA") == 0 or sat_name.find("KANOPUS") == 0 or sat_name.find("EKRAN") == 0 or sat_name.find("RADUGA") == 0 or sat_name.find("OKEAN ") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in RUS_names):
             if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date()<datetime(1991, 10, 26, 0, 0).date():
                 code = "USR"
             else:
                 code = "RUS"
 
-        elif sat_name.find("SINOSAT") == 0 or sat_name.find("SHIYAN") == 0 or sat_name.find("FENGYUN") == 0 or sat_name.find("GAOFEN") == 0 or sat_name.find("BEIDOU") == 0 or sat_name.find("CHINASAT") == 0 or sat_name.find("JILIN") == 0 or sat_name.find("YAOGAN") == 0 or sat_name.find("GEESAT") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in CHN_names):
             code = "CHN"
 
-        elif sat_name.find("ONEWEB") == 0 or sat_name.find("O3B") == 0 or sat_name.find("INMARSAT") == 0 or sat_name.find("SKYNET ") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in GBR_names):
             code = "GBR"
 
-        elif sat_name.find("EUTE") == 0 or sat_name.find("METEOSAT") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in EU_names):
             code = "EU"
 
-        elif sat_name.find("INSAT ") == 0 or sat_name.find("GSAT ") == 0 or sat_name.find("GSAT-") == 0 or sat_name.find("IRS ") == 0 or sat_name.find("IRNSS") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in IND_names):
             code = "IND"
 
-        elif sat_name.find("DIADEME") == 0 or sat_name.find("SPOT ") == 0 or sat_name.find("TELECOM ") == 0 or sat_name.find("BRO-") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in FRA_names):
             code = "FRA"
         
-        elif sat_name.find("UNISAT") == 0 or sat_name.find("ION SCV") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in ITA_names):
             code = "ITA"
         
-        elif sat_name.find("SAUDISAT") == 0 or sat_name.find("SAUDICOMSAT") == 0:
+        elif any(sat_name.startswith(prefix) for prefix in SAU_names):
             code = "SAU"
+
+        elif any(sat_name.startswith(prefix) for prefix in TUR_names):
+            code = "TUR"
+
+        elif any(sat_name.startswith(prefix) for prefix in CAN_names):
+            code = "CAN"
+
+        elif any(sat_name.startswith(prefix) for prefix in AUS_names):
+            code = "AUS"
 
         elif sat_name.find("NUSAT") == 0:
             code = "ARG"
@@ -187,14 +230,8 @@ def get_flag(selected,satellite_data):
         elif sat_name.find("ASTROCAST") == 0:
             code = "CHE"
 
-        elif sat_name.find("ANIK ") == 0 or sat_name.find("GHGSAT") == 0:
-            code = "CAN"
-
         elif sat_name.find("ASTRA") == 0:
             code = "LUX"
-
-        elif sat_name.find("OPTUS") == 0 or sat_name.find("SKYKRAFT") == 0:
-            code = "AUS"
 
         elif sat_name.find("ICEYE") == 0:
             code = "FIN"
@@ -261,11 +298,25 @@ def satellites(sign):
 
     image = Image.open(f"{shared_config.icons_dir}/galaxy.png")
     sign.canvas.SetImage(image.convert('RGB'), 0, 0)
-    for i in range(-1,2):
-        for j in range(-1,2):
-            graphics.DrawText(sign.canvas, sign.fontbig, 3+i, 28+j, graphics.Color(0,0,0), "Loading...")
-    graphics.DrawText(sign.canvas, sign.fontbig, 3, 28, graphics.Color(180,100,180), "Loading...")
-    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+    
+    # Check if N2YO API key is configured
+    if not shared_config.CONF.get("N2YO_API_KEY"):
+        msg = "No N2YO API key!"
+        logging.error("N2YO API key is not configured. Satellite mode will not function.")
+        for i in range(-1,2):
+            for j in range(-1,2):
+                graphics.DrawText(sign.canvas, sign.fontbig, 3+i, 28+j, graphics.Color(0,0,0), msg)
+        graphics.DrawText(sign.canvas, sign.fontbig, 3, 28, graphics.Color(180,100,180), msg)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+        return sign.wait_loop(-1)
+    else:
+        msg = "Loading..."
+        for i in range(-1,2):
+            for j in range(-1,2):
+                graphics.DrawText(sign.canvas, sign.fontbig, 3+i, 28+j, graphics.Color(0,0,0), msg)
+        graphics.DrawText(sign.canvas, sign.fontbig, 3, 28, graphics.Color(180,100,180), msg)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+
     sign.canvas.Clear()
 
     satellite_data = []
@@ -342,9 +393,12 @@ def satellites(sign):
     closest = None
     lowest = None
     multiplier = 1.0
-    above_pollperiod = 45 #seconds - Limit 100/hour -> 36s/call
+    above_pollperiod = 40 #seconds - Limit 100/hour -> 36s/call
     iss_pollperiod = 270 #seconds - Limit 1000/hour but each call gets us 300 seconds worth of data
     geo_pollperiod = 5 #seconds - Don't do too much geometry crunching
+
+    above_rate_limit_per_hour = 100
+    above_max_trans_per_sec = above_rate_limit_per_hour/3600
 
     iss_polltime = None
     iss_flyby_polltime = None
@@ -357,6 +411,9 @@ def satellites(sign):
     geotime = None
     prev_address = None
     prev_code = None
+    delta = None
+    prev_trans = None
+    trans = None
 
     blip_count = 0
     
@@ -393,12 +450,17 @@ def satellites(sign):
 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
-                    response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/45/0/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
+                    response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/45/0/&apiKey={shared_config.CONF["N2YO_API_KEY"]}')
 
                     if response.status_code == requests.codes.ok:
                         try:
                             data = response.json()
-                            polltime = time.perf_counter()
+                            t = time.perf_counter()
+
+                            if polltime != None:
+                                delta = t - polltime
+
+                            polltime = t
                         except:
                             data = None
                     else:
@@ -407,15 +469,22 @@ def satellites(sign):
                     # Slow down requests as we approach limit
                     if data and "info" not in data:
                         # No info returned (rate limit reached)
-                        multiplier = 3600/above_pollperiod
-                    elif data and data["info"]["transactionscount"]:
-                        #multiplier = 1+2*(data["info"]["transactionscount"]-500)/200
-                        #multiplier = (500/(1000-min(data["info"]["transactionscount"],998)))
+                        multiplier = 10.0
 
-                        # Rate limit was changed to 100 from 1000 by n2yo
-                        multiplier = max(100/(100-min(data["info"]["transactionscount"], 98)), 1)
-                    else:
+                    elif data and data["info"]["transactionscount"]:
+
+                        prev_trans = trans
+                        trans = data["info"]["transactionscount"]
+                        #logging.info(f"Transaction count: {trans}, Time: {polltime}")
+
                         multiplier = 1.0
+                        if delta != None:
+                            rate = (trans - prev_trans)/delta
+                            if (rate > 0.0) and (rate > above_max_trans_per_sec):
+                                multiplier = (above_max_trans_per_sec/rate)
+
+                    else:
+                       multiplier = 1.0
 
                     if data:
                         above = data["above"]
@@ -551,7 +620,7 @@ def satellites(sign):
                 iss_pos = None
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
-                    response = s.get(satsite+f'/positions/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/300/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
+                    response = s.get(satsite+f'/positions/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/300/&apiKey={shared_config.CONF["N2YO_API_KEY"]}')
 
                     if response.status_code == requests.codes.ok:
                         try:
@@ -576,7 +645,7 @@ def satellites(sign):
                 iss_pass_error_flag = False
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1)))
-                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/10/180/&apiKey=89PNJ8-5FCFDN-TEKWUN-4SYI')
+                    iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/10/180/&apiKey={shared_config.CONF["N2YO_API_KEY"]}')
 
                     if iss_response.status_code == requests.codes.ok:
                         try:
