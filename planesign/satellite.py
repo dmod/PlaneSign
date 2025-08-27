@@ -411,6 +411,7 @@ def satellites(sign):
     geotime = None
     prev_address = None
     prev_code = None
+    prev_datatime = None
     delta = None
     prev_trans = None
     trans = None
@@ -446,7 +447,9 @@ def satellites(sign):
 
         if shared_config.shared_satellite_mode.value == 1:
 
-            if polltime==None or (time.perf_counter()-polltime) > (above_pollperiod*multiplier):
+            t = time.perf_counter()
+
+            if polltime==None or (t-polltime) > (above_pollperiod*multiplier):
 
                 with requests.Session() as s:
                     s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
@@ -455,12 +458,6 @@ def satellites(sign):
                     if response.status_code == requests.codes.ok:
                         try:
                             data = response.json()
-                            t = time.perf_counter()
-
-                            if polltime != None:
-                                delta = t - polltime
-
-                            polltime = t
                         except:
                             data = None
                     else:
@@ -473,18 +470,25 @@ def satellites(sign):
 
                     elif data and data["info"]["transactionscount"]:
 
+                        if prev_datatime != None:
+                            delta = t - prev_datatime
+                        prev_datatime = t
+
                         prev_trans = trans
                         trans = data["info"]["transactionscount"]
-                        #logging.info(f"Transaction count: {trans}, Time: {polltime}")
+                        #logging.info(f"Transaction count: {trans}, Time: {t}")
 
                         multiplier = 1.0
-                        if delta != None:
+                        if delta != None and prev_trans != None:
                             rate = (trans - prev_trans)/delta
-                            if (rate > 0.0) and (rate > above_max_trans_per_sec):
-                                multiplier = (above_max_trans_per_sec/rate)
+                            if rate > above_max_trans_per_sec:
+                                multiplier = (rate/above_max_trans_per_sec)
+                                #logging.info(f"Multiplier: {multiplier}")
 
                     else:
                        multiplier = 1.0
+
+                    polltime = t
 
                     if data:
                         above = data["above"]
