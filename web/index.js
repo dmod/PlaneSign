@@ -414,6 +414,13 @@ function update_sign_status() {
         if (current_mode && current_mode !== "0") {
             document.getElementById(current_mode).style.backgroundColor = "red";
             global_current_mode = current_mode;
+
+            // Unhide any special options for this mode. These are all currently placed
+            // as divs immediately after the mode button in the HTML
+            sib = document.getElementById(global_current_mode).nextElementSibling;
+            if (sib && sib.hidden) {
+                sib.hidden = false;
+            }
         }
     });
 }
