@@ -2,13 +2,15 @@ from datetime import datetime, timedelta
 import time
 import utilities
 import random
+import shutil
+import os.path
 from PIL import Image, ImageDraw
 import shared_config
 from rgbmatrix import graphics
 import logging
 import numpy as np
 import __main__
-from skyfield.api import load, wgs84
+from skyfield.api import load, wgs84, Loader
 from skyfield.trigonometry import position_angle_of
 from skyfield.framelib import ecliptic_frame
 from skyfield import almanac
@@ -33,11 +35,15 @@ def moon(sign):
 
     load = Loader(shared_config.datafiles_dir)
 
+    if os.path.isfile("./de421.bsp") and not os.path.isfile(f"{shared_config.datafiles_dir}/de421.bsp"):
+        logging.debug("Moving de421.bsp to datafiles directory")
+        shutil.move("./de421.bsp", f"{shared_config.datafiles_dir}/de421.bsp")
+
     try:
         eph = load('de421.bsp')
     except Exception as e:
-        msg = "Error dling ephemeris!"
-        logging.error("Error loading de421.bsp: %s", e)
+        msg = "Error getting ephemeris!"
+        logging.error(f"Error loading "{shared_config.datafiles_dir}/de421.bsp": %s", e)
         logging.error(f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
                       or manually download from https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp and place\
                       it in {shared_config.datafiles_dir}.")
