@@ -43,7 +43,7 @@ def moon(sign):
         eph = load('de421.bsp')
     except Exception as e:
         msg = "Error getting ephemeris!"
-        logging.error(f"Error loading "{shared_config.datafiles_dir}/de421.bsp": %s", e)
+        logging.error(f"Error loading {shared_config.datafiles_dir}/de421.bsp: %s", e)
         logging.error(f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
                       or manually download from https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp and place\
                       it in {shared_config.datafiles_dir}.")
