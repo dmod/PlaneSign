@@ -31,7 +31,24 @@ def moon(sign):
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
     sign.canvas.Clear()
 
-    eph = load('de421.bsp')
+    load = Loader(shared_config.datafiles_dir)
+
+    try:
+        eph = load('de421.bsp')
+    except Exception as e:
+        msg = "Error dling ephemeris!"
+        logging.error("Error loading de421.bsp: %s", e)
+        logging.error(f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
+                      or manually download from https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp and place\
+                      it in {shared_config.datafiles_dir}.")
+
+        sign.canvas.SetImage(image.convert('RGB'), 0, 0)
+        for i in range(-1,2):
+            for j in range(-1,2):
+                graphics.DrawText(sign.canvas, sign.font57, 3+i, 28+j, graphics.Color(0,0,0), msg)
+        graphics.DrawText(sign.canvas, sign.font57, 3, 28, graphics.Color(200, 10, 10), msg)
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+        return sign.wait_loop(-1)
 
     stars = []
 
