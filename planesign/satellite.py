@@ -264,7 +264,7 @@ def get_flag(selected,satellite_data):
 
                 if code != "":
                     logging.info(f'Found country for satellite: {sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}')
-                    with open("datafiles/satsup.txt", "a+") as suppliment_satfile:
+                    with open(f"{shared_config.datafiles_dir}/satsup.txt", "a+") as suppliment_satfile:
 
                         suppliment_satfile.write(f'{sat_name}\t{selected["satid"]}\t{selected["intDesignator"]}\t{code}\n')
                         satellite_data.append({"COSPAR":selected["intDesignator"], "NORAD":selected["satid"], "country":code})
@@ -321,7 +321,7 @@ def satellites(sign):
 
     satellite_data = []
     try:
-        with open("datafiles/satdat.txt",encoding='windows-1252') as f:
+        with open(f"{shared_config.datafiles_dir}/satdat.txt",encoding='windows-1252') as f:
             pass
     except:
         satdaturl = "https://www.ucsusa.org/media/11490"
@@ -329,11 +329,11 @@ def satellites(sign):
         if file.status_code == requests.codes.ok:
             sat_lines = file.text.splitlines()[1:]
             logging.info(f"Found static data for {len(sat_lines)} satellites")
-            with open("datafiles/satdat.txt", 'wb') as f:
+            with open(f"{shared_config.datafiles_dir}/satdat.txt", 'wb') as f:
                 f.write(file.content)
 
     try:
-        with open("datafiles/satdat.txt",encoding='windows-1252',errors='replace') as f:
+        with open(f"{shared_config.datafiles_dir}/satdat.txt",encoding='windows-1252',errors='replace') as f:
             lines = f.readlines()[1:]
             nline = 0
             for line in lines:
@@ -346,8 +346,8 @@ def satellites(sign):
                     cospar = parts[24]
                     norad = int(parts[25])
                     satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
-        if exists("datafiles/satsup.txt"):
-            with open("datafiles/satsup.txt", "r") as f:
+        if exists(f"{shared_config.datafiles_dir}/satsup.txt"):
+            with open(f"{shared_config.datafiles_dir}/satsup.txt", "r") as f:
                 lines = f.readlines()
                 nline = 0
                 for line in lines:
@@ -359,9 +359,9 @@ def satellites(sign):
                         country = parts[3]
                         satellite_data.append({"COSPAR":cospar, "NORAD":norad, "country":country})
         else:
-            with open("datafiles/satsup.txt", "w+") as f:
+            with open(f"{shared_config.datafiles_dir}/satsup.txt", "w+") as f:
                 pass
-            os.chmod("datafiles/satsup.txt", 0o666)
+            os.chmod(f"{shared_config.datafiles_dir}/satsup.txt", 0o666)
 
     except Exception as e:
         logging.exception("Can't read static satellite data")
