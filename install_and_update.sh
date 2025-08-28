@@ -75,6 +75,8 @@ while IFS= read -r package; do
   fi
 done < requirements.txt
 
+sudo -H pip3 install --upgrade --break-system-packages certifi
+
 # Update cache
 ./update_static_cache.py
 
