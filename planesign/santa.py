@@ -445,7 +445,7 @@ def santa(sign):
                 iw,ih=image.size
                 sign.canvas.SetImage(image.convert('RGB'), 6, 20-int(iw/2))
 
-                weatherstring = f"N Pole: {weather_data['daily'][0]['weather'][0]['main']} {round(weather_data['weather']['current']['temp'])}°F"
+                weatherstring = f"N Pole: {weather_data['current']['weather'][0]['main']} {round(weather_data['current']['temp'])}°F"
                 graphics.DrawText(sign.canvas, sign.font46, max(7+iw,60-len(weatherstring)*2), 24, graphics.Color(160,160,20), weatherstring)
 
 
