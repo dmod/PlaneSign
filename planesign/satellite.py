@@ -396,6 +396,7 @@ def satellites(sign):
     above_pollperiod = 40 #seconds - Limit 100/hour -> 36s/call
     iss_pollperiod = 270 #seconds - Limit 1000/hour but each call gets us 300 seconds worth of data
     geo_pollperiod = 5 #seconds - Don't do too much geometry crunching
+    maxmultiplier = 1200/above_pollperiod # 20 minutes
 
     above_rate_limit_per_hour = 100
     above_max_trans_per_sec = above_rate_limit_per_hour/3600
@@ -467,6 +468,7 @@ def satellites(sign):
                     if data and "info" not in data:
                         # No info returned (rate limit reached)
                         multiplier = 10.0
+                        debug.warning("No satellite 'above' info returned - rate limit reached?")
 
                     elif data and data["info"]["transactionscount"]:
 
@@ -486,7 +488,16 @@ def satellites(sign):
                                 #logging.info(f"Multiplier: {multiplier}")
 
                     else:
-                       multiplier = 1.0
+                        # No data returned or no info on transactions
+                        # Back off a bit
+                        multiplier = 5.0
+                        if data == None:
+                            logging.warning("No satellite 'above' data returned")
+                        else:
+                            logging.warning("No satellite 'above' transaction info returned")
+
+                    if multiplier > maxmultiplier:
+                        multiplier = maxmultiplier
 
                     polltime = t
 
