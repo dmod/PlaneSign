@@ -453,7 +453,8 @@ def satellites(sign):
             if polltime==None or (t-polltime) > (above_pollperiod*multiplier):
 
                 with requests.Session() as s:
-                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
+                    s.timeout = (10, 30)
+                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=10, status_forcelist=[408, 429, 500, 502, 503, 504, 520, 522, 524], backoff_factor=1.0, respect_retry_after_header=True)))
                     response = s.get(satsite+f'/above/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/45/0/&apiKey={shared_config.CONF["N2YO_API_KEY"]}')
 
                     if response.status_code == requests.codes.ok:
@@ -465,7 +466,12 @@ def satellites(sign):
                         data = None
 
                     # Slow down requests as we approach limit
-                    if data and "info" not in data:
+                    if data == None:
+                        # No data returned - back off a bit
+                        multiplier = 5.0
+                        logging.warning("No satellite 'above' data returned")
+    
+                    elif data and "info" not in data:
                         # No info returned (rate limit reached)
                         multiplier = 10.0
                         debug.warning("No satellite 'above' info returned - rate limit reached?")
@@ -486,15 +492,10 @@ def satellites(sign):
                             if rate > above_max_trans_per_sec:
                                 multiplier = (rate/above_max_trans_per_sec)
                                 #logging.info(f"Multiplier: {multiplier}")
-
                     else:
-                        # No data returned or no info on transactions
-                        # Back off a bit
-                        multiplier = 5.0
-                        if data == None:
-                            logging.warning("No satellite 'above' data returned")
-                        else:
-                            logging.warning("No satellite 'above' transaction info returned")
+                        # Data returned but no transaction info - hope we're good!
+                        multiplier = 1.0
+                        logging.warning("No satellite 'above' transaction info returned")
 
                     if multiplier > maxmultiplier:
                         multiplier = maxmultiplier
@@ -659,7 +660,7 @@ def satellites(sign):
                 iss_flyby = None
                 iss_pass_error_flag = False
                 with requests.Session() as s:
-                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1)))
+                    s.mount('https://', HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1.0)))
                     iss_response = s.get(satsite+f'/visualpasses/25544/{shared_config.CONF["SENSOR_LAT"]}/{shared_config.CONF["SENSOR_LON"]}/{elevation}/10/180/&apiKey={shared_config.CONF["N2YO_API_KEY"]}')
 
                     if iss_response.status_code == requests.codes.ok:
