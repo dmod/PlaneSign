@@ -1,11 +1,9 @@
-import sys
 import dbus, dbus.mainloop.glib
 import subprocess
 from gi.repository import GLib
 from gatt import Application, Advertisement, Service, Characteristic
 from gatt import find_adapter, set_adapter_name, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
-import re
-from wifi import get_wifi_status, scan_wifi, configure_wifi
+from wifi import get_current_wifi_status, scan_wifi, configure_wifi
 
 BLUEZ_SERVICE_NAME =           'org.bluez'
 DBUS_OM_IFACE =                'org.freedesktop.DBus.ObjectManager'
@@ -103,7 +101,7 @@ class PlanesignWiFiStatusCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        wifi_status = get_wifi_status()
+        wifi_status = get_current_wifi_status()
         print('WiFi Status Read: ' + wifi_status)
         return [dbus.Byte(x.encode()) for x in wifi_status]
 

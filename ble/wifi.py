@@ -2,10 +2,9 @@ import subprocess
 import dbus.exceptions
 
 class WiFiNetwork:
-    def __init__(self, ssid, signal='N/A', quality='N/A', encrypted='yes'):
+    def __init__(self, ssid, signal, encrypted):
         self.ssid = ssid
         self.signal = signal
-        self.quality = quality
         self.encrypted = encrypted
     
     def get_signal_int(self):
@@ -15,9 +14,9 @@ class WiFiNetwork:
             return -100  # Very weak signal for sorting
     
     def __str__(self):
-        return f"{self.ssid}|{self.signal}|{self.quality}|{self.encrypted}"
+        return f"{self.ssid}|{self.signal}|{self.encrypted}"
 
-def get_wifi_status():
+def get_current_wifi_status():
     try:
         # Get current WiFi connection info using nmcli
         connection_info = subprocess.check_output(
@@ -61,28 +60,31 @@ def scan_wifi():
                     network = WiFiNetwork(
                         ssid=current_network['ssid'],
                         signal=current_network.get('signal', 'N/A'),
-                        quality='N/A',
-                        encrypted=current_network.get('encrypted', 'yes')
+                        encrypted=current_network.get('encrypted', 'no')
                     )
                     networks.append(network)
-                current_network = {}
+                current_network = {'encrypted': 'no'}  # Start with assumption of open network
             elif 'SSID:' in line:
                 ssid = line.split('SSID:', 1)[1].strip()
                 if ssid:  # Only store non-empty SSIDs
                     current_network['ssid'] = ssid
             elif 'signal:' in line:
                 current_network['signal'] = line.split('signal:', 1)[1].strip().split()[0]  # Gets the dBm value
+            elif 'Privacy:' in line or 'WPA' in line or 'WEP' in line or 'RSN' in line:
+                # If we see any privacy/security indicators, mark as encrypted
+                current_network['encrypted'] = 'yes'
         
         # Add the last network if it exists
         if current_network.get('ssid'):
             network = WiFiNetwork(
                 ssid=current_network['ssid'],
                 signal=current_network.get('signal', 'N/A'),
-                quality='N/A',
-                encrypted=current_network.get('encrypted', 'yes')
+                encrypted=current_network.get('encrypted', 'no')  # Default to 'no' (open)
             )
             networks.append(network)
         
+        print("\n".join(str(n) for n in networks))
+
         # Group networks by SSID and keep the best one
         # Duplicates occur due to: dual-band (2.4/5GHz), multiple APs, different security modes
         unique_networks = {}
@@ -111,9 +113,9 @@ def scan_wifi():
 
 def configure_wifi(credentials):
     try:
-        # Expected format: "SSID|PASSWORD"
+        # Expected format: "SSID|PASSWORD" or "SSID|" for open networks
         if '|' not in credentials:
-            raise ValueError("Invalid format. Expected 'SSID|PASSWORD'")
+            raise ValueError("Invalid format. Expected 'SSID|PASSWORD' or 'SSID|' for open networks")
             
         ssid, password = credentials.split('|', 1)
         
@@ -121,16 +123,25 @@ def configure_wifi(credentials):
         subprocess.run(['sudo', 'nmcli', 'connection', 'delete', ssid], 
                      stderr=subprocess.DEVNULL)  # Ignore errors if connection doesn't exist
         
-        # Add new connection
-        subprocess.run([
-            'sudo', 'nmcli', 'connection', 'add',
-            'type', 'wifi',
-            'con-name', ssid,
-            'ifname', 'wlan0',
-            'ssid', ssid,
-            'wifi-sec.key-mgmt', 'wpa-psk',
-            'wifi-sec.psk', password
-        ], check=True)
+        # Add new connection - different commands for open vs secured networks
+        if password.strip():  # Secured network
+            subprocess.run([
+                'sudo', 'nmcli', 'connection', 'add',
+                'type', 'wifi',
+                'con-name', ssid,
+                'ifname', 'wlan0',
+                'ssid', ssid,
+                'wifi-sec.key-mgmt', 'wpa-psk',
+                'wifi-sec.psk', password
+            ], check=True)
+        else:  # Open network
+            subprocess.run([
+                'sudo', 'nmcli', 'connection', 'add',
+                'type', 'wifi',
+                'con-name', ssid,
+                'ifname', 'wlan0',
+                'ssid', ssid
+            ], check=True)
         
         # Enable and bring up the connection
         subprocess.run(['sudo', 'nmcli', 'connection', 'up', ssid], check=True)

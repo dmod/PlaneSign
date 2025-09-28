@@ -112,10 +112,8 @@ class Advertisement(dbus.service.Object):
                          in_signature='s',
                          out_signature='a{sv}')
     def GetAll(self, interface):
-        print('GetAll')
         if interface != LE_ADVERTISEMENT_IFACE:
             raise InvalidArgsException()
-        print('returning props')
         return self.get_properties()[LE_ADVERTISEMENT_IFACE]
 
     @dbus.service.method(LE_ADVERTISEMENT_IFACE,
@@ -254,7 +252,8 @@ class Characteristic(dbus.service.Object):
         print('Default ReadValue called, returning error')
         raise NotSupportedException()
 
-    @dbus.service.method(GATT_CHRC_IFACE, in_signature='aya{sv}')
+    @dbus.service.method(GATT_CHRC_IFACE, 
+                         in_signature='aya{sv}')
     def WriteValue(self, value, options):
         print('Default WriteValue called, returning error')
         raise NotSupportedException()
@@ -333,7 +332,6 @@ class Application(dbus.service.Object):
     @dbus.service.method(DBUS_OM_IFACE, out_signature='a{oa{sa{sv}}}')
     def GetManagedObjects(self):
         response = {}
-        print('GetManagedObjects')
 
         for service in self.services:
             response[service.get_path()] = service.get_properties()
