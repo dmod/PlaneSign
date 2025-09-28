@@ -13,9 +13,9 @@ GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
 PLANESIGN_MASTER_UUID =        '3d951a35-76c5-4207-a150-2d0cf7d2bfdd'
 mainloop = None
 
-class DeviceInfoService(Service):
+class BasicInfoService(Service):
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, '180A', True)  # Standard Device Information Service
+        Service.__init__(self, bus, index, '19f65cb7-deba-40cc-a00f-6eaa29b6ea85', True)
         self.add_characteristic(PlanesignTempCharacteristic(bus, 0, self))
         self.add_characteristic(PlanesignHostnameCharacteristic(bus, 1, self))
         self.add_characteristic(PlanesignUptimeCharacteristic(bus, 2, self))
@@ -47,7 +47,7 @@ class WiFiConfigCharacteristic(Characteristic):
 class PlanesignBLEApplication(Application):
     def __init__(self, bus):
         Application.__init__(self, bus)
-        self.add_service(DeviceInfoService(bus, 0))
+        self.add_service(BasicInfoService(bus, 0))
         self.add_service(WiFiManagementService(bus, 1))
         self.add_service(SystemControlService(bus, 2))
 
