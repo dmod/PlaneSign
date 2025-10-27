@@ -32,8 +32,9 @@ RUN apt update && apt -y install \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth=1 https://github.com/hzeller/rpi-rgb-led-matrix.git \
+RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git \
   && cd rpi-rgb-led-matrix \
+  && git checkout 9fbdeea555239daa19d2226f836b790387c0f2e6 \
   && make build-python \
   && make install-python
 
