@@ -98,6 +98,7 @@ root.addHandler(queue_handler)
 root.addHandler(console_handler)
 root.setLevel(logging.DEBUG)
 logging.getLogger('PIL').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('yfinance').disabled = True
 
 utilities.read_static_airport_data()

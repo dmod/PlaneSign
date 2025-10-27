@@ -35,12 +35,6 @@ def countdown(sign):
     # color_cycle_time = 0
     # color_period = 0.01
 
-    if "countdown_datetime" in shared_config.data_dict:
-        now = datetime.now(shared_config.local_timezone)
-        logging.info(f'Countdown datetime set to: {shared_config.data_dict["countdown_datetime"]}')
-        logging.info(f'Current datetime: {now}')
-        logging.info(f'Delta datetime: {shared_config.data_dict["countdown_datetime"]-now}')
-
     while shared_config.shared_mode.value == DisplayMode.COUNTDOWN.value:
 
         #enable_blink = False
@@ -96,10 +90,14 @@ def countdown(sign):
                     color_index = 0
 
         else:
-            dt = shared_config.data_dict["countdown_datetime"]-(datetime.now(shared_config.local_timezone))
-            dts = round(dt.total_seconds())
 
-            if "countdown_message" in shared_config.data_dict and shared_config.data_dict["countdown_message"] != "":
+            now = datetime.now(shared_config.local_timezone)
+            countdown_dt = shared_config.local_timezone.localize(shared_config.data_dict["countdown_datetime"])
+            countdown_delta = countdown_dt - now
+
+            dts = round(countdown_delta.total_seconds())
+
+            if shared_config.data_dict["countdown_message"] != "":
                 yloc = 27
             else:
                 yloc = 21
@@ -127,7 +125,7 @@ def countdown(sign):
 
                 line_2 = string
 
-                if "countdown_message" in shared_config.data_dict and shared_config.data_dict["countdown_message"] != "":
+                if shared_config.data_dict["countdown_message"] != "":
 
                     line_1 = shared_config.data_dict["countdown_message"]
                     xloc = round(65-len(line_1)*4.5)
@@ -168,7 +166,7 @@ def countdown(sign):
                         graphics.DrawText(sign.canvas, sign.fontreallybig, xloc, yloc-14, char_color, char)
 
                         xloc += 9
-                                            
+
                         color_index = color_index + 1 if char != ' ' else color_index
                         if color_index >= len(selected_color_list):
                             color_index = 0

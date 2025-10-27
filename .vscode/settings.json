@@ -1,6 +1,6 @@
 {
     "editor.wordWrap": "off",
-    "editor.rulers": [120],
+    "editor.rulers": [240],
     "diffEditor.wordWrap": "off",
     "html.format.wrapLineLength": 0,
     "python.analysis.typeCheckingMode": "off",
@@ -8,8 +8,7 @@
         "editor.wordWrap": "off",
         "editor.formatOnSave": false,
         "editor.codeActionsOnSave": {
-            "source.organizeImports": "explicit",
-            "source.fixAll": "explicit"
+            "source.sortImports": "explicit"
         }
     },
     "[javascript]": {
