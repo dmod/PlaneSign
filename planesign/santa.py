@@ -7,6 +7,7 @@ import random
 import pytz
 import requests
 import time
+import logging
 import math
 import PIL.Image as Image
 import shared_config
@@ -331,9 +332,8 @@ def santa(sign):
     #now = datetime(2024, 1, 1, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
     while shared_config.shared_mode.value == DisplayMode.SANTA.value:
 
-        now = datetime.now(pytz.utc).astimezone(shared_config.local_timezone)
+        now = datetime.now(shared_config.local_timezone)
         #now = now+timedelta(seconds=0.1)
-
 
         numkids = int(536785866*(1+0.01*(now.year-2019)))
         maxcookies = int(395830485*(1+(hash(str(now.year+3))%10)/10)*(1+0.01*(now.year-2019)))
@@ -350,9 +350,9 @@ def santa(sign):
         tts = santastart - now
 
         if now<santastart:
-            xmas =  datetime(now.year, 12, 25, 0).astimezone(shared_config.local_timezone)
+            xmas =  shared_config.local_timezone.localize(datetime(now.year, 12, 25, 0))
         else:
-            xmas =  datetime(now.year+1, 12, 25, 0).astimezone(shared_config.local_timezone)
+            xmas =  shared_config.local_timezone.localize(datetime(now.year+1, 12, 25, 0))
 
         ttc = xmas - now
 
