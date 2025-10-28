@@ -4,23 +4,6 @@ RUN apt update && apt -y install \
   nginx \
   git \
   openssl \
-  python3 \
-  python3-dev \
-  python3-flask \
-  python3-flask-cors \
-  python3-setuptools \
-  python3-pip \
-  python3-numpy \
-  python3-scipy \
-  python3-pandas \
-  python3-geopandas \
-  python3-requests \
-  python3-pyproj \
-  python3-lxml \
-  python3-gevent \
-  python3-pil \
-  python3-shapely \
-  python3-tz \
   llvm-14 \
   ffmpeg \
   alsa-utils \
