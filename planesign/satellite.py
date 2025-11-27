@@ -138,8 +138,8 @@ def get_flag(selected,satellite_data):
     USA_names = ["AEROCUBE ", "COMSTAR", "DIRECTV", "DMSP ", "DOVE ", "ECHOSTAR", "ESSA ",
                  "EXPLORER", "FLOCK", "GALAXY", "GLOBAL-", "GLOBALSTAR", "GOES ", "HAWK-",
                  "INTELSAT", "IRIDIUM", "KUIPER", "LANDSAT", "LEASAT ", "LEMUR 2", "LES ",
-                 "NAVSTAR", "NOAA", "OPS ", "ORBCOMM", "PRAETORIAN", "SATCOM", "SECOR ",
-                 "SPACEBEE-", "STARLINK", "TIROS ", "USA", "WESTFORD NEEDLES"]
+                 "NAVSTAR", "NOAA", "OPS ", "ORBCOMM", "PRAETORIAN", "SATCOM", "SDA",
+                 "SECOR ", "SPACEBEE-", "STARLINK", "TIROS ", "USA", "WESTFORD NEEDLES"]
 
     RUS_names = ["COSMOS", "EKRAN", "EXPRESS", "GONETS", "GORIZONT", "KANOPUS",
                  "MOLNIYA", "METEOR", "NADEZHDA", "OKEAN ", "RADIO ", "RADUGA",
