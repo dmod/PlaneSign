@@ -96,7 +96,7 @@ def write_config():
 
 @app.route("/update")
 def update_sign():
-    p = subprocess.run(['sh', './install_and_update.sh', ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    p = subprocess.run(['sh', './docker_install_and_update.sh', ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     logging.info("Update sign output:")
     logging.info(p.stdout)
     subprocess.run(['reboot'])
