@@ -8,6 +8,7 @@ RUN apt update && apt -y install \
   ffmpeg \
   alsa-utils \
   cython3 \
+  python3-setuptools \
   file \
   make \
   cmake \
@@ -38,7 +39,8 @@ ARG PLANESIGN_ROOT=/planesign
 COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
 RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_nginx_planesign.conf
 
-RUN pip3 install --no-cache-dir --break-system-packages -v -r docker_requirements.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+RUN uv sync
 
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt

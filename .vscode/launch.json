@@ -30,8 +30,7 @@
             "justMyCode": false,
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
-            "console": "integratedTerminal",
-            "sudo": true
+            "console": "integratedTerminal"
         }
     ]
 }
