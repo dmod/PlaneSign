@@ -45,4 +45,4 @@ RUN uv sync
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
 
-CMD ["sh", "-c", "service nginx start && python3 planesign/"]
+CMD ["sh", "-c", "service nginx start && uv run planesign/"]

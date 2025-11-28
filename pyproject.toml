@@ -9,6 +9,7 @@ dependencies = [
     "favicon>=0.7.0",
     "flask>=3.1.2",
     "flightradarapi>=1.4.0",
+    "pillow>=12.0.0",
     "requests>=2.32.5",
     "skyfield>=1.53",
     "timezonefinder>=8.1.0",
