@@ -11,9 +11,13 @@ dependencies = [
     "flightradarapi>=1.4.0",
     "pillow>=12.0.0",
     "requests>=2.32.5",
+    "rgbmatrix",
     "skyfield>=1.53",
     "timezonefinder>=8.1.0",
     "tz>=0.2.2",
     "websocket-client>=1.9.0",
     "yfinance>=0.2.66",
 ]
+
+[tool.uv.sources]
+rgbmatrix = { git = "https://github.com/hzeller/rpi-rgb-led-matrix.git" }
