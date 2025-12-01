@@ -568,7 +568,7 @@ requires-dist = [
     { name = "flightradarapi", specifier = ">=1.4.0" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "requests", specifier = ">=2.32.5" },
-    { name = "rgbmatrix", git = "https://github.com/hzeller/rpi-rgb-led-matrix.git" },
+    { name = "rgbmatrix", git = "https://github.com/dmod/rpi-rgb-led-matrix.git?subdirectory=bindings%2Fpython" },
     { name = "skyfield", specifier = ">=1.53" },
     { name = "timezonefinder", specifier = ">=8.1.0" },
     { name = "tz", specifier = ">=0.2.2" },
@@ -648,7 +648,10 @@ wheels = [
 [[package]]
 name = "rgbmatrix"
 version = "0.0.1+20250323"
-source = { git = "https://github.com/hzeller/rpi-rgb-led-matrix.git#b054b7bd93cb77cba57fb7b4156152fe4eddd98b" }
+source = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git?subdirectory=bindings%2Fpython#682b1d91b2157cc4dccb5288d6e5432b900eb977" }
+dependencies = [
+    { name = "pillow" },
+]
 
 [[package]]
 name = "sgp4"

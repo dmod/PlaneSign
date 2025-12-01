@@ -20,4 +20,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-rgbmatrix = { git = "https://github.com/hzeller/rpi-rgb-led-matrix.git" }
+rgbmatrix = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git", subdirectory = "bindings/python" }
