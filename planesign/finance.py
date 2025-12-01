@@ -510,8 +510,6 @@ def getFavicon(name, headers, website):
 
 def get_crypto(name, symbol):
 
-    logging.debug(f"Attempting to get crypto logo for {symbol} from CoinMarketCap")
-
     url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map'
     parameters = {
         'symbol': symbol
@@ -684,13 +682,13 @@ class Stock:
                     if logo == None:
                         logging.debug(f"Could not get logo from Finnhub for ticker {self.ticker}.")
                     else:
-                        logging.debug(f"Got logo from Finnhub for ticker {self.ticker} ({profile["logo"]}).")
+                        logging.debug(f"Got logo from Finnhub for ticker {self.ticker} ({profile['logo']}).")
                 if logo == None and "weburl" in profile and profile["weburl"] != "":
                     logo = getFavicon(self.logo_name, headers, profile["weburl"])
                     if logo == None:
                         logging.debug(f"Could not get favicon from website for ticker {self.ticker}.")
                     else:
-                        logging.debug(f"Got favicon from company website for ticker {self.ticker} ({profile["weburl"]}).")
+                        logging.debug(f"Got favicon from company website for ticker {self.ticker} ({profile['weburl']}).")
 
             if logo == None:
                 logo = Image.new("RGB", (20, 20), (0, 0, 0))
