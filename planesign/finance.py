@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import time
-import yfinance as yf
 import finnhub
 import re
 from PIL import Image, ImageDraw
@@ -80,26 +79,55 @@ def bn_similarity(search, entry):
 
     return score
 
+def update_global_lists(client = None):
+
+    if client == None:
+        if "FINNHUB_API_KEY" not in shared_config.CONF or shared_config.CONF["FINNHUB_API_KEY"] == "":
+            logging.error("Finnhub API key is not configured. Satellite mode will not function.")
+        else:   
+            client = finnhub.Client(api_key=shared_config.CONF["FINNHUB_API_KEY"])
+
+    if "us_symbols" not in shared_config.data_dict:
+        try:
+            us_symbols = client.stock_symbols("US")
+            shared_config.data_dict["us_symbols"] = us_symbols
+        except Exception as e:
+            logging.error(f"Finnhub API Error: {e}")
+            us_symbols = []
+    else:
+        us_symbols = shared_config.data_dict["us_symbols"]
+
+    if "cb_symbols" not in shared_config.data_dict:
+        try:
+            cb_symbols = client.crypto_symbols("COINBASE")
+            shared_config.data_dict["cb_symbols"] = cb_symbols
+        except Exception as e:
+            logging.error(f"Finnhub API Error: {e}")
+            cb_symbols = []
+    else:
+        cb_symbols = shared_config.data_dict["cb_symbols"]
+
+    if "bn_symbols" not in shared_config.data_dict:
+        try:
+            bn_symbols = client.crypto_symbols("BINANCE")
+            shared_config.data_dict["bn_symbols"] = bn_symbols
+        except Exception as e:
+            logging.error(f"Finnhub API Error: {e}")
+            bn_symbols = []
+    else:
+        bn_symbols = shared_config.data_dict["bn_symbols"]
+
+    return us_symbols, cb_symbols, bn_symbols
+
 def get_tickers(search):
 
     search = search.upper()
 
-    client = finnhub.Client(api_key="d4kjuj9r01qvpdokn5j0d4kjuj9r01qvpdokn5jg")
+    if "FINNHUB_API_KEY" not in shared_config.CONF or shared_config.CONF["FINNHUB_API_KEY"] == "":
+        logging.error("Finnhub API key is not configured. Satellite mode will not function.")
+        return []
 
-    if "us_symbols" not in shared_config.data_dict:
-        shared_config.data_dict["us_symbols"] = client.stock_symbols("US")
-
-    us_symbols = shared_config.data_dict["us_symbols"]
-
-    if "cb_symbols" not in shared_config.data_dict:
-        shared_config.data_dict["cb_symbols"] = client.crypto_symbols("COINBASE")
-
-    cb_symbols = shared_config.data_dict["cb_symbols"]
-
-    if "bn_symbols" not in shared_config.data_dict:
-        shared_config.data_dict["bn_symbols"] = client.crypto_symbols("BINANCE")
-    
-    bn_symbols = shared_config.data_dict["bn_symbols"]
+    us_symbols, cb_symbols, bn_symbols = update_global_lists()
 
     cbpat = re.compile(rf"^COINBASE:\w*{re.escape(search)}\w*-USD$")
     bnpat = re.compile(rf"^\w*{re.escape(search)}\w*/USDT*$")
@@ -133,38 +161,44 @@ def finance(self):
     shared_config.data_dict["ticker"] = None
     s = None
 
+    graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
+    graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
+    image = Image.open(os.path.join(shared_config.icons_dir, "finance/money.png"))
+    image = image.resize((20, 20), Image.BICUBIC)
+    self.canvas.SetImage(image.convert('RGB'), 10, 14)
+
+    if "FINNHUB_API_KEY" not in shared_config.CONF or shared_config.CONF["FINNHUB_API_KEY"] == "":
+        logging.error("Finnhub API key is not configured. Satellite mode will not function.")
+        graphics.DrawText(self.canvas, self.font57, 75, 13, graphics.Color(200, 0, 0), "No Finnhub")
+        graphics.DrawText(self.canvas, self.font57, 80, 23, graphics.Color(200, 0, 0), "API Key!")
+        self.canvas = self.matrix.SwapOnVSync(self.canvas)
+        self.canvas.Clear()
+        return self.wait_loop(-1)
+    else:
+        image = Image.open(os.path.join(shared_config.icons_dir, "finance/increase.png"))
+        self.canvas.SetImage(image.convert('RGB'), 75, -5)
+
+    self.canvas = self.matrix.SwapOnVSync(self.canvas)
+    self.canvas.Clear()
+
+    client = finnhub.Client(api_key=shared_config.CONF["FINNHUB_API_KEY"])
+
+    update_global_lists(client)
+
     while shared_config.shared_mode.value == DisplayMode.FINANCE.value:
 
-        ddt = shared_config.data_dict["ticker"]
+        ticker = shared_config.data_dict["ticker"]
 
-        if ddt != None and ddt != "":
+        if s == None:
+            s = Stock(self, client, ticker)
+        else if s.ticker != ticker:
+            s.setticker(ticker)
 
-            raw_ticker = ddt.upper()
-
-            if s == None:
-                s = Stock(self, raw_ticker)
-            else:
-                s.setticker(raw_ticker)
-
-            s.drawfullpage()
-
-        else:
-
-            graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
-            graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
-
-            image = Image.open(os.path.join(shared_config.icons_dir, "finance/money.png"))
-            image = image.resize((20, 20), Image.BICUBIC)
-            self.canvas.SetImage(image.convert('RGB'), 10, 14)
-
-            image = Image.open(os.path.join(shared_config.icons_dir, "finance/increase.png"))
-            self.canvas.SetImage(image.convert('RGB'), 75, -5)
+        s.drawfullpage()
 
         breakout = self.wait_loop(0.1)
         if breakout:
             return
-        self.canvas = self.matrix.SwapOnVSync(self.canvas)
-        self.canvas.Clear()
 
 
 def colordista(c1, c2):
@@ -455,13 +489,13 @@ def get_crypto(symbol, name):
 
 
 class Stock:
-    def __init__(self, sign, raw_ticker):
+    def __init__(self, sign, client, ticker):
 
         self.sign = sign
+        self.client = client
 
-        self.clean_ticker = None
-        self.cleaner_ticker = None
-        self.ticker_data = None
+        setticker(ticker)
+
         self.prev_ticker = None
         self.prev_price = None
         self.curr_price = None
@@ -479,31 +513,38 @@ class Stock:
         self.isvalid = False
 
         try:
-            self.setticker(raw_ticker)
+            self.setticker(ticker)
         except Exception as e:
             logging.error(f"Ticker Error: {e}")
 
-    def setticker(self, raw_ticker):
-        clean_ticker, cleaner_ticker, ticker_data = self.validate(raw_ticker)
+    def setticker(self, ticker):
 
-        if self.isvalid:
-            if self.isnew:
+        self.ticker = ticker
 
-                self.prev_ticker = self.clean_ticker
-                self.clean_ticker = clean_ticker
-                self.cleaner_ticker = cleaner_ticker
-                self.ticker_data = ticker_data
+        us_symbols, cb_symbols, bn_symbols = update_global_lists(self.client)
 
-                self.updatedata(False)
-                self.isnew = False
-        else:
-            raise ValueError(f'No data for ticker {raw_ticker}')
+        try:
+            if (ticker.startswith("COINBASE:")):
+                display_ticker = next(data for data in cb_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("-USD")
+            elif (ticker.startswith("BINANCE:")):
+                display_ticker = next(data for data in bn_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("/USDT")
+            else:
+                display_ticker = next(data for data in us_symbols if data["symbol"] == ticker)["displaySymbol"]
+
+            self.display_ticker = display_ticker
+        except:    
+            raise ValueError(f'Can not find ticker {ticker}')
+            self.display_ticker = ticker
+
+        try:
+            data = self.client.quote(ticker)
+        except Exception as e:
+            logging.error(f"No data for ticker {ticker}: {e}")
+            data = None
 
     def updatedata(self, newticker=True):
 
         self.prev_price = self.curr_price
-        if newticker:
-            self.ticker_data = yf.Ticker(self.clean_ticker)
 
         if self.polltime==None or time.perf_counter()-self.polltime>5 or newticker:
             
@@ -626,10 +667,11 @@ class Stock:
 
         self.updatedata()
 
-        self.sign.canvas.Clear()
-
         self.drawlogo()
         self.drawtime()
         self.drawticker()
         self.drawprice()
         self.drawchart()
+
+        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
+        self.sign.canvas.Clear()
