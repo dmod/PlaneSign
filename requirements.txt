@@ -14,3 +14,4 @@ gevent==23.9.1
 FlightRadarAPI==1.2.0
 skyfield==1.45
 geopandas==1.0.1
+finnhub-python==2.4.25

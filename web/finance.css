@@ -1,0 +1,39 @@
+#ticker {
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid #000000;
+  border-radius: 4px;
+}
+
+.autocomplete-ticker-items {
+  border: 1px solid #000000;
+  border-top: none;
+  position: absolute;
+  z-index: 99;
+}
+
+.autocomplete-ticker-items div {
+  padding: 10px;
+  cursor: pointer;
+  background-color: #8fd29d;
+  border-bottom: 1px solid #000000;
+}
+
+.autocomplete-ticker-items div.coinbase-ticker-item {
+  padding: 10px;
+  cursor: pointer;
+  background-color: #7FAAFF;
+  border-bottom: 1px solid #000000;
+}
+
+.autocomplete-ticker-items div.binance-ticker-item {
+  padding: 10px;
+  cursor: pointer;
+  background-color: #EDCF76;
+  border-bottom: 1px solid #000000;
+}
+
+.autocomplete-ticker-items div:hover {
+  filter: brightness(1.25);
+}

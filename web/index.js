@@ -121,8 +121,8 @@ function call_endpoint(endpoint, callback) {
     request.send();
 }
 
-function close_all_lists() {
-    var allitems = document.getElementsByClassName("autocomplete-items");
+function close_all_flight_lists() {
+    var allitems = document.getElementsByClassName("autocomplete-flight-items");
 
     for (let x of allitems) {
         document.getElementById("track-a-flight_div").removeChild(x)
@@ -133,10 +133,10 @@ function get_possible_autofill_flights(query_string) {
     call_endpoint("/get_possible_flights/" + query_string, function (value) {
         live_flights = JSON.parse(value)['results'].filter((flight) => { return flight['type'] == 'live' })
 
-        close_all_lists();
+        close_all_flight_lists();
 
         a = document.createElement("div");
-        a.setAttribute("class", "autocomplete-items");
+        a.setAttribute("class", "autocomplete-flight-items");
         document.getElementById("track-a-flight_div").appendChild(a);
 
         live_flights.forEach(flight => {
@@ -150,10 +150,73 @@ function get_possible_autofill_flights(query_string) {
             b.innerHTML += "<br>" + flight['detail']['route']
 
             b.addEventListener("click", function (e) {
-                close_all_lists();
+                close_all_flight_lists();
                 document.getElementById("track-a-flight_flight-num-input").value = flight['detail']['callsign']
                 call_endpoint('/set_track_a_flight/' + flight['id'])
             });
+            a.appendChild(b);
+        });
+    });
+}
+
+function close_all_ticker_lists() {
+    var allitems = document.getElementsByClassName("autocomplete-ticker-items");
+
+    for (let x of allitems) {
+        document.getElementById("finance_div").removeChild(x)
+    }
+}
+
+function get_possible_autofill_tickers(query_string) {
+    call_endpoint("/get_ticker_opts/" + query_string, function (value) {
+        valid_tickers = JSON.parse(value)
+
+        close_all_ticker_lists();
+
+        a = document.createElement("div");
+        a.setAttribute("class", "autocomplete-ticker-items");
+        document.getElementById("finance_div").appendChild(a);
+
+        valid_tickers.forEach(ticker => {
+            b = document.createElement("div");
+
+            let start_desc = ticker['description'].toLowerCase().search(query_string.toLowerCase())
+
+            if (start_desc > -1) {
+                b.innerHTML += ticker['description'].substring(0, start_desc);
+                b.innerHTML += "<strong>" + ticker['description'].substr(start_desc, query_string.length) + "</strong>";
+                b.innerHTML += ticker['description'].substr(start_desc + query_string.length);
+            }
+            else {
+                b.innerHTML += ticker['description'];
+            }
+
+            b.innerHTML += "<br>";
+
+            let start_symb = ticker['symbol'].toLowerCase().search(query_string.toLowerCase())
+
+            if (start_symb > -1) {
+                b.innerHTML += ticker['symbol'].substring(0, start_symb);
+                b.innerHTML += "<strong>" + ticker['symbol'].substr(start_symb, query_string.length) + "</strong>";
+                b.innerHTML += ticker['symbol'].substr(start_symb + query_string.length);
+            }
+            else {
+                b.innerHTML += ticker['symbol'];
+            }
+
+            b.addEventListener("click", function (e) {
+                close_all_ticker_lists();
+                document.getElementById("ticker").value = ticker['symbol']
+                call_endpoint('/submit_ticker/' + ticker['symbol'])
+            });
+
+            classname = "";
+            if (ticker['symbol'].startsWith("COINBASE:")) {
+                classname = " coinbase-ticker-item";
+            } else if (ticker['symbol'].startsWith("BINANCE:")) {
+                classname = " binance-ticker-item";
+            }
+            b.setAttribute("class", classname);
             a.appendChild(b);
         });
     });
