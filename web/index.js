@@ -180,20 +180,46 @@ function get_possible_autofill_tickers(query_string) {
         valid_tickers.forEach(ticker => {
             b = document.createElement("div");
 
-            let start_desc = ticker['description'].toLowerCase().search(query_string.toLowerCase())
-
-            if (start_desc > -1) {
-                b.innerHTML += ticker['description'].substring(0, start_desc);
-                b.innerHTML += "<strong>" + ticker['description'].substr(start_desc, query_string.length) + "</strong>";
-                b.innerHTML += ticker['description'].substr(start_desc + query_string.length);
+            if (ticker['description'].toUpperCase().startsWith("COINBASE ")) {
+                start_desc = ticker['description'].slice(9).toUpperCase().search(query_string.toUpperCase());
+                if (start_desc > -1) {
+                    start_desc += 9;
+                }
+            } else if (ticker['description'].toUpperCase().startsWith("BINANCE ")) {
+                start_desc = ticker['description'].slice(8).toUpperCase().search(query_string.toUpperCase());
+                if (start_desc > -1) {
+                    start_desc += 8;
+                }
             }
             else {
-                b.innerHTML += ticker['description'];
+                start_desc = ticker['description'].toUpperCase().search(query_string.toUpperCase())
+            }
+
+            if (start_desc > -1) {
+                b.innerHTML += ticker['description'].toUpperCase().substring(0, start_desc);
+                b.innerHTML += "<strong>" + ticker['description'].toUpperCase().substr(start_desc, query_string.length) + "</strong>";
+                b.innerHTML += ticker['description'].toUpperCase().substr(start_desc + query_string.length);
+            }
+            else {
+                b.innerHTML += ticker['description'].toUpperCase();
             }
 
             b.innerHTML += "<br>";
 
-            let start_symb = ticker['symbol'].toLowerCase().search(query_string.toLowerCase())
+            if (ticker['symbol'].toUpperCase().startsWith("COINBASE:")) {
+                start_symb = ticker['symbol'].slice(9).toUpperCase().search(query_string.toUpperCase());
+                if (start_symb > -1) {
+                    start_symb += 9;
+                }
+            } else if (ticker['symbol'].toUpperCase().startsWith("BINANCE:")) {
+                start_symb = ticker['symbol'].slice(8).toUpperCase().search(query_string.toUpperCase());
+                if (start_symb > -1) {
+                    start_symb += 8;
+                }
+            }
+            else {
+                start_symb = ticker['symbol'].toUpperCase().search(query_string.toUpperCase())
+            }
 
             if (start_symb > -1) {
                 b.innerHTML += ticker['symbol'].substring(0, start_symb);
