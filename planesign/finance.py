@@ -510,10 +510,11 @@ def getFavicon(name, headers, website):
 
 def get_crypto(name, symbol):
 
+    logging.debug(f"Attempting to get crypto logo for {symbol} from CoinMarketCap")
+
     url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map'
     parameters = {
-        'start': '1',
-        'limit': '5000'
+        'symbol': symbol
     }
     headers = {
         'Accepts': 'application/json',
@@ -536,13 +537,13 @@ def get_crypto(name, symbol):
         if coinid == 0:
             return None
         else:
-            req = requests.get(f"https://s2.coinmarketcap.com/static/img/coins/32x32/{coinid}.png", stream=True, timeout=5)
+            req = requests.get(f"https://s2.coinmarketcap.com/static/img/coins/64x64/{coinid}.png", stream=True, timeout=5)
             if req.status_code == requests.codes.ok:
                 image = Image.open(req.raw)
-                logo = improcess(image.convert("RGBA"))
-                logo = logo.convert("RGB")
-                logo.save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
-                return logo
+                image = improcess(image.convert("RGBA"))
+                image = image.convert("RGB")
+                image.save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
+                return image
             else:
                 return None
     else:
@@ -573,24 +574,21 @@ class Stock:
 
         us_symbols, cb_symbols, bn_symbols = update_global_lists(self.client)
 
-        try:
-            if (ticker.startswith("COINBASE:")):
-                display_ticker = next(data for data in cb_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("-USD")
-                self.type = "CRYPTO"
-                self.logo_name = "CRYPTO:"+display_ticker
-            elif (ticker.startswith("BINANCE:")):
-                display_ticker = next(data for data in bn_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("/USDT")
-                self.type = "CRYPTO"
-                self.logo_name = "CRYPTO:"+display_ticker
-            else:
-                display_ticker = next(data for data in us_symbols if data["symbol"] == ticker)["displaySymbol"]
-                self.type = "STOCK"
-                self.logo_name = ticker
-
+        if (ticker.startswith("COINBASE:")):
+            display_ticker = next(data for data in cb_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("-USD").removesuffix("/USD")
+            self.type = "CRYPTO"
+            self.logo_name = "CRYPTO:"+display_ticker
             self.display_ticker = display_ticker
-        except:    
-            raise ValueError(f'Can not find ticker {ticker}')
-            self.display_ticker = ticker
+        elif (ticker.startswith("BINANCE:")):
+            display_ticker = next(data for data in bn_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("/USDT").removesuffix("-USDT")
+            self.type = "CRYPTO"
+            self.logo_name = "CRYPTO:"+display_ticker
+            self.display_ticker = display_ticker
+        else:
+            display_ticker = next(data for data in us_symbols if data["symbol"] == ticker)["displaySymbol"]
+            self.type = "STOCK"
+            self.logo_name = ticker
+            self.display_ticker = display_ticker
 
         try:
             data = self.client.quote(ticker)
@@ -657,7 +655,7 @@ class Stock:
 
         # Need to go get logo from web
         if logo == None:
-            logging.debug(f"No previously saved logo for ticker {self.ticker}. Getting from web.")
+            logging.debug(f"No previously saved logo for ticker {self.ticker} ({self.logo_name}). Getting from web.")
 
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
@@ -674,6 +672,10 @@ class Stock:
 
             if self.type == "CRYPTO":
                 logo = get_crypto(self.logo_name, self.display_ticker)
+                if logo == None:
+                    logging.debug(f"Could not get logo from CoinMarketCap for crypto {self.display_ticker}.")
+                else:
+                    logging.debug(f"Got logo from CoinMarketCap for crypto {self.display_ticker}.")
             else:
                 # self.type == "STOCK"
                 profile = self.client.company_profile2(symbol=self.ticker)
@@ -682,13 +684,13 @@ class Stock:
                     if logo == None:
                         logging.debug(f"Could not get logo from Finnhub for ticker {self.ticker}.")
                     else:
-                        logging.debug(f"Got logo from Finnhub for ticker {self.ticker}.")
+                        logging.debug(f"Got logo from Finnhub for ticker {self.ticker} ({profile["logo"]}).")
                 if logo == None and "weburl" in profile and profile["weburl"] != "":
                     logo = getFavicon(self.logo_name, headers, profile["weburl"])
                     if logo == None:
                         logging.debug(f"Could not get favicon from website for ticker {self.ticker}.")
                     else:
-                        logging.debug(f"Got favicon from company website for ticker {self.ticker}.")
+                        logging.debug(f"Got favicon from company website for ticker {self.ticker} ({profile["weburl"]}).")
 
             if logo == None:
                 logo = Image.new("RGB", (20, 20), (0, 0, 0))
