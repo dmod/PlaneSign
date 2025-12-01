@@ -89,7 +89,8 @@ def update_global_lists(client = None):
 
     if "us_symbols" not in shared_config.data_dict:
         try:
-            us_symbols = client.stock_symbols("US")
+            # Halve the number of symbols by only saving "Common Stock" types (filters out ETFs, preferred shares, etc)
+            us_symbols = list(filter(lambda x: x["type"] == "Common Stock", client.stock_symbols("US")))
             shared_config.data_dict["us_symbols"] = us_symbols
         except Exception as e:
             logging.error(f"Finnhub API Error: {e}")
@@ -133,7 +134,7 @@ def get_tickers(search):
     bnpat = re.compile(rf"^\w*{re.escape(search)}\w*/USDT*$")
     
     # US lookup
-    lookup_us = list(filter(lambda x: x["type"] == "Common Stock" and (x["symbol"].startswith(search) or search in x["description"]), us_symbols))
+    lookup_us = list(filter(lambda x: x["symbol"].startswith(search) or search in x["description"], us_symbols))
 
     for entry in lookup_us:
         entry["score"] = similarity(search, entry)
@@ -189,12 +190,13 @@ def finance(self):
 
         ticker = shared_config.data_dict["ticker"]
 
-        if s == None:
-            s = Stock(self, client, ticker)
-        else if s.ticker != ticker:
-            s.setticker(ticker)
+        if ticker != None:
+            if s == None:
+                s = Stock(self, client, ticker)
+            elif s.ticker != ticker:
+                s.setticker(ticker)
 
-        s.drawfullpage()
+            s.drawfullpage()
 
         breakout = self.wait_loop(0.1)
         if breakout:
@@ -313,56 +315,25 @@ def improcess(image):
 
     return image.convert('RGB')
 
-
-def getFavicon(floc, website):
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-        "Accept": "image/webp,*/*",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Keep-Alive": "timeout=5, max=1",
-        'Sec-Fetch-Dest': 'image',
-        'Sec-Fetch-Mode': 'no-cors',
-        'Sec-Fetch-Site': 'same-origin',
-        "Sec-Fetch-User": "?1"
-    }
-
-    icons = favicon.get(website)
+def getLogo(name, headers, website):
 
     image = None
-    panic = False
 
-    for icon in icons:
+    host = re.sub(r"https?:\/\/", "", website)
+    host = re.sub(r"\/.*$", "", host)
 
-        host = re.sub(r"https?:\/\/", "", icon.url)
-        host = re.sub(r"\/.*$", "", host)
+    headers["Host"] = host
+    headers["Referer"] = website
 
-        headers["Host"] = host
-        headers["Referer"] = icon.url
+    filetype = website.split('.')[-1].lower()
 
-        req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
-        if req.status_code == requests.codes.ok:
-            image = open(os.path.join(floc, "favicon."+icon.format), "wb")
-            image.write(req.content)
-            image.close()
-            # with open(floc+"favicon."+icon.format, 'wb') as image:
-            #     for chunk in req.iter_content(chunk_size=1024):
-            #         if chunk:
-            #             image.write(chunk)
-            #             image.flush()
+    req = requests.get(website, stream=True, headers=headers, timeout=5)
+    if req.status_code == requests.codes.ok:
+        image = open(f'{shared_config.icons_dir}/finance/logos/{name}.{filetype}', "wb")
+        image.write(req.content)
+        image.close()
 
-            image = Image.open(os.path.join(floc, "favicon."+icon.format))
-
-            width, height = image.size
-            if width <= 200 and height <= 200:
-                panic = False
-                break
-
-    if image == None or panic:
-        return None
-    else:
+        image = Image.open(f'{shared_config.icons_dir}/finance/logos/{name}.{filetype}')
 
         width, height = image.size
 
@@ -387,7 +358,7 @@ def getFavicon(floc, website):
 
         image = new_image
 
-        # preshrink logo so recursive flood doesn't cause stack overflow or hit recursion limit
+        # Preshrink logo so recursive flood doesn't cause stack overflow or hit recursion limit
         width, height = image.size
         sz = 50
         if width > sz or height > sz:
@@ -433,19 +404,111 @@ def getFavicon(floc, website):
         new_image = Image.new("RGBA", image.size, bg)
         image.paste(new_image, (0, 0), new_image)
 
-        return image.convert('RGB')
+        image.convert('RGB').save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
+
+    return image
 
 
-def check_logos(floc, ticker):
-    try:
-        logo = Image.open(floc+ticker+".png")
-    except:
-        logo = None
+def getFavicon(name, headers, website):
 
-    return logo
+    icons = favicon.get(website)
 
+    image = None
 
-def get_crypto(symbol, name):
+    for icon in icons:
+
+        host = re.sub(r"https?:\/\/", "", icon.url)
+        host = re.sub(r"\/.*$", "", host)
+
+        headers["Host"] = host
+        headers["Referer"] = icon.url
+
+        req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
+        if req.status_code == requests.codes.ok:
+            image = open(f'{shared_config.icons_dir}/finance/logos/favicon.{icon.format}', "wb")
+            image.write(req.content)
+            image.close()
+
+            image = Image.open(f'{shared_config.icons_dir}/finance/logos/favicon.{icon.format}')
+
+            if image:
+                break
+
+    if image:
+        width, height = image.size
+
+        image = image.convert('RGBA')
+
+        testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
+        testimage.paste(image, (0, 0), image)
+        testimage = testimage.convert('RGB')
+
+        # Replace black parts of logo with dark grey if enough of the logo is black
+        if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
+
+            rgba = np.array(image)
+            mask = (rgba[:, :, 0] < 35) & (rgba[:, :, 1] < 35) & (rgba[:, :, 2] < 35) & (rgba[:, :, 3] > 200)
+            rgba[mask] = [35, 35, 35, 255]
+            image = Image.fromarray(rgba)
+
+        bg = (0, 0, 0, 255)
+
+        new_image = Image.new("RGBA", image.size, bg)
+        new_image.paste(image, (0, 0), image)
+
+        image = new_image
+
+        # Preshrink logo so recursive flood doesn't cause stack overflow or hit recursion limit
+        width, height = image.size
+        sz = 50
+        if width > sz or height > sz:
+            if width > height:
+                image = image.resize((sz, int(sz*height/width)), Image.BICUBIC)
+            elif height > width:
+                image = image.resize((int(sz*width/height), sz), Image.BICUBIC)
+            else:
+                image = image.resize((sz, sz), Image.BICUBIC)
+
+            width, height = image.size
+
+        # Flood background starting at the corners only if it is white
+        white = (255, 255, 255, 255)
+
+        tl = image.getpixel((0, 0))
+        tr = image.getpixel((-1, 0))
+        bl = image.getpixel((0, -1))
+        br = image.getpixel((-1, -1))
+
+        if max(colordista(tl, tr), colordista(tl, bl), colordista(tl, br), colordista(tr, bl), colordista(tr, br), colordista(bl, br)) < 30:
+
+            flood(image, 0, 0, white, bg)
+            flood(image, width-1, height-1, white, bg)
+            flood(image, width-1, 0, white, bg)
+            flood(image, 0, height-1, white, bg)
+
+        # crop out background regions
+        image = utilities.autocrop(image, bg)
+
+        width, height = image.size
+
+        # rescale to 20px max, preserving logo aspect ratio
+        if width > height:
+            image = image.resize((20, int(20*height/width)), Image.BICUBIC)
+        elif height > width:
+            image = image.resize((int(20*width/height), 20), Image.BICUBIC)
+        else:
+            image = image.resize((20, 20), Image.BICUBIC)
+
+        # tone down brightness
+        bg = (0, 0, 0, 100)
+        new_image = Image.new("RGBA", image.size, bg)
+        image.paste(new_image, (0, 0), new_image)
+
+        image.convert('RGB').save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
+
+    return image
+
+def get_crypto(name, symbol):
 
     url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map'
     parameters = {
@@ -469,10 +532,7 @@ def get_crypto(symbol, name):
         try:
             coinid = [x for x in data["data"] if x["symbol"] == symbol][0]["id"]
         except:
-            try:
-                coinid = [x for x in data["data"] if x["name"] == name][0]["id"]
-            except:
-                coinid = 0
+            coinid = 0
         if coinid == 0:
             return None
         else:
@@ -481,6 +541,7 @@ def get_crypto(symbol, name):
                 image = Image.open(req.raw)
                 logo = improcess(image.convert("RGBA"))
                 logo = logo.convert("RGB")
+                logo.save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
                 return logo
             else:
                 return None
@@ -494,28 +555,17 @@ class Stock:
         self.sign = sign
         self.client = client
 
-        setticker(ticker)
+        self.setticker(ticker)
 
         self.prev_ticker = None
         self.prev_price = None
         self.curr_price = None
         self.perc_change = None
-        self.logo = None
         self.chart = None
         self.x = None
         self.polltime = None
 
-        self.floc = os.path.join(shared_config.icons_dir, "favicons")
-
         self.last_time = None
-
-        self.isnew = False
-        self.isvalid = False
-
-        try:
-            self.setticker(ticker)
-        except Exception as e:
-            logging.error(f"Ticker Error: {e}")
 
     def setticker(self, ticker):
 
@@ -526,10 +576,16 @@ class Stock:
         try:
             if (ticker.startswith("COINBASE:")):
                 display_ticker = next(data for data in cb_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("-USD")
+                self.type = "CRYPTO"
+                self.logo_name = "CRYPTO:"+display_ticker
             elif (ticker.startswith("BINANCE:")):
                 display_ticker = next(data for data in bn_symbols if data["symbol"] == ticker)["displaySymbol"].removesuffix("/USDT")
+                self.type = "CRYPTO"
+                self.logo_name = "CRYPTO:"+display_ticker
             else:
                 display_ticker = next(data for data in us_symbols if data["symbol"] == ticker)["displaySymbol"]
+                self.type = "STOCK"
+                self.logo_name = ticker
 
             self.display_ticker = display_ticker
         except:    
@@ -542,6 +598,11 @@ class Stock:
             logging.error(f"No data for ticker {ticker}: {e}")
             data = None
 
+        self.data = data
+
+        self.get_logo()
+
+
     def updatedata(self, newticker=True):
 
         self.prev_price = self.curr_price
@@ -553,26 +614,6 @@ class Stock:
             self.open_price = self.ticker_data.info["regularMarketOpen"]
             self.prev_close = self.ticker_data.info["previousClose"]
             self.perc_change = 100*(self.curr_price-self.prev_close)/self.prev_close
-
-        # avoid image processing after the first time unless ticker changes
-        if self.logo == None or self.isnew:
-
-            logo = check_logos(self.floc, self.cleaner_ticker)
-
-            if logo == None:  # logo not saved, go get it from the web
-
-                if self.ticker_data.info["quoteType"] == "CRYPTOCURRENCY":  # go get this logo somewhere else
-                    logo = get_crypto(self.ticker_data.info["fromCurrency"], self.ticker_data.info["name"])
-                else:
-                    website = self.ticker_data.info["website"]
-                    logo = getFavicon(self.floc, website)
-
-                if logo == None:
-                    logo = Image.new("RGB", (20, 20), (0, 0, 0))
-                else:
-                    logo.save(os.path.join(self.floc, self.cleaner_ticker + ".png"))
-
-            self.logo = logo
 
         # avoid getting history data more frequently than the interval unless ticker changes
         if self.chart == None or self.isnew or time.perf_counter()-self.last_time > 300:
@@ -607,27 +648,58 @@ class Stock:
 
             self.chart = stockplot.resize((64, 20), Image.BICUBIC)
 
-    def validate(self, raw_ticker):
+    def get_logo(self):
+        # First try to get saved logo
+        try:
+            logo = Image.open(f'{shared_config.icons_dir}/finance/logos/{self.logo_name}.png')
+        except:
+            logo = None
 
-        clean_ticker = re.sub(r'[^A-Z-.]', '', raw_ticker)
-        ticker_data = yf.Ticker(clean_ticker)
+        # Need to go get logo from web
+        if logo == None:
+            logging.debug(f"No previously saved logo for ticker {self.ticker}. Getting from web.")
 
-        parts = clean_ticker.split('-')
-        cleaner_ticker = parts[0]
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Keep-Alive": "timeout=5, max=1",
+                'Sec-Fetch-Dest': 'image',
+                'Sec-Fetch-Mode': 'no-cors',
+                'Sec-Fetch-Site': 'same-origin',
+                "Sec-Fetch-User": "?1"
+            }
 
-        if ticker_data.info["currentPrice"] != None:
+            if self.type == "CRYPTO":
+                logo = get_crypto(self.logo_name, self.display_ticker)
+            else:
+                # self.type == "STOCK"
+                profile = self.client.company_profile2(symbol=self.ticker)
+                if "logo" in profile and profile["logo"] != "":
+                    logo = getLogo(self.logo_name, headers, profile["logo"])
+                    if logo == None:
+                        logging.debug(f"Could not get logo from Finnhub for ticker {self.ticker}.")
+                    else:
+                        logging.debug(f"Got logo from Finnhub for ticker {self.ticker}.")
+                if logo == None and "weburl" in profile and profile["weburl"] != "":
+                    logo = getFavicon(self.logo_name, headers, profile["weburl"])
+                    if logo == None:
+                        logging.debug(f"Could not get favicon from website for ticker {self.ticker}.")
+                    else:
+                        logging.debug(f"Got favicon from company website for ticker {self.ticker}.")
 
-            if self.clean_ticker != clean_ticker:
-                self.isnew = True
+            if logo == None:
+                logo = Image.new("RGB", (20, 20), (0, 0, 0))
+                logging.debug(f"Could not get logo for ticker {self.ticker} from web.")
 
-            self.isvalid = True
-        else:
-            self.isvalid = False
-
-        return clean_ticker, cleaner_ticker, ticker_data
+        self.logo = logo.convert("RGB")
 
     def drawlogo(self):
 
+        if self.logo == None:
+            return
         width, height = self.logo.size
         self.sign.canvas.SetImage(self.logo, 5+round((20-width)/2.0), 11+round((20-height)/2.0))
 
@@ -641,23 +713,28 @@ class Stock:
 
     def drawticker(self):
 
-        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3+round(3*(4-len(self.cleaner_ticker[0:4]))), 10, graphics.Color(0, 20, 150), self.cleaner_ticker[0:4])
+        if self.display_ticker == None:
+            return
+        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3+round(3*(4-len(self.display_ticker))), 10, graphics.Color(0, 20, 150), self.display_ticker)
 
     def drawprice(self):
 
-        if self.perc_change >= 0:
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(50, 150, 0), "+{0:.1f}".format(self.perc_change)+"%")
-        else:
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(150, 50, 0), "{0:.1f}".format(self.perc_change)+"%")
-        currprice_str = "{0:.2f}".format(self.curr_price)
+        if self.data == None:
+            return
+
+        #if self.perc_change >= 0:
+        #    graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(50, 150, 0), "+{0:.1f}".format(self.perc_change)+"%")
+        #else:
+        #    graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(150, 50, 0), "{0:.1f}".format(self.perc_change)+"%")
+        currprice_str = "{0:.2f}".format(self.data["c"])
         graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 10, graphics.Color(150, 150, 150), currprice_str)
 
-        if self.prev_price != None and self.prev_price != self.curr_price:
-            if self.curr_price > self.prev_price:
-                image = Image.open(os.path.join(shared_config.icons_dir, "finance/up.png"))
-            else:
-                image = Image.open(os.path.join(shared_config.icons_dir, "finance/down.png"))
-            self.sign.canvas.SetImage(image.convert('RGB'), 32+6*len(currprice_str), 2)
+        #if self.prev_price != None and self.prev_price != self.curr_price:
+        #    if self.curr_price > self.prev_price:
+        #        image = Image.open(os.path.join(shared_config.icons_dir, "finance/up.png"))
+        #    else:
+        #        image = Image.open(os.path.join(shared_config.icons_dir, "finance/down.png"))
+        #    self.sign.canvas.SetImage(image.convert('RGB'), 32+6*len(currprice_str), 2)
 
     def drawchart(self):
 
@@ -665,13 +742,13 @@ class Stock:
 
     def drawfullpage(self):
 
-        self.updatedata()
+        #self.updatedata()
 
         self.drawlogo()
         self.drawtime()
         self.drawticker()
         self.drawprice()
-        self.drawchart()
+        #self.drawchart()
 
         self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
         self.sign.canvas.Clear()
