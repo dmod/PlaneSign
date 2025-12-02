@@ -6,7 +6,6 @@ import re
 from PIL import Image, ImageDraw
 import numpy as np
 import favicon
-import os
 import re
 import json
 import utilities
@@ -164,7 +163,7 @@ def finance(self):
 
     graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
     graphics.DrawText(self.canvas, self.fontreallybig, 34, 26, graphics.Color(50, 150, 0), "Sign")
-    image = Image.open(os.path.join(shared_config.icons_dir, "finance/money.png"))
+    image = Image.open(f"{shared_config.icons_dir}/finance/money.png")
     image = image.resize((20, 20), Image.BICUBIC)
     self.canvas.SetImage(image.convert('RGB'), 10, 14)
 
@@ -176,7 +175,7 @@ def finance(self):
         self.canvas.Clear()
         return self.wait_loop(-1)
     else:
-        image = Image.open(os.path.join(shared_config.icons_dir, "finance/increase.png"))
+        image = Image.open(f"{shared_config.icons_dir}/finance/increase.png")
         self.canvas.SetImage(image.convert('RGB'), 75, -5)
 
     self.canvas = self.matrix.SwapOnVSync(self.canvas)
@@ -557,11 +556,7 @@ class Stock:
         self.setticker(ticker)
 
         self.prev_ticker = None
-        self.prev_price = None
-        self.curr_price = None
-        self.perc_change = None
         self.chart = None
-        self.x = None
         self.polltime = None
 
         self.last_time = None
@@ -594,7 +589,22 @@ class Stock:
             logging.error(f"No data for ticker {ticker}: {e}")
             data = None
 
-        self.data = data
+        if data:
+            self.curr_price = data["c"]
+            self.prev_price = data["c"]
+            self.high_price = data["h"]
+            self.low_price = data["l"]
+            self.open_price = data["o"]
+            self.prev_close = data["pc"]
+            self.perc_change = 100*(self.curr_price - self.prev_close)/self.prev_close
+        else:
+            self.curr_price = None
+            self.prev_price = None
+            self.high_price = None
+            self.low_price = None
+            self.open_price = None
+            self.prev_close = None
+            self.perc_change = None
 
         self.get_logo()
 
@@ -691,7 +701,7 @@ class Stock:
                         logging.debug(f"Got favicon from company website for ticker {self.ticker} ({profile['weburl']}).")
 
             if logo == None:
-                logo = Image.new("RGB", (20, 20), (0, 0, 0))
+                logo = Image.open(f"{shared_config.icons_dir}/finance/UNKNOWN.png")
                 logging.debug(f"Could not get logo for ticker {self.ticker} from web.")
 
         self.logo = logo.convert("RGB")
@@ -709,32 +719,36 @@ class Stock:
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%H:%M')
         else:
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
-        graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 94, 8, graphics.Color(130, 90, 0), print_time)
 
     def drawticker(self):
 
         if self.display_ticker == None:
             return
-        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3+round(3*(4-len(self.display_ticker))), 10, graphics.Color(0, 20, 150), self.display_ticker)
+        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3+round(3*(4-len(self.display_ticker[:5]))), 10, graphics.Color(0, 20, 150), self.display_ticker[:5])
 
     def drawprice(self):
 
-        if self.data == None:
-            return
+        if self.perc_change:
+            perc_change = self.perc_change
+            if perc_change > 0:
+                color = graphics.Color(50, 150, 0)
+            elif perc_change < 0:
+                color = graphics.Color(150, 50, 0)
+            else:
+                color = graphics.Color(120, 120, 0)
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, color, "{0:+.1f}".format(perc_change)+"%")
 
-        #if self.perc_change >= 0:
-        #    graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(50, 150, 0), "+{0:.1f}".format(self.perc_change)+"%")
-        #else:
-        #    graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, graphics.Color(150, 50, 0), "{0:.1f}".format(self.perc_change)+"%")
-        currprice_str = "{0:.2f}".format(self.data["c"])
-        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 10, graphics.Color(150, 150, 150), currprice_str)
+        if self.curr_price:
+            currprice_str = "{0:.2f}".format(self.curr_price)
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 10, graphics.Color(150, 150, 150), currprice_str)
 
-        #if self.prev_price != None and self.prev_price != self.curr_price:
-        #    if self.curr_price > self.prev_price:
-        #        image = Image.open(os.path.join(shared_config.icons_dir, "finance/up.png"))
-        #    else:
-        #        image = Image.open(os.path.join(shared_config.icons_dir, "finance/down.png"))
-        #    self.sign.canvas.SetImage(image.convert('RGB'), 32+6*len(currprice_str), 2)
+            if self.prev_price and self.prev_price != self.curr_price:
+                if self.curr_price > self.prev_price:
+                    image = Image.open(f"{shared_config.icons_dir}/finance/up.png")
+                else:
+                    image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
+                self.sign.canvas.SetImage(image.convert('RGB'), 34+6*len(currprice_str), 2)
 
     def drawchart(self):
 
