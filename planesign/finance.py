@@ -4,6 +4,8 @@ import time
 import finnhub
 import re
 from PIL import Image, ImageDraw
+from multiprocessing import Process, Value
+import websocket
 import numpy as np
 import favicon
 import re
@@ -197,7 +199,7 @@ def finance(self):
 
             s.drawfullpage()
 
-        breakout = self.wait_loop(0.1)
+        breakout = self.wait_loop(0.3)
         if breakout:
             return
 
@@ -552,14 +554,23 @@ class Stock:
 
         self.sign = sign
         self.client = client
+        self.ws_server = "wss://ws.finnhub.io"
+        self.ws = None
+        self.thread = None
+
+        # Multithreading safe variables so that
+        # the websocket thread can update them
+        self.curr_price = Value('d', -1.0)
+        self.prev_price = Value('d', -1.0)
+        self.perc_change = Value('d', -1.0)
+        self.high_price = Value('d', -1.0)
+        self.low_price = Value('d', -1.0)
 
         self.setticker(ticker)
-
-        self.prev_ticker = None
-        self.chart = None
-        self.polltime = None
-
-        self.last_time = None
+    
+    def __del__(self):
+        if self.thread and self.thread.is_alive():
+            self.thread.terminate()
 
     def setticker(self, ticker):
 
@@ -590,69 +601,24 @@ class Stock:
             data = None
 
         if data:
-            self.curr_price = data["c"]
-            self.prev_price = data["c"]
-            self.high_price = data["h"]
-            self.low_price = data["l"]
+            self.curr_price.value = data["c"]
+            self.prev_price.value = data["c"]
+            self.high_price.value = data["h"]
+            self.low_price.value = data["l"]
             self.open_price = data["o"]
             self.prev_close = data["pc"]
-            self.perc_change = 100*(self.curr_price - self.prev_close)/self.prev_close
+            self.perc_change.value = 100*(self.curr_price.value - self.prev_close)/self.prev_close
         else:
-            self.curr_price = None
-            self.prev_price = None
-            self.high_price = None
-            self.low_price = None
-            self.open_price = None
-            self.prev_close = None
-            self.perc_change = None
+            self.curr_price.value = -1.0
+            self.prev_price.value = -1.0
+            self.high_price.value = -1.0
+            self.low_price.value = -1.0
+            self.open_price = -1.0
+            self.prev_close = -1.0
+            self.perc_change = -1.0
 
         self.get_logo()
-
-
-    def updatedata(self, newticker=True):
-
-        self.prev_price = self.curr_price
-
-        if self.polltime==None or time.perf_counter()-self.polltime>5 or newticker:
-            
-            self.polltime = time.perf_counter()
-            self.curr_price = self.ticker_data.info["currentPrice"]
-            self.open_price = self.ticker_data.info["regularMarketOpen"]
-            self.prev_close = self.ticker_data.info["previousClose"]
-            self.perc_change = 100*(self.curr_price-self.prev_close)/self.prev_close
-
-        # avoid getting history data more frequently than the interval unless ticker changes
-        if self.chart == None or self.isnew or time.perf_counter()-self.last_time > 300:
-            self.last_time = time.perf_counter()
-            dayvals = self.ticker_data.history(period="1d", interval="5m")
-            dayvals.Open.to_csv("prices.csv", index=False, header=None)
-            dayvals = dayvals.Open.tolist()
-
-            numpts = 32
-            tnew = np.linspace(0, 63, numpts)
-            if len(dayvals) > numpts:
-                told = np.linspace(0, 63, len(dayvals))
-                interpdayvals = interp1d(told, dayvals)
-                dayvals = interpdayvals(tnew)
-
-            daymax = max(dayvals)
-            daymin = min(dayvals)
-            dayspread = daymax - daymin
-
-            if dayspread < 0.001*self.open_price:
-                dayspread = 0.001*self.open_price
-
-            stockplot = Image.new("RGB", (64*2, 20*2), (0, 0, 0))
-            points = []
-            for col in range(len(dayvals)):
-                points.append((round(tnew[col])*2, (20-round(20*(dayvals[col]-daymin)/dayspread))*2))
-            draw = ImageDraw.Draw(stockplot)
-            if self.perc_change >= 0:
-                draw.line(points, width=1, fill=(50, 255, 0), joint="curve")
-            else:
-                draw.line(points, width=1, fill=(255, 50, 0), joint="curve")
-
-            self.chart = stockplot.resize((64, 20), Image.BICUBIC)
+        self.connect()
 
     def get_logo(self):
         # First try to get saved logo
@@ -706,6 +672,55 @@ class Stock:
 
         self.logo = logo.convert("RGB")
 
+    def connect(self):
+
+        # Kill thread if we already have one running
+        if self.thread and self.thread.is_alive():
+            self.thread.terminate()
+
+        # Close existing websocket if we have one
+        if self.ws:
+            self.ws.close()
+
+        # Set to true for debugging
+        websocket.enableTrace(False)
+
+        self.ws = websocket.WebSocketApp(f"{self.ws_server}?token={shared_config.CONF['FINNHUB_API_KEY']}",
+                                          on_open=self.onOpen,
+                                          on_message=lambda ws,message: self.onMessage(ws, message),
+                                          on_error=self.onError,
+                                          on_close=self.onClose)
+        self.thread = Process(target=self.ws.run_forever, daemon=True)
+        self.thread.start()
+
+    def onMessage(self, ws, message):
+        data = json.loads(message)
+
+        if "data" in data and "type" in data and data["type"] == "trade":
+            trades = data["data"]
+
+            # Use the last trade price as current price
+            curr_price = trades[-1]["p"]
+            self.curr_price.value = curr_price
+            self.perc_change.value = 100*(curr_price - self.prev_close)/self.prev_close
+            
+            for trade in trades:
+                p = trade["p"]
+                if p > self.high_price.value:
+                    self.high_price.value = p
+                if p < self.low_price.value:
+                    self.low_price.value = p
+
+    def onError(self, ws, err):
+        logging.error(f"Websocket Error: {err}")
+    
+    def onClose(self, ws, close_status_code="", close_msg=""):
+        logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
+        
+    def onOpen(self, ws):
+        logging.debug(f'Opening Websocket connection to the server {self.ws_server} subscribed to ticker {self.ticker}...')
+        ws.send(json.dumps({"type":"subscribe","symbol":self.ticker}))
+
     def drawlogo(self):
 
         if self.logo == None:
@@ -729,8 +744,11 @@ class Stock:
 
     def drawprice(self):
 
-        if self.perc_change:
-            perc_change = self.perc_change
+        curr_price = self.curr_price.value
+        prev_price = self.prev_price.value
+        perc_change = self.perc_change.value
+
+        if perc_change >= 0:
             if perc_change > 0:
                 color = graphics.Color(50, 150, 0)
             elif perc_change < 0:
@@ -739,30 +757,27 @@ class Stock:
                 color = graphics.Color(120, 120, 0)
             graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, color, "{0:+.1f}".format(perc_change)+"%")
 
-        if self.curr_price:
-            currprice_str = "{0:.2f}".format(self.curr_price)
+        if curr_price >= 0:
+            currprice_str = "{0:.2f}".format(curr_price)
             graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 10, graphics.Color(150, 150, 150), currprice_str)
 
-            if self.prev_price and self.prev_price != self.curr_price:
-                if self.curr_price > self.prev_price:
+            if prev_price >=0 and prev_price != curr_price:
+
+                if curr_price > prev_price:
                     image = Image.open(f"{shared_config.icons_dir}/finance/up.png")
                 else:
                     image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
                 self.sign.canvas.SetImage(image.convert('RGB'), 34+6*len(currprice_str), 2)
 
-    def drawchart(self):
-
-        self.sign.canvas.SetImage(self.chart, 64, 11)
+            # Remember the current price we just drew for next time
+            self.prev_price.value = curr_price
 
     def drawfullpage(self):
-
-        #self.updatedata()
 
         self.drawlogo()
         self.drawtime()
         self.drawticker()
         self.drawprice()
-        #self.drawchart()
 
         self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
         self.sign.canvas.Clear()
