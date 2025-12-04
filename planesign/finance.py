@@ -199,7 +199,7 @@ def finance(self):
 
             s.drawfullpage()
 
-        breakout = self.wait_loop(0.3)
+        breakout = self.wait_loop(0.5)
         if breakout:
             return
 
@@ -310,7 +310,7 @@ def improcess(image):
         image = image.resize((20, 20), Image.BICUBIC)
 
     # tone down brightness
-    bg = (0, 0, 0, 100)
+    bg = (0, 0, 0, 30)
     new_image = Image.new("RGBA", image.size, bg)
     image.paste(new_image, (0, 0), new_image)
 
@@ -401,7 +401,7 @@ def getLogo(name, headers, website):
             image = image.resize((20, 20), Image.BICUBIC)
 
         # tone down brightness
-        bg = (0, 0, 0, 100)
+        bg = (0, 0, 0, 30)
         new_image = Image.new("RGBA", image.size, bg)
         image.paste(new_image, (0, 0), new_image)
 
@@ -501,7 +501,7 @@ def getFavicon(name, headers, website):
             image = image.resize((20, 20), Image.BICUBIC)
 
         # tone down brightness
-        bg = (0, 0, 0, 100)
+        bg = (0, 0, 0, 30)
         new_image = Image.new("RGBA", image.size, bg)
         image.paste(new_image, (0, 0), new_image)
 
@@ -562,7 +562,7 @@ class Stock:
         # the websocket thread can update them
         self.curr_price = Value('d', -1.0)
         self.prev_price = Value('d', -1.0)
-        self.perc_change = Value('d', -1.0)
+        self.perc_change = Value('d', 0.0)
         self.high_price = Value('d', -1.0)
         self.low_price = Value('d', -1.0)
 
@@ -607,7 +607,19 @@ class Stock:
             self.low_price.value = data["l"]
             self.open_price = data["o"]
             self.prev_close = data["pc"]
-            self.perc_change.value = 100*(self.curr_price.value - self.prev_close)/self.prev_close
+
+            if self.prev_close > 0:
+                self.perc_change.value = 100*(self.curr_price.value - self.prev_close)/self.prev_close
+            else:
+                self.perc_change.value = 0.0
+
+            logging.debug(f"Set ticker to {ticker}: \
+Current Price={self.curr_price.value}, \
+Previous Close={self.prev_close}, \
+Percent Change={self.perc_change.value}%, \
+High Price={self.high_price.value}, \
+Low Price={self.low_price.value}, \
+Open Price={self.open_price}")
         else:
             self.curr_price.value = -1.0
             self.prev_price.value = -1.0
@@ -615,7 +627,7 @@ class Stock:
             self.low_price.value = -1.0
             self.open_price = -1.0
             self.prev_close = -1.0
-            self.perc_change = -1.0
+            self.perc_change = 0.0
 
         self.get_logo()
         self.connect()
@@ -687,7 +699,7 @@ class Stock:
 
         self.ws = websocket.WebSocketApp(f"{self.ws_server}?token={shared_config.CONF['FINNHUB_API_KEY']}",
                                           on_open=self.onOpen,
-                                          on_message=lambda ws,message: self.onMessage(ws, message),
+                                          on_message=self.onMessage,
                                           on_error=self.onError,
                                           on_close=self.onClose)
         self.thread = Process(target=self.ws.run_forever, daemon=True)
@@ -702,14 +714,19 @@ class Stock:
             # Use the last trade price as current price
             curr_price = trades[-1]["p"]
             self.curr_price.value = curr_price
-            self.perc_change.value = 100*(curr_price - self.prev_close)/self.prev_close
+            if self.prev_close > 0:
+                self.perc_change.value = 100*(curr_price - self.prev_close)/self.prev_close
+            else:
+                self.perc_change.value = 0.0
             
             for trade in trades:
                 p = trade["p"]
                 if p > self.high_price.value:
                     self.high_price.value = p
+                    logging.debug(f"New high price for ticker {self.ticker}: High Price={self.high_price.value}, ({p})")
                 if p < self.low_price.value:
                     self.low_price.value = p
+                    logging.debug(f"New low price for ticker {self.ticker}: Low Price={self.low_price.value}, ({p})")
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
@@ -734,7 +751,7 @@ class Stock:
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%H:%M')
         else:
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
-        graphics.DrawText(self.sign.canvas, self.sign.font57, 94, 8, graphics.Color(130, 90, 0), print_time)
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
 
     def drawticker(self):
 
@@ -747,30 +764,84 @@ class Stock:
         curr_price = self.curr_price.value
         prev_price = self.prev_price.value
         perc_change = self.perc_change.value
+        low_price = self.low_price.value
+        high_price = self.high_price.value
+        open_price = self.open_price
 
-        if perc_change >= 0:
-            if perc_change > 0:
-                color = graphics.Color(50, 150, 0)
-            elif perc_change < 0:
-                color = graphics.Color(150, 50, 0)
-            else:
-                color = graphics.Color(120, 120, 0)
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 29, 22, color, "{0:+.1f}".format(perc_change)+"%")
+        price_format_str = "{0:.2f}"
+        if self.type == "CRYPTO":
+            if  curr_price < 1.0:
+                price_format_str = "{0:.5f}"
+            elif curr_price < 10.0:
+                price_format_str = "{0:.4f}"
+            elif curr_price < 100.0:
+                price_format_str = "{0:.3f}"
+
+        if curr_price >= 100000.0:
+            price_format_str = "{0:.0f}"
+        elif curr_price >= 10000.0:
+                price_format_str = "{0:.1f}"
+
+        if perc_change > 0.01:
+            color = graphics.Color(50, 150, 0)
+        elif perc_change < -0.01:
+            color = graphics.Color(150, 50, 0)
+        else:
+            color = graphics.Color(140, 140, 30)
 
         if curr_price >= 0:
-            currprice_str = "{0:.2f}".format(curr_price)
+
+            # Draw current price
+            currprice_str = price_format_str.format(curr_price)
             graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 10, graphics.Color(150, 150, 150), currprice_str)
 
+            # Draw up/down arrow if price changed since last draw
             if prev_price >=0 and prev_price != curr_price:
-
                 if curr_price > prev_price:
                     image = Image.open(f"{shared_config.icons_dir}/finance/up.png")
                 else:
                     image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
                 self.sign.canvas.SetImage(image.convert('RGB'), 34+6*len(currprice_str), 2)
 
+            # Draw percent change
+            percent_format_str = "{0:+.2f}%"
+            if (abs(perc_change) >= 100.0):
+                percent_format_str = "{0:+.0f}%"
+            elif (abs(perc_change) >= 10.0):
+                percent_format_str = "{0:+.1f}%"
+
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 22, color, percent_format_str.format(perc_change))
+
             # Remember the current price we just drew for next time
             self.prev_price.value = curr_price
+
+        # Draw high price
+        high_str = "--"
+        if high_price >= 0:
+            high_str = price_format_str.format(high_price)
+
+        high_color = graphics.Color(70, 70, 215)
+        if high_price >= 0 and curr_price == high_price:
+            high_color = graphics.Color(100, 100, 245)
+
+        graphics.DrawText(self.sign.canvas, self.sign.font57, min(83, 127 - 5*(len(high_str)+2)), 20, high_color, "H:"+ high_str)
+
+        # Draw low price
+        low_color = graphics.Color(150, 130, 30)
+        if low_price >= 0 and curr_price == low_price:
+            low_color = graphics.Color(180, 160, 60)
+
+        low_str = "--"
+        if low_price >= 0:
+            low_str = price_format_str.format(low_price)
+        graphics.DrawText(self.sign.canvas, self.sign.font57, min(83, 127 - 5*(len(low_str)+2)), 30, low_color, "L:"+ low_str)
+
+        # Draw open price
+        open_str = "--"
+        if open_price >= 0:
+            open_str = price_format_str.format(open_price)
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 32, 30, graphics.Color(150, 70, 130), "O:"+ open_str)
+
 
     def drawfullpage(self):
 
