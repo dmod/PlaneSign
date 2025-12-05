@@ -723,10 +723,8 @@ Open Price={self.open_price}")
                 p = trade["p"]
                 if p > self.high_price.value:
                     self.high_price.value = p
-                    logging.debug(f"New high price for ticker {self.ticker}: High Price={self.high_price.value}, ({p})")
                 if p < self.low_price.value:
                     self.low_price.value = p
-                    logging.debug(f"New low price for ticker {self.ticker}: Low Price={self.low_price.value}, ({p})")
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
@@ -743,7 +741,7 @@ Open Price={self.open_price}")
         if self.logo == None:
             return
         width, height = self.logo.size
-        self.sign.canvas.SetImage(self.logo, 5+round((20-width)/2.0), 11+round((20-height)/2.0))
+        self.sign.canvas.SetImage(self.logo, 7+round((20-width)/2.0), 11+round((20-height)/2.0))
 
     def drawtime(self):
 
@@ -751,13 +749,16 @@ Open Price={self.open_price}")
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%H:%M')
         else:
             print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
-        graphics.DrawText(self.sign.canvas, self.sign.font57, 92, 8, graphics.Color(130, 90, 0), print_time)
+        graphics.DrawText(self.sign.canvas, self.sign.font57, 93, 8, graphics.Color(255, 158, 31), print_time)
 
     def drawticker(self):
 
         if self.display_ticker == None:
             return
-        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3+round(3*(4-len(self.display_ticker[:5]))), 10, graphics.Color(0, 20, 150), self.display_ticker[:5])
+        if len(self.display_ticker) <= 4:
+            graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 17-round(4.5*len(self.display_ticker)), 10, graphics.Color(20,200,20), self.display_ticker)
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 17-round(3*len(self.display_ticker[:5])), 10, graphics.Color(20,200,20), self.display_ticker[:5])
 
     def drawprice(self):
 
@@ -782,18 +783,10 @@ Open Price={self.open_price}")
         elif curr_price >= 10000.0:
                 price_format_str = "{0:.1f}"
 
-        if perc_change > 0.01:
-            color = graphics.Color(50, 150, 0)
-        elif perc_change < -0.01:
-            color = graphics.Color(150, 50, 0)
-        else:
-            color = graphics.Color(140, 140, 30)
-
         if curr_price >= 0:
-
             # Draw current price
             currprice_str = price_format_str.format(curr_price)
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 10, graphics.Color(150, 150, 150), currprice_str)
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 39, 10, graphics.Color(180, 180, 180), currprice_str)
 
             # Draw up/down arrow if price changed since last draw
             if prev_price >=0 and prev_price != curr_price:
@@ -801,16 +794,44 @@ Open Price={self.open_price}")
                     image = Image.open(f"{shared_config.icons_dir}/finance/up.png")
                 else:
                     image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
-                self.sign.canvas.SetImage(image.convert('RGB'), 34+6*len(currprice_str), 2)
+                self.sign.canvas.SetImage(image.convert('RGB'), 41+6*len(currprice_str), 2)
 
             # Draw percent change
-            percent_format_str = "{0:+.2f}%"
+            if perc_change > 0.001:
+                change_color = graphics.Color(50, 150, 0)
+            elif perc_change < -0.001:
+                change_color = graphics.Color(150, 50, 0)
+            else:
+                change_color = graphics.Color(140, 140, 30)
+                
+            percent_format_str = "{0:+.3f}%"
             if (abs(perc_change) >= 100.0):
-                percent_format_str = "{0:+.0f}%"
-            elif (abs(perc_change) >= 10.0):
                 percent_format_str = "{0:+.1f}%"
+            elif (abs(perc_change) >= 10.0):
+                percent_format_str = "{0:+.2f}%"
+            perc_change_str = percent_format_str.format(perc_change)
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 22, change_color, perc_change_str)
 
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 22, color, percent_format_str.format(perc_change))
+            # Draw price delta since open
+            if open_price >= 0:
+                delta = curr_price - open_price
+                split_delta_str = str(delta).split('.')
+                count_before_decimal = len(split_delta_str[0])
+                count_after_decimal = len(split_delta_str[1])
+
+                count_after_decimal_curr = len(currprice_str.split('.')[1])
+
+                if (count_after_decimal > count_after_decimal_curr):
+                    count_after_decimal = count_after_decimal_curr
+
+                tot_length = count_before_decimal + count_after_decimal + 1
+                if (tot_length > 8):
+                    # Too long to fit, reduce decimal places
+                    count_after_decimal = max(0, 8 - count_before_decimal - 1)
+                delta_format_str = "{0:+." + str(count_after_decimal) + "f}"
+
+                delta_str = delta_format_str.format(delta)
+                graphics.DrawText(self.sign.canvas, self.sign.font57, 32+round(3*len(perc_change_str) - 2.5*len(delta_str)), 30, change_color, delta_str)
 
             # Remember the current price we just drew for next time
             self.prev_price.value = curr_price
@@ -820,28 +841,21 @@ Open Price={self.open_price}")
         if high_price >= 0:
             high_str = price_format_str.format(high_price)
 
-        high_color = graphics.Color(70, 70, 215)
+        high_color = graphics.Color(20, 160, 60)
         if high_price >= 0 and curr_price == high_price:
-            high_color = graphics.Color(100, 100, 245)
+            high_color = graphics.Color(70, 210, 110)
 
         graphics.DrawText(self.sign.canvas, self.sign.font57, min(83, 127 - 5*(len(high_str)+2)), 20, high_color, "H:"+ high_str)
 
         # Draw low price
-        low_color = graphics.Color(150, 130, 30)
+        low_color = graphics.Color(60, 60, 160)
         if low_price >= 0 and curr_price == low_price:
-            low_color = graphics.Color(180, 160, 60)
+            low_color = graphics.Color(110, 110, 210)
 
         low_str = "--"
         if low_price >= 0:
             low_str = price_format_str.format(low_price)
         graphics.DrawText(self.sign.canvas, self.sign.font57, min(83, 127 - 5*(len(low_str)+2)), 30, low_color, "L:"+ low_str)
-
-        # Draw open price
-        open_str = "--"
-        if open_price >= 0:
-            open_str = price_format_str.format(open_price)
-        graphics.DrawText(self.sign.canvas, self.sign.font57, 32, 30, graphics.Color(150, 70, 130), "O:"+ open_str)
-
 
     def drawfullpage(self):
 
