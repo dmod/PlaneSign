@@ -767,9 +767,9 @@ Open Price={self.open_price}")
         if self.display_ticker == None:
             return
         if len(self.display_ticker) <= 4:
-            graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 18-round(4.5*len(self.display_ticker)), 10, graphics.Color(20,200,20), self.display_ticker)
+            graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 17-round(4.5*len(self.display_ticker)), 10, graphics.Color(20,200,20), self.display_ticker)
         else:
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 18-round(3*len(self.display_ticker[:5])), 10, graphics.Color(20,200,20), self.display_ticker[:5])
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 17-round(3*len(self.display_ticker[:5])), 10, graphics.Color(20,200,20), self.display_ticker[:5])
 
     def drawprice(self):
 
