@@ -574,6 +574,8 @@ class Stock:
 
     def setticker(self, ticker):
 
+        self.kill_ws()
+
         self.ticker = ticker
 
         us_symbols, cb_symbols, bn_symbols = update_global_lists(self.client)
@@ -684,15 +686,23 @@ Open Price={self.open_price}")
 
         self.logo = logo.convert("RGB")
 
-    def connect(self):
-
-        # Kill thread if we already have one running
-        if self.thread and self.thread.is_alive():
-            self.thread.terminate()
-
+    def kill_ws(self):
         # Close existing websocket if we have one
         if self.ws:
             self.ws.close()
+            self.ws = None
+
+        # Kill thread if we already have one running
+        if self.thread:
+            self.thread.terminate()
+
+            while self.thread.is_alive():
+                pass
+
+
+    def connect(self):
+
+        self.kill_ws()
 
         # Set to true for debugging
         websocket.enableTrace(False)
@@ -710,9 +720,10 @@ Open Price={self.open_price}")
 
         if "data" in data and "type" in data and data["type"] == "trade":
             trades = data["data"]
+            trade = trades[-1]
 
             # Use the last trade price as current price
-            curr_price = trades[-1]["p"]
+            curr_price = trade["p"]
             self.curr_price.value = curr_price
             if self.prev_close > 0:
                 self.perc_change.value = 100*(curr_price - self.prev_close)/self.prev_close
@@ -756,9 +767,9 @@ Open Price={self.open_price}")
         if self.display_ticker == None:
             return
         if len(self.display_ticker) <= 4:
-            graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 17-round(4.5*len(self.display_ticker)), 10, graphics.Color(20,200,20), self.display_ticker)
+            graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 18-round(4.5*len(self.display_ticker)), 10, graphics.Color(20,200,20), self.display_ticker)
         else:
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 17-round(3*len(self.display_ticker[:5])), 10, graphics.Color(20,200,20), self.display_ticker[:5])
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 18-round(3*len(self.display_ticker[:5])), 10, graphics.Color(20,200,20), self.display_ticker[:5])
 
     def drawprice(self):
 
@@ -784,18 +795,6 @@ Open Price={self.open_price}")
                 price_format_str = "{0:.1f}"
 
         if curr_price >= 0:
-            # Draw current price
-            currprice_str = price_format_str.format(curr_price)
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 39, 10, graphics.Color(180, 180, 180), currprice_str)
-
-            # Draw up/down arrow if price changed since last draw
-            if prev_price >=0 and prev_price != curr_price:
-                if curr_price > prev_price:
-                    image = Image.open(f"{shared_config.icons_dir}/finance/up.png")
-                else:
-                    image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
-                self.sign.canvas.SetImage(image.convert('RGB'), 41+6*len(currprice_str), 2)
-
             # Draw percent change
             if perc_change > 0.001:
                 change_color = graphics.Color(50, 150, 0)
@@ -811,6 +810,19 @@ Open Price={self.open_price}")
                 percent_format_str = "{0:+.2f}%"
             perc_change_str = percent_format_str.format(perc_change)
             graphics.DrawText(self.sign.canvas, self.sign.fontbig, 32, 22, change_color, perc_change_str)
+
+            # Draw current price
+            currprice_str = price_format_str.format(curr_price)
+            currprice_xloc = max(38, 32+round(3*(len(perc_change_str) - len(currprice_str))))
+            graphics.DrawText(self.sign.canvas, self.sign.fontbig, currprice_xloc, 10, graphics.Color(180, 180, 180), currprice_str)
+
+            # Draw up/down arrow if price changed since last draw
+            if prev_price >=0 and prev_price != curr_price:
+                if curr_price > prev_price:
+                    image = Image.open(f"{shared_config.icons_dir}/finance/up.png")
+                else:
+                    image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
+                self.sign.canvas.SetImage(image.convert('RGB'), 41+6*len(currprice_str), 2)
 
             # Draw price delta since open
             if open_price >= 0:
