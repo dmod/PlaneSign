@@ -20,6 +20,7 @@ class BasicInfoService(Service):
         self.add_characteristic(PlanesignHostnameCharacteristic(bus, 1, self))
         self.add_characteristic(PlanesignUptimeCharacteristic(bus, 2, self))
         self.add_characteristic(PlanesignWiFiStatusCharacteristic(bus, 3, self))
+        self.add_characteristic(PlanesignIPAddressCharacteristic(bus, 4, self))
 
 class SystemControlService(Service):
     def __init__(self, bus, index):
@@ -104,6 +105,29 @@ class PlanesignWiFiStatusCharacteristic(Characteristic):
         wifi_status = get_current_wifi_status()
         print('WiFi Status Read: ' + wifi_status)
         return [dbus.Byte(x.encode()) for x in wifi_status]
+
+class PlanesignIPAddressCharacteristic(Characteristic):
+    CHRC_UUID = 'fed6ced8-9ef1-4b7e-9f05-07963adde32b'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        ip_address = self._get_ip_address()
+        print('IP Address Read: ' + ip_address)
+        return [dbus.Byte(x.encode()) for x in ip_address]
+
+    def _get_ip_address(self):
+        """Get the IP address from the first connected network interface."""
+        for interface in ['wlan0', 'eth0', 'wlan1', 'eth1', 'usb0']:
+            try:
+                cmd = f"ip -4 addr show {interface} | grep -oP '(?<=inet\\s)\\d+(\\.\\d+){{3}}'"
+                ip = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip().split('\n')[0]
+                if ip:
+                    return ip
+            except subprocess.CalledProcessError:
+                continue
+        return "No IP address"
 
 class SafeCommandCharacteristic(Characteristic):
     COMMAND_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef2'
