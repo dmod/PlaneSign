@@ -85,7 +85,7 @@
           <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" orient="vertical" hidden>
         </div>
       </div>
-      <button id="FINANCE" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance 🤑</button>
+      <button id="FINANCE" class="mode_button" onclick="set_mode(this.id); get_tickers();">Finance 🤑</button>
       <div id="finance_div" hidden>
         <input type="text" id="ticker" autocomplete="off" oninput="get_possible_autofill_tickers(this.value)"></input>
       </div>
