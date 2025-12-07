@@ -22,76 +22,20 @@ import logging
 
 from modes import DisplayMode
 
-repl = re.compile(r'(?:\s+(?:CO|CORP|LTD|LLC|PLC|INC|GRO|OPTION|ETF|EQ|INVT|TRUST))+|(?:\s+\w{1,2})+$|[\s\"\_\'\-\&\.\+\/\\]')
-
-def similarity(search, entry):
-    
-    ls = len(search)
-            
-    if search in entry["symbol"]:
-        le = len(entry["symbol"])
-        symscore = ls / le
-        if le > 2*ls+1:
-            symscore *= 0.75
-        if entry["symbol"].startswith(search):
-            symscore *= 1.5
-    else:
-        symscore = 0.0
-        
-    if search in entry["description"]:
-        strippeddesc = re.sub(repl, "", entry["description"])
-        lds = len(strippeddesc)
-        ld = len(entry["description"])
-        descscore = ls / lds
-        if descscore > 1.0:
-            descscore = 1.0 - 0.02*(ld-lds)
-        if ls < 3 or lds > 3*ls+2:
-            descscore *= 0.75
-        if entry["description"].startswith(search):
-            descscore *= 1.5
-    else:
-        descscore = 0.0
-
-    return max(symscore, descscore)
-    
-def cb_similarity(search, entry):
-    
-    ls = len(search)
-    lds = len(entry["displaySymbol"].removesuffix("-USD"))
-    
-    score = ls / lds
-    if lds > 2*ls+1:
-        score *= 0.75
-    if entry["displaySymbol"].startswith(search):
-        score *= 1.5
-
-    return score
-
-def bn_similarity(search, entry):
-    
-    ls = len(search)
-    lds = len(entry["displaySymbol"].removesuffix("/USDT"))
-    
-    score = ls / lds
-    if lds > 2*ls+1:
-        score *= 0.75
-    if entry["displaySymbol"].startswith(search):
-        score *= 1.5
-
-    return score
-
 def update_global_lists(client = None):
 
     if client == None:
         if "FINNHUB_API_KEY" not in shared_config.CONF or shared_config.CONF["FINNHUB_API_KEY"] == "":
-            logging.error("Finnhub API key is not configured. Satellite mode will not function.")
+            logging.error("Finnhub API key is not configured. Finance mode will not function.")
+            return [], [], []
         else:   
             client = finnhub.Client(api_key=shared_config.CONF["FINNHUB_API_KEY"])
 
     if "us_symbols" not in shared_config.data_dict:
         try:
             # Halve the number of symbols by only saving "Common Stock" types (filters out ETFs, preferred shares, etc)
-            us_symbols = list(filter(lambda x: x["type"] == "Common Stock", client.stock_symbols("US")))
+            us_symbols = client.stock_symbols("US")
+            us_symbols = list(filter(lambda x: x["type"] == "Common Stock", us_symbols))
             shared_config.data_dict["us_symbols"] = us_symbols
         except Exception as e:
             logging.error(f"Finnhub API Error: {e}")
@@ -99,9 +43,13 @@ def update_global_lists(client = None):
     else:
         us_symbols = shared_config.data_dict["us_symbols"]
 
+    cbpat = re.compile("^COINBASE:.+-USD$")
+    bnpat = re.compile("^.+/USDT*$")
+
     if "cb_symbols" not in shared_config.data_dict:
         try:
             cb_symbols = client.crypto_symbols("COINBASE")
+            cb_symbols = list(filter(lambda x: cbpat.match(x["symbol"]), cb_symbols))
             shared_config.data_dict["cb_symbols"] = cb_symbols
         except Exception as e:
             logging.error(f"Finnhub API Error: {e}")
@@ -112,6 +60,7 @@ def update_global_lists(client = None):
     if "bn_symbols" not in shared_config.data_dict:
         try:
             bn_symbols = client.crypto_symbols("BINANCE")
+            bn_symbols = list(filter(lambda x: bnpat.match(x["displaySymbol"]), bn_symbols))
             shared_config.data_dict["bn_symbols"] = bn_symbols
         except Exception as e:
             logging.error(f"Finnhub API Error: {e}")
@@ -121,41 +70,14 @@ def update_global_lists(client = None):
 
     return us_symbols, cb_symbols, bn_symbols
 
-def get_tickers(search):
-
-    search = search.upper()
+def get_tickers():
 
     if "FINNHUB_API_KEY" not in shared_config.CONF or shared_config.CONF["FINNHUB_API_KEY"] == "":
-        logging.error("Finnhub API key is not configured. Satellite mode will not function.")
-        return []
+        logging.error("Finnhub API key is not configured. Finance mode will not function.")
+        return {'bn':[], 'cb':[], 'us':[]}
 
     us_symbols, cb_symbols, bn_symbols = update_global_lists()
-
-    cbpat = re.compile(rf"^COINBASE:\w*{re.escape(search)}\w*-USD$")
-    bnpat = re.compile(rf"^\w*{re.escape(search)}\w*/USDT*$")
-    
-    # US lookup
-    lookup_us = list(filter(lambda x: x["symbol"].startswith(search) or search in x["description"], us_symbols))
-
-    for entry in lookup_us:
-        entry["score"] = similarity(search, entry)
-
-    # COINBASE lookup
-    lookup_cb = list(filter(lambda x: cbpat.match(x["symbol"]), cb_symbols))
-    
-    for entry in lookup_cb:
-        entry["score"] = cb_similarity(search, entry)
-
-    # BINANCE lookup
-    lookup_bn = list(filter(lambda x: bnpat.match(x["displaySymbol"]), bn_symbols))
-    
-    for entry in lookup_bn:
-        entry["score"] = bn_similarity(search, entry)
-    
-    # Combined list sorted by score
-    searchlist = sorted(lookup_us + lookup_cb + lookup_bn, key=lambda x: x["score"], reverse=True)
-
-    return [{'description':dic['description'], 'symbol':dic['symbol']} for dic in searchlist[:25] if 'symbol' in dic and 'description' in dic]
+    return {'bn': bn_symbols, 'cb': cb_symbols, 'us': us_symbols}
 
 @__main__.planesign_mode_handler(DisplayMode.FINANCE)
 def finance(self):
@@ -170,7 +92,7 @@ def finance(self):
     self.canvas.SetImage(image.convert('RGB'), 10, 14)
 
     if "FINNHUB_API_KEY" not in shared_config.CONF or shared_config.CONF["FINNHUB_API_KEY"] == "":
-        logging.error("Finnhub API key is not configured. Satellite mode will not function.")
+        logging.error("Finnhub API key is not configured. Finance mode will not function.")
         graphics.DrawText(self.canvas, self.font57, 75, 13, graphics.Color(200, 0, 0), "No Finnhub")
         graphics.DrawText(self.canvas, self.font57, 80, 23, graphics.Color(200, 0, 0), "API Key!")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)

@@ -1,5 +1,6 @@
 var global_current_mode;
 var recordButton, recorder;
+var valid_tickers = null;
 
 window.onload = function () {
     update_sign_status();
@@ -167,84 +168,233 @@ function close_all_ticker_lists() {
     }
 }
 
-function get_possible_autofill_tickers(query_string) {
-    call_endpoint("/get_ticker_opts/" + query_string, function (value) {
-        valid_tickers = JSON.parse(value)
-
-        close_all_ticker_lists();
-
-        a = document.createElement("div");
-        a.setAttribute("class", "autocomplete-ticker-items");
-        document.getElementById("finance_div").appendChild(a);
-
-        valid_tickers.forEach(ticker => {
-            b = document.createElement("div");
-
-            if (ticker['description'].toUpperCase().startsWith("COINBASE ")) {
-                start_desc = ticker['description'].slice(9).toUpperCase().search(query_string.toUpperCase());
-                if (start_desc > -1) {
-                    start_desc += 9;
-                }
-            } else if (ticker['description'].toUpperCase().startsWith("BINANCE ")) {
-                start_desc = ticker['description'].slice(8).toUpperCase().search(query_string.toUpperCase());
-                if (start_desc > -1) {
-                    start_desc += 8;
-                }
-            }
-            else {
-                start_desc = ticker['description'].toUpperCase().search(query_string.toUpperCase())
-            }
-
-            if (start_desc > -1) {
-                b.innerHTML += ticker['description'].toUpperCase().substring(0, start_desc);
-                b.innerHTML += "<strong>" + ticker['description'].toUpperCase().substr(start_desc, query_string.length) + "</strong>";
-                b.innerHTML += ticker['description'].toUpperCase().substr(start_desc + query_string.length);
-            }
-            else {
-                b.innerHTML += ticker['description'].toUpperCase();
-            }
-
-            b.innerHTML += "<br>";
-
-            if (ticker['symbol'].toUpperCase().startsWith("COINBASE:")) {
-                start_symb = ticker['symbol'].slice(9).toUpperCase().search(query_string.toUpperCase());
-                if (start_symb > -1) {
-                    start_symb += 9;
-                }
-            } else if (ticker['symbol'].toUpperCase().startsWith("BINANCE:")) {
-                start_symb = ticker['symbol'].slice(8).toUpperCase().search(query_string.toUpperCase());
-                if (start_symb > -1) {
-                    start_symb += 8;
-                }
-            }
-            else {
-                start_symb = ticker['symbol'].toUpperCase().search(query_string.toUpperCase())
-            }
-
-            if (start_symb > -1) {
-                b.innerHTML += ticker['symbol'].substring(0, start_symb);
-                b.innerHTML += "<strong>" + ticker['symbol'].substr(start_symb, query_string.length) + "</strong>";
-                b.innerHTML += ticker['symbol'].substr(start_symb + query_string.length);
-            }
-            else {
-                b.innerHTML += ticker['symbol'];
-            }
-
-            b.addEventListener("click", function (e) {
-                close_all_ticker_lists();
-                document.getElementById("ticker").value = ticker['symbol']
-                call_endpoint('/submit_ticker/' + ticker['symbol'])
-            });
-
-            classname = "";
-            if (ticker['symbol'].startsWith("COINBASE:")) {
-                classname = " coinbase-ticker-item";
-            } else if (ticker['symbol'].startsWith("BINANCE:")) {
-                classname = " binance-ticker-item";
-            }
-            b.setAttribute("class", classname);
-            a.appendChild(b);
+function get_tickers() {
+    if (valid_tickers === null) {
+        call_endpoint("/get_ticker_opts", function (value) {
+            valid_tickers = JSON.parse(value)
+            document.getElementById('finance_div').hidden = false
         });
+    }
+    else {
+        document.getElementById('finance_div').hidden = false
+    }
+}
+
+function get_possible_autofill_tickers(query_string) {
+
+    if (valid_tickers === null) {
+        // Might be nice to call get_tickers() here
+        // but need to do some kind of async nonsense
+        // to make it work
+        return;
+    }
+
+    if (query_string == "") {
+        close_all_ticker_lists();
+        return;
+    }
+
+    query_string = query_string.toUpperCase();
+    ls = query_string.length
+
+    bn_regex = new RegExp(`^\\w*${RegExp.escape(query_string)}\\w*\/USDT$`, "i");
+    cb_regex = new RegExp(`^COINBASE:\\w*${RegExp.escape(query_string)}\\w*-USD$`, "i");
+    us_regex = us_regex = new RegExp(`${RegExp.escape(query_string)}`, "i");
+
+    found_bn = Object.values(valid_tickers['bn']).filter((entry) => bn_regex.test(entry.displaySymbol));
+    found_cb = Object.values(valid_tickers['cb']).filter((entry) => cb_regex.test(entry.symbol));
+    found_us = Object.values(valid_tickers['us']).filter((entry) => entry.symbol.startsWith(query_string) || us_regex.test(entry.description));
+
+    // Binance ticker similarity score
+    function bn_similarity(entry) {
+
+        // Remove "/USDT"
+        lds = entry["displaySymbol"].slice(0, -5).length
+        score = ls / lds
+        if (lds > 2 * ls + 1) {
+            score *= 0.75
+        }
+        if (entry["displaySymbol"].startsWith(query_string)) {
+            score *= 1.5
+        }
+
+        return score
+    }
+
+    // Coinbase ticker similarity score
+    function cb_similarity(entry) {
+
+        // Remove "-USD"
+        lds = entry["displaySymbol"].slice(0, -4).length
+        score = ls / lds
+        if (lds > 2 * ls + 1) {
+            score *= 0.75
+        }
+        if (entry["displaySymbol"].startsWith(query_string)) {
+            score *= 1.5
+        }
+
+        return score
+    }
+
+    repl = new RegExp("(?:\\s+(?:CO|CORP|LTD|LLC|PLC|INC|GRO|OPTION|ETF|EQ|INVT|TRUST))+(?:\\s+\\w{1,2})*$|[^a-zA-Z0-9]", "ig");
+
+    // US Exchange ticker similarity score
+    function us_similarity(entry) {
+
+        if (entry["symbol"].startsWith(query_string)) {
+            le = entry["symbol"].length
+            symscore = ls / le
+            if (le > 2 * ls + 1) {
+                symscore *= 0.75
+            }
+            symscore *= 1.5
+        }
+        else {
+            symscore = 0.0
+        }
+
+        if (us_regex.test(entry["description"])) {
+            strippeddesc = entry["description"].replaceAll(repl, "")
+            lds = strippeddesc.length
+            ld = entry["description"].length
+            descscore = ls / lds
+            if (descscore > 1.0) {
+                descscore = 1.0 - 0.02 * (ld - lds)
+            }
+            if (ls <= 3) {
+                descscore *= ls / 4;
+            }
+            else if (lds > 3 * ls + 2) {
+                descscore *= 0.75
+            }
+            if (entry["description"].startsWith(query_string)) {
+                descscore *= 1.5
+            }
+        }
+        else {
+            descscore = 0.0
+        }
+
+        return Math.max(symscore, descscore)
+    }
+
+    function order_results(a, b) {
+        diff = b["score"] - a["score"];
+        if (diff != 0.0) {
+            return diff;
+        }
+        else {
+            // Tiebreak with matching start of ticker
+            sa = a["displaySymbol"];
+            sb = b["displaySymbol"];
+
+            sa_start = sa.startsWith(query_string);
+            sb_start = sb.startsWith(query_string);
+
+            if (sa_start && !sb_start) {
+                return -1.0;
+            }
+            else if (!sa_start && sb_start) {
+                return 1.0;
+            }
+            else {
+                // Tiebreak with shorter ticker length
+                if (sa.length != sb.length) {
+                    return sa.length - sb.length
+                }
+                else {
+                    return 0.0;
+                }
+            }
+        }
+    }
+
+    // Score search results
+    found_bn.map((entry) => entry.score = bn_similarity(entry));
+    found_cb.map((entry) => entry.score = cb_similarity(entry));
+    found_us.map((entry) => entry.score = us_similarity(entry));
+
+    found_tickers = found_us.concat(found_bn, found_cb);
+
+    found_tickers.sort(order_results);
+
+    // Only display best 25 results
+    found_tickers.length = 25;
+
+    close_all_ticker_lists();
+
+    a = document.createElement("div");
+    a.setAttribute("class", "autocomplete-ticker-items");
+    document.getElementById("finance_div").appendChild(a);
+
+    found_tickers.forEach(ticker => {
+        b = document.createElement("div");
+
+        if (ticker['description'].toUpperCase().startsWith("COINBASE ")) {
+            start_desc = ticker['description'].slice(9).toUpperCase().search(query_string);
+            if (start_desc > -1) {
+                start_desc += 9;
+            }
+        } else if (ticker['description'].toUpperCase().startsWith("BINANCE ")) {
+            start_desc = ticker['description'].slice(8).toUpperCase().search(query_string);
+            if (start_desc > -1) {
+                start_desc += 8;
+            }
+        }
+        else {
+            start_desc = ticker['description'].toUpperCase().search(query_string)
+        }
+
+        if (start_desc > -1) {
+            b.innerHTML += ticker['description'].toUpperCase().substring(0, start_desc);
+            b.innerHTML += "<strong>" + ticker['description'].toUpperCase().substr(start_desc, ls) + "</strong>";
+            b.innerHTML += ticker['description'].toUpperCase().substr(start_desc + ls);
+        }
+        else {
+            b.innerHTML += ticker['description'].toUpperCase();
+        }
+
+        b.innerHTML += "<br>";
+
+        if (ticker['symbol'].toUpperCase().startsWith("COINBASE:")) {
+            start_symb = ticker['symbol'].slice(9).toUpperCase().search(query_string);
+            if (start_symb > -1) {
+                start_symb += 9;
+            }
+        } else if (ticker['symbol'].toUpperCase().startsWith("BINANCE:")) {
+            start_symb = ticker['symbol'].slice(8).toUpperCase().search(query_string);
+            if (start_symb > -1) {
+                start_symb += 8;
+            }
+        }
+        else {
+            start_symb = ticker['symbol'].toUpperCase().search(query_string)
+        }
+
+        if (start_symb > -1) {
+            b.innerHTML += ticker['symbol'].substring(0, start_symb);
+            b.innerHTML += "<strong>" + ticker['symbol'].substr(start_symb, ls) + "</strong>";
+            b.innerHTML += ticker['symbol'].substr(start_symb + ls);
+        }
+        else {
+            b.innerHTML += ticker['symbol'];
+        }
+
+        b.addEventListener("click", function (e) {
+            close_all_ticker_lists();
+            document.getElementById("ticker").value = ticker['symbol']
+            call_endpoint('/submit_ticker/' + ticker['symbol'])
+        });
+
+        classname = "";
+        if (ticker['symbol'].startsWith("COINBASE:")) {
+            classname = " coinbase-ticker-item";
+        } else if (ticker['symbol'].startsWith("BINANCE:")) {
+            classname = " binance-ticker-item";
+        }
+        b.setAttribute("class", classname);
+        a.appendChild(b);
     });
 }
 
@@ -509,6 +659,12 @@ function update_sign_status() {
             sib = document.getElementById(global_current_mode).nextElementSibling;
             if (sib && sib.hidden) {
                 sib.hidden = false;
+            }
+
+            // Hide Finance search bar based on if we have ticker data
+            // yet or not
+            if (global_current_mode == "FINANCE") {
+                sib.hidden = (valid_tickers === null);
             }
         }
     });
