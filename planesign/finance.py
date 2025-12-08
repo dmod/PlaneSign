@@ -701,7 +701,7 @@ Open Price={self.open_price}")
             perc_change = self.perc_change
             low_price = self.low_price
             high_price = self.high_price
-            open_price = self.open_price
+            prev_close = self.prev_close
 
         price_format_str = "{0:.2f}"
         if self.type == "CRYPTO":
@@ -747,14 +747,22 @@ Open Price={self.open_price}")
                     image = Image.open(f"{shared_config.icons_dir}/finance/down.png")
                 self.sign.canvas.SetImage(image.convert('RGB'), 41+6*len(currprice_str), 2)
 
-            # Draw price delta since open
-            if open_price >= 0:
-                delta = curr_price - open_price
+            # Draw price delta since previous close
+            if prev_close >= 0:
+                delta = curr_price - prev_close
+
                 split_delta_str = str(delta).split('.')
                 count_before_decimal = len(split_delta_str[0])
-                count_after_decimal = len(split_delta_str[1])
+                if (len(split_delta_str)>1):
+                    count_after_decimal = len(split_delta_str[1])
+                else:
+                    count_after_decimal = 0
 
-                count_after_decimal_curr = len(currprice_str.split('.')[1])
+                split_currprice_str = currprice_str.split('.')
+                if (len(split_currprice_str)>1):
+                    count_after_decimal_curr = len(split_currprice_str[1])
+                else:
+                    count_after_decimal_curr = 0
 
                 if (count_after_decimal > count_after_decimal_curr):
                     count_after_decimal = count_after_decimal_curr
@@ -766,7 +774,11 @@ Open Price={self.open_price}")
                 delta_format_str = "{0:+." + str(count_after_decimal) + "f}"
 
                 delta_str = delta_format_str.format(delta)
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 32+round(3*len(perc_change_str) - 2.5*len(delta_str)), 30, change_color, delta_str)
+
+            else:
+                delta_str = "--"
+    
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 32+round(3*len(perc_change_str) - 2.5*len(delta_str)), 30, change_color, delta_str)
 
             # Remember the current price we just drew for next time
             self.prev_price = curr_price

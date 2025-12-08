@@ -383,7 +383,7 @@ function get_possible_autofill_tickers(query_string) {
 
         b.addEventListener("click", function (e) {
             close_all_ticker_lists();
-            document.getElementById("ticker").value = ticker['symbol']
+            document.getElementById("ticker").value = ""//  ticker['symbol']
             call_endpoint('/submit_ticker/' + ticker['symbol'])
         });
 
