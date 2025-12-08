@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 import time
 import finnhub
-import re
 from PIL import Image, ImageDraw
-from multiprocessing import Process, Value
+from threading import Thread, Lock
 import websocket
 import numpy as np
 import favicon
@@ -14,8 +13,6 @@ import utilities
 import requests
 from rgbmatrix import graphics
 from requests import Session
-from datetime import datetime
-from scipy.interpolate import interp1d
 import shared_config
 import __main__
 import logging
@@ -114,8 +111,10 @@ def finance(self):
         ticker = shared_config.data_dict["ticker"]
 
         if ticker != None:
-            if s == None or s.ticker != ticker:
+            if s == None:
                 s = Stock(self, client, ticker)
+            elif s.ticker != ticker:
+                s.setticker(ticker)
 
             s.drawfullpage()
 
@@ -477,23 +476,20 @@ class Stock:
         self.ws_server = "wss://ws.finnhub.io"
         self.ws = None
         self.thread = None
+        self.lock = Lock()
 
         # Multithreading safe variables so that
         # the websocket thread can update them
-        self.curr_price = Value('d', -1.0)
-        self.prev_price = Value('d', -1.0)
-        self.perc_change = Value('d', 0.0)
-        self.high_price = Value('d', -1.0)
-        self.low_price = Value('d', -1.0)
+        self.curr_price = -1.0
+        self.prev_price = -1.0
+        self.perc_change = 0.0
+        self.high_price = -1.0
+        self.low_price = -1.0
 
         self.setticker(ticker)
     
     def __del__(self):
-        if self.ws:
-            self.ws.close()
-
-        if self.thread and self.thread.is_alive():
-            self.thread.terminate()
+        self.kill_ws()
 
     def setticker(self, ticker):
 
@@ -525,34 +521,35 @@ class Stock:
             logging.error(f"No data for ticker {ticker}: {e}")
             data = None
 
-        if data:
-            self.curr_price.value = data["c"]
-            self.prev_price.value = data["c"]
-            self.high_price.value = data["h"]
-            self.low_price.value = data["l"]
-            self.open_price = data["o"]
-            self.prev_close = data["pc"]
+        with self.lock:
+            if data:
+                self.curr_price = data["c"]
+                self.prev_price = data["c"]
+                self.high_price = data["h"]
+                self.low_price = data["l"]
+                self.open_price = data["o"]
+                self.prev_close = data["pc"]
 
-            if self.prev_close > 0:
-                self.perc_change.value = 100*(self.curr_price.value - self.prev_close)/self.prev_close
-            else:
-                self.perc_change.value = 0.0
+                if self.prev_close > 0:
+                    self.perc_change = 100*(self.curr_price - self.prev_close)/self.prev_close
+                else:
+                    self.perc_change = 0.0
 
-            logging.debug(f"Set ticker to {ticker}: \
-Current Price={self.curr_price.value}, \
+                logging.debug(f"Set ticker to {ticker}: \
+Current Price={self.curr_price}, \
 Previous Close={self.prev_close}, \
-Percent Change={self.perc_change.value}%, \
-High Price={self.high_price.value}, \
-Low Price={self.low_price.value}, \
+Percent Change={self.perc_change}%, \
+High Price={self.high_price}, \
+Low Price={self.low_price}, \
 Open Price={self.open_price}")
-        else:
-            self.curr_price.value = -1.0
-            self.prev_price.value = -1.0
-            self.high_price.value = -1.0
-            self.low_price.value = -1.0
-            self.open_price = -1.0
-            self.prev_close = -1.0
-            self.perc_change = 0.0
+            else:
+                self.curr_price = -1.0
+                self.prev_price = -1.0
+                self.high_price = -1.0
+                self.low_price = -1.0
+                self.open_price = -1.0
+                self.prev_close = -1.0
+                self.perc_change = 0.0
 
         self.get_logo()
         self.connect()
@@ -616,11 +613,8 @@ Open Price={self.open_price}")
             self.ws = None
 
         # Kill thread if we already have one running
-        if self.thread:
-            self.thread.terminate()
-
-            while self.thread.is_alive():
-                pass
+        if self.thread and self.thread.is_alive():
+            self.thread.join()
             self.thread = None
 
     def connect(self):
@@ -635,7 +629,7 @@ Open Price={self.open_price}")
                                           on_message=self.onMessage,
                                           on_error=self.onError,
                                           on_close=self.onClose)
-        self.thread = Process(target=self.ws.run_forever, daemon=True)
+        self.thread = Thread(target=self.ws.run_forever, daemon=True)
         self.thread.start()
 
     def onMessage(self, ws, message):
@@ -647,18 +641,23 @@ Open Price={self.open_price}")
 
             # Use the last trade price as current price
             curr_price = trade["p"]
-            self.curr_price.value = curr_price
-            if self.prev_close > 0:
-                self.perc_change.value = 100*(curr_price - self.prev_close)/self.prev_close
-            else:
-                self.perc_change.value = 0.0
-            
-            for trade in trades:
-                p = trade["p"]
-                if p > self.high_price.value:
-                    self.high_price.value = p
-                if p < self.low_price.value:
-                    self.low_price.value = p
+
+            self.lock.acquire(timeout = 1.0)
+            try:
+                self.curr_price = curr_price
+                if self.prev_close > 0:
+                    self.perc_change = 100*(curr_price - self.prev_close)/self.prev_close
+                else:
+                    self.perc_change = 0.0
+                
+                for trade in trades:
+                    p = trade["p"]
+                    if p > self.high_price:
+                        self.high_price = p
+                    if p < self.low_price:
+                        self.low_price = p
+            finally:
+                self.lock.release()
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
@@ -696,12 +695,13 @@ Open Price={self.open_price}")
 
     def drawprice(self):
 
-        curr_price = self.curr_price.value
-        prev_price = self.prev_price.value
-        perc_change = self.perc_change.value
-        low_price = self.low_price.value
-        high_price = self.high_price.value
-        open_price = self.open_price
+        with self.lock:
+            curr_price = self.curr_price
+            prev_price = self.prev_price
+            perc_change = self.perc_change
+            low_price = self.low_price
+            high_price = self.high_price
+            open_price = self.open_price
 
         price_format_str = "{0:.2f}"
         if self.type == "CRYPTO":
@@ -769,7 +769,7 @@ Open Price={self.open_price}")
                 graphics.DrawText(self.sign.canvas, self.sign.font57, 32+round(3*len(perc_change_str) - 2.5*len(delta_str)), 30, change_color, delta_str)
 
             # Remember the current price we just drew for next time
-            self.prev_price.value = curr_price
+            self.prev_price = curr_price
 
         # Draw high price
         high_str = "--"
