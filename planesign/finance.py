@@ -114,10 +114,8 @@ def finance(self):
         ticker = shared_config.data_dict["ticker"]
 
         if ticker != None:
-            if s == None:
+            if s == None or s.ticker != ticker:
                 s = Stock(self, client, ticker)
-            elif s.ticker != ticker:
-                s.setticker(ticker)
 
             s.drawfullpage()
 
@@ -491,6 +489,9 @@ class Stock:
         self.setticker(ticker)
     
     def __del__(self):
+        if self.ws:
+            self.ws.close()
+
         if self.thread and self.thread.is_alive():
             self.thread.terminate()
 
@@ -620,7 +621,7 @@ Open Price={self.open_price}")
 
             while self.thread.is_alive():
                 pass
-
+            self.thread = None
 
     def connect(self):
 
