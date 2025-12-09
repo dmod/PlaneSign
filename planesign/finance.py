@@ -120,6 +120,8 @@ def finance(self):
 
         breakout = self.wait_loop(0.5)
         if breakout:
+            if s:
+                s.kill_ws()
             return
 
 
