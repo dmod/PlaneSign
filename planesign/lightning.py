@@ -52,7 +52,7 @@ def lightning(sign):
 
                 breakout = sign.wait_loop(0.1)
                 if breakout:
-                    return
+                    break
             LM.close()
         elif LM.connected.value==0:
             failed_connections += 1

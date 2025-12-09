@@ -13,6 +13,7 @@ import os
 import glob
 import threading
 import traceback
+from finance import get_tickers
 import weather
 import planes
 import santa
@@ -194,6 +195,10 @@ def set_custom_message(message):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+@app.route("/get_ticker_opts")
+def get_ticker_opts():
+    options = get_tickers()
+    return jsonify(options)
 
 @app.route("/submit_ticker/", defaults={"ticker": ""})
 @app.route("/submit_ticker/<ticker>")

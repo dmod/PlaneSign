@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
+  <link rel="stylesheet" href="finance.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="index.js"></script>
   <title>Plane Sign</title>
@@ -84,10 +85,9 @@
           <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" orient="vertical" hidden>
         </div>
       </div>
-      <button id="FINANCE" class="mode_button" onclick="set_mode(this.id); document.getElementById('finance_div').hidden = false">Finance 🤑</button>
+      <button id="FINANCE" class="mode_button" onclick="set_mode(this.id); get_tickers();">Finance 🤑</button>
       <div id="finance_div" hidden>
-        Ticker Symbol:<input type="text" id="ticker"></input>
-        <button class="submit" onclick="submit_ticker();">Submit</button>
+        <input type="text" id="ticker" autocomplete="off" oninput="get_possible_autofill_tickers(this.value)"></input>
       </div>
     </fieldset>
 

@@ -38,8 +38,8 @@ satdat.txt
 satsup.txt
 de421.bsp
 disable_update
-icons/favicons/*
-!icons/favicons/.gitkeep 
+icons/finance/logos/*
+!icons/finance/logos/.gitkeep 
 icons/lightning/*
 !icons/lightning/.gitkeep
 .data/audio

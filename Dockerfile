@@ -11,7 +11,6 @@ RUN apt update && apt -y install \
   python3-setuptools \
   python3-pip \
   python3-numpy \
-  python3-scipy \
   python3-pandas \
   python3-geopandas \
   python3-requests \
