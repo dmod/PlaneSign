@@ -479,6 +479,8 @@ class Stock:
         self.ws = None
         self.thread = None
         self.lock = Lock()
+        self.errLock = Lock()
+        self.errCode = None
 
         # Multithreading safe variables so that
         # the websocket thread can update them
@@ -614,10 +616,8 @@ Open Price={self.open_price}")
             self.ws.close()
             self.ws = None
 
-        # Kill thread if we already have one running
-        if self.thread and self.thread.is_alive():
-            self.thread.join()
-            self.thread = None
+        with self.errLock:
+            self.errCode = None
 
     def connect(self):
 
@@ -663,9 +663,23 @@ Open Price={self.open_price}")
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
+        with self.errLock:
+            if (err == None):
+                self.errCode = -1
+            elif (str(err).startswith("Connection to remote host was lost")):
+                self.errCode = 1
+            else:
+                self.errCode = 2
     
     def onClose(self, ws, close_status_code="", close_msg=""):
         logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
+        with self.errLock:
+            err = self.errCode
+        logging.debug(f"Got error code {err}")
+        if (err == 1):
+            logging.debug(f'Attempting to reconnect to websocket.')
+            time.sleep(10)
+            self.connect()
         
     def onOpen(self, ws):
         logging.debug(f'Opening Websocket connection to the server {self.ws_server} subscribed to ticker {self.ticker}...')
