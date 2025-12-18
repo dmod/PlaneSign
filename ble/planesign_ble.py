@@ -140,6 +140,7 @@ class SafeCommandCharacteristic(Characteristic):
         'hostname': '/bin/hostname',
         'disk': '/bin/df -h /',
         'memory': '/usr/bin/free -h',
+        'reboot': 'sudo /usr/sbin/reboot'
     }
 
     def __init__(self, bus, index, service):
