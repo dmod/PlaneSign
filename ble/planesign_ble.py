@@ -1,4 +1,5 @@
 import dbus, dbus.mainloop.glib
+import shutil
 import subprocess
 from gi.repository import GLib
 from gatt import Application, Advertisement, Service, Characteristic
@@ -11,6 +12,7 @@ LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_MANAGER_IFACE =           'org.bluez.GattManager1'
 GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
 PLANESIGN_MASTER_UUID =        '3d951a35-76c5-4207-a150-2d0cf7d2bfdd'
+DOCKER_CONTAINER_NAME =        'PlaneSignRuntime'
 mainloop = None
 
 class BasicInfoService(Service):
@@ -26,6 +28,11 @@ class SystemControlService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, '312f08be-a717-40b0-9730-6d3d7c929856', True)
         self.add_characteristic(SafeCommandCharacteristic(bus, 0, self))
+
+class ContainerControlService(Service):
+    def __init__(self, bus, index):
+        Service.__init__(self, bus, index, 'a8e86355-accb-4ba4-a7c5-63206cab4b7b', True)
+        self.add_characteristic(DockerContainerControlCharacteristic(bus, 0, self))
 
 class WiFiManagementService(Service):
     def __init__(self, bus, index):
@@ -51,6 +58,7 @@ class PlanesignBLEApplication(Application):
         self.add_service(BasicInfoService(bus, 0))
         self.add_service(WiFiManagementService(bus, 1))
         self.add_service(SystemControlService(bus, 2))
+        self.add_service(ContainerControlService(bus, 3))
 
 class PlanesignBLEAdvertisement(Advertisement):
     def __init__(self, bus, index, device_name):
@@ -167,6 +175,105 @@ class SafeCommandCharacteristic(Characteristic):
                 self.last_result = f"Error executing command: {str(e)}"
         else:
             self.last_result = f"Command '{command}' not in allowed list"
+
+class DockerContainerControlCharacteristic(Characteristic):
+    DOCKER_CONTAINER_CONTROL_UUID = '29352a73-3108-4ecc-9440-57b5a8a5c027'
+
+    ALLOWED_COMMANDS = {
+        'start',
+        'stop',
+    }
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.DOCKER_CONTAINER_CONTROL_UUID, ['read', 'write'], service)
+        self.value = []
+        self.last_result = "No docker command executed yet"
+
+    def ReadValue(self, options):
+        # Always return live container status (client reads immediately after connect).
+        try:
+            status = self._get_container_status()
+            self.last_result = status
+        except Exception as e:
+            self.last_result = f"Error: {e}"
+
+        print('DockerContainerControlCharacteristic Read: ' + self.last_result)
+        return [dbus.Byte(x.encode()) for x in self.last_result]
+
+    def WriteValue(self, value, options):
+        command = bytes(value).decode(errors='replace').strip().lower()
+        print('DockerContainerControlCharacteristic Write: ' + command)
+
+        if command not in self.ALLOWED_COMMANDS:
+            self.last_result = f"Command '{command}' not in allowed list"
+            return
+
+        try:
+            self.last_result = self._run_docker_lifecycle(command)
+        except Exception as e:
+            self.last_result = f"Error: {e}"
+
+    def _docker_available(self):
+        return shutil.which('docker') is not None
+
+    def _run(self, args, timeout=8):
+        completed = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        stdout = (completed.stdout or '').strip()
+        stderr = (completed.stderr or '').strip()
+        return completed.returncode, stdout, stderr
+
+    def _run_docker_lifecycle(self, command):
+        if not self._docker_available():
+            return "docker not found"
+
+        # Client API uses "stop", but we intentionally force-stop via `docker kill`.
+        docker_command = 'kill' if command == 'stop' else command
+
+        docker_args = ['docker', docker_command, DOCKER_CONTAINER_NAME]
+        rc, stdout, stderr = self._run(docker_args)
+        if rc != 0:
+            return f"docker {docker_command} failed: {stderr or stdout or 'unknown error'}"
+
+        # After lifecycle operations, return updated status for convenience.
+        status = self._get_container_status()
+        return f"ok: {stdout or command}; {status}"
+
+    def _get_container_status(self):
+        if not self._docker_available():
+            return "docker not found"
+
+        # Prefer inspect for a precise status.
+        rc, stdout, stderr = self._run(
+            ['docker', 'inspect', '-f', '{{.Name}}|{{.State.Status}}|{{.State.Running}}|{{.Id}}', DOCKER_CONTAINER_NAME]
+        )
+        if rc == 0 and stdout:
+            # stdout like: /PlaneSignRuntime|running|true|<id>
+            parts = stdout.split('|')
+            if len(parts) >= 4:
+                name, state, running, cid = parts[0], parts[1], parts[2], parts[3]
+                cid_short = cid[:12]
+                return f"{name.lstrip('/')} status={state} running={running} id={cid_short}"
+            return stdout
+
+        # Fallback to ps -a filtered by name.
+        rc2, stdout2, stderr2 = self._run(
+            ['docker', 'ps', '-a', '--filter', f"name=^{DOCKER_CONTAINER_NAME}$", '--format', '{{.Names}}|{{.Status}}|{{.ID}}']
+        )
+        if rc2 == 0 and stdout2:
+            line = stdout2.splitlines()[0]
+            parts = line.split('|')
+            if len(parts) >= 3:
+                name, status, cid = parts[0], parts[1], parts[2]
+                return f"{name} {status} id={cid}"
+            return stdout2
+
+        return f"status unavailable: {stderr or stderr2 or 'unknown error'}"
 
 class WiFiScanCharacteristic(Characteristic):
     WIFI_SCAN_CHRC_UUID = '99945678-1234-5678-1234-56789abcdef3'
