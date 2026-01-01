@@ -1,6 +1,9 @@
 import dbus, dbus.mainloop.glib
 import shutil
+import socket
 import subprocess
+import urllib.error
+import urllib.request
 from gi.repository import GLib
 from gatt import Application, Advertisement, Service, Characteristic
 from gatt import find_adapter, set_adapter_name, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
@@ -33,6 +36,32 @@ class ContainerControlService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, 'a8e86355-accb-4ba4-a7c5-63206cab4b7b', True)
         self.add_characteristic(DockerContainerControlCharacteristic(bus, 0, self))
+        self.add_characteristic(PlaneSignVersionCharacteristic(bus, 1, self))
+
+class PlaneSignVersionCharacteristic(Characteristic):
+    VERSION_CHRC_UUID = '8d1151e7-04b8-49e2-955a-daa50e1285e5'
+    VERSION_URL = 'http://localhost/api/version'
+    TIMEOUT_SECONDS = 2
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.VERSION_CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        version = self._fetch_version()
+        print('PlaneSignVersionCharacteristic Read: ' + version)
+        return [dbus.Byte(x.encode()) for x in version]
+
+    def _fetch_version(self):
+        try:
+            req = urllib.request.Request(self.VERSION_URL, method='GET')
+            with urllib.request.urlopen(req, timeout=self.TIMEOUT_SECONDS) as resp:
+                body = resp.read()
+
+            # API returns a string; tolerate bytes/whitespace and decode safely.
+            text = body.decode('utf-8', errors='replace').strip()
+            return text or 'empty response'
+        except Exception as e:
+            return f'error: {e}'
 
 class WiFiManagementService(Service):
     def __init__(self, bus, index):
