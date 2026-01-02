@@ -118,9 +118,11 @@ def moon(sign):
 
             moonangle = position_angle_of(m.altaz(), s.altaz()).degrees
 
-            if phase > 180: #waning
+            if phase > 180:
+                # Waning
                 moonorient = moonangle - 90
-            else: #waxing
+            else:
+                # Waxing
                 moonorient = moonangle + 90
 
             w, h = 300, 300
@@ -129,13 +131,13 @@ def moon(sign):
             angle = phase*np.pi/180
             minor = major*abs(np.cos(angle))
 
-            bg = Image.open("./icons/moon/moonbg.png").convert('RGBA')
-            moon = Image.open("./icons/moon/moon.png").convert('RGBA')
+            bg = Image.open(f"{shared_config.icons_dir}/moon/moonbg.png").convert('RGBA')
+            moon = Image.open(f"{shared_config.icons_dir}/moon/moon.png").convert('RGBA')
 
             if angle<np.pi:
-                mask = Image.open("./icons/moon/moonmaskright.png").convert('L')
+                mask = Image.open(f"{shared_config.icons_dir}/moon/moonmaskright.png").convert('L')
             else:
-                mask = Image.open("./icons/moon/moonmaskleft.png").convert('L')
+                mask = Image.open(f"{shared_config.icons_dir}/moon/moonmaskleft.png").convert('L')
 
             if angle<np.pi/2 or angle>np.pi*3/2:
                 maskcolor = "black"
@@ -148,6 +150,15 @@ def moon(sign):
             moon.putalpha(mask)
             bg.paste(moon, (0, 0), mask)
             bg = bg.rotate(moonorient, resample=Image.BICUBIC, expand=False)
+
+            if ((now.month == 10 and now.day == 31) or (now.month == 11 and now.day == 1 and now.hour < 6)):
+                if percent >= 70:
+                    pumpkin = Image.open(f"{shared_config.icons_dir}/moon/witch.png").convert("RGBA")
+                    bg.paste(pumpkin, (0, 0), pumpkin)
+                else:
+                    pumpkin = Image.open(f"{shared_config.icons_dir}/moon/pumpkin.png").convert("RGBA")
+                    bg.paste(pumpkin, (0, 0), pumpkin)
+
             bg = bg.resize((36,36),Image.BICUBIC)
 
             _, ymonth = almanac.find_discrete(ts.utc(t.utc.year,t.utc.month,1,0), ts.utc(t.utc.year+1 if t.utc.month==12 else t.utc.year,(t.utc.month%12)+1,1,0), almanac.moon_phases(eph))
@@ -223,11 +234,9 @@ def moon(sign):
             scale = min(max(scale,0),scalemax)
             scalepos = scalestart+round(scale)
 
-
-            
             lastcalc = time.perf_counter()
 
-
+        # Draw the moon
         sign.canvas.SetImage(bg.convert('RGB'), 94, -2) 
 
         for s in stars:
@@ -251,6 +260,7 @@ def moon(sign):
         else:
             graphics.DrawText(sign.canvas, sign.font57, 72, 30, graphics.Color(20, 20, 210), '{0:.1f}%'.format(percent))
         
+        # Perigee/Apogee indicator scale
         graphics.DrawLine(sign.canvas, scalestart, scaley, scalestart+scalemax, scaley,  scalecolor)
         graphics.DrawLine(sign.canvas, scalestart, scaley-2, scalestart, scaley+2,  scalecolor)
         graphics.DrawLine(sign.canvas, scalestart+scalemax, scaley-2, scalestart+scalemax, scaley+2,  scalecolor)
@@ -261,7 +271,7 @@ def moon(sign):
 
         
         if i<20:
-
+            # Blinking moon for perigee/apogee indicator
             moonx = scalepos-1
             moony = scaley-2
 
