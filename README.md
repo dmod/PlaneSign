@@ -82,6 +82,7 @@ network={
 - FlightRadar24
 - ucsusa.org
 - n2yo.com
+- finnhub.io
 - coinmarketcap.com
 - googleapis.com
 - ourairports.com
