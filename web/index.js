@@ -26,7 +26,47 @@ window.onload = function () {
         }
         str = str.slice(0, -1);
 
-        call_endpoint("/write_config?" + str);
+        var btn = document.getElementById("submit_config_button");
+        var originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.remove("config-save-success");
+        btn.classList.remove("config-save-error");
+
+        fetch("api/write_config?" + str)
+            .then(async (resp) => {
+                let body = null;
+                try {
+                    body = await resp.json();
+                } catch (_) {
+                    body = null;
+                }
+
+                if (!resp.ok || !body || body.ok !== true) {
+                    throw new Error((body && body.error) ? body.error : ("HTTP " + resp.status));
+                }
+
+                btn.classList.add("config-save-success");
+                btn.innerHTML = originalHtml +
+                    " <span class=\"config-save-icon\" aria-hidden=\"true\">" +
+                    "<svg viewBox=\"0 0 24 24\" width=\"26\" height=\"26\" focusable=\"false\" role=\"img\" aria-label=\"Saved\">" +
+                    "<path d=\"M20 6L9 17l-5-5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>" +
+                    "</svg></span>";
+
+                window.setTimeout(function () {
+                    btn.classList.remove("config-save-success");
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+            })
+            .catch((err) => {
+                console.error("write_config failed:", err);
+                btn.classList.add("config-save-error");
+                window.setTimeout(function () {
+                    btn.classList.remove("config-save-error");
+                }, 2000);
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
     }
 
     document.getElementById("brightness_slider").oninput = function () {
@@ -631,12 +671,6 @@ function read_conf() {
             }
         };
         xhr.send();
-    }
-}
-
-function update_sign() {
-    if (confirm('Are you sure you want to update?\n(Uncommitted sign updates will be lost)')) {
-        call_endpoint("/update");
     }
 }
 

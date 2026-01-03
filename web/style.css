@@ -488,6 +488,24 @@ input[type=number] {
   margin-top: 5px;
 }
 
+#submit_config_button.config-save-success {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+#submit_config_button .config-save-icon {
+  color: #16a34a;
+  display: inline-flex;
+  align-items: center;
+}
+
+#submit_config_button.config-save-error {
+  outline: 3px solid #dc2626;
+  outline-offset: 2px;
+}
+
 #config_button_span {
   display: block;
 }
