@@ -37,6 +37,9 @@ prices.csv
 satdat.txt
 satsup.txt
 de421.bsp
+moon_pa_de421_1900-2050.bpc
+moon_080317.tf
+pck00008.tpc
 disable_update
 icons/finance/logos/*
 !icons/finance/logos/.gitkeep 
