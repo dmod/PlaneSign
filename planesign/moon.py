@@ -148,7 +148,7 @@ def moon(sign):
 
         blink_tic = (blink_tic + 1)%25
 
-        if lastcalc==None or time.perf_counter()-lastcalc>0.1:
+        if lastcalc==None or time.perf_counter()-lastcalc>5:
 
             # ---------------------------------------------------------
             # Current Barycentric Positions
