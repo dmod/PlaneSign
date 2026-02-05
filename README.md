@@ -41,7 +41,7 @@
 
 #### Docker Installation
 ```sh
-cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/docker_install_and_update.sh --reboot
+curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash
 ```
 
 #### Classic Installation
