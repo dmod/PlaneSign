@@ -78,8 +78,10 @@ sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --priv
 
 echo "Installation and configuration completed!"
 
-if [[ "$1" == "--reboot" ]]
+if [[ "$1" == "--no-reboot" ]]
 then
+  echo "Skipping reboot"
+else
   echo "...Rebooting"
   sudo reboot
 fi
