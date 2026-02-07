@@ -13,6 +13,9 @@ env:
 jobs:
   build-and-push-image:
     runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
     steps:
 
       - name: Checkout repository
@@ -38,7 +41,9 @@ jobs:
           context: .
           push: true
           platforms: linux/arm64/v8
-          tags: ${{ github.actor }}/planesign:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
 
