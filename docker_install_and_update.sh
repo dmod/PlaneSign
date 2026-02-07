@@ -42,6 +42,15 @@ crontab -r
 # Install bluetooth support
 sudo apt-get update
 sudo apt install -y python3-dbus
+
+# Download BLE files from GitHub (repo is no longer fully cloned)
+BLE_DIR=/home/pi/PlaneSign/ble
+BLE_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main/ble
+mkdir -p "$BLE_DIR"
+for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
+  wget -q -O "$BLE_DIR/$file" "$BLE_BASE_URL/$file"
+done
+
 sudo ln --force --symbolic /home/pi/PlaneSign/ble/planesign-ble.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
