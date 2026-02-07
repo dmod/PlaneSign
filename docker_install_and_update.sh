@@ -86,14 +86,7 @@ fi
 
 sudo docker pull ghcr.io/dmod/planesign:latest
 sudo docker rm --force PlaneSignRuntime # Stops and removes any existing container
-sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 -p 443:443 --mount type=bind,source="$INSTALL_DIR/sign.conf",target=/planesign/sign.conf ghcr.io/dmod/planesign:latest
+sudo docker create --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 -p 443:443 --mount type=bind,source="$INSTALL_DIR/sign.conf",target=/planesign/sign.conf ghcr.io/dmod/planesign:latest
 
-echo "Installation and configuration completed!"
-
-if [[ "$1" == "--no-reboot" ]]
-then
-  echo "Skipping reboot"
-else
-  echo "...Rebooting"
-  sudo reboot
-fi
+echo "Installation and configuration completed! Rebooting..."
+sudo reboot
