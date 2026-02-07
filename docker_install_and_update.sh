@@ -42,6 +42,7 @@ crontab -r
 # Install bluetooth support
 sudo apt-get update
 sudo apt install -y python3-dbus
+sudo rfkill unblock bluetooth
 
 # Download BLE files from GitHub (repo is no longer fully cloned)
 BLE_DIR=/home/pi/PlaneSign/ble
