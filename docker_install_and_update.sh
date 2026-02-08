@@ -8,7 +8,7 @@ fi
 # to skip any questions from APT
 export DEBIAN_FRONTEND=noninteractive
 
-INSTALL_DIR=/home/pi
+INSTALL_DIR=/home/pi/PlaneSign
 
 echo "PlaneSign install starting..."
 
@@ -39,10 +39,22 @@ fi
 sudo systemctl disable nginx
 crontab -r
 
+# Download required files from GitHub
+GITHUB_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main
+
+BLE_DIR="$INSTALL_DIR/ble"
+mkdir -p "$BLE_DIR"
+for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
+  wget -O "$BLE_DIR/$file" "$GITHUB_BASE_URL/ble/$file"
+done
+
+wget -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
+
 # Install bluetooth support
 sudo apt-get update
 sudo apt install -y python3-dbus
-sudo ln --force --symbolic /home/pi/PlaneSign/ble/planesign-ble.service /etc/systemd/system/
+sudo rfkill unblock bluetooth
+sudo ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
 
@@ -68,18 +80,13 @@ sudo usermod -aG docker $USER
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
 
-if [ ! -f /home/pi/PlaneSign/sign.conf ]; then
-  cp /home/pi/PlaneSign/sign.conf.sample /home/pi/PlaneSign/sign.conf
+if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
+  cp "$INSTALL_DIR/sign.conf.sample" "$INSTALL_DIR/sign.conf"
 fi
 
-sudo docker pull dmod/planesign:latest
+sudo docker pull ghcr.io/dmod/planesign:latest
 sudo docker rm --force PlaneSignRuntime # Stops and removes any existing container
-sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 -p 443:443 --mount type=bind,source=/home/pi/PlaneSign/sign.conf,target=/planesign/sign.conf dmod/planesign:latest
+sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 -p 443:443 --mount type=bind,source="$INSTALL_DIR/sign.conf",target=/planesign/sign.conf ghcr.io/dmod/planesign:latest
 
-echo "Installation and configuration completed!"
-
-if [[ "$1" == "--reboot" ]]
-then
-  echo "...Rebooting"
-  sudo reboot
-fi
+echo "Installation and configuration completed! Rebooting..."
+sudo reboot
