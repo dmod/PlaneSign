@@ -14,6 +14,7 @@ import glob
 import threading
 import traceback
 from finance import get_tickers
+from snow import populate_resort_lists, load_user_list, save_current_resort, delete_user_resort, SnowMode
 import weather
 import planes
 import santa
@@ -193,6 +194,45 @@ def set_custom_message(message):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+@app.route("/get_resort_opts")
+def get_resort_opts():
+    populate_resort_lists()
+    return jsonify(shared_config.data_dict["resort_info"])
+
+@app.route("/snow_mode/<mode>")
+def set_snow_mode(mode):
+    shared_config.shared_snow_mode.value = int(mode)
+    return ""
+
+@app.route("/display_resort/", defaults={"uuid": ""})
+@app.route("/display_resort/<uuid>")
+def display_resort(uuid):
+    if (uuid != ""):
+        shared_config.data_dict["displayed_resort"] = uuid
+        shared_config.shared_snow_mode.value = SnowMode.STATIC.value
+    return ""
+
+@app.route("/save_current_resort")
+def save_resort():
+    save_current_resort()
+    return ""
+
+@app.route("/delete_saved_resort/", defaults={"uuid": ""})
+@app.route("/delete_saved_resort/<uuid>")
+def delete_resort(uuid):
+    if (uuid != ""):
+        delete_user_resort(uuid)
+    return ""
+    
+@app.route("/get_saved_resorts")
+def get_resorts():
+    load_user_list()
+    if "user_resorts" in shared_config.data_dict:
+        data = shared_config.data_dict["user_resorts"]
+    else:
+        data = ""
+    return '\n'.join(data)
+
 @app.route("/get_ticker_opts")
 def get_ticker_opts():
     options = get_tickers()
@@ -230,7 +270,6 @@ def set_mandelbrot_colorscale(mode):
 def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
-
 
 @app.route("/is_audio_supported")
 def is_audio_supported():

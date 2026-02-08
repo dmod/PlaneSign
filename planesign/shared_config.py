@@ -20,6 +20,8 @@ shared_lighting_mode = Value('i', 1)
 shared_mandelbrot_color = Value('i', 0)
 shared_mandelbrot_colorscale = Value('d', 3)
 
+shared_snow_mode = Value('i', 1)
+
 local_timezone = None
 
 audio_device = None
