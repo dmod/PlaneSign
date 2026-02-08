@@ -84,6 +84,7 @@ network={
 - n2yo.com
 - finnhub.io
 - coinmarketcap.com
+- onthesnow.com
 - googleapis.com
 - ourairports.com
 - opendatasoft.com (map polygons)
