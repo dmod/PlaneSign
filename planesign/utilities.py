@@ -8,16 +8,22 @@ import __main__
 import shared_config
 import numpy as np
 import subprocess
+import favicon
+import requests
+import re
 
+from urllib.parse import urlparse
 from PIL import Image, ImageDraw, ImageFont
 from timezonefinder import TimezoneFinder
 from rgbmatrix import graphics
 from math import pi, cos, sin
 from datetime import datetime
+from functools import cmp_to_key
 
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
-KM_2_MI = 0.6214    
+KM_2_MI = 0.6214
+CM_2_IN = 0.3937008  
 
 from modes import DisplayMode
 
@@ -58,6 +64,31 @@ def read_config():
 
     shared_config.airport_codes_to_ignore = set(shared_config.CONF["IGNORE_AIRPORT_CODES"].split(","))
 
+def acquire_lock(filepath):
+    while True:
+        try:
+            fd = os.open(filepath + ".lock", os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            break  # Lock acquired
+        except FileExistsError:
+            time.sleep(0.01)  # Wait and retry
+
+def release_lock(filepath):
+    try:
+        os.remove(filepath + ".lock")
+    except FileNotFoundError:
+        pass  # Already removed
+
+def safe_write(filepath, newdata):
+    # Appends newdata to the end of a file safely
+    acquire_lock(filepath)
+    try:
+        with open(filepath, "r+") as f:
+            data = f.read()
+            f.seek(0)
+            f.write(data + f"{newdata}")
+    finally:
+        release_lock(filepath)
 
 def random_angle():
     return random.randrange(0, 360)
@@ -350,6 +381,85 @@ def fix_black(image):
 
     return image
 
+def colordista(c1, c2, bg):
+    
+    # Background must be RGB
+    bgr = bg[0]/255
+    bgg = bg[1]/255
+    bgb = bg[2]/255
+    
+    # C1 and C2 must be RGBA
+    r1 = c1[0]/255
+    r2 = c2[0]/255
+    g1 = c1[1]/255
+    g2 = c2[1]/255
+    b1 = c1[2]/255
+    b2 = c2[2]/255
+    a1 = c1[3]/255
+    a2 = c2[3]/255
+
+    r1 = (r1*a1 + bgr*(1-a1))
+    r2 = (r2*a2 + bgr*(1-a2))
+    
+    g1 = (g1*a1 + bgg*(1-a1))
+    g2 = (g2*a2 + bgg*(1-a2))
+    
+    b1 = (b1*a1 + bgb*(1-a1))
+    b2 = (b2*a2 + bgb*(1-a2))
+    
+    dr = r1 - r2
+    dg = g1 - g2
+    db = b1 - b2
+
+    return np.sqrt(dr**2 + dg**2 + db**2)*255
+
+def flood(image, x, y, floodcolor, threshold):
+
+    sizex, sizey = image.size
+
+    if x >= sizex or y >= sizey or x < 0 or y < 0:
+        return
+    
+    oldcolor = image.getpixel((x, y))
+
+    done = []
+    q = []
+    q.append((x, y))
+    while (len(q) > 0):
+        (x, y) = q.pop()
+
+        image.putpixel((x, y), floodcolor)
+        done.append((x,y))
+
+        if x+1 < sizex:
+            rightcolor = image.getpixel((x+1, y))
+        else:
+            rightcolor = None
+
+        if y+1 < sizey:
+            downcolor = image.getpixel((x, y+1))
+        else:
+            downcolor = None
+
+        if x-1 >= 0:
+            leftcolor = image.getpixel((x-1, y))
+        else:
+            leftcolor = None
+
+        if y-1 >= 0:
+            upcolor = image.getpixel((x, y-1))
+        else:
+            upcolor = None
+
+        if rightcolor != None and rightcolor != floodcolor and colordista(oldcolor, rightcolor, floodcolor) < threshold:
+            q.append((x+1, y))
+        if downcolor != None and downcolor != floodcolor and colordista(oldcolor, downcolor, floodcolor) < threshold:
+            q.append((x, y+1))
+        if leftcolor != None and leftcolor != floodcolor and colordista(oldcolor, leftcolor, floodcolor) < threshold:
+            q.append((x-1, y))
+        if upcolor != None and upcolor != floodcolor and colordista(oldcolor, upcolor, floodcolor) < threshold:
+            q.append((x, y-1))
+
 def autocrop(image, bg):
 
     sizex, sizey = image.size
@@ -363,11 +473,10 @@ def autocrop(image, bg):
                 break
         if flag:
             break
-
     top = row
 
     flag = False
-    for row in range(sizey-1, top+2, -1):
+    for row in range(sizey-1, top+1, -1):
         for col in range(sizex):
             if image.getpixel((col, row)) != bg:
                 flag = True
@@ -379,7 +488,7 @@ def autocrop(image, bg):
 
     flag = False
     for col in range(sizex):
-        for row in range(top+1, bot, 1):
+        for row in range(top, bot+1, 1):
             if image.getpixel((col, row)) != bg:
                 flag = True
             if flag:
@@ -390,8 +499,8 @@ def autocrop(image, bg):
     left = col
 
     flag = False
-    for col in range(sizex-1, left+2, -1):
-        for row in range(top+1, bot, 1):
+    for col in range(sizex-1, left+1, -1):
+        for row in range(top, bot+1, 1):
             if image.getpixel((col, row)) != bg:
                 flag = True
             if flag:
@@ -401,8 +510,280 @@ def autocrop(image, bg):
 
     right = col
 
-    return image.crop((left, top, right, bot))
+    return image.crop((left, top, right+1, bot+1))
 
+def getFavicon(website, headers=None):
+
+    if (headers == None):
+        headers = {
+            "Host": urlparse(website).netloc,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Sec-GPC": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-cache",
+            "Priority": "u=0, i"
+            }
+
+    try:
+        icons = favicon.get(website, headers=headers)
+    except:
+        icons = []
+    
+    def compare(item1, item2):
+        
+        f = "favico"
+        i = "icon"
+        name1 = item1.url.split("/")[-1].split(".")[0]
+        name2 = item2.url.split("/")[-1].split(".")[0]
+        # Prioritize files starting with "favico"
+        if (name1.startswith(f) or name1.startswith(i)) and not (name2.startswith(f) or name2.startswith(i)):
+            return -1
+        elif not (name1.startswith(f) or name1.startswith(i)) and (name2.startswith(f) or name2.startswith(i)):
+            return 1
+        else:
+            
+            # Deprioritize the "default" favicon (favicon library just guesses
+            # this url and sometimes it is a janky placeholder image)
+            domain = urlparse(website).netloc
+            default = domain + '/favicon.ico'
+            url1 = item1.url
+            url2 = item2.url
+            if url1.endswith(default) and not url2.endswith(default):
+                return 1
+            elif not url1.endswith(default) and url2.endswith(default):
+                return -1
+            else:
+                # Prioritize files containing "favico" or "icon"
+                if (f in name1 or i in name1) and not (f in name2 or i in name2):
+                    return -1
+                elif not (f in name1 or i in name1) and (f in name2 or i in name2):
+                    return 1
+                else:
+                    # Prioritize ".ico" files
+                    format1 = item1.url.split("/")[-1].split(".")
+                    format2 = item2.url.split("/")[-1].split(".")
+                    isIco1 = True if (item1.format == "ico" or (len(format1)>1 and format1[1].startswith("ico"))) else False
+                    isIco2 = True if (item2.format == "ico" or (len(format2)>1 and format2[1].startswith("ico"))) else False
+                    if isIco1 and not isIco2:
+                        return -1
+                    elif not isIco1 and isIco2:
+                        return 1
+                    else:
+                        # All else being equal, use size to sort
+                        size1 = item1.width * item1.height
+                        size2 = item2.width * item2.height
+                        large = 150*150 + 1
+                        
+                        # Suppress images that are too large (usually random non-icon pics)
+                        if (size1 >= large and size2 < large):
+                            # Prefer small over too large
+                            return 1
+                        elif (size1 < large and size2 >= large):
+                            # Prefer small over too large
+                            return -1
+                        
+                        # Prefer square images:
+                        if item1.width > 0 and item1.height > 0 and item2.width > 0 and item2.height > 0:
+                            if (item1.width > item1.height):
+                                ar1 = item1.height / item1.width
+                            else:
+                                ar1 = item1.width / item1.height
+                                
+                            if (item2.width > item2.height):
+                                ar2 = item2.height / item2.width
+                            else:
+                                ar2 = item2.width / item2.height
+                                
+                            if (ar1 > ar2):
+                                # Item 1 is more square
+                                return -1
+                            elif (ar2 > ar1):
+                                # Item 2 is more square
+                                return 1
+
+                        if (size1 >= large and size2 >= large):
+                            # Both are too large, prefer smaller
+                            return (size1 - size2)
+                        else:
+                            # Both are small, prefer larger
+                            return (size2 - size1)
+ 
+    icons_sorted = sorted(icons, key=cmp_to_key(compare))
+    image = None
+
+    for icon in icons_sorted:
+
+        host = re.sub(r"https?:\/\/", "", icon.url)
+        host = re.sub(r"\/.*$", "", host)
+
+        headers["Host"] = host
+        headers["Referer"] = icon.url
+
+        req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
+        if req.status_code == requests.codes.ok and len(req.content) > 0:
+            image = open(f"{shared_config.icons_dir}/favicon", "wb")
+            image.write(req.content)
+            image.close()
+
+            try:
+                image = Image.open(f"{shared_config.icons_dir}/favicon")
+                if image.width > 500 or image.height > 500 or image.width <= 10 or image.height <= 10:
+                    # Actual image size is too big or too small
+                    image = None
+                    continue
+                break
+            except:
+                image = None
+                continue
+
+    if image == None:
+        # Fallback to getting favicon from google
+        google_url = f"https://www.google.com/s2/favicons?domain={urlparse(website).netloc}"
+        req = requests.get(google_url, stream=True, timeout=5)
+        if req.status_code == requests.codes.ok:
+            image = open(f"{shared_config.icons_dir}/favicon", "wb")
+            image.write(req.content)
+            image.close()
+
+            try:
+                image = Image.open(f"{shared_config.icons_dir}/favicon")
+            except:
+                image = None
+
+    if image:
+        
+        white = (255, 255, 255, 255)
+        black = (0, 0, 0, 255)
+        
+        def getPixels(image, offset = 0):
+            width, height = image.size
+            tl = image.getpixel((0 + offset, 0 + offset))
+            tr = image.getpixel((width-1 - offset, 0 + offset))
+            bl = image.getpixel((0 + offset, height-1 - offset))
+            br = image.getpixel((width-1 - offset, height-1 - offset))
+            return tl, tr, bl, br
+
+        width, height = image.size
+        image = image.convert('RGBA')
+        
+        testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
+        testimage.paste(image, (0, 0), image)
+        testimage = testimage.convert('RGB')
+        
+        # Replace black parts of logo with dark grey if enough of the logo is black
+        if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
+
+            rgba = np.array(image)
+            mask = (rgba[:, :, 0] < 35) & (rgba[:, :, 1] < 35) & (rgba[:, :, 2] < 35) & (rgba[:, :, 3] > 200)
+            rgba[mask] = [35, 35, 35, 255]
+            image = Image.fromarray(rgba)
+            
+            
+        floodcorners = False
+
+        # Try and fix the background if it is transparent or white
+        tl, tr, bl, br = getPixels(image)
+        
+        threshold = 50
+        if max(tl[3], tr[3], bl[3], br[3]) <= threshold:
+            # Corners are transparent
+
+            # Try flooding with black to test
+            transim = Image.new("RGBA", (image.width+2, image.height+2), (0, 0, 0, 0))
+            transim.paste(image, (1,1))
+            blackflood = transim
+            if (tl[3] < threshold):
+                flood(blackflood, 1, 1, black, 100)
+                tl, tr, bl, br = getPixels(blackflood, 1)
+            
+            if (tr[3] < threshold):
+                flood(blackflood, width-2, 1, black, 100)
+                tl, tr, bl, br = getPixels(blackflood, 1)
+            
+            if (bl[3] < threshold):
+                flood(blackflood, 1, height-2, black, 100)
+                tl, tr, bl, br = getPixels(blackflood, 1)
+            
+            if (br[3] < threshold):
+                flood(blackflood, width-2, height-2, black, 100)
+                
+                blackflood = blackflood.crop((1, 1, width+1, height+1))
+                
+            if np.count_nonzero(np.array(blackflood)[:,:,3] <= threshold)/(width*height) > 0.025:
+                # After flooding the corners, we still have transparent regions which
+                # likely should have a white background. Paste white behind the original image.
+                whiteim = Image.new("RGBA", image.size, white)
+                whiteim.paste(image, (0, 0), image)
+                image = whiteim
+                
+                floodcorners = True
+                
+            else:
+                # No large transparent holes, just paste black behind original image
+                blackim = Image.new("RGBA", image.size, black)
+                blackim.paste(image, (0,0), image)
+                image = blackim
+                
+        elif max(colordista(tl, white, white), colordista(tr, white, white), colordista(bl, white, white), colordista(br, white, white)) < threshold:
+            # Corners are white
+            floodcorners = True
+            
+        
+        if floodcorners:
+
+            tl, tr, bl, br = getPixels(image)
+
+            if (colordista(tl, white, white) < threshold):
+                flood(image, 0, 0, black, 100)
+                tl, tr, bl, br = getPixels(image)
+
+            if (colordista(tr, white, white) < threshold):
+                flood(image, width-1, 0, black, 100)
+                tl, tr, bl, br = getPixels(image)
+
+            if (colordista(bl, white, white) < threshold):
+                flood(image, 0, height-1, black, 100)
+                tl, tr, bl, br = getPixels(image)
+
+            if (colordista(br, white, white) < threshold):
+                flood(image, width-1, height-1, black, 100)
+
+        # Paste black behind as final "normalization"
+        new_image = Image.new("RGBA", image.size, black)
+        new_image.paste(image, (0, 0), image)
+
+        image = new_image.convert("RGBA")
+
+        # Crop out black background regions
+        image = autocrop(image, black)
+
+        width, height = image.size
+
+        # Rescale final cropped image to 20px max, preserving logo aspect ratio
+        if width > height:
+            image = image.resize((20, int(20*height/width)), Image.BICUBIC)
+        elif height > width:
+            image = image.resize((int(20*width/height), 20), Image.BICUBIC)
+        else:
+            image = image.resize((20, 20), Image.BICUBIC)
+
+        # Tone-down brightness
+        bg = (0, 0, 0, 30)
+        new_image = Image.new("RGBA", image.size, bg)
+        image.paste(new_image, (0, 0), new_image)
+        
+        return image.convert("RGB")
+    else:
+        return None
 
 def fix_chars(name):
     name = name.replace("–","-")
@@ -779,6 +1160,9 @@ def convert_unix_to_local_time(unix_timestamp):
     utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
     local_time = utc_time.astimezone(shared_config.local_timezone)
     return local_time
+
+def convert_c_to_f(celcius):
+    return (celcius*1.8) + 32
 
 
 def interpolate(num1, num2):

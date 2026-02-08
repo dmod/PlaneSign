@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
+  <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="index.js"></script>
   <title>Plane Sign</title>
@@ -71,6 +72,26 @@
         <label for="Overhead">Overhead</label>
         <input type="radio" id="ISS" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="2">
         <label for="ISS">ISS</label>
+      </div>
+      <button id="SNOW" class="mode_button" onclick="set_mode(this.id); get_resorts(); setTimeout(get_saved_resorts, 1000); document.getElementById('snow_div').hidden = false">Slope Conditions 🏂</button>
+      <div id="snow_div" style="position: relative;" hidden>
+        <div id="tracked_resorts" hidden>
+          <b style="padding-top: 5px;display: block;">Tracked Resorts</b>
+          <hr>
+          <input type="radio" id="Detail" name="snowstyle" onclick="set_snow_mode(this.value)" value="1" checked="checked">
+          <label for="Detail">Rotate Detail</label>
+          <input type="radio" id="Overview" name="snowstyle" onclick="set_snow_mode(this.value)" value="2">
+          <label for="Overview">Overview</label>
+          <hr>
+          <div id="user_resort_list">
+          </div>
+        </div>
+        <div id="resort_search" hidden>
+          <input type="text" id="resort_searchbar" autocomplete="off" oninput="get_possible_autofill_resorts(this.value)"></input>
+          <button id="save_resort" onclick="save_current_resort()">
+            Save
+          </button>
+        </div>
       </div>
       <button id="MOON" class="mode_button" onclick="set_mode(this.id)">Moon 🌘</button>
       <button id="LIGHTNING" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning ⛈️</button>

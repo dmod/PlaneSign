@@ -32,6 +32,7 @@ import lightning
 import firework
 import weather
 import moon
+import snow
 import mandelbrot
 import planesign
 import signal

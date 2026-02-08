@@ -33,9 +33,14 @@ logs/
 sign.conf
 
 #misc
-prices.csv
+*.lock
 satdat.txt
 satsup.txt
+resortdata.json
+resortlist.txt
+icons/snow/logos/*
+!icons/snow/logos/DEFAULT.png
+icons/favicon
 de421.bsp
 moon_pa_de421_1900-2050.bpc
 moon_080317.tf

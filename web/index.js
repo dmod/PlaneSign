@@ -1,6 +1,7 @@
 var global_current_mode;
 var recordButton, recorder;
 var valid_tickers = null;
+var valid_resorts = null;
 
 window.onload = function () {
     update_sign_status();
@@ -197,6 +198,167 @@ function get_possible_autofill_flights(query_string) {
             });
             a.appendChild(b);
         });
+    });
+}
+
+function clear_user_resorts_list() {
+    user_resort_list = document.getElementById('user_resort_list');
+    while (user_resort_list.firstChild) {
+        user_resort_list.removeChild(user_resort_list.lastChild);
+    }
+}
+
+function get_saved_resorts() {
+    call_endpoint("/get_saved_resorts", function (value) {
+        saved_resorts = value.toString().split("\n");
+
+        tracked_resorts_div = document.getElementById('tracked_resorts');
+        user_resort_list = document.getElementById('user_resort_list');
+        clear_user_resorts_list();
+        if (saved_resorts != "" && saved_resorts.length > 0) {
+
+            if (valid_resorts === null) {
+                // Should really call this asyncronously and wait for
+                // the response to continue...
+                get_resorts()
+            }
+
+            saved_resorts.forEach(uuid => {
+
+                // Lookup data for this uuid
+                found_res = Object.values(valid_resorts['resorts']).filter((entry) => entry.uuid == uuid);
+
+                if (found_res.length == 0) {
+                    console.log("UUID: " + uuid + " not found in valid resorts data")
+                    return;
+                }
+                resort = found_res[0]
+
+                elem = document.createElement("div");
+
+                inner = document.createElement("div");
+
+                inner.innerHTML += resort['title'];
+                inner.innerHTML += "<br>";
+                inner.innerHTML += resort['region_en'] + " (" + resort['country_code'] + ")";
+                inner.setAttribute("class", "user-resort-name")
+
+                closebutton = document.createElement("div");
+                closebutton.setAttribute("class", "close");
+                closebutton.setAttribute("href", "")
+                closebutton.addEventListener("click", function (e) {
+                    call_endpoint('/delete_saved_resort/' + this.parentElement.getAttribute("uuid"), function () {
+                        setTimeout(get_saved_resorts, 500);
+                    })
+                });
+
+                elem.setAttribute("class", "user-resort-item");
+                elem.setAttribute("uuid", uuid)
+                elem.appendChild(inner);
+                elem.appendChild(closebutton);
+
+                user_resort_list.appendChild(elem);
+            });
+            tracked_resorts_div.hidden = false
+        }
+        else {
+            tracked_resorts_div.hidden = true
+        }
+    });
+}
+
+function save_current_resort() {
+    call_endpoint("/save_current_resort", function () {
+        setTimeout(get_saved_resorts, 500);
+    });
+}
+
+function close_resort_opts_list() {
+    var allitems = document.getElementsByClassName("autocomplete-resort-items");
+
+    for (let x of allitems) {
+        document.getElementById("resort_search").removeChild(x);
+    }
+}
+
+function get_resorts() {
+    // Need to call this endpoint even if we already have
+    // the valid_resorts already because the sign may have
+    // been reset and this call is the ONLY trigger for the
+    // sign to load its own copy of the data.
+    call_endpoint("/get_resort_opts", function (value) {
+        valid_resorts = JSON.parse(value)
+        document.getElementById('resort_search').hidden = false
+    });
+}
+
+function get_possible_autofill_resorts(query_string) {
+
+    if (valid_resorts === null) {
+        // Might be nice to call get_resorts() here
+        // but need to do some kind of async nonsense
+        // to make it work
+        return;
+    }
+
+    if (query_string == "") {
+        close_resort_opts_list();
+        return;
+    }
+
+    query_string = query_string.toLowerCase();
+    ls = query_string.length
+
+    found_resorts = Object.values(valid_resorts['resorts']).filter((entry) => entry.title.toLowerCase().includes(query_string) || entry.title_original.toLowerCase().includes(query_string));
+
+    function order_results(a, b) {
+        a_title = a.title.toLowerCase();
+        a_orig = a.title_original.toLowerCase();
+        b_title = b.title.toLowerCase();
+        b_orig = b.title_original.toLowerCase();
+
+        a_startswith = a_title.startsWith(query_string) || a_orig.startsWith(query_string);
+        b_startswith = b_title.startsWith(query_string) || b_orig.startsWith(query_string);
+        if (a_startswith && !b_startswith) {
+            return -1.0;
+        }
+        else if (!a_startswith && b_startswith) {
+            return 1.0;
+        }
+        else {
+            return 0.0;
+        }
+    }
+
+    found_resorts.sort(order_results);
+
+    // Only display best 25 results
+    found_resorts.length = 25;
+
+    close_resort_opts_list();
+
+    a = document.createElement("div");
+    a.setAttribute("class", "autocomplete-resort-items");
+    document.getElementById("resort_search").appendChild(a);
+
+    found_resorts.forEach(resort => {
+        b = document.createElement("div");
+        b.innerHTML += resort['title'];
+        b.innerHTML += "<br>";
+        b.innerHTML += resort['region_en'] + " (" + resort['country_code'] + ")";
+
+        b.addEventListener("click", function (e) {
+            close_resort_opts_list();
+            document.getElementById("resort_searchbar").value = ""
+            call_endpoint('/display_resort/' + resort['uuid'])
+
+            // "Display resort" sets to static display mode "0"
+            // so unselect both of the radio button modes now.
+            document.getElementById("Detail").checked = false;
+            document.getElementById("Overview").checked = false;
+        });
+
+        a.appendChild(b);
     });
 }
 
@@ -527,6 +689,9 @@ function set_mode(mode) {
     if (mode !== 'PONG') {
         document.getElementById('pong_div').hidden = true;
     }
+    if (mode !== 'SNOW') {
+        document.getElementById('snow_div').hidden = true;
+    }
     if (mode !== 'FINANCE') {
         document.getElementById('finance_div').hidden = true;
     }
@@ -560,6 +725,10 @@ function set_mode(mode) {
 
 function set_lightning_mode(mode) {
     call_endpoint("/lightning_mode/" + mode);
+}
+
+function set_snow_mode(mode) {
+    call_endpoint("/snow_mode/" + mode);
 }
 
 function set_mandelbrot_color(mode) {
