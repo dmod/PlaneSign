@@ -307,18 +307,85 @@ function get_possible_autofill_resorts(query_string) {
     }
 
     query_string = query_string.toLowerCase();
-    ls = query_string.length
+    lq = query_string.length
 
-    found_resorts = Object.values(valid_resorts['resorts']).filter((entry) => entry.title.toLowerCase().includes(query_string) || entry.title_original.toLowerCase().includes(query_string));
+    function score(word) {
+
+        if (word == undefined || word == "") {
+            return 0.0;
+        }
+
+        word = word.toLowerCase()
+
+        if (!word.includes(query_string)) {
+            return 0.0;
+        }
+
+        lm = word.length;
+
+        s = lq / lm;
+
+        if (lm > 2 * lq + 1) {
+            s *= 0.75
+        }
+
+        if (word.startsWith(query_string)) {
+            s *= 1.5;
+        }
+
+        return s;
+    }
+
+    resorts = Object.values(valid_resorts['resorts']);
+    alts = Object.values(valid_resorts["alt_names"]);
+    misses = Object.values(valid_resorts["misspellings"]);
+
+    function getScore(entry) {
+        alt_score = 0.0;
+        if (alts != undefined) {
+            found_alt = alts.find((alt) => { return alt.uuid == entry.uuid; })
+            if (found_alt != undefined) {
+                alt_score = Math.max(...found_alt?.data.map((d) => { return score(d); }));
+            }
+        }
+        miss_score = 0.0;
+        if (misses != undefined) {
+            found_miss = misses.find((miss) => { return miss.uuid == entry.uuid; })
+            if (found_miss != undefined) {
+                miss_score = Math.max(...found_miss?.data.map((d) => { return score(d); }));
+            }
+        }
+        return Math.max(score(entry.title), score(entry.title_short), score(entry.title_original), 0.75 * alt_score, 0.75 * miss_score);
+    }
+
+    found_resorts = resorts.filter((entry) =>
+        entry.title.toLowerCase().includes(query_string) ||
+        entry.title_short.toLowerCase().includes(query_string) ||
+        entry.title_original.toLowerCase().includes(query_string) ||
+        alts?.find((alt) => { return alt.uuid == entry.uuid })?.data.filter((d) => { return d.toLowerCase().includes(query_string) }).length > 0 ||
+        misses?.find((alt) => { return alt.uuid == entry.uuid })?.data.filter((d) => { return d.toLowerCase().includes(query_string) }).length > 0
+    );
+
+    final_entries = found_resorts.map((entry) => entry = {
+        uuid: entry.uuid,
+        title: entry.title,
+        title_short: entry.title_short,
+        title_original: entry.title_original,
+        region_en: entry.region_en,
+        country_code: entry.country_code,
+        score: getScore(entry)
+    });
 
     function order_results(a, b) {
         a_title = a.title.toLowerCase();
+        a_short = a.title_short.toLowerCase();
         a_orig = a.title_original.toLowerCase();
         b_title = b.title.toLowerCase();
+        b_short = b.title_short.toLowerCase();
         b_orig = b.title_original.toLowerCase();
 
-        a_startswith = a_title.startsWith(query_string) || a_orig.startsWith(query_string);
-        b_startswith = b_title.startsWith(query_string) || b_orig.startsWith(query_string);
+        a_startswith = a_title.startsWith(query_string) || a_short.startsWith(query_string) || a_orig.startsWith(query_string);
+        b_startswith = b_title.startsWith(query_string) || b_short.startsWith(query_string) || b_orig.startsWith(query_string);
         if (a_startswith && !b_startswith) {
             return -1.0;
         }
@@ -326,14 +393,15 @@ function get_possible_autofill_resorts(query_string) {
             return 1.0;
         }
         else {
-            return 0.0;
+            // Sort by higher score
+            return b.score - a.score
         }
     }
 
-    found_resorts.sort(order_results);
+    final_entries.sort(order_results);
 
     // Only display best 25 results
-    found_resorts.length = 25;
+    final_entries.length = 25;
 
     close_resort_opts_list();
 
@@ -341,7 +409,7 @@ function get_possible_autofill_resorts(query_string) {
     a.setAttribute("class", "autocomplete-resort-items");
     document.getElementById("resort_search").appendChild(a);
 
-    found_resorts.forEach(resort => {
+    final_entries.forEach(resort => {
         b = document.createElement("div");
         b.innerHTML += resort['title'];
         b.innerHTML += "<br>";
