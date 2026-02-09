@@ -350,14 +350,14 @@ class SnowReport:
                 y = 22-round(sizey/2)
                 self.sign.canvas.SetImage(resort['logo'], x, y)
             
-            graphics.DrawText(self.sign.canvas, self.sign.font57, 24, 21, graphics.Color(100, 10, 10), "New:")
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 24, 20, graphics.Color(100, 10, 10), "New:")
 
             snownew = resort['new']
             if snownew == None:
                 snownew = "?"
             else:
                 snownew = str(round(snownew))
-            graphics.DrawText(self.sign.canvas, self.sign.font57, 45, 21, snowcolor(snownew), snownew+'"')
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 45, 20, snowcolor(snownew), snownew+'"')
 
             weather = resort["weather"]
 
@@ -435,7 +435,7 @@ class SnowReport:
             else:
                 snow8d = "?"
 
-            liney = 18
+            liney = 17
             x4d = graphx-1 + round((num_bars/4)*(graphw+1) + 0.5 - (len(snow4d)+1)*5/2)
             x8d = graphx-1 + round((3*num_bars/4)*(graphw+1)+2 + 0.5 - (len(snow8d)+1)*5/2)
             middlex = round(graphx-1 + num_bars/2*(graphw+1) + 1)
