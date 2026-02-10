@@ -93,6 +93,7 @@ def get_weather_data_worker(data_dict):
 def draw_daily_forcast(sign,day,xloc):
     code = day['weather'][0]['id']
     status = day['weather'][0]['main']
+    local_time = utilities.convert_unix_to_local_time(day['dt'])
 
     icon,status = utilities.weather_icon_decode(code,status)
 
@@ -100,9 +101,9 @@ def draw_daily_forcast(sign,day,xloc):
     iw,ih=image.size
     sign.canvas.SetImage(image.convert('RGB'), xloc + 25 - round(iw/2), 9)
 
-    graphics.DrawText(sign.canvas, sign.font57, xloc, 14, graphics.Color(47, 158, 19), utilities.convert_unix_to_local_time(day['dt']).strftime('%a'))
+    graphics.DrawText(sign.canvas, sign.font57, xloc, 14, graphics.Color(47, 158, 19), local_time.strftime('%a'))
     graphics.DrawText(sign.canvas, sign.font57, xloc, 22, graphics.Color(210, 20, 20), str(round(day['temp']['max'])))
     graphics.DrawText(sign.canvas, sign.font57, xloc, 30, graphics.Color(20, 20, 210), str(round(day['temp']['min'])))
-    graphics.DrawText(sign.canvas, sign.font46, xloc + 26 - len(status)*2, 30, graphics.Color(52, 235, 183), status)
+    graphics.DrawText(sign.canvas, sign.font46, xloc + 26 - len(status)*2, 30, graphics.Color(52, 235, 183), status[:7])
 
     return
