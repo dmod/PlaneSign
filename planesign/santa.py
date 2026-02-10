@@ -437,13 +437,20 @@ def santa(sign):
                 if weatherpoll==None or time.perf_counter()-weatherpoll>900:
                     weatherpoll = time.perf_counter()
                     weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat=90&lon=0&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial").json()
-                    icon,_ = utilities.weather_icon_decode(weather_data['daily'][0]['weather'][0]['id'],weather_data['daily'][0]['weather'][0]['main'])
+                    isNight = True
+                    icon,_ = utilities.weather_icon_decode(weather_data['daily'][0]['weather'][0]['id'], weather_data['daily'][0]['weather'][0]['main'], isNight)
 
                 image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
                 iw,ih=image.size
-                image = image.resize((int(iw*13/ih), 13), Image.BICUBIC)
+                if iw > ih:
+                    image = image.resize((13, int(13*ih/iw)), Image.BICUBIC)
+                elif ih > iw:
+                    image = image.resize((int(13*iw/ih), 13), Image.BICUBIC)
+                else:
+                    image = image.resize((13, 13), Image.BICUBIC)
+
                 iw,ih=image.size
-                sign.canvas.SetImage(image.convert('RGB'), 6, 20-int(iw/2))
+                sign.canvas.SetImage(image.convert('RGB'), round(13-iw/2), round(21-ih/2))
 
                 weatherstring = f"N Pole: {weather_data['current']['weather'][0]['main']} {round(weather_data['current']['temp'])}°F"
                 graphics.DrawText(sign.canvas, sign.font46, max(7+iw,60-len(weatherstring)*2), 24, graphics.Color(160,160,20), weatherstring)

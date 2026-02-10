@@ -1260,134 +1260,203 @@ def show_time(sign):
 
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-def weather_icon_decode(code,status):
+def weather_icon_decode(code, status, isNight = False):
     if code==200:
+        # thunderstorm with light rain
         icon="thunderrain"
     elif code==201:
+        # thunderstorm with rain
         icon="thunderrain"
     elif code==202:
+        # thunderstorm with heavy rain
         icon="thunderrainheavy"
     elif code==210:
+        # light thunderstorm
         icon="thunder"
     elif code==211:
+        # thunderstorm
         icon="thunder"
     elif code==212:
+        # heavy thunderstorm
         icon="thunderheavy"
     elif code==221:
+        # ragged thunderstorm
         icon="thunder"
     elif code==230:
+        # thunderstorm with light drizzle
         icon="thunderrain"
     elif code==231:
+        # thunderstorm with drizzle
         icon="thunderrain"
     elif code==232:
+        # thunderstorm with heavy drizzle
         icon="thunderrainheavy"
     elif code <300:
+        # generic fallback for "thunderstorm"
         icon="thunder"
     elif code==300:
+        # light intensity drizzle
         icon="rainlight"
     elif code==301:
-        icon="rain"
+        # drizzle
+        icon="rainlight"
     elif code==302:
-        icon="rainheavy"
+        # heavy intensity drizzle
+        icon="rain"
     elif code==310:
+        # light intensity drizzle rain
         icon="rainlight"
     elif code==311:
-        icon="rain"
+        # drizzle rain
+        icon="rainlight"
     elif code==312:
+        # heavy intensity drizzle rain
         icon="rain"
     elif code==313:
+        # shower rain and drizzle
         icon="rain"
     elif code==314:
+        # heavy shower rain and drizzle
         icon="rainheavy"
     elif code==321:
-        icon="rain"
+        # shower drizzle
+        icon="rainlight"
     elif code <500:
-        icon="rain"
+        # generic fallback for "drizzle"
+        icon="rainlight"
     elif code==500:
+        # light rain
         icon="rainlight"
     elif code==501:
-        icon="rainlight"
-    elif code==502:
+        # moderate rain
         icon="rain"
+    elif code==502:
+        # heavy intensity rain
+        icon="rainheavy"
     elif code==503:
+        # very heavy rain
         icon="rainheavy"
     elif code==504:
+        # extreme rain
         icon="rainheavy"
     elif code==511:
+        # freezing rain
         icon="snow"
         status="FrzRain"
     elif code==520:
+        # light intensity shower rain
         icon="rainlight"
     elif code==521:
+        # shower rain
         icon="rain"
     elif code==522:
+        # heavy intensity shower rain
         icon="rainheavy"
     elif code==531:
+        # ragged shower rain
         icon="rainlight"
     elif code <600:
+        # generic fallback for "rain"
         icon="rain"
     elif code==600:
+        # light snow
         icon="snow"
     elif code==601:
+        # snow
         icon="snow"
     elif code==602:
+        # heavy snow
         icon="snow"
     elif code==611:
+        # sleet
         icon="snow"
         status="Sleet"
     elif code==612:
+        # light shower sleet
         icon="snow"
         status="Sleet"
     elif code==613:
+        # shower sleet
         icon="snow"
         status="Sleet"
     elif code==615:
+        # light rain and snow
         icon="snow"
         status="RainSno"
     elif code==616:
+        # rain and snow
         icon="snow"
         status="RainSno"
     elif code==620:
+        # light shower snow
         icon="snow"
+        status="RainSno"
     elif code==621:
+        # shower snow
         icon="snow"
+        status="RainSno"
     elif code==622:
+        # heavy shower snow
         icon="snow"
+        status="RainSno"
     elif code <700:
+        # generic fallback for "snow"
         icon="snow"
     elif code==701:
+        # mist
         icon="haze"
     elif code==711:
+        # smoke
         icon="haze"
     elif code==721:
+        # haze
         icon="haze"
     elif code==731:
+        # sand/dust whirls
         icon="haze"
     elif code==741:
+        # fog
         icon="haze"
     elif code==751:
+        # sand
         icon="haze"
     elif code==761:
+        # dust
         icon="haze"
     elif code==762:
+        # volcanic ash
         icon="haze"
+    elif code==771:
+        # squalls
+        icon="tornado"
     elif code==781:
+        # tornado
         icon="tornado"
     elif code <800:
+        # generic fallback for "haze"
         icon="haze"
     elif code==800:
+        # clear sky
         icon="clear"
     elif code==801:
+        # few clouds: 11-25%
         icon="cloudpart"
     elif code==802:
+        # scattered clouds: 25-50%
         icon="cloud"
     elif code==803:
+        # broken clouds: 51-84%
         icon="cloudheavy"
     elif code==804:
+        # overcast clouds: 85-100%
         icon="cloudheavy"
         status="Overcst"
     else:
+        # generic fallback for "clouds"
         icon="cloud"
+
+    if (isNight and icon in ["clear", "cloudpart", "rainlight"]):
+        icon += "_night"
 
     return icon,status
 

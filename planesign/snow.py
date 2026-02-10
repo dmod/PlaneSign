@@ -220,15 +220,21 @@ def draw_loading(sign):
 
     return False
 
-def mapIcon(i):
-    if (i == "PARTLY_CLOUDY") or (i == "SLIGHTLY_CLOUDY") or (i == "MOSTLY_SUNNY"):
-        return "cloudpart"
+def mapIcon(i, isNight):
+    if (i == "MOSTLY_SUNNY") or (i == "PARTLY_CLOUDY") or (i == "SLIGHTLY_CLOUDY") or (i == "FAIR"):
+        if (isNight):
+            return "cloudpart_night"
+        else:
+            return "cloudpart"
     elif (i == "CLOUDY"):
         return "cloud"
     elif (i == "OVERCAS"):
         return "cloudheavy"
     elif (i == "LIGHT_RAI"):
-        return "rainlight"
+        if (isNight):
+            return "rainlight_night"
+        else:
+            return "rainlight"
     elif (i == "RAIN"):
         return "rain"
     elif (i == "RAIN_SHOWERS"):
@@ -237,10 +243,11 @@ def mapIcon(i):
         return "snow"
     elif (i == "FOG"):
         return "haze"
-    elif (i == "SUN") or (i == "SUNNY") or (i == "FAIR"):
-        return "clear"
-    elif (i == "LUNE"):
-        return "lune"
+    elif (i == "SUN") or (i == "SUNNY") or (i == "LUNE"):
+        if (isNight):
+            return "clear_night"
+        else:
+            return "clear"
     elif (i == "THUNDERSTORM"):
         return "thunder"
     else:
@@ -735,10 +742,15 @@ class SnowReport:
                         current = hourly[0]
 
                         icon = None
+                        isNight = False
+                        if ("datetime" in current):
+                            curr_h = datetime.fromisoformat(current["datetime"]).hour
+                            if (curr_h <= 6 or curr_h >=18):
+                                isNight = True
                         if "mid" in current and "type" in current["mid"]:
-                            icon = mapIcon(current["mid"]["type"])
+                            icon = mapIcon(current["mid"]["type"], isNight)
                         elif "base" in current and "type" in current["base"]:
-                            icon = mapIcon(current["base"]["type"])
+                            icon = mapIcon(current["base"]["type"], isNight)
 
                         if icon:
                             image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png").convert("RGB")
@@ -799,7 +811,7 @@ class SnowReport:
                         fallback = True
 
                 except Exception as e:
-                    logging.json(f"Error getting resort weather data for {resort['name']} from url {weather_url}: {e}")
+                    logging.error(f"Error getting resort weather data for {resort['name']} from url {weather_url}: {e}")
                     fallback = True
 
                 if fallback:
@@ -822,10 +834,8 @@ class SnowReport:
 
                             if "weather" in weather_data["current"]:
                                 try:
-                                    icon,_ = weather_icon_decode(weather_data['daily'][0]['weather'][0]['id'],weather_data['daily'][0]['weather'][0]['main'])
-                                    
-                                    if (icon == "clear") and (weather_data["current"]["dt"] < weather_data["current"]["sunrise"] or weather_data["current"]["dt"] > weather_data["current"]["sunset"]):
-                                        icon = "lune"
+                                    isNight = (weather_data["current"]["dt"] < weather_data["current"]["sunrise"] or weather_data["current"]["dt"] > weather_data["current"]["sunset"])
+                                    icon,_ = weather_icon_decode(weather_data['daily'][0]['weather'][0]['id'],weather_data['daily'][0]['weather'][0]['main'], isNight)
 
                                     image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
 
