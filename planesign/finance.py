@@ -9,7 +9,7 @@ import numpy as np
 import favicon
 import re
 import json
-import utilities
+from utilities import convert_unix_to_local_time, getFavicon, improcess
 import requests
 from rgbmatrix import graphics
 from requests import Session
@@ -124,120 +124,7 @@ def finance(self):
                 s.kill_ws()
             return
 
-
-def colordista(c1, c2):
-    r1 = c1[0]/255
-    r2 = c2[0]/255
-    g1 = c1[1]/255
-    g2 = c2[1]/255
-    b1 = c1[2]/255
-    b2 = c2[2]/255
-    a1 = c1[3]/255
-    a2 = c2[3]/255
-
-    r1 *= a1
-    g1 *= a1
-    b1 *= a1
-
-    r2 *= a2
-    g2 *= a2
-    b2 *= a2
-
-    dr = r1-r2
-    dg = g1-g2
-    db = b1-b2
-
-    return np.sqrt(max(dr**2, (dr - a1+a2)**2) + max(dg**2, (dg - a1+a2)**2) + max(db**2, (db - a1+a2)**2))*255
-
-
-def flood(image, x, y, color, bg):
-
-    sizex, sizey = image.size
-
-    if color == None:
-        color = image.getpixel((x, y))
-
-    if x >= sizex or y >= sizey or x < 0 or y < 0:
-        return
-
-    threshold = 50
-    threshold2 = 80
-    q = []
-    q.append((x, y))
-    while (len(q) > 0):
-        (x1, y1) = q.pop()
-
-        imagecolor = image.getpixel((x1, y1))
-
-        image.putpixel((x1, y1), bg)
-
-        if x1 < sizex-1 and image.getpixel((x1+1, y1)) != bg and colordista(imagecolor, image.getpixel((x1+1, y1))) < threshold and colordista(color, image.getpixel((x1+1, y1))) < threshold2:
-            q.append((x1+1, y1))
-        if y1 < sizey-1 and image.getpixel((x1, y1+1)) != bg and colordista(imagecolor, image.getpixel((x1, y1+1))) < threshold and colordista(color, image.getpixel((x1, y1+1))) < threshold2:
-            q.append((x1, y1+1))
-        if x1 > 1 and image.getpixel((x1-1, y1)) != bg and colordista(imagecolor, image.getpixel((x1-1, y1))) < threshold and colordista(color, image.getpixel((x1-1, y1))) < threshold2:
-            q.append((x1-1, y1))
-        if y1 > 1 and image.getpixel((x1, y1-1)) != bg and colordista(imagecolor, image.getpixel((x1, y1-1))) < threshold and colordista(color, image.getpixel((x1, y1-1))) < threshold2:
-            q.append((x1, y1-1))
-
-def improcess(image):
-    width, height = image.size
-
-    testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
-    testimage.paste(image, (0, 0), image)
-    testimage = testimage.convert('RGB')
-
-    # replace black parts of logo with dark grey if enough of the logo is black
-    if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
-
-        rgba = np.array(image)
-        #mask = (rgba[:,:,0] < 35) & (rgba[:,:,1] < 35) & (rgba[:,:,2] < 35) & (rgba[:,:,3] > 200)
-        #rgba[mask,0:3] = [35,35,35]
-        mask = (rgba[:, :, 0] < 50) & (rgba[:, :, 1] < 50) & (rgba[:, :, 2] < 50) & (rgba[:, :, 3] > 0)
-        rgba[mask, 0:3] = np.true_divide(rgba[mask, 0:3], 2.0)+[35, 35, 35]
-        image = Image.fromarray(rgba)
-
-    bg = (0, 0, 0, 255)
-
-    new_image = Image.new("RGBA", image.size, bg)
-    new_image.paste(image, (0, 0), image)
-
-    image = new_image
-
-    tl = image.getpixel((0, 0))
-    tr = image.getpixel((-1, 0))
-    bl = image.getpixel((0, -1))
-    br = image.getpixel((-1, -1))
-
-    if max(colordista(tl, tr), colordista(tl, bl), colordista(tl, br), colordista(tr, bl), colordista(tr, br), colordista(bl, br)) < 30:
-
-        # flood background starting at the corners
-        flood(image, 0, 0, None, bg)
-        flood(image, width-1, height-1, None, bg)
-        flood(image, width-1, 0, None, bg)
-        flood(image, 0, height-1, None, bg)
-
-    # crop out background regions
-    image = utilities.autocrop(image, bg)
-
-    width, height = image.size
-
-    # rescale to 20px max, preserving logo aspect ratio
-    if width > height:
-        image = image.resize((20, int(20*height/width)), Image.BICUBIC)
-    elif height > width:
-        image = image.resize((int(20*width/height), 20), Image.BICUBIC)
-    else:
-        image = image.resize((20, 20), Image.BICUBIC)
-
-    # tone down brightness
-    bg = (0, 0, 0, 30)
-    new_image = Image.new("RGBA", image.size, bg)
-    image.paste(new_image, (0, 0), new_image)
-
-    return image.convert('RGB')
-
-def getLogo(name, headers, website):
+def getLogo(headers, website):
 
     image = None
 
@@ -251,186 +138,30 @@ def getLogo(name, headers, website):
 
     req = requests.get(website, stream=True, headers=headers, timeout=5)
     if req.status_code == requests.codes.ok:
-        image = open(f'{shared_config.icons_dir}/finance/logos/{name}.{filetype}', "wb")
-        image.write(req.content)
-        image.close()
-
-        image = Image.open(f'{shared_config.icons_dir}/finance/logos/{name}.{filetype}')
-
-        width, height = image.size
-
-        image = image.convert('RGBA')
-
-        testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
-        testimage.paste(image, (0, 0), image)
-        testimage = testimage.convert('RGB')
-
-        # replace black parts of logo with dark grey if enough of the logo is black
-        if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
-
-            rgba = np.array(image)
-            mask = (rgba[:, :, 0] < 35) & (rgba[:, :, 1] < 35) & (rgba[:, :, 2] < 35) & (rgba[:, :, 3] > 200)
-            rgba[mask] = [35, 35, 35, 255]
-            image = Image.fromarray(rgba)
-
-        bg = (0, 0, 0, 255)
-
-        new_image = Image.new("RGBA", image.size, bg)
-        new_image.paste(image, (0, 0), image)
-
-        image = new_image
-
-        # Preshrink logo so recursive flood doesn't cause stack overflow or hit recursion limit
-        width, height = image.size
-        sz = 50
-        if width > sz or height > sz:
-            if width > height:
-                image = image.resize((sz, int(sz*height/width)), Image.BICUBIC)
-            elif height > width:
-                image = image.resize((int(sz*width/height), sz), Image.BICUBIC)
-            else:
-                image = image.resize((sz, sz), Image.BICUBIC)
+        try:
+            image = Image.open(req.raw)
 
             width, height = image.size
 
-        # flood background starting at the corners only if it is white
-        white = (255, 255, 255, 255)
+            desired_size = 300
+            # Pre-shrink if image is too big so imageprocess is faster
+            if height > desired_size or width > desired_size:
+                if width > height:
+                    image = image.resize((desired_size, int(desired_size*height/width)), Image.BICUBIC)
+                elif height > width:
+                    image = image.resize((int(desired_size*width/height), desired_size), Image.BICUBIC)
+                else:
+                    image = image.resize((desired_size, desired_size), Image.BICUBIC)
 
-        tl = image.getpixel((0, 0))
-        tr = image.getpixel((-1, 0))
-        bl = image.getpixel((0, -1))
-        br = image.getpixel((-1, -1))
+            image = improcess(image.convert("RGBA"))
+            image = image.convert("RGB")
+            return image
+        except:
+            return None
+    else:
+        return None
 
-        if max(colordista(tl, tr), colordista(tl, bl), colordista(tl, br), colordista(tr, bl), colordista(tr, br), colordista(bl, br)) < 30:
-
-            flood(image, 0, 0, white, bg)
-            flood(image, width-1, height-1, white, bg)
-            flood(image, width-1, 0, white, bg)
-            flood(image, 0, height-1, white, bg)
-
-        # crop out background regions
-        image = utilities.autocrop(image, bg)
-
-        width, height = image.size
-
-        # rescale to 20px max, preserving logo aspect ratio
-        if width > height:
-            image = image.resize((20, int(20*height/width)), Image.BICUBIC)
-        elif height > width:
-            image = image.resize((int(20*width/height), 20), Image.BICUBIC)
-        else:
-            image = image.resize((20, 20), Image.BICUBIC)
-
-        # tone down brightness
-        bg = (0, 0, 0, 30)
-        new_image = Image.new("RGBA", image.size, bg)
-        image.paste(new_image, (0, 0), new_image)
-
-        image.convert('RGB').save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
-
-    return image
-
-
-def getFavicon(name, headers, website):
-
-    icons = favicon.get(website)
-
-    image = None
-
-    for icon in icons:
-
-        host = re.sub(r"https?:\/\/", "", icon.url)
-        host = re.sub(r"\/.*$", "", host)
-
-        headers["Host"] = host
-        headers["Referer"] = icon.url
-
-        req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
-        if req.status_code == requests.codes.ok:
-            image = open(f'{shared_config.icons_dir}/finance/logos/favicon.{icon.format}', "wb")
-            image.write(req.content)
-            image.close()
-
-            image = Image.open(f'{shared_config.icons_dir}/finance/logos/favicon.{icon.format}')
-
-            if image:
-                break
-
-    if image:
-        width, height = image.size
-
-        image = image.convert('RGBA')
-
-        testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
-        testimage.paste(image, (0, 0), image)
-        testimage = testimage.convert('RGB')
-
-        # Replace black parts of logo with dark grey if enough of the logo is black
-        if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
-
-            rgba = np.array(image)
-            mask = (rgba[:, :, 0] < 35) & (rgba[:, :, 1] < 35) & (rgba[:, :, 2] < 35) & (rgba[:, :, 3] > 200)
-            rgba[mask] = [35, 35, 35, 255]
-            image = Image.fromarray(rgba)
-
-        bg = (0, 0, 0, 255)
-
-        new_image = Image.new("RGBA", image.size, bg)
-        new_image.paste(image, (0, 0), image)
-
-        image = new_image
-
-        # Preshrink logo so recursive flood doesn't cause stack overflow or hit recursion limit
-        width, height = image.size
-        sz = 50
-        if width > sz or height > sz:
-            if width > height:
-                image = image.resize((sz, int(sz*height/width)), Image.BICUBIC)
-            elif height > width:
-                image = image.resize((int(sz*width/height), sz), Image.BICUBIC)
-            else:
-                image = image.resize((sz, sz), Image.BICUBIC)
-
-            width, height = image.size
-
-        # Flood background starting at the corners only if it is white
-        white = (255, 255, 255, 255)
-
-        tl = image.getpixel((0, 0))
-        tr = image.getpixel((-1, 0))
-        bl = image.getpixel((0, -1))
-        br = image.getpixel((-1, -1))
-
-        if max(colordista(tl, tr), colordista(tl, bl), colordista(tl, br), colordista(tr, bl), colordista(tr, br), colordista(bl, br)) < 30:
-
-            flood(image, 0, 0, white, bg)
-            flood(image, width-1, height-1, white, bg)
-            flood(image, width-1, 0, white, bg)
-            flood(image, 0, height-1, white, bg)
-
-        # crop out background regions
-        image = utilities.autocrop(image, bg)
-
-        width, height = image.size
-
-        # rescale to 20px max, preserving logo aspect ratio
-        if width > height:
-            image = image.resize((20, int(20*height/width)), Image.BICUBIC)
-        elif height > width:
-            image = image.resize((int(20*width/height), 20), Image.BICUBIC)
-        else:
-            image = image.resize((20, 20), Image.BICUBIC)
-
-        # tone down brightness
-        bg = (0, 0, 0, 30)
-        new_image = Image.new("RGBA", image.size, bg)
-        image.paste(new_image, (0, 0), new_image)
-
-        image.convert('RGB').save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
-
-    return image
-
-def get_crypto(name, symbol):
+def get_crypto(symbol):
 
     url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map'
     parameters = {
@@ -459,11 +190,13 @@ def get_crypto(name, symbol):
         else:
             req = requests.get(f"https://s2.coinmarketcap.com/static/img/coins/64x64/{coinid}.png", stream=True, timeout=5)
             if req.status_code == requests.codes.ok:
-                image = Image.open(req.raw)
-                image = improcess(image.convert("RGBA"))
-                image = image.convert("RGB")
-                image.save(f'{shared_config.icons_dir}/finance/logos/{name}.png')
-                return image
+                try:
+                    image = Image.open(req.raw)
+                    image = improcess(image.convert("RGBA"))
+                    image = image.convert("RGB")
+                    return image
+                except:
+                    return None
             else:
                 return None
     else:
@@ -583,7 +316,7 @@ Open Price={self.open_price}")
             }
 
             if self.type == "CRYPTO":
-                logo = get_crypto(self.logo_name, self.display_ticker)
+                logo = get_crypto(self.display_ticker)
                 if logo == None:
                     logging.debug(f"Could not get logo from CoinMarketCap for crypto {self.display_ticker}.")
                 else:
@@ -592,13 +325,13 @@ Open Price={self.open_price}")
                 # self.type == "STOCK"
                 profile = self.client.company_profile2(symbol=self.ticker)
                 if "logo" in profile and profile["logo"] != "":
-                    logo = getLogo(self.logo_name, headers, profile["logo"])
+                    logo = getLogo(headers, profile["logo"])
                     if logo == None:
                         logging.debug(f"Could not get logo from Finnhub for ticker {self.ticker}.")
                     else:
                         logging.debug(f"Got logo from Finnhub for ticker {self.ticker} ({profile['logo']}).")
                 if logo == None and "weburl" in profile and profile["weburl"] != "":
-                    logo = getFavicon(self.logo_name, headers, profile["weburl"])
+                    logo = getFavicon(profile["weburl"], headers)
                     if logo == None:
                         logging.debug(f"Could not get favicon from website for ticker {self.ticker}.")
                     else:
@@ -607,6 +340,8 @@ Open Price={self.open_price}")
             if logo == None:
                 logo = Image.open(f"{shared_config.icons_dir}/finance/UNKNOWN.png")
                 logging.debug(f"Could not get logo for ticker {self.ticker} from web.")
+            else:
+                logo.convert('RGB').save(f'{shared_config.icons_dir}/finance/logos/{self.logo_name}.png')
 
         self.logo = logo.convert("RGB")
 
@@ -695,9 +430,9 @@ Open Price={self.open_price}")
     def drawtime(self):
 
         if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-            print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%H:%M')
+            print_time = convert_unix_to_local_time(time.time()).strftime('%H:%M')
         else:
-            print_time = utilities.convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
+            print_time = convert_unix_to_local_time(time.time()).strftime('%-I:%M%p')
         graphics.DrawText(self.sign.canvas, self.sign.font57, 93, 8, graphics.Color(255, 158, 31), print_time)
 
     def drawticker(self):

@@ -512,6 +512,128 @@ def autocrop(image, bg):
 
     return image.crop((left, top, right+1, bot+1))
 
+def getPixels(image, offset = 0):
+    width, height = image.size
+    tl = image.getpixel((0 + offset, 0 + offset))
+    tr = image.getpixel((width-1 - offset, 0 + offset))
+    bl = image.getpixel((0 + offset, height-1 - offset))
+    br = image.getpixel((width-1 - offset, height-1 - offset))
+    return tl, tr, bl, br
+
+def improcess(image, desired_size=20):
+
+    white = (255, 255, 255, 255)
+    black = (0, 0, 0, 255)
+
+    width, height = image.size
+    image = image.convert('RGBA')
+    
+    testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
+    testimage.paste(image, (0, 0), image)
+    testimage = testimage.convert('RGB')
+    
+    # Replace black parts of logo with dark grey if enough of the logo is black
+    if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
+
+        rgba = np.array(image)
+        mask = (rgba[:, :, 0] < 35) & (rgba[:, :, 1] < 35) & (rgba[:, :, 2] < 35) & (rgba[:, :, 3] > 200)
+        rgba[mask] = [35, 35, 35, 255]
+        image = Image.fromarray(rgba)
+
+    floodcorners = False
+
+    # Try and fix the background if it is transparent or white
+    tl, tr, bl, br = getPixels(image)
+    
+    threshold = 50
+    if max(tl[3], tr[3], bl[3], br[3]) <= threshold:
+        # Corners are transparent
+
+        # Try flooding with black to test
+        transim = Image.new("RGBA", (image.width+2, image.height+2), (0, 0, 0, 0))
+        transim.paste(image, (1,1))
+        blackflood = transim
+        if (tl[3] < threshold):
+            flood(blackflood, 1, 1, black, 100)
+            tl, tr, bl, br = getPixels(blackflood, 1)
+        
+        if (tr[3] < threshold):
+            flood(blackflood, width-2, 1, black, 100)
+            tl, tr, bl, br = getPixels(blackflood, 1)
+        
+        if (bl[3] < threshold):
+            flood(blackflood, 1, height-2, black, 100)
+            tl, tr, bl, br = getPixels(blackflood, 1)
+        
+        if (br[3] < threshold):
+            flood(blackflood, width-2, height-2, black, 100)
+            
+            blackflood = blackflood.crop((1, 1, width+1, height+1))
+            
+        if np.count_nonzero(np.array(blackflood)[:,:,3] <= threshold)/(width*height) > 0.025:
+            # After flooding the corners, we still have transparent regions which
+            # likely should have a white background. Paste white behind the original image.
+            whiteim = Image.new("RGBA", image.size, white)
+            whiteim.paste(image, (0, 0), image)
+            image = whiteim
+            
+            floodcorners = True
+            
+        else:
+            # No large transparent holes, just paste black behind original image
+            blackim = Image.new("RGBA", image.size, black)
+            blackim.paste(image, (0,0), image)
+            image = blackim
+            
+    elif max(colordista(tl, white, white), colordista(tr, white, white), colordista(bl, white, white), colordista(br, white, white)) < threshold:
+        # Corners are white
+        floodcorners = True
+
+    if floodcorners:
+
+        tl, tr, bl, br = getPixels(image)
+
+        if (colordista(tl, white, white) < threshold):
+            flood(image, 0, 0, black, 100)
+            tl, tr, bl, br = getPixels(image)
+
+        if (colordista(tr, white, white) < threshold):
+            flood(image, width-1, 0, black, 100)
+            tl, tr, bl, br = getPixels(image)
+
+        if (colordista(bl, white, white) < threshold):
+            flood(image, 0, height-1, black, 100)
+            tl, tr, bl, br = getPixels(image)
+
+        if (colordista(br, white, white) < threshold):
+            flood(image, width-1, height-1, black, 100)
+
+    # Paste black behind as final "normalization"
+    new_image = Image.new("RGBA", image.size, black)
+    new_image.paste(image, (0, 0), image)
+
+    image = new_image.convert("RGBA")
+
+    # Crop out black background regions
+    image = autocrop(image, black)
+
+    width, height = image.size
+
+    # Rescale final cropped image to desired_size max, preserving logo aspect ratio
+    if width > height:
+        image = image.resize((desired_size, int(desired_size*height/width)), Image.BICUBIC)
+    elif height > width:
+        image = image.resize((int(desired_size*width/height), desired_size), Image.BICUBIC)
+    else:
+        image = image.resize((desired_size, desired_size), Image.BICUBIC)
+
+    # Tone-down brightness
+    bg = (0, 0, 0, 30)
+    new_image = Image.new("RGBA", image.size, bg)
+    image.paste(new_image, (0, 0), new_image)
+    
+    return image.convert("RGB")
+
 def getFavicon(website, headers=None):
 
     if (headers == None):
@@ -660,128 +782,7 @@ def getFavicon(website, headers=None):
                 image = None
 
     if image:
-        
-        white = (255, 255, 255, 255)
-        black = (0, 0, 0, 255)
-        
-        def getPixels(image, offset = 0):
-            width, height = image.size
-            tl = image.getpixel((0 + offset, 0 + offset))
-            tr = image.getpixel((width-1 - offset, 0 + offset))
-            bl = image.getpixel((0 + offset, height-1 - offset))
-            br = image.getpixel((width-1 - offset, height-1 - offset))
-            return tl, tr, bl, br
-
-        width, height = image.size
-        image = image.convert('RGBA')
-        
-        testimage = Image.new("RGBA", image.size, (255, 255, 255, 255))
-        testimage.paste(image, (0, 0), image)
-        testimage = testimage.convert('RGB')
-        
-        # Replace black parts of logo with dark grey if enough of the logo is black
-        if np.count_nonzero(np.all(np.array(testimage) == (0, 0, 0), axis=-1))/(width*height) > 0.05:
-
-            rgba = np.array(image)
-            mask = (rgba[:, :, 0] < 35) & (rgba[:, :, 1] < 35) & (rgba[:, :, 2] < 35) & (rgba[:, :, 3] > 200)
-            rgba[mask] = [35, 35, 35, 255]
-            image = Image.fromarray(rgba)
-            
-            
-        floodcorners = False
-
-        # Try and fix the background if it is transparent or white
-        tl, tr, bl, br = getPixels(image)
-        
-        threshold = 50
-        if max(tl[3], tr[3], bl[3], br[3]) <= threshold:
-            # Corners are transparent
-
-            # Try flooding with black to test
-            transim = Image.new("RGBA", (image.width+2, image.height+2), (0, 0, 0, 0))
-            transim.paste(image, (1,1))
-            blackflood = transim
-            if (tl[3] < threshold):
-                flood(blackflood, 1, 1, black, 100)
-                tl, tr, bl, br = getPixels(blackflood, 1)
-            
-            if (tr[3] < threshold):
-                flood(blackflood, width-2, 1, black, 100)
-                tl, tr, bl, br = getPixels(blackflood, 1)
-            
-            if (bl[3] < threshold):
-                flood(blackflood, 1, height-2, black, 100)
-                tl, tr, bl, br = getPixels(blackflood, 1)
-            
-            if (br[3] < threshold):
-                flood(blackflood, width-2, height-2, black, 100)
-                
-                blackflood = blackflood.crop((1, 1, width+1, height+1))
-                
-            if np.count_nonzero(np.array(blackflood)[:,:,3] <= threshold)/(width*height) > 0.025:
-                # After flooding the corners, we still have transparent regions which
-                # likely should have a white background. Paste white behind the original image.
-                whiteim = Image.new("RGBA", image.size, white)
-                whiteim.paste(image, (0, 0), image)
-                image = whiteim
-                
-                floodcorners = True
-                
-            else:
-                # No large transparent holes, just paste black behind original image
-                blackim = Image.new("RGBA", image.size, black)
-                blackim.paste(image, (0,0), image)
-                image = blackim
-                
-        elif max(colordista(tl, white, white), colordista(tr, white, white), colordista(bl, white, white), colordista(br, white, white)) < threshold:
-            # Corners are white
-            floodcorners = True
-            
-        
-        if floodcorners:
-
-            tl, tr, bl, br = getPixels(image)
-
-            if (colordista(tl, white, white) < threshold):
-                flood(image, 0, 0, black, 100)
-                tl, tr, bl, br = getPixels(image)
-
-            if (colordista(tr, white, white) < threshold):
-                flood(image, width-1, 0, black, 100)
-                tl, tr, bl, br = getPixels(image)
-
-            if (colordista(bl, white, white) < threshold):
-                flood(image, 0, height-1, black, 100)
-                tl, tr, bl, br = getPixels(image)
-
-            if (colordista(br, white, white) < threshold):
-                flood(image, width-1, height-1, black, 100)
-
-        # Paste black behind as final "normalization"
-        new_image = Image.new("RGBA", image.size, black)
-        new_image.paste(image, (0, 0), image)
-
-        image = new_image.convert("RGBA")
-
-        # Crop out black background regions
-        image = autocrop(image, black)
-
-        width, height = image.size
-
-        # Rescale final cropped image to 20px max, preserving logo aspect ratio
-        if width > height:
-            image = image.resize((20, int(20*height/width)), Image.BICUBIC)
-        elif height > width:
-            image = image.resize((int(20*width/height), 20), Image.BICUBIC)
-        else:
-            image = image.resize((20, 20), Image.BICUBIC)
-
-        # Tone-down brightness
-        bg = (0, 0, 0, 30)
-        new_image = Image.new("RGBA", image.size, bg)
-        image.paste(new_image, (0, 0), new_image)
-        
-        return image.convert("RGB")
+        image = improcess(image)
     else:
         return None
 
