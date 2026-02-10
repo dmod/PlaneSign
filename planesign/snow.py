@@ -41,7 +41,6 @@ def load_user_list():
         try:
             with open(userresorts_filename, "r") as file:
                 resort_list = [line.rstrip() for line in file]
-                logging.debug(f"Loaded user resort list: {resort_list}")
         except Exception as e:
             logging.error(f"Error reading {userresorts_filename}: {e}")
         finally:
