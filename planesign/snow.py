@@ -837,7 +837,7 @@ class SnowReport:
                                     isNight = (weather_data["current"]["dt"] < weather_data["current"]["sunrise"] or weather_data["current"]["dt"] > weather_data["current"]["sunset"])
                                     icon,_ = weather_icon_decode(weather_data['daily'][0]['weather'][0]['id'],weather_data['daily'][0]['weather'][0]['main'], isNight)
 
-                                    image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
+                                    image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png").convert("RGB")
 
                                     weather["currWeatherIcon"] = image
                                 except:
