@@ -32,6 +32,14 @@
             "program": "${workspaceFolder}/test/test.py",
             "console": "integratedTerminal",
             "sudo": true
+        },
+        {
+            "name": "Run Test Script - devcontainer",
+            "type": "debugpy",
+            "justMyCode": false,
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test.py",
+            "console": "integratedTerminal"
         }
     ]
 }
