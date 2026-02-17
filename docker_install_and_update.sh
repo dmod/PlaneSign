@@ -13,13 +13,13 @@ INSTALL_DIR=/home/pi/PlaneSign
 echo "PlaneSign install starting..."
 
 # Performance upgrade for isolcpus
-grep "isolcpus" /boot/cmdline.txt
+grep "isolcpus" /boot/firmware/cmdline.txt
 if [ $? -ne 0 ]
 then
-  echo "Adding isolcpus config to /boot/cmdline.txt"
-  sudo bash -c "echo ' isolcpus=3' >> /boot/cmdline.txt"
+  echo "Adding isolcpus config to /boot/firmware/cmdline.txt"
+  sudo bash -c "echo ' isolcpus=3' >> /boot/firmware/cmdline.txt"
 else
-  echo "isolcpus config found in /boot/cmdline.txt"
+  echo "isolcpus config found in /boot/firmware/cmdline.txt"
 fi
 
 # Turn off onboard audio
@@ -27,7 +27,7 @@ if lsmod | grep -wq "snd_bcm2835"; then
   echo "snd_bcm2835 is loaded!"
   sudo rmmod snd_bcm2835
 fi
-sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/config.txt
+sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/firmware/config.txt
 if [ ! -f /etc/modprobe.d/alsa-blacklist.conf ] || ! grep -q "blacklist snd_bcm2835" /etc/modprobe.d/alsa-blacklist.conf; then
   echo "Blacklisting snd_bcm2835 module..."
   echo "blacklist snd_bcm2835" | sudo tee -a /etc/modprobe.d/alsa-blacklist.conf
