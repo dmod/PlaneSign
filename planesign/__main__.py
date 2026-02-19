@@ -34,6 +34,7 @@ import weather
 import moon
 import snow
 import mandelbrot
+import wedding
 import planesign
 import signal
 import sys

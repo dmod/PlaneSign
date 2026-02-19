@@ -250,6 +250,10 @@ def set_zoom(zi):
     shared_config.shared_lighting_zoomind.value = int(zi)
     return ""
 
+@app.route("/trigger_shooting_star")
+def trigger_shooting_star():
+    shared_config.data_dict["trigger_shooting_star"] = True
+    return ""
 
 @app.route("/lightning_mode/<mode>")
 def set_lightning_mode(mode):

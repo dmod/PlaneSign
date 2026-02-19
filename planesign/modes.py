@@ -26,3 +26,4 @@ class DisplayMode(Enum):
     CGOL = auto()                  # Conway's Game of Life
     MOON = auto()                  # Moon phase display
     CUSTOM_MESSAGE = auto()        # Custom message display
+    WEDDING = auto()               # Wedding display

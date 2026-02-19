@@ -778,6 +778,9 @@ function set_mode(mode) {
     if (mode !== 'TRACK_A_FLIGHT') {
         document.getElementById('track-a-flight_div').hidden = true;
     }
+    if (mode !== 'WEDDING') {
+        document.getElementById('wedding_div').hidden = true;
+    }
     if (mode == 'CGOL') {
         var ele = document.getElementsByName('cgolstyle');
         for (i = 0; i < ele.length; i++) {

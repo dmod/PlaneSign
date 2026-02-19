@@ -180,6 +180,10 @@
       <button id="FIREWORKS" class="mode_button" onclick="set_mode(this.id)">Fireworks</button>
       <button id="SANTA" class="mode_button" onclick="set_mode(this.id)">Christmas</button>
       <button id="SNOWFALL" class="mode_button" onclick="set_mode(this.id)">Let It Snow!</button>
+      <button id="WEDDING" class="mode_button" onclick="set_mode(this.id); document.getElementById('wedding_div').hidden = false">Wedding 💒</button>
+      <div id="wedding_div" hidden>
+        <button onclick="call_endpoint('/trigger_shooting_star')" style="font-size: 28px; background: none; border: none; cursor: pointer; padding: 4px 8px;" title="Send a shooting star!">🌠</button>
+      </div>
     </fieldset>
 
     <div id="mic_button" class="box4" hidden>
