@@ -5,10 +5,29 @@ import time
 import math
 import random
 import logging
+import os
 from PIL import Image, ImageDraw
 import shared_config
 import __main__
 from modes import DisplayMode
+
+
+WEDDING_NAMES_FILE = "weddingnames.txt"
+
+
+def load_wedding_names():
+    """Load couple names from the wedding names file, one per line."""
+    names = []
+    if os.path.isfile(WEDDING_NAMES_FILE):
+        try:
+            with open(WEDDING_NAMES_FILE, "r") as f:
+                names = [line.strip() for line in f if line.strip()]
+            logging.info(f"Loaded {len(names)} wedding names from {WEDDING_NAMES_FILE}")
+        except Exception as e:
+            logging.error(f"Error reading {WEDDING_NAMES_FILE}: {e}")
+    else:
+        logging.warning(f"Wedding names file not found: {WEDDING_NAMES_FILE}")
+    return names
 
 
 # ── Pixel-art flower definitions (small enough for 32px height) ──────────
@@ -212,17 +231,33 @@ def wedding(sign):
     line1 = "Welcome to"
     line2 = "our Wedding"
 
-    # Use the 5x7 font for line measurements
-    font = sign.fontbig  # 6x13 – fits two lines in 32px height
+    # Use fontbig (6x13) for main text, font46 (4x6) for names
+    font = sign.fontbig
     char_w = 6
+    name_font = sign.font46
+    name_char_w = 4
 
-    # Center positions (offset slightly right to account for flower strip on left)
+    # Load wedding names
+    wedding_names = load_wedding_names()
+
+    # All text is centered within the right-side text area (right of flower strip)
     text_area_start = 24
     text_area_width = 128 - text_area_start
+    if wedding_names:
+        line1_y = 10   # baseline y for top line (shifted up)
+        line2_y = 22   # baseline y for bottom line (shifted up)
+    else:
+        line1_y = 13
+        line2_y = 27
     line1_x = text_area_start + (text_area_width - len(line1) * char_w) // 2
     line2_x = text_area_start + (text_area_width - len(line2) * char_w) // 2
-    line1_y = 13   # baseline y for 6x13 font, top line
-    line2_y = 27   # baseline y for 6x13 font, bottom line
+
+    # Name display timing
+    name_index = 0
+    name_hold_time = 4.0     # seconds to show each name at full brightness
+    name_fade_time = 1.0     # seconds for fade in / fade out
+    name_cycle_time = name_fade_time + name_hold_time + name_fade_time  # total per name
+    name_base_color = (180, 210, 255)  # soft light blue for names
 
     from rgbmatrix import graphics
 
@@ -283,6 +318,35 @@ def wedding(sign):
             graphics.DrawText(sign.canvas, font, x_pos, line2_y, color, ch)
             x_pos += char_w
             global_idx += 1
+
+        # Draw fading wedding names at the bottom
+        if wedding_names:
+            cycle_t = t % (name_cycle_time * len(wedding_names))
+            name_index = int(cycle_t // name_cycle_time)
+            phase_t = cycle_t - name_index * name_cycle_time
+
+            # Compute fade: fade_in → hold → fade_out
+            if phase_t < name_fade_time:
+                # Fading in
+                fade = phase_t / name_fade_time
+            elif phase_t < name_fade_time + name_hold_time:
+                # Holding at full brightness
+                fade = 1.0
+            else:
+                # Fading out
+                fade = 1.0 - (phase_t - name_fade_time - name_hold_time) / name_fade_time
+
+            fade = max(0.0, min(1.0, fade))
+
+            if fade > 0.01:
+                name = wedding_names[name_index % len(wedding_names)]
+                nr = int(name_base_color[0] * fade)
+                ng = int(name_base_color[1] * fade)
+                nb = int(name_base_color[2] * fade)
+                name_color = graphics.Color(nr, ng, nb)
+                name_x = text_area_start + (text_area_width - len(name) * name_char_w) // 2
+                name_y = 31  # bottom of screen
+                graphics.DrawText(sign.canvas, name_font, name_x, name_y, name_color, name)
 
         # Draw shooting stars ON TOP of everything so they're clearly visible
         for star in shooting_stars:
