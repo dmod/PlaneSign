@@ -3,16 +3,13 @@
 
 import logging.handlers
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from urllib.parse import urlparse
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from PIL import Image, ImageDraw, ImageFont, GifImagePlugin
+from rgbmatrix import graphics
+from PIL import Image
 from bs4 import BeautifulSoup
 import random
 import shared_config
 from math import ceil
-import re
 import time
 from datetime import datetime, timedelta
 from functools import cmp_to_key
@@ -46,7 +43,7 @@ def load_user_list():
         finally:
             release_lock(userresorts_filename)
     else:
-        logging.debug(f"No user resort list to read.")
+        logging.debug("No user resort list to read.")
 
     shared_config.data_dict["user_resorts"] = resort_list
     return
@@ -57,7 +54,7 @@ def save_current_resort():
 
     # Save the currently displayed resort
     uuid = shared_config.data_dict["displayed_resort"]
-    if uuid == "" or uuid == None:
+    if uuid == "" or uuid is None:
         return
 
     acquire_lock(userresorts_filename)
@@ -126,7 +123,7 @@ def populate_resort_lists():
     # Need to get data from web. Start from scratch
     resort_info = {}
 
-    logging.debug(f"Getting available ski resort list jsons from internet.")
+    logging.debug("Getting available ski resort list jsons from internet.")
 
     headers = {
         "Host": "www.onthesnow.com",
@@ -169,7 +166,7 @@ def populate_resort_lists():
         resort_info["misspellings"] = None
         logging.error(f"Error getting misspellings list from url: {misspellings_url}")
 
-    if resort_info["resorts"] != None and len(resort_info["resorts"]) > 0:
+    if resort_info["resorts"] is not None and len(resort_info["resorts"]) > 0:
         # Data is good enough
 
         resort_info["last_update"] = datetime.now().timestamp()
@@ -264,10 +261,10 @@ def compute_display_name (resdata, desired_length):
 
         info = next((res for res in shared_config.data_dict["resort_info"]["resorts"] if res['uuid'] == resdata['uuid']), None)
     
-    if info != None and "title_short" in info and info["title_short"]:
+    if info is not None and "title_short" in info and info["title_short"]:
         nameopts.add(info["title_short"])
 
-    if info != None and "title_original" in info and info["title_original"]:
+    if info is not None and "title_original" in info and info["title_original"]:
         nameopts.add(info["title_original"])
 
     # Check various subsitution combos
@@ -278,7 +275,7 @@ def compute_display_name (resdata, desired_length):
     def fixWhitespace(string):
         return string.replace("  "," ").strip()
 
-    while (lastnopts == None or nopts != lastnopts):
+    while (lastnopts is None or nopts != lastnopts):
         
         for name in optlist:
             nameopts.add(fixWhitespace(name.replace("Mountain", "Mtn.")))
@@ -342,7 +339,7 @@ class SnowReport:
 
         resort = self.update(res_id)
 
-        if resort != None:
+        if resort is not None:
             if resort['isOpen']:
                 color = graphics.Color(10, 150, 10)
             else:
@@ -350,7 +347,7 @@ class SnowReport:
 
             graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46-round(len(resort['displayName'][:15])*3), 10, color, resort['displayName'][:15])
 
-            if "logo" in resort and resort["logo"] != None:
+            if "logo" in resort and resort["logo"] is not None:
                 sizex, sizey = resort['logo'].size
                 x = 12-round(sizex/2)
                 y = 22-round(sizey/2)
@@ -359,7 +356,7 @@ class SnowReport:
             graphics.DrawText(self.sign.canvas, self.sign.font57, 24, 20, graphics.Color(100, 10, 10), "New:")
 
             snownew = resort['new']
-            if snownew == None:
+            if snownew is None:
                 snownew = "?"
             else:
                 snownew = str(round(snownew))
@@ -368,7 +365,7 @@ class SnowReport:
             weather = resort["weather"]
 
             currtemp = "?°F"
-            if "currTemp" in weather and weather["currTemp"] != None:
+            if "currTemp" in weather and weather["currTemp"] is not None:
                 currtemp = f"{round(weather['currTemp'])}°F"
 
             graphics.DrawText(self.sign.canvas, self.sign.font57, 40-round(len(currtemp)*5/2), 30, graphics.Color(60, 60, 200), currtemp)
@@ -408,14 +405,14 @@ class SnowReport:
                 else:
                     snowfall = None
 
-                if snowfall != None:
+                if snowfall is not None:
                     if i < round(num_bars/2):
-                        if snow4d == None:
+                        if snow4d is None:
                             snow4d = snowfall
                         else:
                             snow4d += snowfall
                     else:
-                        if snow8d == None:
+                        if snow8d is None:
                             snow8d = snowfall
                         else:
                             snow8d += snowfall
@@ -431,12 +428,12 @@ class SnowReport:
                         startx = offset+graphx+i*(graphw+1)
                         graphics.DrawLine(self.sign.canvas, startx, graphy-j, startx+graphw-1, graphy-j, snowcolor(snowfall))
 
-            if snow4d != None:
+            if snow4d is not None:
                 snow4d = str(round(snow4d))
             else:
                 snow4d = "?"
 
-            if snow8d != None:
+            if snow8d is not None:
                 snow8d = str(round(snow8d))
             else:
                 snow8d = "?"
@@ -479,9 +476,9 @@ class SnowReport:
 
             minTemp = "?"
             maxTemp = "?"
-            if "dayLow" in weather and weather["dayLow"] != None:
+            if "dayLow" in weather and weather["dayLow"] is not None:
                 minTemp = round(weather["dayLow"])
-            if "dayHigh" in weather and weather["dayHigh"] != None:
+            if "dayHigh" in weather and weather["dayHigh"] is not None:
                 maxTemp = round(weather["dayHigh"])
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, sunx+7, suny+5, graphics.Color(95, 95, 105), f"{minTemp}-{maxTemp}°F")
@@ -508,9 +505,9 @@ class SnowReport:
 
             minTemp = "?"
             maxTemp = "?"
-            if "nightLow" in weather and weather["nightLow"] != None:
+            if "nightLow" in weather and weather["nightLow"] is not None:
                 minTemp = round(weather["nightLow"])
-            if "nightHigh" in weather and weather["nightHigh"] != None:
+            if "nightHigh" in weather and weather["nightHigh"] is not None:
                 maxTemp = round(weather["nightHigh"])
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, moonx+7, moony+5, graphics.Color(95, 95, 105), f"{minTemp}-{maxTemp}°F")
@@ -534,7 +531,7 @@ class SnowReport:
             else:
                 # Do not want to be in this mode if we have no saved user resorts
                 shared_config.shared_snow_mode.value = SnowMode.STATIC.value
-                drawresort(currently_displayed)
+                self.drawresort(currently_displayed)
                 return
 
         numdisplay = min(4, n)
@@ -549,7 +546,7 @@ class SnowReport:
 
             resort = self.update(res_id)
 
-            if resort != None:
+            if resort is not None:
 
                 if resort["isOpen"]:
                     color = graphics.Color(40, 167, 69)
@@ -561,7 +558,7 @@ class SnowReport:
                 graphics.DrawLine(self.sign.canvas, 94, 0, 94, 31, graphics.Color(13, 13, 25))
 
                 snownew = resort['new']
-                if snownew == None:
+                if snownew is None:
                     snownew = "?"
                 else:
                     snownew = str(round(snownew))
@@ -576,23 +573,23 @@ class SnowReport:
                     else:
                         snowfall = None
 
-                    if snowfall != None:
+                    if snowfall is not None:
                         if i < 4:
-                            if snow4d == None:
+                            if snow4d is None:
                                 snow4d = snowfall
                             else:
                                 snow4d += snowfall
                         else:
-                            if snow8d == None:
+                            if snow8d is None:
                                 snow8d = snowfall
                             else:
                                 snow8d += snowfall
-                if snow4d != None:
+                if snow4d is not None:
                     snow4d = str(round(snow4d))
                 else:
                     snow4d = "?"
 
-                if snow8d != None:
+                if snow8d is not None:
                     snow8d = str(round(snow8d))
                 else:
                     snow8d = "?"
@@ -613,7 +610,7 @@ class SnowReport:
         # Do we already have data stored?
         resort = next((res for res in self.resorts if res['uuid'] == res_id), None)
 
-        if resort == None:
+        if resort is None:
             # Need to add resort to list
             resort = {}
 
@@ -628,7 +625,7 @@ class SnowReport:
 
                 info = next((res for res in shared_config.data_dict["resort_info"]["resorts"] if res['uuid'] == res_id), None)
             
-            if info == None:
+            if info is None:
                 # Updating the resort list failed or the specified uuid is not listed. Give up!
                 logging.error(f"Error getting resort with uuid={res_id} from resort list.")
                 return None
@@ -694,19 +691,19 @@ class SnowReport:
                 resort["runsTotal"] = resortdata["runs"]["total"]
 
                 snowbase = None
-                if "base" in resortdata["snow"] and resortdata["snow"]["base"] != None:
+                if "base" in resortdata["snow"] and resortdata["snow"]["base"] is not None:
                     snowbase = resortdata["snow"]["base"] * CM_2_IN
 
                 snowmid = None
-                if "middle" in resortdata["snow"] and resortdata["snow"]["middle"] != None:
+                if "middle" in resortdata["snow"] and resortdata["snow"]["middle"] is not None:
                     snowmid = resortdata["snow"]["middle"] * CM_2_IN
 
                 snowpeak = None
-                if "summit" in resortdata["snow"] and resortdata["snow"]["summit"] != None:
+                if "summit" in resortdata["snow"] and resortdata["snow"]["summit"] is not None:
                     snowpeak = resortdata["snow"]["summit"] * CM_2_IN
 
                 snownew = None
-                if "last24" in resortdata["snow"] and resortdata["snow"]["last24"] != None:
+                if "last24" in resortdata["snow"] and resortdata["snow"]["last24"] is not None:
                     snownew = resortdata["snow"]["last24"] * CM_2_IN
 
                 resort["snowBase"]  = snowbase
@@ -767,7 +764,7 @@ class SnowReport:
                             weather["currTemp"] = mean
 
                         for hour in hourly:
-                            if "datetime" in hour and hour["datetime"] != None:
+                            if "datetime" in hour and hour["datetime"] is not None:
                                 h = datetime.fromisoformat(hour["datetime"]).hour
                                 temp = None
 
@@ -782,29 +779,29 @@ class SnowReport:
                                     templow = temp["min"]
                                     temphigh = temp["max"]
 
-                                if templow != None and temphigh != None:
+                                if templow is not None and temphigh is not None:
                                     if (h <= 6 or h >=18):
                                         # Night 6pm - 7am
-                                        if (weather["nightLow"] == None or templow < weather["nightLow"]):
+                                        if (weather["nightLow"] is None or templow < weather["nightLow"]):
                                             weather["nightLow"] = templow
 
-                                        if (weather["nightHigh"] == None or temphigh > weather["nightHigh"]):
+                                        if (weather["nightHigh"] is None or temphigh > weather["nightHigh"]):
                                             weather["nightHigh"] = temphigh
                                     else:
                                         # Day
-                                        if (weather["dayLow"] == None or templow < weather["dayLow"]):
+                                        if (weather["dayLow"] is None or templow < weather["dayLow"]):
                                             weather["dayLow"] = templow
 
-                                        if (weather["dayHigh"] == None or temphigh > weather["dayHigh"]):
+                                        if (weather["dayHigh"] is None or temphigh > weather["dayHigh"]):
                                             weather["dayHigh"] = temphigh
 
-                        if weather["dayHigh"] != None:
+                        if weather["dayHigh"] is not None:
                             weather["dayHigh"] = convert_c_to_f(weather["dayHigh"])
-                        if weather["nightHigh"] != None:
+                        if weather["nightHigh"] is not None:
                             weather["nightHigh"] = convert_c_to_f(weather["nightHigh"])
-                        if weather["dayLow"] != None:
+                        if weather["dayLow"] is not None:
                             weather["dayLow"] = convert_c_to_f(weather["dayLow"])
-                        if weather["nightLow"] != None:
+                        if weather["nightLow"] is not None:
                             weather["nightLow"] = convert_c_to_f(weather["nightLow"])
                         
                     else:
@@ -821,10 +818,10 @@ class SnowReport:
                     if "OPENWEATHER_API_KEY" in shared_config.CONF:
                         try:
                             weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={resortdata['latitude']}&lon={resortdata['longitude']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial").json()
-                        except:
+                        except Exception:
                             logging.debug(f"Could not get weather data for resort {resort['name']} at: {resortdata['latitude']}°, {resortdata['longitude']}°.")
                     else:
-                        logging.debug(f"No OPENWEATHER_API_KEY!")
+                        logging.debug("No OPENWEATHER_API_KEY!")
 
                     if weather_data:
 
@@ -840,7 +837,7 @@ class SnowReport:
                                     image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png").convert("RGB")
 
                                     weather["currWeatherIcon"] = image
-                                except:
+                                except Exception:
                                     pass
 
                         if "daily" in weather_data:
@@ -848,7 +845,7 @@ class SnowReport:
                             daily = weather_data["daily"]
 
                             for day in daily:
-                                if "temp" in day and day["temp"] != None:
+                                if "temp" in day and day["temp"] is not None:
                                     
                                     daytemp = None
                                     morntemp = None
@@ -868,44 +865,44 @@ class SnowReport:
                                         evetemp = day["temp"]["eve"]
 
                                     if nighttemp:
-                                        if (weather["nightLow"] == None or nighttemp < weather["nightLow"]):
+                                        if (weather["nightLow"] is None or nighttemp < weather["nightLow"]):
                                             weather["nightLow"] = nighttemp
-                                        if (weather["nightHigh"] == None or nighttemp > weather["nightHigh"]):
+                                        if (weather["nightHigh"] is None or nighttemp > weather["nightHigh"]):
                                             weather["nightHigh"] = nighttemp
 
                                     if evetemp:
-                                        if (weather["nightLow"] == None or evetemp < weather["nightLow"]):
+                                        if (weather["nightLow"] is None or evetemp < weather["nightLow"]):
                                             weather["nightLow"] = evetemp
-                                        if (weather["nightHigh"] == None or evetemp > weather["nightHigh"]):
+                                        if (weather["nightHigh"] is None or evetemp > weather["nightHigh"]):
                                             weather["nightHigh"] = evetemp
 
                                     if daytemp:
-                                        if (weather["dayLow"] == None or daytemp < weather["dayLow"]):
+                                        if (weather["dayLow"] is None or daytemp < weather["dayLow"]):
                                             weather["dayLow"] = daytemp
-                                        if (weather["dayHigh"] == None or daytemp > weather["dayHigh"]):
+                                        if (weather["dayHigh"] is None or daytemp > weather["dayHigh"]):
                                             weather["dayHigh"] = daytemp
 
                                     if morntemp:
-                                        if (weather["dayLow"] == None or morntemp < weather["dayLow"]):
+                                        if (weather["dayLow"] is None or morntemp < weather["dayLow"]):
                                             weather["dayLow"] = morntemp
-                                        if (weather["dayHigh"] == None or morntemp > weather["dayHigh"]):
+                                        if (weather["dayHigh"] is None or morntemp > weather["dayHigh"]):
                                             weather["dayHigh"] = morntemp
                     else:
                         logging.error("Fallback to openweathermap failed.")
 
                 resort["weather"] = weather
                 
-                if ("logo" not in resort or resort["logo"] == None):
+                if ("logo" not in resort or resort["logo"] is None):
 
                     logo = None
 
                     # First try to get saved logo
                     try:
                         logo = Image.open(f"{shared_config.icons_dir}/snow/logos/{resort['slug']}.png")
-                    except:
+                    except Exception:
                         logo = None
 
-                    if (logo == None):
+                    if (logo is None):
 
                         # List of websites to try getting favicon from (in preference order)
                         website_list = [resortdata["website"], resortdata["liftsUrl"], resortdata["rentalUrl"], resortdata["lessonsUrl"], resortdata["mobileWebsite"]]
@@ -916,7 +913,7 @@ class SnowReport:
                         checked = []
                         
                         for website in website_list:
-                            if (website == None):
+                            if (website is None):
                                 continue
                             if website in checked:
                                 continue
@@ -924,7 +921,7 @@ class SnowReport:
                             logging.debug(f"Attempting to get favicon for {resort['name']} from: {website}.")
 
                             logo = getFavicon(website)
-                            if logo != None:
+                            if logo is not None:
                                 logging.debug(f"Successfully got logo for resort {resort['name']} from: {website}.")
                                 break
 
@@ -939,13 +936,13 @@ class SnowReport:
                                     logging.debug(f"Attempting to get favicon for {resort['name']} from: {website}.")
 
                                     logo = getFavicon(website)
-                                    if logo != None:
+                                    if logo is not None:
                                         logging.debug(f"Successfully got logo for resort {resort['name']} from: {website}.")
                                         break
 
                             checked.append(website)
 
-                    if (logo == None):
+                    if (logo is None):
                         # Give up and use the default image
                         logo = Image.open(f'{shared_config.icons_dir}/snow/logos/DEFAULT.png').convert("RGB")
                         logging.debug(f"Could not get logo for resort {resort['name']}.")
@@ -991,7 +988,7 @@ def snow_forecast(sign):
         else:
             current_resort = None
 
-        if (current_resort == None):
+        if (current_resort is None):
             # Nothing to display - draw the background gif
             gif.seek(frame)
             frame = (frame+1)%nf

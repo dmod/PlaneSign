@@ -1,6 +1,7 @@
 import math
 import random
 import logging
+import traceback
 import time
 import pytz
 import os
@@ -636,28 +637,20 @@ def improcess(image, desired_size=20):
 
 def getFavicon(website, headers=None):
 
-    if (headers == None):
+    if (headers is None):
         headers = {
-            "Host": urlparse(website).netloc,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Sec-GPC": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/png,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
             "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Pragma": "no-cache",
-            "Cache-Control": "no-cache",
-            "Priority": "u=0, i"
             }
-
     try:
-        icons = favicon.get(website, headers=headers)
-    except:
+        logging.debug(f"getFavicon: fetching icons for {website}")
+        icons = favicon.get(website, headers=headers, timeout=10)
+        logging.debug(f"getFavicon: found {len(icons)} icons for {website}")
+    except Exception as e:
+        logging.warning(f"getFavicon: failed for {website}: {e}")
+        logging.debug(traceback.format_exc())
         icons = []
     
     def compare(item1, item2):
@@ -744,46 +737,66 @@ def getFavicon(website, headers=None):
 
     for icon in icons_sorted:
 
-        host = re.sub(r"https?:\/\/", "", icon.url)
-        host = re.sub(r"\/.*$", "", host)
+        try:
+            logging.debug(f"getFavicon: downloading icon {icon.url} ({icon.width}x{icon.height}, {icon.format})")
+            req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
+        except Exception as e:
+            logging.warning(f"getFavicon: failed to download icon {icon.url}: {e}")
+            logging.debug(traceback.format_exc())
+            continue
+        if req.status_code != requests.codes.ok:
+            logging.debug(f"getFavicon: icon {icon.url} returned status {req.status_code}")
+            continue
+        if len(req.content) == 0:
+            logging.debug(f"getFavicon: icon {icon.url} returned empty content")
+            continue
 
-        headers["Host"] = host
-        headers["Referer"] = icon.url
+        image = open(f"{shared_config.icons_dir}/favicon", "wb")
+        image.write(req.content)
+        image.close()
 
-        req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
-        if req.status_code == requests.codes.ok and len(req.content) > 0:
-            image = open(f"{shared_config.icons_dir}/favicon", "wb")
-            image.write(req.content)
-            image.close()
-
-            try:
-                image = Image.open(f"{shared_config.icons_dir}/favicon")
-                if image.width > 500 or image.height > 500 or image.width <= 10 or image.height <= 10:
-                    # Actual image size is too big or too small
-                    image = None
-                    continue
-                break
-            except:
+        try:
+            image = Image.open(f"{shared_config.icons_dir}/favicon")
+            if image.width > 500 or image.height > 500 or image.width <= 10 or image.height <= 10:
+                # Actual image size is too big or too small
+                logging.debug(f"getFavicon: icon {icon.url} size {image.width}x{image.height} out of range, skipping")
                 image = None
                 continue
+            logging.debug(f"getFavicon: successfully loaded icon {icon.url} ({image.width}x{image.height})")
+            break
+        except Exception as e:
+            logging.debug(f"getFavicon: failed to open downloaded icon {icon.url}: {e}")
+            image = None
+            continue
 
-    if image == None:
+    if image is None:
         # Fallback to getting favicon from google
         google_url = f"https://www.google.com/s2/favicons?domain={urlparse(website).netloc}"
-        req = requests.get(google_url, stream=True, timeout=5)
-        if req.status_code == requests.codes.ok:
-            image = open(f"{shared_config.icons_dir}/favicon", "wb")
-            image.write(req.content)
-            image.close()
+        logging.debug(f"getFavicon: trying Google fallback for {website}: {google_url}")
+        try:
+            req = requests.get(google_url, stream=True, timeout=5)
+            if req.status_code == requests.codes.ok:
+                image = open(f"{shared_config.icons_dir}/favicon", "wb")
+                image.write(req.content)
+                image.close()
 
-            try:
-                image = Image.open(f"{shared_config.icons_dir}/favicon")
-            except:
-                image = None
+                try:
+                    image = Image.open(f"{shared_config.icons_dir}/favicon")
+                    logging.debug(f"getFavicon: Google fallback succeeded for {website} ({image.width}x{image.height})")
+                except Exception as e:
+                    logging.debug(f"getFavicon: Google fallback image failed to open: {e}")
+                    image = None
+            else:
+                logging.debug(f"getFavicon: Google fallback returned status {req.status_code}")
+        except Exception as e:
+            logging.warning(f"getFavicon: Google fallback failed for {website}: {e}")
+            logging.debug(traceback.format_exc())
 
     if image:
         image = improcess(image)
+        return image
     else:
+        logging.debug(f"getFavicon: no usable favicon found for {website}")
         return None
 
 def fix_chars(name):
