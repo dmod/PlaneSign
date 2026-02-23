@@ -54,9 +54,15 @@ wget -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
 sudo apt-get update
 sudo apt install -y python3-dbus
 sudo rfkill unblock bluetooth
+
 sudo ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
+
+# Verify bluetooth adapter status
+echo "Bluetooth status:"
+rfkill list bluetooth | grep -E "Soft|Hard"
+bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
 
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl gnupg
