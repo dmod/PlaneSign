@@ -1,4 +1,5 @@
 import dbus, dbus.mainloop.glib
+import json
 import shutil
 import socket
 import subprocess
@@ -16,6 +17,8 @@ GATT_MANAGER_IFACE =           'org.bluez.GattManager1'
 GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
 PLANESIGN_MASTER_UUID =        '3d951a35-76c5-4207-a150-2d0cf7d2bfdd'
 DOCKER_CONTAINER_NAME =        'PlaneSignRuntime'
+DOCKER_IMAGE =                 'ghcr.io/dmod/planesign:latest'
+DOCKER_IMAGE_REPO =            'dmod/planesign'
 mainloop = None
 
 class BasicInfoService(Service):
@@ -37,6 +40,83 @@ class ContainerControlService(Service):
         Service.__init__(self, bus, index, 'a8e86355-accb-4ba4-a7c5-63206cab4b7b', True)
         self.add_characteristic(DockerContainerControlCharacteristic(bus, 0, self))
         self.add_characteristic(PlaneSignVersionCharacteristic(bus, 1, self))
+        self.add_characteristic(DockerUpdateCheckCharacteristic(bus, 2, self))
+
+class DockerUpdateCheckCharacteristic(Characteristic):
+    UPDATE_CHECK_CHRC_UUID = 'a9cc9f79-aa76-4955-aeb5-85aa9299028e'
+    GHCR_TOKEN_URL = f'https://ghcr.io/token?scope=repository:{DOCKER_IMAGE_REPO}:pull&service=ghcr.io'
+    GHCR_MANIFEST_URL = f'https://ghcr.io/v2/{DOCKER_IMAGE_REPO}/manifests/latest'
+    TIMEOUT_SECONDS = 10
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        result = self._check_for_update()
+        print('DockerUpdateCheckCharacteristic Read: ' + result)
+        return [dbus.Byte(x.encode()) for x in result]
+
+    def _check_for_update(self):
+        try:
+            local_digest = self._get_local_digest()
+            if local_digest is None:
+                return 'check failed: could not get local digest'
+
+            remote_digest = self._get_remote_digest()
+            if remote_digest is None:
+                return 'check failed: could not get remote digest'
+
+            local_short = local_digest.replace('sha256:', '')[:12]
+            remote_short = remote_digest.replace('sha256:', '')[:12]
+
+            if local_digest == remote_digest:
+                return f'up-to-date|local={local_short}|remote={remote_short}'
+            else:
+                return f'update-available|local={local_short}|remote={remote_short}'
+        except Exception as e:
+            return f'check failed: {e}'
+
+    def _get_local_digest(self):
+        """Get the repo digest of the locally cached image."""
+        try:
+            completed = subprocess.run(
+                ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', DOCKER_IMAGE],
+                capture_output=True, text=True, timeout=8, check=False,
+            )
+            if completed.returncode != 0:
+                return None
+            # Output like: ghcr.io/dmod/planesign@sha256:abc123...
+            repo_digest = completed.stdout.strip()
+            if '@' in repo_digest:
+                return repo_digest.split('@', 1)[1]
+            return repo_digest
+        except Exception:
+            return None
+
+    def _get_remote_digest(self):
+        """Fetch the remote manifest digest from GHCR without pulling the image."""
+        try:
+            # Step 1: Get anonymous bearer token
+            token_req = urllib.request.Request(self.GHCR_TOKEN_URL, method='GET')
+            with urllib.request.urlopen(token_req, timeout=self.TIMEOUT_SECONDS) as resp:
+                token_data = json.loads(resp.read().decode('utf-8'))
+            token = token_data.get('token', '')
+            if not token:
+                return None
+
+            # Step 2: HEAD request to manifest endpoint
+            manifest_req = urllib.request.Request(self.GHCR_MANIFEST_URL, method='HEAD')
+            manifest_req.add_header('Authorization', f'Bearer {token}')
+            manifest_req.add_header('Accept', (
+                'application/vnd.docker.distribution.manifest.v2+json, '
+                'application/vnd.docker.distribution.manifest.list.v2+json, '
+                'application/vnd.oci.image.index.v1+json'
+            ))
+            with urllib.request.urlopen(manifest_req, timeout=self.TIMEOUT_SECONDS) as resp:
+                digest = resp.headers.get('Docker-Content-Digest', '')
+            return digest if digest else None
+        except Exception:
+            return None
 
 class PlaneSignVersionCharacteristic(Characteristic):
     VERSION_CHRC_UUID = '8d1151e7-04b8-49e2-955a-daa50e1285e5'
