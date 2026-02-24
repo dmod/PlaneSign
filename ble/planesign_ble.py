@@ -1,5 +1,7 @@
 import dbus, dbus.mainloop.glib
+import fcntl
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -41,7 +43,9 @@ class ContainerControlService(Service):
         self.add_characteristic(DockerContainerControlCharacteristic(bus, 0, self))
         self.add_characteristic(PlaneSignVersionCharacteristic(bus, 1, self))
         self.add_characteristic(DockerUpdateCheckCharacteristic(bus, 2, self))
-        self.add_characteristic(SystemUpdateCharacteristic(bus, 3, self))
+        log_char = SystemUpdateLogCharacteristic(bus, 4, self)
+        self.add_characteristic(SystemUpdateCharacteristic(bus, 3, self, log_char))
+        self.add_characteristic(log_char)
 
 class DockerUpdateCheckCharacteristic(Characteristic):
     UPDATE_CHECK_CHRC_UUID = 'a9cc9f79-aa76-4955-aeb5-85aa9299028e'
@@ -119,14 +123,76 @@ class DockerUpdateCheckCharacteristic(Characteristic):
         except Exception:
             return None
 
+class SystemUpdateLogCharacteristic(Characteristic):
+    """Streams stdout/stderr from the update script via BLE notifications."""
+    LOG_CHRC_UUID = 'f63b67f9-b823-4f8f-a528-94e286cda73e'
+    MAX_LOG_SIZE = 65536  # 64 KB ring buffer
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.LOG_CHRC_UUID, ['read', 'notify'], service)
+        self._log_buffer = ''
+        self._notifying = False
+
+    def ReadValue(self, options):
+        chunk = self._log_buffer[-512:] if self._log_buffer else 'no log'
+        return [dbus.Byte(x.encode()) for x in chunk]
+
+    def StartNotify(self):
+        if self._notifying:
+            return
+        self._notifying = True
+        print('SystemUpdateLogCharacteristic: notifications enabled')
+
+    def StopNotify(self):
+        self._notifying = False
+        print('SystemUpdateLogCharacteristic: notifications disabled')
+
+    def append_log(self, text):
+        """Append text to the log buffer and push a BLE notification."""
+        self._log_buffer += text
+        if len(self._log_buffer) > self.MAX_LOG_SIZE:
+            self._log_buffer = self._log_buffer[-self.MAX_LOG_SIZE:]
+        if self._notifying:
+            self._send_notification(text)
+
+    def clear_log(self):
+        self._log_buffer = ''
+
+    def _send_notification(self, text):
+        max_chunk = 480  # conservative BLE MTU-safe size
+        encoded = text.encode('utf-8', errors='replace')
+        for i in range(0, len(encoded), max_chunk):
+            chunk = encoded[i:i + max_chunk]
+            value = dbus.Array([dbus.Byte(b) for b in chunk], signature='y')
+            self.PropertiesChanged(GATT_CHRC_IFACE, {'Value': value}, [])
+
+
 class SystemUpdateCharacteristic(Characteristic):
     UPDATE_CHRC_UUID = '32d1b76b-9532-44da-9a43-3b682b8be90c'
     UPDATE_CMD = 'curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash'
 
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, self.UPDATE_CHRC_UUID, ['read', 'write'], service)
+    def __init__(self, bus, index, service, log_characteristic=None):
+        Characteristic.__init__(self, bus, index, self.UPDATE_CHRC_UUID, ['read', 'write', 'notify'], service)
         self._status = 'idle'
         self._process = None
+        self._log_char = log_characteristic
+        self._notifying = False
+
+    def StartNotify(self):
+        if self._notifying:
+            return
+        self._notifying = True
+
+    def StopNotify(self):
+        self._notifying = False
+
+    def _set_status(self, status):
+        """Update status and push a BLE notification if subscribed."""
+        self._status = status
+        print('SystemUpdateCharacteristic status: ' + status)
+        if self._notifying:
+            value = dbus.Array([dbus.Byte(b) for b in status.encode('utf-8')], signature='y')
+            self.PropertiesChanged(GATT_CHRC_IFACE, {'Value': value}, [])
 
     def ReadValue(self, options):
         # If a process is running, check if it finished
@@ -147,21 +213,72 @@ class SystemUpdateCharacteristic(Characteristic):
         command = bytes(value).decode(errors='replace').strip().lower()
         print('SystemUpdateCharacteristic Write: ' + command)
         if command != 'update':
-            self._status = f"unknown command: {command}"
+            self._set_status(f"unknown command: {command}")
             return
         if self._process is not None and self._process.poll() is None:
-            self._status = 'updating'  # already in progress
+            self._set_status('updating')  # already in progress
             return
         try:
+            if self._log_char:
+                self._log_char.clear_log()
             self._process = subprocess.Popen(
                 self.UPDATE_CMD,
                 shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
-            self._status = 'updating'
+            # Make stdout non-blocking for GLib polling
+            fd = self._process.stdout.fileno()
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            self._set_status('updating')
+            # Poll subprocess output every 200ms via GLib main loop
+            GLib.timeout_add(200, self._poll_process_output)
         except Exception as e:
-            self._status = f'failed: {e}'
+            self._set_status(f'failed: {e}')
+
+    def _poll_process_output(self):
+        """GLib timeout callback: read available subprocess output and stream via BLE."""
+        if self._process is None:
+            return False  # stop polling
+
+        # Read all available data from the non-blocking pipe
+        try:
+            while True:
+                data = os.read(self._process.stdout.fileno(), 4096)
+                if not data:
+                    break
+                text = data.decode('utf-8', errors='replace')
+                if self._log_char:
+                    self._log_char.append_log(text)
+        except OSError:
+            pass  # EAGAIN — no data available yet
+
+        # Check if the process has finished
+        retcode = self._process.poll()
+        if retcode is not None:
+            # Drain any remaining output
+            try:
+                remaining = self._process.stdout.read()
+                if remaining:
+                    text = remaining.decode('utf-8', errors='replace')
+                    if self._log_char:
+                        self._log_char.append_log(text)
+            except Exception:
+                pass
+
+            if retcode == 0:
+                if self._log_char:
+                    self._log_char.append_log('\n--- Update complete ---\n')
+                self._set_status('complete')
+            else:
+                if self._log_char:
+                    self._log_char.append_log(f'\n--- Update failed (exit code {retcode}) ---\n')
+                self._set_status(f'failed: exit code {retcode}')
+            self._process = None
+            return False  # stop polling
+
+        return True  # continue polling
 
 
 class PlaneSignVersionCharacteristic(Characteristic):
