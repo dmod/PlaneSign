@@ -41,6 +41,7 @@ class ContainerControlService(Service):
         self.add_characteristic(DockerContainerControlCharacteristic(bus, 0, self))
         self.add_characteristic(PlaneSignVersionCharacteristic(bus, 1, self))
         self.add_characteristic(DockerUpdateCheckCharacteristic(bus, 2, self))
+        self.add_characteristic(SystemUpdateCharacteristic(bus, 3, self))
 
 class DockerUpdateCheckCharacteristic(Characteristic):
     UPDATE_CHECK_CHRC_UUID = 'a9cc9f79-aa76-4955-aeb5-85aa9299028e'
@@ -117,6 +118,51 @@ class DockerUpdateCheckCharacteristic(Characteristic):
             return digest if digest else None
         except Exception:
             return None
+
+class SystemUpdateCharacteristic(Characteristic):
+    UPDATE_CHRC_UUID = '32d1b76b-9532-44da-9a43-3b682b8be90c'
+    UPDATE_CMD = 'curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.UPDATE_CHRC_UUID, ['read', 'write'], service)
+        self._status = 'idle'
+        self._process = None
+
+    def ReadValue(self, options):
+        # If a process is running, check if it finished
+        if self._process is not None:
+            retcode = self._process.poll()
+            if retcode is None:
+                self._status = 'updating'
+            elif retcode == 0:
+                self._status = 'complete'
+                self._process = None
+            else:
+                self._status = f'failed: exit code {retcode}'
+                self._process = None
+        print('SystemUpdateCharacteristic Read: ' + self._status)
+        return [dbus.Byte(x.encode()) for x in self._status]
+
+    def WriteValue(self, value, options):
+        command = bytes(value).decode(errors='replace').strip().lower()
+        print('SystemUpdateCharacteristic Write: ' + command)
+        if command != 'update':
+            self._status = f"unknown command: {command}"
+            return
+        if self._process is not None and self._process.poll() is None:
+            self._status = 'updating'  # already in progress
+            return
+        try:
+            self._process = subprocess.Popen(
+                self.UPDATE_CMD,
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self._status = 'updating'
+        except Exception as e:
+            self._status = f'failed: {e}'
+
 
 class PlaneSignVersionCharacteristic(Characteristic):
     VERSION_CHRC_UUID = '8d1151e7-04b8-49e2-955a-daa50e1285e5'
