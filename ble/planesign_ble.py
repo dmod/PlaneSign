@@ -51,7 +51,7 @@ class DockerUpdateCheckCharacteristic(Characteristic):
     UPDATE_CHECK_CHRC_UUID = 'a9cc9f79-aa76-4955-aeb5-85aa9299028e'
     GHCR_TOKEN_URL = f'https://ghcr.io/token?scope=repository:{DOCKER_IMAGE_REPO}:pull&service=ghcr.io'
     GHCR_MANIFEST_URL = f'https://ghcr.io/v2/{DOCKER_IMAGE_REPO}/manifests/latest'
-    TIMEOUT_SECONDS = 10
+    TIMEOUT_SECONDS = 8
 
     def __init__(self, bus, index, service):
         Characteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, ['read'], service)
@@ -86,7 +86,7 @@ class DockerUpdateCheckCharacteristic(Characteristic):
         try:
             completed = subprocess.run(
                 ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', DOCKER_IMAGE],
-                capture_output=True, text=True, timeout=8, check=False,
+                capture_output=True, text=True, timeout=5, check=False,
             )
             if completed.returncode != 0:
                 return None
@@ -346,7 +346,10 @@ class PlanesignTempCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        temperature = subprocess.check_output('/usr/bin/vcgencmd measure_temp', shell=True).decode("utf-8").strip()
+        try:
+            temperature = subprocess.check_output('/usr/bin/vcgencmd measure_temp', shell=True, timeout=5).decode("utf-8").strip()
+        except Exception as e:
+            temperature = f'error: {e}'
         print('Temp Read: ' + temperature)
 
         return [dbus.Byte(x.encode()) for x in temperature]
@@ -358,7 +361,10 @@ class PlanesignHostnameCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        hostname = subprocess.check_output('/bin/hostname', shell=True).decode("utf-8").strip()
+        try:
+            hostname = subprocess.check_output('/bin/hostname', shell=True, timeout=5).decode("utf-8").strip()
+        except Exception as e:
+            hostname = f'error: {e}'
         print('Hostname Read: ' + hostname)
 
         return [dbus.Byte(x.encode()) for x in hostname]
@@ -370,7 +376,10 @@ class PlanesignUptimeCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        uptime = subprocess.check_output('/usr/bin/uptime', shell=True).decode("utf-8").strip()
+        try:
+            uptime = subprocess.check_output('/usr/bin/uptime', shell=True, timeout=5).decode("utf-8").strip()
+        except Exception as e:
+            uptime = f'error: {e}'
         print('Uptime Read: ' + uptime)
 
         return [dbus.Byte(x.encode()) for x in uptime]
@@ -440,10 +449,11 @@ class SafeCommandCharacteristic(Characteristic):
             try:
                 result = subprocess.check_output(
                     self.ALLOWED_COMMANDS[command], 
-                    shell=True
+                    shell=True,
+                    timeout=5
                 ).decode('utf-8').strip()
                 self.last_result = result
-            except subprocess.CalledProcessError as e:
+            except Exception as e:
                 self.last_result = f"Error executing command: {str(e)}"
         else:
             self.last_result = f"Command '{command}' not in allowed list"
@@ -596,7 +606,7 @@ def main():
 
 def get_mac_suffix(interface='wlan0'):
     cmd = f"cat /sys/class/net/{interface}/address"
-    mac_address = subprocess.check_output(cmd, shell=True).decode().strip()
+    mac_address = subprocess.check_output(cmd, shell=True, timeout=5).decode().strip()
     return mac_address.replace(":", "")[-4:].upper()
 
 if __name__ == '__main__':
