@@ -86,14 +86,11 @@ def write_config():
         keys = list(request.args.keys())
         vals = list(request.args.values())
 
-        tmp_path = "sign.conf.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        with open("sign.conf", "w", encoding="utf-8") as f:
             for i in range(len(keys)):
                 f.write(keys[i] + "=" + vals[i] + "\n")
             f.flush()
             os.fsync(f.fileno())
-
-        os.replace(tmp_path, "sign.conf")
 
         utilities.read_config()
         shared_config.shared_forced_sign_update.value = 1
