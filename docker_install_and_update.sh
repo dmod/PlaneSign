@@ -45,10 +45,10 @@ GITHUB_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main
 BLE_DIR="$INSTALL_DIR/ble"
 mkdir -p "$BLE_DIR"
 for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
-  wget -O "$BLE_DIR/$file" "$GITHUB_BASE_URL/ble/$file"
+  wget -q --show-progress -O "$BLE_DIR/$file" "$GITHUB_BASE_URL/ble/$file"
 done
 
-wget -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
+wget -q --show-progress -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
 
 # Install bluetooth support
 sudo apt-get update
