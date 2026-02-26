@@ -392,11 +392,11 @@ class PlaneSign:
                     self.defined_mode_handlers[display_mode](self)
                 else:
                     logging.error(f"Mode {display_mode.name} has no handler defined...")
-                    shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
+                    shared_config.shared_mode.value = DisplayMode.WEDDING.value
 
             except:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
-                shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value #Reset to default mode
+                shared_config.shared_mode.value = DisplayMode.WEDDING.value #Reset to default mode
 
         logging.info("--- END OF SIGN LOOP ---")

@@ -2,8 +2,8 @@ from multiprocessing import Value
 from modes import DisplayMode
 import os
 
-shared_mode = Value('i', DisplayMode.PLANES_ALERT.value)
-shared_prev_mode = Value('i', DisplayMode.PLANES_ALERT.value)
+shared_mode = Value('i', DisplayMode.WEDDING.value)
+shared_prev_mode = Value('i', DisplayMode.WEDDING.value)
 
 shared_pong_player1 = Value('i', 0)
 shared_pong_player2 = Value('i', 0)
