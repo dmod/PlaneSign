@@ -1473,6 +1473,23 @@ def weather_icon_decode(code, status, isNight = False):
 
     return icon,status
 
+def get_mac_suffix(interface='wlan0'):
+    try:
+        cmd = f"cat /sys/class/net/{interface}/address"
+        mac_address = subprocess.check_output(cmd, shell=True, timeout=5).decode().strip()
+        return mac_address.replace(":", "")[-4:].upper()
+    except Exception:
+        return "????"
+
+
+def get_version():
+    try:
+        with open("version.txt", "r") as f:
+            return f.read().strip()
+    except Exception:
+        return "unknown"
+
+
 @__main__.planesign_mode_handler(DisplayMode.SIGN_OFF)
 def clear_matrix(sign):
     sign.canvas.Clear()

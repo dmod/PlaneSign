@@ -306,12 +306,7 @@ def get_sounds():
 
 @app.route("/version")
 def get_version():
-    try:
-        with open("version.txt", "r") as f:
-            version = f.read().strip()
-        return version
-    except:
-        return "unknown"
+    return utilities.get_version()
 
 def api_server():
     app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
