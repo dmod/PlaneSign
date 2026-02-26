@@ -48,11 +48,56 @@ def show_custom_message(sign):
         clean_message = raw_message.strip()
 
 
-        if shared_config.shared_color_mode.value != 5 and len(clean_message)>28:
+        if shared_config.shared_color_mode.value != 5 and len(clean_message)>54:
 
             scroll.text=clean_message
             scroll.color = shared_config.shared_color_mode.value
             scroll.draw()
+
+        elif shared_config.shared_color_mode.value != 5 and len(clean_message)>28:
+            # 3-line mode using fontbig (6x13)
+            chars_per_line = 18
+            char_width = 7
+            line_a = clean_message[0:chars_per_line].strip()
+            line_b = clean_message[chars_per_line:chars_per_line*2].strip()
+            line_c = clean_message[chars_per_line*2:chars_per_line*3].strip()
+
+            lines_3 = [line_a, line_b, line_c]
+            y_positions = [10, 21, 32]
+
+            if shared_config.shared_color_mode.value == 1:
+                selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
+            elif shared_config.shared_color_mode.value >= color_mode_offset:
+                selected_color_list = [RGB(((shared_config.shared_color_mode.value-color_mode_offset) >> 16) & 255, ((shared_config.shared_color_mode.value -
+                                        color_mode_offset) >> 8) & 255, (shared_config.shared_color_mode.value-color_mode_offset) & 255)]
+            else:
+                selected_color_list = COLORS[shared_config.shared_color_mode.value]
+
+            if starting_color_index >= len(selected_color_list):
+                starting_color_index = 0
+
+            color_index = starting_color_index
+
+            for i, line in enumerate(lines_3):
+                if len(line) == 0:
+                    continue
+                if len(line) % 2 == 0:
+                    start_x = int(64 - ((len(line) / 2) * char_width))
+                else:
+                    start_x = int(61 - (((len(line) - 1) / 2) * char_width))
+
+                x_pos = start_x
+                for ch in line:
+                    char_color = graphics.Color(selected_color_list[color_index].r, selected_color_list[color_index].g, selected_color_list[color_index].b)
+                    graphics.DrawText(sign.canvas, sign.fontbig, x_pos, y_positions[i], char_color, ch)
+                    x_pos += char_width
+
+                    color_index = color_index + 1 if ch != ' ' else color_index
+
+                    if color_index >= len(selected_color_list):
+                        color_index = 0
+
+            starting_color_index += 1
 
         else:
             
@@ -186,7 +231,7 @@ def show_custom_message(sign):
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-        if shared_config.shared_color_mode.value != 5 and len(clean_message)>28:
+        if shared_config.shared_color_mode.value != 5 and len(clean_message)>54:
             sign.wait_loop(0.01)
         elif shared_config.shared_color_mode.value == 1:
             sign.wait_loop(0.1)
