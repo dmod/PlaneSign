@@ -8,6 +8,8 @@ window.onload = function () {
     update_brightness_slider();
     set_version();
     get_audio_support();
+    update_device_info();
+    setInterval(update_device_info, 10000);
 
     recordButton = document.getElementById('mic_button');
 
@@ -116,6 +118,23 @@ window.onload = function () {
 function set_version() {
     call_endpoint("/version", function (version) {
         document.getElementById('version').textContent = version;
+    });
+}
+
+function update_device_info() {
+    call_endpoint("/get_device_info", function (value) {
+        var info = JSON.parse(value);
+        var parts = [];
+        if (info.ip_address) {
+            parts.push(info.ip_address);
+        }
+        if (info.cpu_temp_f !== null) {
+            parts.push("CPU: " + info.cpu_temp_f + "°F");
+        }
+        if (info.cpu_load !== null) {
+            parts.push("Load: " + info.cpu_load);
+        }
+        document.getElementById('device_info').textContent = parts.join(" | ");
     });
 }
 

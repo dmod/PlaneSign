@@ -11,6 +11,7 @@ import signal
 import pytz
 import os
 import glob
+import socket
 import threading
 import traceback
 from finance import get_tickers
@@ -307,6 +308,35 @@ def get_sounds():
 @app.route("/version")
 def get_version():
     return utilities.get_version()
+
+
+@app.route("/get_device_info")
+def get_device_info():
+    info = {}
+
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            temp_c = int(f.read().strip()) / 1000.0
+        info["cpu_temp_c"] = round(temp_c, 1)
+        info["cpu_temp_f"] = round(temp_c * 9 / 5 + 32, 1)
+    except Exception:
+        info["cpu_temp_c"] = None
+        info["cpu_temp_f"] = None
+
+    try:
+        with open("/proc/loadavg") as f:
+            info["cpu_load"] = float(f.read().split()[0])
+    except Exception:
+        info["cpu_load"] = None
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            info["ip_address"] = s.getsockname()[0]
+    except Exception:
+        info["ip_address"] = None
+
+    return jsonify(info)
 
 def api_server():
     app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
