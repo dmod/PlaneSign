@@ -41,8 +41,6 @@ if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-fi
   sudo systemctl disable nginx
 fi
 
-crontab -r
-
 # Download required files from GitHub
 GITHUB_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main
 
@@ -85,7 +83,6 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plug
 
 sudo groupadd --force docker
 sudo usermod -aG docker $USER
-# newgrp docker
 
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
