@@ -1538,13 +1538,13 @@ def weather_icon_decode(code, status, isNight = False):
 
     return icon,status
 
-def get_mac_suffix(interface='wlan0'):
+def get_mac_id(interface='wlan0'):
     try:
         cmd = f"cat /sys/class/net/{interface}/address"
         mac_address = subprocess.check_output(cmd, shell=True, timeout=5).decode().strip()
-        return mac_address.replace(":", "")[-4:].upper()
+        return mac_address.replace(":", "").upper()
     except Exception:
-        return "????"
+        return "UNKNOWN"
 
 
 def get_version():

@@ -3,7 +3,7 @@ import math
 import random
 import shared_config
 from rgbmatrix import graphics
-from utilities import get_centered_text_x_offset_value, get_mac_suffix, get_version
+from utilities import get_centered_text_x_offset_value, get_mac_id, get_version
 import __main__
 
 from modes import DisplayMode
@@ -12,7 +12,7 @@ from modes import DisplayMode
 @__main__.planesign_mode_handler(DisplayMode.WELCOME)
 def welcome(self):
 
-    device_name = f"PlaneSign-BLE-{get_mac_suffix()}"
+    device_name = f"PlaneSign-BLE-{get_mac_id()}"
     device_name_x = int(get_centered_text_x_offset_value(4, device_name))
 
     version_str = f"v{get_version()}"

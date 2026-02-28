@@ -580,7 +580,7 @@ def main():
         return
     
     # Set device name consistently
-    device_name = f"PlaneSign-BLE-{get_mac_suffix()}"
+    device_name = f"PlaneSign-BLE-{get_mac_id()}"
     
     # Set the Bluetooth device name
     set_adapter_name(bus, adapter, device_name)
@@ -604,10 +604,10 @@ def main():
     except KeyboardInterrupt:
         adv.Release()
 
-def get_mac_suffix(interface='wlan0'):
+def get_mac_id(interface='wlan0'):
     cmd = f"cat /sys/class/net/{interface}/address"
     mac_address = subprocess.check_output(cmd, shell=True, timeout=5).decode().strip()
-    return mac_address.replace(":", "")[-4:].upper()
+    return mac_address.replace(":", "").upper()
 
 if __name__ == '__main__':
     main()
