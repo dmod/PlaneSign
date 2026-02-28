@@ -214,6 +214,13 @@
     <span id="linetemplate" class="configline" style="display:none">
       <label for="templatename" class="configline"></label><input type="text" class="configline" id="templateid" name="templatename" value="">
     </span>
+    <button id="geolocate_button" type="button" onclick="fill_location_from_browser()" style="display:none;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+      </svg>
+      Use My Location
+    </button>
     <form id="config" name="config" method="get">
       <span id="config_button_span">
         <button id="submit_config_button" type="submit" class="configline">Update Config</button>
