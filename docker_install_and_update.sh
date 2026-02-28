@@ -35,8 +35,12 @@ else
   echo "snd_bcm2835 already blacklisted"
 fi
 
-# Stop existing versions of nginx
-sudo systemctl disable nginx
+# Stop existing versions of nginx (from legacy non-Docker installs)
+if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-files nginx.service | grep -q nginx; then
+  echo "Legacy nginx service found, disabling..."
+  sudo systemctl disable nginx
+fi
+
 crontab -r
 
 # Download required files from GitHub
