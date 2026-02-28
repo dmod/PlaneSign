@@ -100,6 +100,7 @@ root.addHandler(console_handler)
 root.setLevel(logging.DEBUG)
 logging.getLogger('PIL').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('fiona.ogrext').setLevel(logging.WARNING)
 
 utilities.read_static_airport_data()
 utilities.read_geojsons()
