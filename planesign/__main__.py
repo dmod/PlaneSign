@@ -102,6 +102,7 @@ logging.getLogger('PIL').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 utilities.read_static_airport_data()
+utilities.read_geojsons()
 utilities.detect_usb_audio_device()
 
 api_server_process = Process(target=planesign.api_server, name="APIServer")
