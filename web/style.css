@@ -511,6 +511,31 @@ input[type=number] {
   display: block;
 }
 
+#geolocate_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 5px;
+  height: 50px;
+  font-size: 28px;
+  margin-top: 10px;
+  cursor: pointer;
+  background-color: #4285f4;
+  color: #fff;
+  border: none;
+  padding: 0 20px;
+}
+
+#geolocate_button:hover {
+  background-color: #3367d6;
+}
+
+#geolocate_button:disabled {
+  background-color: #999;
+  cursor: not-allowed;
+}
+
 .baritem {
   width: 100%;
   display: block;

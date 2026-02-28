@@ -50,7 +50,7 @@ def welcome(self):
         max_bright = random.randint(140, 255)  # bright twinkle stars
         star_spots.append((sx, sy, phase, speed, max_bright))
 
-    duration = 3.5
+    duration = 5
     start_time = time.perf_counter()
 
     while True:

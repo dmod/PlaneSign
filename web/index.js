@@ -824,6 +824,47 @@ function hide_options() {
     document.getElementById("optionsSidebar").style.display = "none";
 }
 
+function fill_location_from_browser() {
+    var btn = document.getElementById("geolocate_button");
+    if (!navigator.geolocation) {
+        console.warn("[Geolocation] Browser does not support geolocation");
+        alert("Geolocation is not supported by your browser.");
+        return;
+    }
+    console.log("[Geolocation] Requesting position from browser…");
+    btn.disabled = true;
+    var originalHtml = btn.innerHTML;
+    btn.textContent = "Locating…";
+    navigator.geolocation.getCurrentPosition(
+        function (position) {
+            console.log("[Geolocation] Position acquired — lat: " + position.coords.latitude + ", lon: " + position.coords.longitude + ", accuracy: " + position.coords.accuracy + "m");
+            var latField = document.getElementById("SENSOR_LAT");
+            var lonField = document.getElementById("SENSOR_LON");
+            if (latField) {
+                latField.value = position.coords.latitude.toFixed(6);
+                console.log("[Geolocation] Set SENSOR_LAT to " + latField.value);
+            } else {
+                console.warn("[Geolocation] SENSOR_LAT field not found in config form");
+            }
+            if (lonField) {
+                lonField.value = position.coords.longitude.toFixed(6);
+                console.log("[Geolocation] Set SENSOR_LON to " + lonField.value);
+            } else {
+                console.warn("[Geolocation] SENSOR_LON field not found in config form");
+            }
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        },
+        function (error) {
+            console.error("[Geolocation] Error (" + error.code + "): " + error.message);
+            alert("Unable to retrieve your location: " + error.message);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
+}
+
 function read_conf() {
     if (document.getElementById("config").childElementCount == 1 && document.getElementById("optionsSidebar").style.display == "none") {
         var xhr = new XMLHttpRequest()
@@ -901,6 +942,11 @@ function read_conf() {
 
 
                     console.log(xhr.responseText);
+                    // Show the geolocation button if SENSOR_LAT/LON fields exist
+                    if (document.getElementById("SENSOR_LAT") && document.getElementById("SENSOR_LON")) {
+                        document.getElementById("geolocate_button").style.display = "";
+                        console.log("[Geolocation] SENSOR_LAT and SENSOR_LON fields detected — showing geolocation button");
+                    }
                 } else {
                     console.log(xhr.responseText);
                     // Oh no! There has been an error with the request!
