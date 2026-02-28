@@ -12,6 +12,8 @@ import subprocess
 import favicon
 import requests
 import re
+import geopandas as gpd
+from shapely.geometry import Point
 
 from urllib.parse import urlparse
 from PIL import Image, ImageDraw, ImageFont
@@ -163,6 +165,91 @@ def read_static_airport_data():
             shared_config.code_to_airport[code] = (name, lat, lon)
 
     logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
+
+def read_geojsons():
+    # Load static geojson files for use in local reverse geocoding
+    country_polys = gpd.read_file(f"{shared_config.datafiles_dir}/countries.geojson")
+    state_polys = gpd.read_file(f"{shared_config.datafiles_dir}/states.geojson")
+    water_polys = gpd.read_file(f"{shared_config.datafiles_dir}/water.geojson")
+
+    shared_config.data_dict["country_polys"] = country_polys
+    shared_config.data_dict["state_polys"] = state_polys
+    shared_config.data_dict["water_polys"] = water_polys
+
+def reverse_geocode(lat, lon):
+    """
+    For a given lat/lon pair in degrees, returns a string representing the name
+    of the state/country/body of water/point of interest, as well as the 'code'
+    to display the region's flag or symbol via the icon saved in:
+    f'{shared_config.icons_dir}/flags/{code}.png'
+    """
+
+    formatted_address = None
+    code = None
+
+    point = Point(lon, lat)
+
+    country_polys = shared_config.data_dict["country_polys"]
+    state_polys = shared_config.data_dict["state_polys"]
+    water_polys = shared_config.data_dict["water_polys"]
+
+    # First check for point in countries (water is more probable but you'll miss small islands)
+    result = country_polys[country_polys.contains(point)]
+    
+    if result.shape[0]:
+
+        index = 0
+        if result.shape[0] > 1:
+            smallest_area = None
+            for j in range(result.shape[0]):
+                new_area = result["geometry"].iloc[j].area
+                if smallest_area == None or (new_area < smallest_area):
+                    smallest_area = new_area
+                    index = j
+
+        code = result["CODE"].iloc[index]
+        formatted_address = result["NAME"].iloc[index]
+
+        if code == "USA":
+            # Check for specific state
+            result = state_polys[state_polys.contains(point)]
+    
+            if result.shape[0]:  
+                code = "states/"+result["CODE"].iloc[0]
+                formatted_address = result["NAME"].iloc[0]     
+
+    else:
+        # We're in the water
+        
+        result = water_polys[water_polys.contains(point)]
+
+        if result.shape[0]:
+            
+            code = "OCEAN"
+
+            index = 0
+            if result.shape[0] > 1:
+                smallest_area = None
+                for j in range(result.shape[0]):
+                    new_area = result["geometry"].iloc[j].area
+                    if smallest_area == None or (new_area < smallest_area):
+                        smallest_area = new_area
+                        index = j
+
+            # Special case codes
+            if result["CODE"].iloc[index] in ["IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","NEMO","SHIP"]:
+                code = result["CODE"].iloc[index]
+
+            formatted_address = result["NAME"].iloc[index]
+
+    if formatted_address == None:
+        formatted_address = "Unknown"
+        logging.debug(f'Couldn\'t find reverse geocoding for Lat/Lon: ({pos["satlatitude"]},{pos["satlongitude"]})')
+
+    if code == None:
+        code = "UNKNOWN"
+
+    return formatted_address, code
 
 class TextScroller:
     """
@@ -1106,28 +1193,6 @@ def next_color_random_walk_nonuniform_step(r, g, b, step=1, rmin=0, rmax=255, gm
     b += db
 
     return r, g, b
-
-
-def next_color_andrew_weird(r, g, b, dr, dg, db):
-
-    rtemp = r+dr
-    gtemp = g+dg
-    btemp = b+db
-
-    if not (r > 230 and dr < 0) and not (r < 30 and dr > 0) and (rtemp <= 30 or rtemp >= 230):
-        dr *= -1
-
-    if not (g > 230 and dg > 0) and not (g < 30 and dg < 0) and (gtemp <= 30 or gtemp >= 230):
-        dg *= -1
-
-    if not (b > 230 and db > 0) and not (b < 30 and db < 0) and (btemp <= 30 or btemp >= 230):
-        db *= -1
-
-    r += dr
-    g += dg
-    b += db
-
-    return r, g, b, dr, dg, db
 
 
 def get_distance(coord1, coord2):
