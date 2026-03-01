@@ -698,15 +698,12 @@ def satellites(sign):
                         #Perform reverse geocoding
                         formatted_address, code = reverse_geocode(pos['satlatitude'], pos['satlongitude'])
 
-                        if formatted_address == "Unknown":
+                        if formatted_address == "Unknown" or code == "UNKNOWN":
 
                             if prev_address and prev_code:
                                 formatted_address = prev_address
                                 code = prev_code
                                 logging.debug(f"Using previous valid location data: {prev_address} ({prev_code})")
-                            else:
-                                formatted_address = "Somewhere"
-                                code = None
 
                         if formatted_address and code:
                             prev_address = formatted_address

@@ -26,7 +26,11 @@ from functools import cmp_to_key
 NUM_STEPS = 40
 DEG_2_RAD = pi/180.0
 KM_2_MI = 0.6214
-CM_2_IN = 0.3937008  
+CM_2_IN = 0.3937008
+
+country_polys = []
+state_polys = []
+water_polys = []
 
 from modes import DisplayMode
 
@@ -167,14 +171,14 @@ def read_static_airport_data():
     logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
 
 def read_geojsons():
+    global country_polys
+    global state_polys
+    global water_polys
+
     # Load static geojson files for use in local reverse geocoding
     country_polys = gpd.read_file(f"{shared_config.datafiles_dir}/countries.geojson")
     state_polys = gpd.read_file(f"{shared_config.datafiles_dir}/states.geojson")
     water_polys = gpd.read_file(f"{shared_config.datafiles_dir}/water.geojson")
-
-    shared_config.data_dict["country_polys"] = country_polys
-    shared_config.data_dict["state_polys"] = state_polys
-    shared_config.data_dict["water_polys"] = water_polys
 
 def reverse_geocode(lat, lon):
     """
@@ -184,14 +188,14 @@ def reverse_geocode(lat, lon):
     f'{shared_config.icons_dir}/flags/{code}.png'
     """
 
+    global country_polys
+    global state_polys
+    global water_polys
+
     formatted_address = None
     code = None
 
     point = Point(lon, lat)
-
-    country_polys = shared_config.data_dict["country_polys"]
-    state_polys = shared_config.data_dict["state_polys"]
-    water_polys = shared_config.data_dict["water_polys"]
 
     # First check for point in countries (water is more probable but you'll miss small islands)
     result = country_polys[country_polys.contains(point)]
@@ -244,7 +248,9 @@ def reverse_geocode(lat, lon):
 
     if formatted_address == None:
         formatted_address = "Unknown"
-        logging.debug(f"Couldn\'t find reverse geocoding for Lat/Lon: ({lat},{lon})")
+        logging.debug(f"Couldn\'t find reverse geocoding for lat/lon: ({lat},{lon})")
+    else:
+        logging.info(f"Found location {formatted_address} for lat/lon ({lat},{lon}).")
 
     if code == None:
         code = "UNKNOWN"
