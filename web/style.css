@@ -79,6 +79,68 @@ body {
   text-align: center;
 }
 
+.box6 {
+  grid-column-start: 1;
+  grid-column-end: 2;
+
+  grid-row-start: 2;
+  grid-row-end: 3;
+}
+
+.device_info_box {
+  border-radius: 25px;
+  background: #2c2c2c;
+  margin: 10px;
+  border: 3px solid #444;
+  padding: 15px 20px;
+  color: #e0e0e0;
+  font-family: 'Roboto', Arial, sans-serif;
+}
+
+.device_info_header {
+  font-family: 'Permanent Marker';
+  font-size: 28px;
+  color: #fff;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.device_info_content {
+  display: table;
+  width: 100%;
+  border-spacing: 0 6px;
+}
+
+.device_info_row {
+  display: table-row;
+}
+
+.device_info_label {
+  display: table-cell;
+  font-size: 14px;
+  color: #aaa;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 12px;
+  background: #3a3a3a;
+  border-radius: 8px 0 0 8px;
+  white-space: nowrap;
+}
+
+.device_info_value {
+  display: table-cell;
+  font-size: 15px;
+  color: #7bb9c9;
+  font-weight: 600;
+  font-family: monospace;
+  padding: 8px 12px;
+  background: #3a3a3a;
+  border-radius: 0 8px 8px 0;
+  text-align: right;
+  width: 100%;
+}
+
 .a_sound_button {
   text-align: center;
   font-size: 80px;

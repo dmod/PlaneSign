@@ -7,6 +7,8 @@ window.onload = function () {
     update_sign_status();
     update_brightness_slider();
     set_version();
+    update_device_info();
+    setInterval(update_device_info, 10000);
     get_audio_support();
 
     recordButton = document.getElementById('mic_button');
@@ -116,6 +118,35 @@ window.onload = function () {
 function set_version() {
     call_endpoint("/version", function (version) {
         document.getElementById('version').textContent = version;
+    });
+}
+
+function update_device_info() {
+    call_endpoint("/device_info", function (response) {
+        var info = JSON.parse(response);
+
+        document.getElementById('di_hostname').textContent = info.hostname || '—';
+        document.getElementById('di_ip').textContent = info.ip_address || '—';
+
+        if (info.cpu_temp_c !== null) {
+            document.getElementById('di_cpu_temp').textContent = info.cpu_temp_c + '°C';
+        } else {
+            document.getElementById('di_cpu_temp').textContent = 'N/A';
+        }
+
+        if (info.disk_usage_percent !== null) {
+            document.getElementById('di_disk').textContent = info.disk_usage_percent + '% (' + info.disk_used_gb + ' / ' + info.disk_total_gb + ' GB)';
+        } else {
+            document.getElementById('di_disk').textContent = 'N/A';
+        }
+
+        if (info.mem_usage_percent !== null) {
+            document.getElementById('di_mem').textContent = info.mem_usage_percent + '% (' + Math.round(info.mem_used_mb) + ' / ' + Math.round(info.mem_total_mb) + ' MB)';
+        } else {
+            document.getElementById('di_mem').textContent = 'N/A';
+        }
+
+        document.getElementById('di_uptime').textContent = info.uptime || '—';
     });
 }
 

@@ -308,6 +308,76 @@ def get_sounds():
 def get_version():
     return utilities.get_version()
 
+@app.route("/device_info")
+def get_device_info():
+    import shutil
+    import socket
+    info = {}
+
+    # Hostname
+    info["hostname"] = socket.gethostname()
+
+    # IP address
+    try:
+        result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5)
+        addrs = result.stdout.strip().split()
+        info["ip_address"] = addrs[0] if addrs else "N/A"
+    except Exception:
+        info["ip_address"] = "N/A"
+
+    # CPU temperature
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp_millideg = int(f.read().strip())
+            temp_c = temp_millideg / 1000.0
+            info["cpu_temp_c"] = round(temp_c, 1)
+    except Exception:
+        info["cpu_temp_c"] = None
+
+    # Disk usage
+    try:
+        total, used, free = shutil.disk_usage("/")
+        info["disk_total_gb"] = round(total / (1024 ** 3), 1)
+        info["disk_used_gb"] = round(used / (1024 ** 3), 1)
+        info["disk_free_gb"] = round(free / (1024 ** 3), 1)
+        info["disk_usage_percent"] = round(used / total * 100, 1)
+    except Exception:
+        info["disk_total_gb"] = None
+        info["disk_used_gb"] = None
+        info["disk_free_gb"] = None
+        info["disk_usage_percent"] = None
+
+    # Uptime
+    try:
+        with open("/proc/uptime", "r") as f:
+            uptime_seconds = float(f.read().split()[0])
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            minutes = int((uptime_seconds % 3600) // 60)
+            info["uptime"] = f"{days}d {hours}h {minutes}m"
+    except Exception:
+        info["uptime"] = "N/A"
+
+    # Memory usage
+    try:
+        with open("/proc/meminfo", "r") as f:
+            meminfo = {}
+            for line in f:
+                parts = line.split(":")
+                meminfo[parts[0].strip()] = int(parts[1].strip().split()[0])
+            total_mb = meminfo["MemTotal"] / 1024
+            available_mb = meminfo["MemAvailable"] / 1024
+            used_mb = total_mb - available_mb
+            info["mem_total_mb"] = round(total_mb, 0)
+            info["mem_used_mb"] = round(used_mb, 0)
+            info["mem_usage_percent"] = round(used_mb / total_mb * 100, 1)
+    except Exception:
+        info["mem_total_mb"] = None
+        info["mem_used_mb"] = None
+        info["mem_usage_percent"] = None
+
+    return jsonify(info)
+
 def api_server():
     app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
     app_server.serve_forever()
