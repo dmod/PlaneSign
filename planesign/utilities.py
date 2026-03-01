@@ -244,7 +244,7 @@ def reverse_geocode(lat, lon):
 
     if formatted_address == None:
         formatted_address = "Unknown"
-        logging.debug(f'Couldn\'t find reverse geocoding for Lat/Lon: ({pos["satlatitude"]},{pos["satlongitude"]})')
+        logging.debug(f"Couldn\'t find reverse geocoding for Lat/Lon: ({lat},{lon})")
 
     if code == None:
         code = "UNKNOWN"
