@@ -399,11 +399,15 @@ class SnowReport:
             graphics.DrawLine(self.sign.canvas, graphx-1, graphy+1, graphend+1, graphy+1, graphics.Color(13, 13, 25))
             for i in range(num_bars):
                 # Daily forecast
-                forecast = resort['forecast'][i+7]
-                if "snowfall" in forecast:
-                    snowfall = forecast["snowfall"] * CM_2_IN
-                else:
-                    snowfall = None
+                snowfall = None
+                if 'forecast' in resort:
+                    try:
+                        forecast = resort['forecast'][i+7]
+                    except:
+                        forecast = {}
+                    if "snowfall" in forecast:
+                        snowfall = forecast["snowfall"] * CM_2_IN
+
 
                 if snowfall is not None:
                     if i < round(num_bars/2):
@@ -567,11 +571,14 @@ class SnowReport:
                 snow8d = None
                 for i in range(8):
                     # Daily forecast
-                    forecast = resort['forecast'][i+7]
-                    if "snowfall" in forecast:
-                        snowfall = forecast["snowfall"] * CM_2_IN
-                    else:
-                        snowfall = None
+                    snowfall = None
+                    if 'forecast' in resort:
+                        try:
+                            forecast = resort['forecast'][i+7]
+                        except:
+                            forecast = {}
+                        if "snowfall" in forecast:
+                            snowfall = forecast["snowfall"] * CM_2_IN
 
                     if snowfall is not None:
                         if i < 4:
