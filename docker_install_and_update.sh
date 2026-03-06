@@ -35,9 +35,11 @@ else
   echo "snd_bcm2835 already blacklisted"
 fi
 
-# Stop existing versions of nginx
-sudo systemctl disable nginx
-crontab -r
+# Stop existing versions of nginx (from legacy non-Docker installs)
+if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-files nginx.service | grep -q nginx; then
+  echo "Legacy nginx service found, disabling..."
+  sudo systemctl disable nginx
+fi
 
 # Download required files from GitHub
 GITHUB_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main
@@ -45,18 +47,24 @@ GITHUB_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main
 BLE_DIR="$INSTALL_DIR/ble"
 mkdir -p "$BLE_DIR"
 for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
-  wget -O "$BLE_DIR/$file" "$GITHUB_BASE_URL/ble/$file"
+  wget -q --show-progress -O "$BLE_DIR/$file" "$GITHUB_BASE_URL/ble/$file"
 done
 
-wget -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
+wget -q --show-progress -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
 
 # Install bluetooth support
 sudo apt-get update
 sudo apt install -y python3-dbus
 sudo rfkill unblock bluetooth
+
 sudo ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
+
+# Verify bluetooth adapter status
+echo "Bluetooth status:"
+rfkill list bluetooth | grep -E "Soft|Hard"
+bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
 
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl gnupg
@@ -75,7 +83,6 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plug
 
 sudo groupadd --force docker
 sudo usermod -aG docker $USER
-# newgrp docker
 
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
@@ -86,7 +93,7 @@ fi
 
 sudo docker pull ghcr.io/dmod/planesign:latest
 sudo docker rm --force PlaneSignRuntime # Stops and removes any existing container
-sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged -p 80:80 -p 443:443 --mount type=bind,source="$INSTALL_DIR/sign.conf",target=/planesign/sign.conf ghcr.io/dmod/planesign:latest
+sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged --network host --mount type=bind,source="$INSTALL_DIR/sign.conf",target=/planesign/sign.conf ghcr.io/dmod/planesign:latest
 
 echo "Installation and configuration completed! Rebooting..."
 sudo reboot

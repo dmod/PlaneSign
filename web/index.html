@@ -62,6 +62,36 @@
       </div>
     </fieldset>
 
+    <div class="device_info_box box6">
+      <div class="device_info_header">Device Info</div>
+      <div id="device_info_content" class="device_info_content">
+        <div class="device_info_row">
+          <span class="device_info_label">Hostname</span>
+          <span class="device_info_value" id="di_hostname">—</span>
+        </div>
+        <div class="device_info_row">
+          <span class="device_info_label">IP Address</span>
+          <span class="device_info_value" id="di_ip">—</span>
+        </div>
+        <div class="device_info_row">
+          <span class="device_info_label">CPU Temp</span>
+          <span class="device_info_value" id="di_cpu_temp">—</span>
+        </div>
+        <div class="device_info_row">
+          <span class="device_info_label">Disk Usage</span>
+          <span class="device_info_value" id="di_disk">—</span>
+        </div>
+        <div class="device_info_row">
+          <span class="device_info_label">Memory</span>
+          <span class="device_info_value" id="di_mem">—</span>
+        </div>
+        <div class="device_info_row">
+          <span class="device_info_label">Uptime</span>
+          <span class="device_info_value" id="di_uptime">—</span>
+        </div>
+      </div>
+    </div>
+
     <fieldset class="mode_selector_button_group box2">
       <legend>Informational</legend>
       <button id="WEATHER" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
@@ -218,6 +248,13 @@
     <span id="linetemplate" class="configline" style="display:none">
       <label for="templatename" class="configline"></label><input type="text" class="configline" id="templateid" name="templatename" value="">
     </span>
+    <button id="geolocate_button" type="button" onclick="fill_location_from_browser()" style="display:none;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+      </svg>
+      Use My Location
+    </button>
     <form id="config" name="config" method="get">
       <span id="config_button_span">
         <button id="submit_config_button" type="submit" class="configline">Update Config</button>

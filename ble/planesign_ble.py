@@ -1,4 +1,7 @@
 import dbus, dbus.mainloop.glib
+import fcntl
+import json
+import os
 import shutil
 import socket
 import subprocess
@@ -16,6 +19,8 @@ GATT_MANAGER_IFACE =           'org.bluez.GattManager1'
 GATT_CHRC_IFACE =              'org.bluez.GattCharacteristic1'
 PLANESIGN_MASTER_UUID =        '3d951a35-76c5-4207-a150-2d0cf7d2bfdd'
 DOCKER_CONTAINER_NAME =        'PlaneSignRuntime'
+DOCKER_IMAGE =                 'ghcr.io/dmod/planesign:latest'
+DOCKER_IMAGE_REPO =            'dmod/planesign'
 mainloop = None
 
 class BasicInfoService(Service):
@@ -37,6 +42,244 @@ class ContainerControlService(Service):
         Service.__init__(self, bus, index, 'a8e86355-accb-4ba4-a7c5-63206cab4b7b', True)
         self.add_characteristic(DockerContainerControlCharacteristic(bus, 0, self))
         self.add_characteristic(PlaneSignVersionCharacteristic(bus, 1, self))
+        self.add_characteristic(DockerUpdateCheckCharacteristic(bus, 2, self))
+        log_char = SystemUpdateLogCharacteristic(bus, 4, self)
+        self.add_characteristic(SystemUpdateCharacteristic(bus, 3, self, log_char))
+        self.add_characteristic(log_char)
+
+class DockerUpdateCheckCharacteristic(Characteristic):
+    UPDATE_CHECK_CHRC_UUID = 'a9cc9f79-aa76-4955-aeb5-85aa9299028e'
+    GHCR_TOKEN_URL = f'https://ghcr.io/token?scope=repository:{DOCKER_IMAGE_REPO}:pull&service=ghcr.io'
+    GHCR_MANIFEST_URL = f'https://ghcr.io/v2/{DOCKER_IMAGE_REPO}/manifests/latest'
+    TIMEOUT_SECONDS = 8
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, ['read'], service)
+
+    def ReadValue(self, options):
+        result = self._check_for_update()
+        print('DockerUpdateCheckCharacteristic Read: ' + result)
+        return [dbus.Byte(x.encode()) for x in result]
+
+    def _check_for_update(self):
+        try:
+            local_digest = self._get_local_digest()
+            if local_digest is None:
+                return 'check failed: could not get local digest'
+
+            remote_digest = self._get_remote_digest()
+            if remote_digest is None:
+                return 'check failed: could not get remote digest'
+
+            local_short = local_digest.replace('sha256:', '')[:12]
+            remote_short = remote_digest.replace('sha256:', '')[:12]
+
+            if local_digest == remote_digest:
+                return f'up-to-date|local={local_short}|remote={remote_short}'
+            else:
+                return f'update-available|local={local_short}|remote={remote_short}'
+        except Exception as e:
+            return f'check failed: {e}'
+
+    def _get_local_digest(self):
+        """Get the repo digest of the locally cached image."""
+        try:
+            completed = subprocess.run(
+                ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', DOCKER_IMAGE],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            if completed.returncode != 0:
+                return None
+            # Output like: ghcr.io/dmod/planesign@sha256:abc123...
+            repo_digest = completed.stdout.strip()
+            if '@' in repo_digest:
+                return repo_digest.split('@', 1)[1]
+            return repo_digest
+        except Exception:
+            return None
+
+    def _get_remote_digest(self):
+        """Fetch the remote manifest digest from GHCR without pulling the image."""
+        try:
+            # Step 1: Get anonymous bearer token
+            token_req = urllib.request.Request(self.GHCR_TOKEN_URL, method='GET')
+            with urllib.request.urlopen(token_req, timeout=self.TIMEOUT_SECONDS) as resp:
+                token_data = json.loads(resp.read().decode('utf-8'))
+            token = token_data.get('token', '')
+            if not token:
+                return None
+
+            # Step 2: HEAD request to manifest endpoint
+            manifest_req = urllib.request.Request(self.GHCR_MANIFEST_URL, method='HEAD')
+            manifest_req.add_header('Authorization', f'Bearer {token}')
+            manifest_req.add_header('Accept', (
+                'application/vnd.docker.distribution.manifest.v2+json, '
+                'application/vnd.docker.distribution.manifest.list.v2+json, '
+                'application/vnd.oci.image.index.v1+json'
+            ))
+            with urllib.request.urlopen(manifest_req, timeout=self.TIMEOUT_SECONDS) as resp:
+                digest = resp.headers.get('Docker-Content-Digest', '')
+            return digest if digest else None
+        except Exception:
+            return None
+
+class SystemUpdateLogCharacteristic(Characteristic):
+    """Streams stdout/stderr from the update script via BLE notifications."""
+    LOG_CHRC_UUID = 'f63b67f9-b823-4f8f-a528-94e286cda73e'
+    MAX_LOG_SIZE = 65536  # 64 KB ring buffer
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.LOG_CHRC_UUID, ['read', 'notify'], service)
+        self._log_buffer = ''
+        self._notifying = False
+
+    def ReadValue(self, options):
+        chunk = self._log_buffer[-512:] if self._log_buffer else 'no log'
+        return [dbus.Byte(x.encode()) for x in chunk]
+
+    def StartNotify(self):
+        if self._notifying:
+            return
+        self._notifying = True
+        print('SystemUpdateLogCharacteristic: notifications enabled')
+
+    def StopNotify(self):
+        self._notifying = False
+        print('SystemUpdateLogCharacteristic: notifications disabled')
+
+    def append_log(self, text):
+        """Append text to the log buffer and push a BLE notification."""
+        self._log_buffer += text
+        if len(self._log_buffer) > self.MAX_LOG_SIZE:
+            self._log_buffer = self._log_buffer[-self.MAX_LOG_SIZE:]
+        if self._notifying:
+            self._send_notification(text)
+
+    def clear_log(self):
+        self._log_buffer = ''
+
+    def _send_notification(self, text):
+        max_chunk = 480  # conservative BLE MTU-safe size
+        encoded = text.encode('utf-8', errors='replace')
+        for i in range(0, len(encoded), max_chunk):
+            chunk = encoded[i:i + max_chunk]
+            value = dbus.Array([dbus.Byte(b) for b in chunk], signature='y')
+            self.PropertiesChanged(GATT_CHRC_IFACE, {'Value': value}, [])
+
+
+class SystemUpdateCharacteristic(Characteristic):
+    UPDATE_CHRC_UUID = '32d1b76b-9532-44da-9a43-3b682b8be90c'
+    UPDATE_CMD = 'curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | sudo -u pi bash'
+
+    def __init__(self, bus, index, service, log_characteristic=None):
+        Characteristic.__init__(self, bus, index, self.UPDATE_CHRC_UUID, ['read', 'write', 'notify'], service)
+        self._status = 'idle'
+        self._process = None
+        self._log_char = log_characteristic
+        self._notifying = False
+
+    def StartNotify(self):
+        if self._notifying:
+            return
+        self._notifying = True
+
+    def StopNotify(self):
+        self._notifying = False
+
+    def _set_status(self, status):
+        """Update status and push a BLE notification if subscribed."""
+        self._status = status
+        print('SystemUpdateCharacteristic status: ' + status)
+        if self._notifying:
+            value = dbus.Array([dbus.Byte(b) for b in status.encode('utf-8')], signature='y')
+            self.PropertiesChanged(GATT_CHRC_IFACE, {'Value': value}, [])
+
+    def ReadValue(self, options):
+        # If a process is running, check if it finished
+        if self._process is not None:
+            retcode = self._process.poll()
+            if retcode is None:
+                self._status = 'updating'
+            elif retcode == 0:
+                self._status = 'complete'
+                self._process = None
+            else:
+                self._status = f'failed: exit code {retcode}'
+                self._process = None
+        print('SystemUpdateCharacteristic Read: ' + self._status)
+        return [dbus.Byte(x.encode()) for x in self._status]
+
+    def WriteValue(self, value, options):
+        command = bytes(value).decode(errors='replace').strip().lower()
+        print('SystemUpdateCharacteristic Write: ' + command)
+        if command != 'update':
+            self._set_status(f"unknown command: {command}")
+            return
+        if self._process is not None and self._process.poll() is None:
+            self._set_status('updating')  # already in progress
+            return
+        try:
+            if self._log_char:
+                self._log_char.clear_log()
+            self._process = subprocess.Popen(
+                self.UPDATE_CMD,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            # Make stdout non-blocking for GLib polling
+            fd = self._process.stdout.fileno()
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            self._set_status('updating')
+            # Poll subprocess output every 200ms via GLib main loop
+            GLib.timeout_add(200, self._poll_process_output)
+        except Exception as e:
+            self._set_status(f'failed: {e}')
+
+    def _poll_process_output(self):
+        """GLib timeout callback: read available subprocess output and stream via BLE."""
+        if self._process is None:
+            return False  # stop polling
+
+        # Read all available data from the non-blocking pipe
+        try:
+            while True:
+                data = os.read(self._process.stdout.fileno(), 4096)
+                if not data:
+                    break
+                text = data.decode('utf-8', errors='replace')
+                if self._log_char:
+                    self._log_char.append_log(text)
+        except OSError:
+            pass  # EAGAIN — no data available yet
+
+        # Check if the process has finished
+        retcode = self._process.poll()
+        if retcode is not None:
+            # Drain any remaining output
+            try:
+                remaining = self._process.stdout.read()
+                if remaining:
+                    text = remaining.decode('utf-8', errors='replace')
+                    if self._log_char:
+                        self._log_char.append_log(text)
+            except Exception:
+                pass
+
+            if retcode == 0:
+                if self._log_char:
+                    self._log_char.append_log('\n--- Update complete ---\n')
+                self._set_status('complete')
+            else:
+                if self._log_char:
+                    self._log_char.append_log(f'\n--- Update failed (exit code {retcode}) ---\n')
+                self._set_status(f'failed: exit code {retcode}')
+            self._process = None
+            return False  # stop polling
+
+        return True  # continue polling
+
 
 class PlaneSignVersionCharacteristic(Characteristic):
     VERSION_CHRC_UUID = '8d1151e7-04b8-49e2-955a-daa50e1285e5'
@@ -103,7 +346,10 @@ class PlanesignTempCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        temperature = subprocess.check_output('/usr/bin/vcgencmd measure_temp', shell=True).decode("utf-8").strip()
+        try:
+            temperature = subprocess.check_output('/usr/bin/vcgencmd measure_temp', shell=True, timeout=5).decode("utf-8").strip()
+        except Exception as e:
+            temperature = f'error: {e}'
         print('Temp Read: ' + temperature)
 
         return [dbus.Byte(x.encode()) for x in temperature]
@@ -115,7 +361,10 @@ class PlanesignHostnameCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        hostname = subprocess.check_output('/bin/hostname', shell=True).decode("utf-8").strip()
+        try:
+            hostname = subprocess.check_output('/bin/hostname', shell=True, timeout=5).decode("utf-8").strip()
+        except Exception as e:
+            hostname = f'error: {e}'
         print('Hostname Read: ' + hostname)
 
         return [dbus.Byte(x.encode()) for x in hostname]
@@ -127,7 +376,10 @@ class PlanesignUptimeCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, self.CHRC_UUID, ['read'], service)
 
     def ReadValue(self, options):
-        uptime = subprocess.check_output('/usr/bin/uptime', shell=True).decode("utf-8").strip()
+        try:
+            uptime = subprocess.check_output('/usr/bin/uptime', shell=True, timeout=5).decode("utf-8").strip()
+        except Exception as e:
+            uptime = f'error: {e}'
         print('Uptime Read: ' + uptime)
 
         return [dbus.Byte(x.encode()) for x in uptime]
@@ -197,10 +449,11 @@ class SafeCommandCharacteristic(Characteristic):
             try:
                 result = subprocess.check_output(
                     self.ALLOWED_COMMANDS[command], 
-                    shell=True
+                    shell=True,
+                    timeout=5
                 ).decode('utf-8').strip()
                 self.last_result = result
-            except subprocess.CalledProcessError as e:
+            except Exception as e:
                 self.last_result = f"Error executing command: {str(e)}"
         else:
             self.last_result = f"Command '{command}' not in allowed list"
@@ -327,7 +580,7 @@ def main():
         return
     
     # Set device name consistently
-    device_name = f"PlaneSign-BLE-{get_mac_suffix()}"
+    device_name = f"PlaneSign-BLE-{get_mac_id()}"
     
     # Set the Bluetooth device name
     set_adapter_name(bus, adapter, device_name)
@@ -351,10 +604,10 @@ def main():
     except KeyboardInterrupt:
         adv.Release()
 
-def get_mac_suffix(interface='wlan0'):
+def get_mac_id(interface='wlan0'):
     cmd = f"cat /sys/class/net/{interface}/address"
-    mac_address = subprocess.check_output(cmd, shell=True).decode().strip()
-    return mac_address.replace(":", "")[-4:].upper()
+    mac_address = subprocess.check_output(cmd, shell=True, timeout=5).decode().strip()
+    return mac_address.replace(":", "").upper()
 
 if __name__ == '__main__':
     main()

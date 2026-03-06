@@ -4,7 +4,7 @@ import time
 import requests
 from rgbmatrix import graphics
 from FlightRadar24.api import FlightRadar24API, Flight
-import utilities
+from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode
 import __main__
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -13,10 +13,6 @@ from modes import DisplayMode
 
 @__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
 def track_a_flight(sign):
-    # Check if Google Maps API key is configured
-    if not shared_config.CONF.get("GOOGLEMAPS_API_KEY"):
-        logging.error("Google Maps API key is not configured. Location names will not be available.")
-        formatted_address = "No API key"
     
     if "track_a_flight_num" not in shared_config.data_dict:
         sign.canvas.Clear()
@@ -41,15 +37,11 @@ def track_a_flight(sign):
             if flight_data and "trail" in flight_data:
                 current_location = flight_data['trail'][0]
                 
-                # Only attempt reverse geocoding if we have an API key
-                if shared_config.CONF.get("GOOGLEMAPS_API_KEY"):
-                    reverse_geocode = requests.get(f"https://maps.googleapis.com/maps/api/geocode/json?latlng={current_location['lat']},{current_location['lng']}&result_type=country|administrative_area_level_1|natural_feature&key={shared_config.CONF['GOOGLEMAPS_API_KEY']}").json()
-                    if len(reverse_geocode['results']) != 0:
-                        formatted_address = reverse_geocode['results'][0]['formatted_address']
-                    else:
-                        formatted_address = 'Ocean'
-                else:
-                    # Show coordinates when no API key is available
+                # Perform reverse geocoding
+                formatted_address, _ = reverse_geocode(current_location['lat'], current_location['lng'])
+
+                if formatted_address == "Unknown":
+                    # Show coordinates instead
                     formatted_address = f"({current_location['lat']:.1f}, {current_location['lng']:.1f})"
 
                 logging.info(current_location)
@@ -64,7 +56,7 @@ def track_a_flight(sign):
         if flight_data:
             flight_number_header = f"- {flight_data['identification']['callsign']} -"
 
-            graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
+            graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
 
             graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
             graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
@@ -91,8 +83,8 @@ def track_a_flight(sign):
             else:
                 end_time = scheduled_end_time
 
-            origin_distance_to_destination = utilities.get_distance((flight_data['airport']['origin']['position']['latitude'], flight_data['airport']['origin']['position']['longitude']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
-            current_position_to_destination = utilities.get_distance((current_location['lat'], current_location['lng']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
+            origin_distance_to_destination = get_distance((flight_data['airport']['origin']['position']['latitude'], flight_data['airport']['origin']['position']['longitude']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
+            current_position_to_destination = get_distance((current_location['lat'], current_location['lng']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
 
             # Handle case where origin and destination are the same
             if origin_distance_to_destination == 0:
@@ -148,7 +140,7 @@ def track_a_flight(sign):
                 graphics.DrawText(sign.canvas, sign.font46, 70, 19, graphics.Color(20, 160, 60), f"Vel:{current_location['spd']}")
 
             if formatted_address:
-                graphics.DrawText(sign.canvas, sign.font57, utilities.get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
+                graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
 
             sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 

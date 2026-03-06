@@ -3,15 +3,13 @@ import time
 from datetime import datetime, timedelta
 import random
 import requests
-import utilities
+from utilities import reverse_geocode, fix_black, get_distance, direction_lookup, KM_2_MI
 from PIL import Image
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import shared_config
 from rgbmatrix import graphics
 import country_converter as coco
-import geopandas as gpd
-from shapely.geometry import Point
 import logging
 import math
 from bs4 import BeautifulSoup
@@ -283,7 +281,7 @@ def get_flag(selected,satellite_data):
 
     else:
 
-        image = utilities.fix_black(image)
+        image = fix_black(image)
 
         w, h = image.size
 
@@ -369,11 +367,6 @@ def satellites(sign):
     except Exception as e:
         logging.exception("Can't read static satellite data")
         logging.exception(e)
-
-    #load static geojson files for local reverse geocoding
-    country_polys = gpd.read_file(f"{shared_config.datafiles_dir}/countries.geojson")
-    state_polys = gpd.read_file(f"{shared_config.datafiles_dir}/states.geojson")
-    water_polys = gpd.read_file(f"{shared_config.datafiles_dir}/water.geojson")
 
     elevation = 0
     with requests.Session() as s:
@@ -508,7 +501,7 @@ def satellites(sign):
                     if data:
                         above = data["above"]
                         
-                        above = list(map(lambda item: dict(item, dist=utilities.get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
+                        above = list(map(lambda item: dict(item, dist=get_distance((item["satlat"],item["satlng"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600/(6371.009+item["satalt"]))), above))
 
                         #remove debris from results
                         above = list(filter(lambda x: " DEB" not in x["satname"] and " R/B" not in x["satname"] and " AKM" not in x["satname"] and " ABM" not in x["satname"] and "OBJECT " not in x["satname"] and "OBJECT-" not in x["satname"] and x["satname"] != "OBJECT" and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == 'true' else True), above))
@@ -571,7 +564,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 1, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(closest["dist"]))
                 
                 graphics.DrawText(sign.canvas, sign.font57, 22, 24, graphics.Color(20, 160, 60), "Dir:")
-                close_dir = utilities.direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                close_dir = direction_lookup((closest["satlat"],closest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                 if len(close_dir)==1:
                     graphics.DrawText(sign.canvas, sign.font57, 27, 32, graphics.Color(20, 160, 60), close_dir)
                 else:
@@ -581,7 +574,7 @@ def satellites(sign):
                 if dupeflag:
                     for x in range(43,57):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
-                close_alt = closest["satalt"]*utilities.KM_2_MI
+                close_alt = closest["satalt"]*KM_2_MI
                 if close_alt < 10000:
                     graphics.DrawText(sign.canvas, sign.font57, 43, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(close_alt))
                 else:
@@ -616,7 +609,7 @@ def satellites(sign):
                     graphics.DrawText(sign.canvas, sign.font57, 66, 32, graphics.Color(60, 60, 160), "{0:.0f}".format(lowest["dist"]))
 
                 graphics.DrawText(sign.canvas, sign.font57, 87, 24, graphics.Color(20, 160, 60), "Dir:")
-                low_dir = utilities.direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                low_dir = direction_lookup((lowest["satlat"],lowest["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
                 if len(low_dir)==1:
                     graphics.DrawText(sign.canvas, sign.font57, 92, 32, graphics.Color(20, 160, 60), low_dir)
                 else:
@@ -626,7 +619,7 @@ def satellites(sign):
                 if not dupeflag:
                     for x in range(108,122):
                         sign.canvas.SetPixel(x, 24, 110, 90, 0)
-                low_alt = lowest["satalt"]*utilities.KM_2_MI
+                low_alt = lowest["satalt"]*KM_2_MI
                 if low_alt < 10000:
                     graphics.DrawText(sign.canvas, sign.font57, 108, 32, graphics.Color(160, 160, 200), "{0:.0f}".format(low_alt))
                 else:
@@ -702,79 +695,24 @@ def satellites(sign):
                     if geotime == None or time.perf_counter()-geotime > geo_pollperiod: #limit how often we check location
                         geotime = time.perf_counter()
                         
-                        code = None
-                        formatted_address = None
-
                         #Perform reverse geocoding
-                        point = Point(pos['satlongitude'], pos['satlatitude'])
-    
-                        #First check for point in countries (water is more probable but you'll miss small islands)
-                        result = country_polys[country_polys.contains(point)]
-                        
-                        if result.shape[0]:
+                        formatted_address, code = reverse_geocode(pos['satlatitude'], pos['satlongitude'])
 
-                            index = 0
-                            if result.shape[0] > 1:
-                                smallest_area = None
-                                for j in range(result.shape[0]):
-                                    new_area = result["geometry"].iloc[j].area
-                                    if smallest_area == None or (new_area < smallest_area):
-                                        smallest_area = new_area
-                                        index = j
+                        if formatted_address == "Unknown" or code == "UNKNOWN":
 
-                            code = result["CODE"].iloc[index]
-                            formatted_address = result["NAME"].iloc[index]
-
-                            if code == "USA": #Check for state
-                                result = state_polys[state_polys.contains(point)]
-                        
-                                if result.shape[0]:  
-                                    code = "states/"+result["CODE"].iloc[0]
-                                    formatted_address = result["NAME"].iloc[0]     
-        
-                        else: #We're in the water
-                            
-                            result = water_polys[water_polys.contains(point)]
-
-                            if result.shape[0]:
-                                
-                                code = "OCEAN"
-                
-                                index = 0
-                                if result.shape[0] > 1:
-                                    smallest_area = None
-                                    for j in range(result.shape[0]):
-                                        new_area = result["geometry"].iloc[j].area
-                                        if smallest_area == None or (new_area < smallest_area):
-                                            smallest_area = new_area
-                                            index = j
-
-                                #special case codes
-                                if result["CODE"].iloc[index] in ["IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","NEMO","SHIP"]:
-                                    code = result["CODE"].iloc[index]
-
-                                formatted_address = result["NAME"].iloc[index]
-
-                        
-                        if formatted_address == None:
-
-                            logging.debug(f'Couldn\'t find reverse geocoding for Lat/Lon: ({pos["satlatitude"]},{pos["satlongitude"]})')
-                            
                             if prev_address and prev_code:
                                 formatted_address = prev_address
                                 code = prev_code
                                 logging.debug(f"Using previous valid location data: {prev_address} ({prev_code})")
-                            else:
-                                formatted_address = "Somewhere"
 
                         if formatted_address and code:
                             prev_address = formatted_address
                             prev_code = code
 
-                    iss_dist = utilities.get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
-                    iss_alt = pos["sataltitude"]*utilities.KM_2_MI
-                    iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*utilities.KM_2_MI
-                    #iss_dir = utilities.direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    iss_dist = get_distance((pos["satlatitude"],pos["satlongitude"]),(float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                    iss_alt = pos["sataltitude"]*KM_2_MI
+                    iss_vel = math.sqrt(398600/(6371.009+pos["sataltitude"]))*KM_2_MI
+                    #iss_dir = direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
 
             else:
                 logging.error("No satellite position data found")
@@ -782,12 +720,6 @@ def satellites(sign):
                 iss_alt = None
                 iss_vel = None
                 #iss_dir = None
-
-            if formatted_address == None:
-                formatted_address = "Unknown"
-            
-            if code == None:
-                code = "UNKNOWN"
 
             sign.canvas.SetImage(iss_image, 99, 11)
 
@@ -801,7 +733,7 @@ def satellites(sign):
                     image = Image.open(f'{shared_config.icons_dir}/flags/{code}.png').convert('RGBA')
 
                     if code not in ["states/OH","NPL","OCEAN","IMAG","NEMO","TRASH","TRIANG","TRENCH","REEF","UNKNOWN","NUKE"]:
-                        image = utilities.fix_black(image)
+                        image = fix_black(image)
                         
                 except Exception:
                     logging.warning(f'Couldn\'t find flag for: {code}')
