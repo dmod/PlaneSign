@@ -95,7 +95,8 @@ class DockerUpdateCheckCharacteristic(Characteristic):
             if '@' in repo_digest:
                 return repo_digest.split('@', 1)[1]
             return repo_digest
-        except Exception:
+        except Exception as e:
+            print(f'_get_local_digest error: {e}')
             return None
 
     def _get_remote_digest(self):
@@ -120,7 +121,8 @@ class DockerUpdateCheckCharacteristic(Characteristic):
             with urllib.request.urlopen(manifest_req, timeout=self.TIMEOUT_SECONDS) as resp:
                 digest = resp.headers.get('Docker-Content-Digest', '')
             return digest if digest else None
-        except Exception:
+        except Exception as e:
+            print(f'_get_remote_digest error: {e}')
             return None
 
 class SystemUpdateLogCharacteristic(Characteristic):
@@ -264,8 +266,8 @@ class SystemUpdateCharacteristic(Characteristic):
                     text = remaining.decode('utf-8', errors='replace')
                     if self._log_char:
                         self._log_char.append_log(text)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f'_poll_process_output drain error: {e}')
 
             if retcode == 0:
                 if self._log_char:
@@ -322,7 +324,11 @@ class WiFiConfigCharacteristic(Characteristic):
     def WriteValue(self, value, options):
         credentials = bytes(value).decode().strip()
         print('WiFiConfigCharacteristic Write: Received credentials')
-        configure_wifi(credentials)
+        try:
+            configure_wifi(credentials)
+        except Exception as e:
+            print(f'WiFiConfigCharacteristic error: {e}')
+            raise
 
 class PlanesignBLEApplication(Application):
     def __init__(self, bus):
