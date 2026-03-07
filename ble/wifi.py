@@ -40,7 +40,8 @@ def get_current_wifi_status():
         else:
             return "Disconnected|None|0"
             
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f'get_current_wifi_status error: {e}')
         return "Error|Unable to get WiFi status|0"
 
 def scan_wifi():
@@ -107,8 +108,10 @@ def scan_wifi():
         return "\n".join(str(network) for network in top_networks) if top_networks else "No networks found"
         
     except subprocess.CalledProcessError as e:
+        print(f'scan_wifi error: {e}')
         return f"Error scanning WiFi: {str(e)}"
     except Exception as e:
+        print(f'scan_wifi unexpected error: {e}')
         return f"Unexpected error: {str(e)}"
 
 def configure_wifi(credentials):
