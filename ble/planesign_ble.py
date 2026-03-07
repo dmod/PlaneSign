@@ -568,13 +568,12 @@ class WiFiScanCharacteristic(Characteristic):
 
     def __init__(self, bus, index, service):
         Characteristic.__init__(self, bus, index, self.WIFI_SCAN_CHRC_UUID, ['read'], service)
-        self.scan_result = scan_wifi()
 
     def ReadValue(self, options):
-        print('WiFiScanCharacteristic Read requested - auto-scanning...')
-        # Auto-trigger scan on read
-        print(f'Scan result size: {len(self.scan_result)}')
-        return [dbus.Byte(x.encode()) for x in self.scan_result]
+        print('WiFiScanCharacteristic Read requested - scanning...')
+        scan_result = scan_wifi()
+        print(f'Scan result size: {len(scan_result)}')
+        return [dbus.Byte(x.encode()) for x in scan_result]
 
 def main():
     global mainloop
