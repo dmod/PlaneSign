@@ -116,7 +116,10 @@ api_server_process.start()
 plane_data_process.start()
 weather_data_process.start()
 
-planesign.PlaneSign(defined_mode_handlers).sign_loop()
+ps = planesign.PlaneSign(defined_mode_handlers)
+defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
+shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
+ps.sign_loop()
 
 api_server_process.join()
 plane_data_process.join()

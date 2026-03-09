@@ -10,7 +10,7 @@ from modes import DisplayMode
 
 
 @__main__.planesign_mode_handler(DisplayMode.WELCOME)
-def welcome(self):
+def welcome(self, duration=None):
 
     device_name = f"PlaneSign-BLE-{get_mac_id()}"
     device_name_x = int(get_centered_text_x_offset_value(4, device_name))
@@ -50,13 +50,14 @@ def welcome(self):
         max_bright = random.randint(140, 255)  # bright twinkle stars
         star_spots.append((sx, sy, phase, speed, max_bright))
 
-    duration = 5
     start_time = time.perf_counter()
 
     while True:
         elapsed = time.perf_counter() - start_time
-        if elapsed >= duration or shared_config.shared_forced_sign_update.value == 1:
+        if shared_config.shared_forced_sign_update.value == 1:
             shared_config.shared_forced_sign_update.value = 0
+            break
+        if duration is not None and elapsed >= duration:
             break
 
         self.canvas.Clear()
@@ -109,4 +110,3 @@ def welcome(self):
         time.sleep(0.025)  # ~40fps
 
     self.canvas.Clear()
-    shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value  # Go back to the default mode after this welcome
