@@ -828,6 +828,21 @@ function set_lightning_mode(mode) {
 
 function set_snow_mode(mode) {
     call_endpoint("/snow_mode/" + mode);
+
+    detail = document.getElementById("Detail");
+    overview = document.getElementById("Overview");
+    if (mode == detail.value) {
+        detail.checked = true;
+        overview.checked = false;
+    }
+    else if (mode == overview.value) {
+        detail.checked = false;
+        overview.checked = true;
+    }
+    else {
+        detail.checked = false;
+        overview.checked = false;
+    }
 }
 
 function set_mandelbrot_color(mode) {

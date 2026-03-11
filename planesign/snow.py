@@ -42,8 +42,6 @@ def load_user_list():
             logging.error(f"Error reading {userresorts_filename}: {e}")
         finally:
             release_lock(userresorts_filename)
-    else:
-        logging.debug("No user resort list to read.")
 
     shared_config.data_dict["user_resorts"] = resort_list
     return
@@ -334,18 +332,33 @@ class SnowReport:
     def __init__(self,sign):
         self.sign = sign
         self.resorts = []
+        self.gif = Image.open(f"{shared_config.icons_dir}/snow/snow.gif")
+        self.nf = self.gif.n_frames
+        self.frame = 0
+
+    def draw_snow_frame(self):
+            self.gif.seek(self.frame)
+            self.frame = (self.frame + 1) % self.nf
+            
+            image = Image.new("RGB", self.gif.size, (255, 255, 255))
+            image.paste(self.gif, (0,0))
+            self.sign.canvas.SetImage(image.resize((128, 64), Image.BICUBIC).convert('RGB'), 1, -15)
 
     def drawresort(self, res_id):
 
         resort = self.update(res_id)
 
         if resort is not None:
-            if resort['isOpen']:
-                color = graphics.Color(10, 150, 10)
+            if 'isOpen' in resort:
+                if resort['isOpen']:
+                    color = graphics.Color(10, 150, 10)
+                else:
+                    color = graphics.Color(100, 10, 10)
             else:
-                color = graphics.Color(100, 10, 10)
+                color = graphics.Color(75, 75, 75)
 
-            graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46-round(len(resort['displayName'][:15])*3), 10, color, resort['displayName'][:15])
+            if 'displayName' in resort:
+                graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46-round(len(resort['displayName'][:15])*3), 10, color, resort['displayName'][:15])
 
             if "logo" in resort and resort["logo"] is not None:
                 sizex, sizey = resort['logo'].size
@@ -355,22 +368,27 @@ class SnowReport:
             
             graphics.DrawText(self.sign.canvas, self.sign.font57, 24, 20, graphics.Color(100, 10, 10), "New:")
 
-            snownew = resort['new']
+            snownew = None
+            if 'new' in resort:
+                snownew = resort['new']
+
             if snownew is None:
                 snownew = "?"
             else:
                 snownew = str(round(snownew))
             graphics.DrawText(self.sign.canvas, self.sign.font57, 45, 20, snowcolor(snownew), snownew+'"')
 
-            weather = resort["weather"]
+            weather = None
+            if "weather" in resort:
+                weather = resort["weather"]
 
             currtemp = "?°F"
-            if "currTemp" in weather and weather["currTemp"] is not None:
+            if weather and "currTemp" in weather and weather["currTemp"] is not None:
                 currtemp = f"{round(weather['currTemp'])}°F"
 
             graphics.DrawText(self.sign.canvas, self.sign.font57, 40-round(len(currtemp)*5/2), 30, graphics.Color(60, 60, 200), currtemp)
             
-            if "currWeatherIcon" in weather and weather["currWeatherIcon"]:
+            if weather and "currWeatherIcon" in weather and weather["currWeatherIcon"]:
                 image = weather["currWeatherIcon"]
 
                 width, height = image.size
@@ -480,9 +498,9 @@ class SnowReport:
 
             minTemp = "?"
             maxTemp = "?"
-            if "dayLow" in weather and weather["dayLow"] is not None:
+            if weather and "dayLow" in weather and weather["dayLow"] is not None:
                 minTemp = round(weather["dayLow"])
-            if "dayHigh" in weather and weather["dayHigh"] is not None:
+            if weather and "dayHigh" in weather and weather["dayHigh"] is not None:
                 maxTemp = round(weather["dayHigh"])
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, sunx+7, suny+5, graphics.Color(95, 95, 105), f"{minTemp}-{maxTemp}°F")
@@ -509,9 +527,9 @@ class SnowReport:
 
             minTemp = "?"
             maxTemp = "?"
-            if "nightLow" in weather and weather["nightLow"] is not None:
+            if weather and "nightLow" in weather and weather["nightLow"] is not None:
                 minTemp = round(weather["nightLow"])
-            if "nightHigh" in weather and weather["nightHigh"] is not None:
+            if weather and "nightHigh" in weather and weather["nightHigh"] is not None:
                 maxTemp = round(weather["nightHigh"])
 
             graphics.DrawText(self.sign.canvas, self.sign.font46, moonx+7, moony+5, graphics.Color(95, 95, 105), f"{minTemp}-{maxTemp}°F")
@@ -531,7 +549,7 @@ class SnowReport:
 
         if not found:
             if n > 0:
-                start_index = random.randint(0, n)
+                start_index = random.randint(0, n-1)
             else:
                 # Do not want to be in this mode if we have no saved user resorts
                 shared_config.shared_snow_mode.value = SnowMode.STATIC.value
@@ -637,12 +655,20 @@ class SnowReport:
                 logging.error(f"Error getting resort with uuid={res_id} from resort list.")
                 return None
 
-            reporturl = f"https://www.onthesnow.com/{info['region']}/{info['slug']}/skireport"
+            if "domain" in info and info['domain']:
+                domain = info['domain']
+            else:
+                domain = "www.onthesnow.com"
 
-            resort["url"]   = reporturl
-            resort["uuid"]  = res_id
+            reporturl = f"https://{domain}/{info['region']}/{info['slug']}/skireport"
 
-            logging.debug(f"Creating new data for uuid: {res_id}")
+            resort["url"]         = reporturl
+            resort["uuid"]        = res_id
+            resort["name"]        = info["title"]
+            resort["slug"]        = info["slug"]
+            resort["displayName"] = compute_display_name(info, 15)
+
+            logging.debug(f"Created new data for {resort['displayName']} (uuid: {res_id})")
 
             # Save this data for recall later
             self.resorts.append(resort)
@@ -656,6 +682,8 @@ class SnowReport:
             reporturl = resort["url"]
 
         logging.debug(f"Updating data for uuid: {res_id} using url: {reporturl}")
+
+        resort["last_update"] = datetime.now().timestamp()
 
         report_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
@@ -671,7 +699,12 @@ class SnowReport:
             }
 
         with requests.Session() as s:
-            response = s.get(reporturl, headers = report_headers, timeout=10)
+            try:
+                response = s.get(reporturl, headers = report_headers, timeout=10)
+            except Exception as e:
+                logging.error(f"Error getting snow report data for uuid: {res_id} from url {reporturl}: {e}")
+                response = None
+
             if response and response.status_code == requests.codes.ok:
                 
                 soup = BeautifulSoup(response.content, "html.parser")
@@ -688,11 +721,6 @@ class SnowReport:
                         resortdata = res
                         break
 
-                resort["name"]      = resortdata["title"]
-
-                resort["displayName"] = compute_display_name(resortdata, 15)
-
-                resort["slug"]      = resortdata["slug"]
                 resort["isOpen"]    = resortdata["status"]["openFlag"]
                 resort["runsOpen"]  = resortdata["runs"]["open"]
                 resort["runsTotal"] = resortdata["runs"]["total"]
@@ -959,12 +987,11 @@ class SnowReport:
 
                     resort["logo"] = logo
 
-                resort["last_update"] = datetime.now().timestamp()
-
-                return resort
             else:
-                logging.error(f"Could not update data for resort: {resort['name']} using url: {reporturl}")
-        return None
+                logging.error(f"Could not update data for uuid: {res_id} using url: {reporturl}")
+                return None
+
+        return resort
 
 @__main__.planesign_mode_handler(DisplayMode.SNOW)
 def snow_forecast(sign):
@@ -983,10 +1010,6 @@ def snow_forecast(sign):
     if n > 0:
         shared_config.data_dict["displayed_resort"] = user_list[random.randint(0, n-1)]
 
-    gif = Image.open(f"{shared_config.icons_dir}/snow/snow.gif")
-    nf = gif.n_frames
-    frame=0
-
     last_rotate = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.SNOW.value:
 
@@ -997,14 +1020,9 @@ def snow_forecast(sign):
 
         if (current_resort is None):
             # Nothing to display - draw the background gif
-            gif.seek(frame)
-            frame = (frame+1)%nf
-            
-            image = Image.new("RGB", gif.size, (255, 255, 255))
-            image.paste(gif, (0,0))
-            sign.canvas.SetImage(image.resize((128, 64), Image.BICUBIC).convert('RGB'), 1, -15)
+            sr.draw_snow_frame()
 
-        elif (shared_config.shared_snow_mode.value == SnowMode.STATIC.value or n == 0):
+        elif (shared_config.shared_snow_mode.value == SnowMode.STATIC.value):
 
             sr.drawresort(current_resort)
 
@@ -1026,8 +1044,19 @@ def snow_forecast(sign):
                     current_resort = user_list[index]
                     shared_config.data_dict["displayed_resort"] = current_resort
                     last_rotate = time.perf_counter()
+                elif n > 0:
+                    index = random.randint(0, n-1)
+                    current_resort = user_list[index]
+                    shared_config.data_dict["displayed_resort"] = current_resort
+                    last_rotate = time.perf_counter()
+                else:
+                    current_resort = None
+                    shared_config.data_dict["displayed_resort"] = None
 
-            sr.drawresort(current_resort)
+            if current_resort:
+                sr.drawresort(current_resort)
+            else:
+                sr.draw_snow_frame()
 
         elif (shared_config.shared_snow_mode.value == SnowMode.OVERVIEW.value):
             
@@ -1058,8 +1087,14 @@ def snow_forecast(sign):
                     current_resort = user_list[index]
                     shared_config.data_dict["displayed_resort"] = current_resort
                     last_rotate = time.perf_counter()
+                else:
+                    current_resort = None
+                    shared_config.data_dict["displayed_resort"] = None
                     
-            sr.drawoverview(current_resort, user_list)
+            if current_resort:
+                sr.drawoverview(current_resort, user_list)
+            else:
+                sr.draw_snow_frame()
 
         else:
             logging.error(f"Invalid snow mode: {shared_config.shared_snow_mode.value}.")

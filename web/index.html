@@ -108,9 +108,9 @@
         <div id="tracked_resorts" hidden>
           <b style="padding-top: 5px;display: block;">Tracked Resorts</b>
           <hr>
-          <input type="radio" id="Detail" name="snowstyle" onclick="set_snow_mode(this.value)" value="1" checked="checked">
+          <input type="radio" id="Detail" name="snowmode" onclick="set_snow_mode(this.value)" value="1" checked="checked">
           <label for="Detail">Rotate Detail</label>
-          <input type="radio" id="Overview" name="snowstyle" onclick="set_snow_mode(this.value)" value="2">
+          <input type="radio" id="Overview" name="snowmode" onclick="set_snow_mode(this.value)" value="2">
           <label for="Overview">Overview</label>
           <hr>
           <div id="user_resort_list">
@@ -118,7 +118,7 @@
         </div>
         <div id="resort_search" hidden>
           <input type="text" id="resort_searchbar" autocomplete="off" oninput="get_possible_autofill_resorts(this.value)"></input>
-          <button id="save_resort" onclick="save_current_resort()">
+          <button id="save_resort" onclick="save_current_resort(); set_snow_mode(getElementById('Detail').value)">
             Save
           </button>
         </div>
