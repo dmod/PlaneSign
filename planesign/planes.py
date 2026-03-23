@@ -47,7 +47,7 @@ def shorten_airport_name(name,desired_length):
 def show_closest_plane_if_in_alert_radius(sign):
     scroll=utilities.TextScroller(sign,2,21,(200, 10, 10),boxdim=(70,7),space=3,scrollspeed=10,holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_ALERT.value:
-        if shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= 2:
+        if shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= float(shared_config.CONF["PLANE_ALERT_RADIUS"]):
             plane_to_show = shared_config.data_dict["closest"]
         else:
             # No closest plane, show time
