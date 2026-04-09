@@ -1548,7 +1548,7 @@ def get_mac_id(interface='wlan0'):
     try:
         cmd = f"cat /sys/class/net/{interface}/address"
         mac_address = subprocess.check_output(cmd, shell=True, timeout=5).decode().strip()
-        return mac_address.replace(":", "").upper()[:4]
+        return mac_address.replace(":", "").upper()[-4:]
     except Exception:
         return "UNKNOWN"
 
