@@ -728,6 +728,36 @@ function get_audio_support() {
         if (value) {
             populate_sound_dropdown();
 
+            if (window.location.protocol === 'http:') {
+                // Mic recording requires HTTPS — replace mic button with link
+                var micBtn = document.getElementById("mic_button");
+
+                var wrapper = document.createElement("div");
+                wrapper.className = "box4";
+                wrapper.style.display = "flex";
+                wrapper.style.justifyContent = "center";
+                wrapper.style.alignItems = "center";
+
+                var enableBtn = document.createElement("a");
+                enableBtn.href = "https://" + window.location.host + window.location.pathname + window.location.search + window.location.hash;
+                enableBtn.textContent = "Enable Mic";
+                enableBtn.style.display = "flex";
+                enableBtn.style.justifyContent = "center";
+                enableBtn.style.alignItems = "center";
+                enableBtn.style.width = "120px";
+                enableBtn.style.height = "120px";
+                enableBtn.style.borderRadius = "50%";
+                enableBtn.style.backgroundColor = "#444";
+                enableBtn.style.color = "#ccc";
+                enableBtn.style.textDecoration = "none";
+                enableBtn.style.fontSize = "14px";
+                enableBtn.style.textAlign = "center";
+
+                wrapper.appendChild(enableBtn);
+                micBtn.parentNode.replaceChild(wrapper, micBtn);
+                return;
+            }
+
             try {
                 // get audio stream from user's mic
                 navigator.mediaDevices.getUserMedia({
