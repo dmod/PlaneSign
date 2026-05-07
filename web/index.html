@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=free-sketch-1">
+  <link rel="stylesheet" href="style.css?v=free-sketch-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=free-sketch-1"></script>
+  <script src="index.js?v=free-sketch-2"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -265,7 +265,9 @@
         <h2 id="free_sketch_title">Free Sketch</h2>
         <button type="button" class="free_sketch_icon_button" onclick="close_free_sketch_modal()" aria-label="Close">&times;</button>
       </div>
-      <canvas id="free_sketch_canvas" width="128" height="32"></canvas>
+      <div class="free_sketch_canvas_wrap">
+        <canvas id="free_sketch_canvas" width="128" height="32"></canvas>
+      </div>
       <div class="free_sketch_controls">
         <label class="free_sketch_color_label" for="free_sketch_color">Color</label>
         <input type="color" id="free_sketch_color" value="#ff0000">
