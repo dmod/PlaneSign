@@ -30,6 +30,7 @@ import cca
 import cgol
 import lightning
 import firework
+import free_sketch
 import weather
 import moon
 import snow

@@ -608,3 +608,117 @@ input[type=number] {
   float: none;
   outline: 0;
 }
+
+.modal_backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.modal_backdrop[hidden] {
+  display: none;
+}
+
+.free_sketch_modal {
+  width: min(960px, 96vw);
+  padding: 18px;
+  border: 3px solid black;
+  border-radius: 8px;
+  background: #2c2c2c;
+  color: white;
+}
+
+.free_sketch_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.free_sketch_header h2 {
+  margin: 0;
+  font-family: 'Permanent Marker';
+  font-size: 36px;
+  font-weight: normal;
+}
+
+.free_sketch_icon_button {
+  width: 44px;
+  height: 44px;
+  border: 2px solid white;
+  border-radius: 6px;
+  background: black;
+  color: white;
+  font-size: 36px;
+  line-height: 36px;
+  cursor: pointer;
+}
+
+#free_sketch_canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 128 / 32;
+  border: 3px solid #7bb9c9;
+  background: black;
+  image-rendering: pixelated;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.free_sketch_controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.free_sketch_color_label {
+  font-size: 22px;
+}
+
+#free_sketch_color {
+  width: 70px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid white;
+  background: black;
+}
+
+.free_sketch_control_button {
+  min-width: 110px;
+  height: 44px;
+  border: 2px solid white;
+  border-radius: 6px;
+  background: black;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.free_sketch_control_button.active {
+  background: #7bb9c9;
+  color: black;
+}
+
+@media (max-width: 700px) {
+  .modal_backdrop {
+    padding: 10px;
+  }
+
+  .free_sketch_modal {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .free_sketch_header h2 {
+    font-size: 30px;
+  }
+}

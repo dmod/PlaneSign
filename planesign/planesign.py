@@ -146,6 +146,42 @@ def set_track_a_flight(flight_num):
     return ""
 
 
+@app.route("/free_sketch/pixel", methods=["POST"])
+def set_free_sketch_pixel():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "Expected JSON object"}), 400
+
+    try:
+        x = int(data["x"])
+        y = int(data["y"])
+        r = int(data["r"])
+        g = int(data["g"])
+        b = int(data["b"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Expected integer x, y, r, g, b"}), 400
+
+    if not 0 <= x < 128 or not 0 <= y < 32:
+        return jsonify({"ok": False, "error": "Coordinates must be in range x=0-127, y=0-31"}), 400
+    if not 0 <= r <= 255 or not 0 <= g <= 255 or not 0 <= b <= 255:
+        return jsonify({"ok": False, "error": "RGB values must be in range 0-255"}), 400
+
+    index = (y * 128 + x) * 3
+    with shared_config.free_sketch_pixels.get_lock():
+        shared_config.free_sketch_pixels[index] = r
+        shared_config.free_sketch_pixels[index + 1] = g
+        shared_config.free_sketch_pixels[index + 2] = b
+
+    return jsonify({"ok": True})
+
+
+@app.route("/free_sketch/clear", methods=["POST"])
+def clear_free_sketch():
+    with shared_config.free_sketch_pixels.get_lock():
+        shared_config.free_sketch_pixels[:] = b"\x00" * len(shared_config.free_sketch_pixels)
+    return jsonify({"ok": True})
+
+
 @app.route('/set_mode/<mode>')
 def set_mode(mode):
     shared_config.shared_mode.value = DisplayMode[mode].value

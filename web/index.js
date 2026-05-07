@@ -2,6 +2,9 @@ var global_current_mode;
 var recordButton, recorder;
 var valid_tickers = null;
 var valid_resorts = null;
+var free_sketch_is_drawing = false;
+var free_sketch_is_eraser = false;
+var free_sketch_last_pixel = null;
 
 window.onload = function () {
     update_sign_status();
@@ -10,6 +13,7 @@ window.onload = function () {
     update_device_info();
     setInterval(update_device_info, 10000);
     get_audio_support();
+    setup_free_sketch();
 
     recordButton = document.getElementById('mic_button');
 
@@ -192,6 +196,146 @@ function call_endpoint(endpoint, callback) {
     }
     request.open('GET', "api" + endpoint, true);
     request.send();
+}
+
+function post_json_endpoint(endpoint, data, callback) {
+    fetch("api" + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data || {})
+    })
+        .then(async function (resp) {
+            var body = await resp.json().catch(function () { return null; });
+            if (!resp.ok || !body || body.ok !== true) {
+                throw new Error((body && body.error) ? body.error : ("HTTP " + resp.status));
+            }
+            if (callback) {
+                callback(body);
+            }
+        })
+        .catch(function (err) {
+            console.error(endpoint + " failed:", err);
+        });
+}
+
+function setup_free_sketch() {
+    var canvas = document.getElementById("free_sketch_canvas");
+    if (!canvas) {
+        return;
+    }
+
+    var context = canvas.getContext("2d");
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#000000";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    canvas.addEventListener("pointerdown", function (event) {
+        free_sketch_is_drawing = true;
+        free_sketch_last_pixel = null;
+        canvas.setPointerCapture(event.pointerId);
+        paint_free_sketch_pixel(event);
+    });
+
+    canvas.addEventListener("pointermove", function (event) {
+        if (free_sketch_is_drawing) {
+            paint_free_sketch_pixel(event);
+        }
+    });
+
+    canvas.addEventListener("pointerup", stop_free_sketch_drawing);
+    canvas.addEventListener("pointercancel", stop_free_sketch_drawing);
+    canvas.addEventListener("pointerleave", function () {
+        free_sketch_last_pixel = null;
+    });
+}
+
+function open_free_sketch_modal() {
+    var modal = document.getElementById("free_sketch_modal");
+    if (!modal) {
+        return;
+    }
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function close_free_sketch_modal() {
+    var modal = document.getElementById("free_sketch_modal");
+    if (!modal) {
+        return;
+    }
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+    free_sketch_is_drawing = false;
+    free_sketch_last_pixel = null;
+}
+
+function toggle_free_sketch_eraser() {
+    free_sketch_is_eraser = !free_sketch_is_eraser;
+    var eraser = document.getElementById("free_sketch_eraser");
+    if (eraser) {
+        eraser.classList.toggle("active", free_sketch_is_eraser);
+    }
+}
+
+function clear_free_sketch() {
+    var canvas = document.getElementById("free_sketch_canvas");
+    if (canvas) {
+        var context = canvas.getContext("2d");
+        context.fillStyle = "#000000";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    post_json_endpoint("/free_sketch/clear", {});
+}
+
+function stop_free_sketch_drawing() {
+    free_sketch_is_drawing = false;
+    free_sketch_last_pixel = null;
+}
+
+function get_free_sketch_color() {
+    if (free_sketch_is_eraser) {
+        return { r: 0, g: 0, b: 0, hex: "#000000" };
+    }
+
+    var color = document.getElementById("free_sketch_color").value;
+    return {
+        r: parseInt(color.substring(1, 3), 16),
+        g: parseInt(color.substring(3, 5), 16),
+        b: parseInt(color.substring(5, 7), 16),
+        hex: color
+    };
+}
+
+function paint_free_sketch_pixel(event) {
+    event.preventDefault();
+
+    var canvas = document.getElementById("free_sketch_canvas");
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.floor((event.clientX - rect.left) * canvas.width / rect.width);
+    var y = Math.floor((event.clientY - rect.top) * canvas.height / rect.height);
+
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+        return;
+    }
+
+    var pixel_key = x + "," + y;
+    if (pixel_key === free_sketch_last_pixel) {
+        return;
+    }
+    free_sketch_last_pixel = pixel_key;
+
+    var selected_color = get_free_sketch_color();
+    var context = canvas.getContext("2d");
+    context.fillStyle = selected_color.hex;
+    context.fillRect(x, y, 1, 1);
+
+    post_json_endpoint("/free_sketch/pixel", {
+        x: x,
+        y: y,
+        r: selected_color.r,
+        g: selected_color.g,
+        b: selected_color.b
+    });
 }
 
 function close_all_flight_lists() {
@@ -839,6 +983,9 @@ function set_mode(mode) {
     if (mode !== 'TRACK_A_FLIGHT') {
         document.getElementById('track-a-flight_div').hidden = true;
     }
+    if (mode !== 'FREE_SKETCH') {
+        close_free_sketch_modal();
+    }
     if (mode == 'CGOL') {
         var ele = document.getElementsByName('cgolstyle');
         for (i = 0; i < ele.length; i++) {
@@ -848,6 +995,10 @@ function set_mode(mode) {
         call_endpoint("/set_mode/" + mode + "?style=" + ele[i].value);
     } else {
         call_endpoint("/set_mode/" + mode);
+    }
+
+    if (mode == 'FREE_SKETCH') {
+        open_free_sketch_modal();
     }
 
 }
@@ -1058,6 +1209,10 @@ function update_sign_status() {
             // yet or not
             if (global_current_mode == "FINANCE") {
                 sib.hidden = (valid_tickers === null);
+            }
+
+            if (global_current_mode == "FREE_SKETCH") {
+                open_free_sketch_modal();
             }
         }
     });

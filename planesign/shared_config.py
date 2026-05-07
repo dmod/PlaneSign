@@ -1,4 +1,4 @@
-from multiprocessing import Value
+from multiprocessing import Array, Value
 from modes import DisplayMode
 import os
 
@@ -21,6 +21,8 @@ shared_mandelbrot_color = Value('i', 0)
 shared_mandelbrot_colorscale = Value('d', 3)
 
 shared_snow_mode = Value('i', 1)
+
+free_sketch_pixels = Array('B', 128 * 32 * 3)
 
 local_timezone = None
 
