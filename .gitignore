@@ -33,7 +33,6 @@ logs/
 sign.conf
 
 #misc
-*.lock
 satdat.txt
 satsup.txt
 resortdata.json
