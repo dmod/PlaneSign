@@ -31,6 +31,7 @@ CM_2_IN = 0.3937008
 country_polys = []
 state_polys = []
 water_polys = []
+geojsons_loaded = False
 
 from modes import DisplayMode
 
@@ -174,11 +175,16 @@ def read_geojsons():
     global country_polys
     global state_polys
     global water_polys
+    global geojsons_loaded
+
+    if geojsons_loaded:
+        return
 
     # Load static geojson files for use in local reverse geocoding
     country_polys = gpd.read_file(f"{shared_config.datafiles_dir}/countries.geojson")
     state_polys = gpd.read_file(f"{shared_config.datafiles_dir}/states.geojson")
     water_polys = gpd.read_file(f"{shared_config.datafiles_dir}/water.geojson")
+    geojsons_loaded = True
 
 def reverse_geocode(lat, lon):
     """
@@ -191,6 +197,8 @@ def reverse_geocode(lat, lon):
     global country_polys
     global state_polys
     global water_polys
+
+    read_geojsons()
 
     formatted_address = None
     code = None
