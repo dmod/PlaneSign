@@ -31,6 +31,8 @@ RUN apt update && apt -y install \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 RUN git clone https://github.com/hzeller/rpi-rgb-led-matrix.git \
   && cd rpi-rgb-led-matrix \
   && git checkout 9fbdeea555239daa19d2226f836b790387c0f2e6 \
