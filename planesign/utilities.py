@@ -148,7 +148,7 @@ def set_usb_audio_volume(card_num):
             logging.error("No suitable volume control found")
             return
 
-        volume_percent = "95%"
+        volume_percent = "90%"
         result = subprocess.run(['amixer', '-c', card_num, 'set', found_control, volume_percent], 
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode == 0:

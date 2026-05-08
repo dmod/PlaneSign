@@ -2,6 +2,19 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "uv sync and start nginx",
+            "dependsOn": [
+                "uv sync",
+                "Start nginx"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "uv sync",
+            "type": "shell",
+            "command": "uv sync"
+        },
+        {
             "label": "Start nginx",
             "type": "shell",
             "command": "service nginx start",
@@ -10,4 +23,4 @@
             }
         }
     ]
-} 
+}

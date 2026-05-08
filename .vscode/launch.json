@@ -12,10 +12,11 @@
         {
             "name": "PlaneSign Debug - devcontainer",
             "type": "debugpy",
+            "python": "${workspaceFolder}/.venv/bin/python",
             "request": "launch",
             "program": "${workspaceFolder}/planesign",
             "console": "integratedTerminal",
-            "preLaunchTask": "Start nginx"
+            "preLaunchTask": "uv sync and start nginx"
         },
         {
             "name": "Bluetooth Debug",
