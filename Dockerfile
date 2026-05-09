@@ -6,6 +6,7 @@ RUN apt update && apt -y install \
   openssl \
   python3 \
   python3-dev \
+  python3-pil \
   ffmpeg \
   alsa-utils \
   cython3 \

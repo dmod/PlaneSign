@@ -834,7 +834,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pytz", specifier = ">=2026.2" },
-    { name = "rgbmatrix", git = "https://github.com/hzeller/rpi-rgb-led-matrix.git" },
+    { name = "rgbmatrix", directory = "../../rpi-rgb-led-matrix" },
     { name = "skyfield", specifier = ">=1.54" },
     { name = "timezonefinder", specifier = ">=8.2.4" },
     { name = "websocket-client", specifier = ">=1.9.0" },
@@ -987,7 +987,7 @@ wheels = [
 [[package]]
 name = "rgbmatrix"
 version = "0.0.1+20260125"
-source = { git = "https://github.com/hzeller/rpi-rgb-led-matrix.git#89072356305e272c2b1af32b8377a274df3d6d9f" }
+source = { directory = "../../rpi-rgb-led-matrix" }
 
 [[package]]
 name = "sgp4"
