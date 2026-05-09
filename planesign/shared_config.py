@@ -32,6 +32,7 @@ log_filename = "logs/planesign.log"
 icons_dir = "./icons"
 
 possible_font_dirs = [
+    "/rpi-rgb-led-matrix/fonts",
     "../rpi-rgb-led-matrix/fonts",
     "../../rpi-rgb-led-matrix/fonts"
 ]

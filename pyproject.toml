@@ -26,4 +26,4 @@ dependencies = [
 extra-build-variables = { rgbmatrix = { CFLAGS = "-I/usr/include/python3.12" } }
 
 [tool.uv.sources]
-rgbmatrix = { path = "../../rpi-rgb-led-matrix" }
+rgbmatrix = { path = "/rpi-rgb-led-matrix" }
