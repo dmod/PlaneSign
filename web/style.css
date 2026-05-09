@@ -641,6 +641,12 @@ input[type=number] {
   margin-bottom: 14px;
 }
 
+.free_sketch_header_actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .free_sketch_header h2 {
   margin: 0;
   font-family: 'Permanent Marker';
@@ -733,6 +739,21 @@ input[type=number] {
   color: black;
 }
 
+.modal_backdrop.free_sketch_fullscreen {
+  align-items: flex-start;
+  justify-content: stretch;
+  padding: 0;
+}
+
+.modal_backdrop.free_sketch_fullscreen .free_sketch_modal {
+  width: 100vw;
+  min-height: 100vh;
+  padding: 20px 24px;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
 @media (max-width: 700px) {
   .modal_backdrop {
     padding: 10px;
@@ -745,5 +766,15 @@ input[type=number] {
 
   .free_sketch_header h2 {
     font-size: 30px;
+  }
+
+  .free_sketch_header_actions {
+    gap: 8px;
+  }
+
+  #free_sketch_fullscreen_toggle {
+    min-width: 86px;
+    font-size: 16px;
+    height: 40px;
   }
 }

@@ -4,7 +4,10 @@ var valid_tickers = null;
 var valid_resorts = null;
 var free_sketch_is_drawing = false;
 var free_sketch_is_eraser = false;
+var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
+
+document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
 window.onload = function () {
     update_sign_status();
@@ -256,6 +259,7 @@ function open_free_sketch_modal() {
     }
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
+    update_free_sketch_fullscreen_ui(is_free_sketch_in_browser_fullscreen() || free_sketch_is_fullscreen);
 }
 
 function close_free_sketch_modal() {
@@ -263,10 +267,80 @@ function close_free_sketch_modal() {
     if (!modal) {
         return;
     }
+    exit_free_sketch_fullscreen();
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
     free_sketch_is_drawing = false;
     free_sketch_last_pixel = null;
+}
+
+function is_free_sketch_in_browser_fullscreen() {
+    var fs = document.fullscreenElement;
+    var modal = document.getElementById("free_sketch_modal");
+    return !!(fs && modal && fs === modal);
+}
+
+function update_free_sketch_fullscreen_ui(is_fullscreen) {
+    free_sketch_is_fullscreen = is_fullscreen;
+
+    var modal = document.getElementById("free_sketch_modal");
+    if (modal) {
+        modal.classList.toggle("free_sketch_fullscreen", is_fullscreen);
+    }
+
+    var toggle = document.getElementById("free_sketch_fullscreen_toggle");
+    if (toggle) {
+        toggle.textContent = is_fullscreen ? "Exit Full Screen" : "Full Screen";
+        toggle.setAttribute("aria-pressed", is_fullscreen ? "true" : "false");
+    }
+}
+
+function sync_free_sketch_fullscreen_state() {
+    update_free_sketch_fullscreen_ui(is_free_sketch_in_browser_fullscreen());
+}
+
+function enter_free_sketch_fullscreen() {
+    var modal = document.getElementById("free_sketch_modal");
+    if (!modal) {
+        return;
+    }
+
+    if (!modal.hidden && modal.requestFullscreen) {
+        modal.requestFullscreen()
+            .then(function () {
+                update_free_sketch_fullscreen_ui(true);
+            })
+            .catch(function () {
+                // Fallback to full-width modal if browser fullscreen is blocked.
+                update_free_sketch_fullscreen_ui(true);
+            });
+        return;
+    }
+
+    update_free_sketch_fullscreen_ui(true);
+}
+
+function exit_free_sketch_fullscreen() {
+    if (is_free_sketch_in_browser_fullscreen() && document.exitFullscreen) {
+        document.exitFullscreen()
+            .then(function () {
+                update_free_sketch_fullscreen_ui(false);
+            })
+            .catch(function () {
+                update_free_sketch_fullscreen_ui(false);
+            });
+        return;
+    }
+
+    update_free_sketch_fullscreen_ui(false);
+}
+
+function toggle_free_sketch_fullscreen() {
+    if (is_free_sketch_in_browser_fullscreen() || free_sketch_is_fullscreen) {
+        exit_free_sketch_fullscreen();
+    } else {
+        enter_free_sketch_fullscreen();
+    }
 }
 
 function toggle_free_sketch_eraser() {
