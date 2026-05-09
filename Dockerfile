@@ -27,6 +27,8 @@ EXPOSE 80/tcp 443/tcp
 
 COPY . .
 
+RUN uv sync --frozen --no-install-project --no-dev
+
 # Nginx Setup
 RUN unlink /etc/nginx/sites-enabled/default
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
