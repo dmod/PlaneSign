@@ -51,6 +51,7 @@ for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; 
 done
 
 wget -q --show-progress -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
+wget -q --show-progress -O "$INSTALL_DIR/compose.yml" "$GITHUB_BASE_URL/compose.yml"
 
 # Install bluetooth support
 sudo apt-get update
@@ -91,9 +92,10 @@ if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
   cp "$INSTALL_DIR/sign.conf.sample" "$INSTALL_DIR/sign.conf"
 fi
 
-sudo docker pull ghcr.io/dmod/planesign:latest
-sudo docker rm --force PlaneSignRuntime # Stops and removes any existing container
-sudo docker run --detach --restart unless-stopped --name PlaneSignRuntime --privileged --network host --mount type=bind,source="$INSTALL_DIR/sign.conf",target=/planesign/sign.conf ghcr.io/dmod/planesign:latest
+mkdir -p "$INSTALL_DIR/sketches"
+
+sudo docker compose -f "$INSTALL_DIR/compose.yaml" pull
+sudo docker compose -f "$INSTALL_DIR/compose.yaml" up --detach --force-recreate
 
 echo "Installation and configuration completed! Rebooting..."
 sudo reboot

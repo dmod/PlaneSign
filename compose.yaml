@@ -1,0 +1,10 @@
+services:
+  planesign:
+    image: ghcr.io/dmod/planesign:latest
+    container_name: PlaneSignRuntime
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./sign.conf:/planesign/sign.conf
+      - ./sketches:/planesign/sketches
