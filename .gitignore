@@ -28,6 +28,7 @@ share/python-wheels/
 MANIFEST
 
 logs/
+sketches/
 
 #Config
 sign.conf

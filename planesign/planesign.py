@@ -31,13 +31,16 @@ from timezonefinder import TimezoneFinder
 
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 from multiprocessing import Process, Manager, Value, Array, Queue
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from PIL import Image, ImageDraw
 from flask_cors import CORS
+import re
 
 import utilities
 import shared_config
 from modes import DisplayMode
+
+SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
 
 app = Flask(__name__)
 CORS(app)
@@ -180,6 +183,70 @@ def clear_free_sketch():
     with shared_config.free_sketch_pixels.get_lock():
         shared_config.free_sketch_pixels[:] = b"\x00" * len(shared_config.free_sketch_pixels)
     return jsonify({"ok": True})
+
+
+def _validate_sketch_filename(filename):
+    if not filename or not re.match(r'^[a-zA-Z0-9_\-]+\.png$', filename):
+        return False
+    if '..' in filename or '/' in filename or '\\' in filename:
+        return False
+    return True
+
+
+@app.route("/free_sketch/save", methods=["POST"])
+def save_free_sketch():
+    os.makedirs(SKETCHES_DIR, exist_ok=True)
+    with shared_config.free_sketch_pixels.get_lock():
+        pixels = bytes(shared_config.free_sketch_pixels)
+    img = Image.frombytes("RGB", (128, 32), pixels)
+    filename = "sketch_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
+    img.save(os.path.join(SKETCHES_DIR, filename))
+    return jsonify({"ok": True, "filename": filename})
+
+
+@app.route("/free_sketch/list")
+def list_free_sketches():
+    os.makedirs(SKETCHES_DIR, exist_ok=True)
+    files = sorted(glob.glob(os.path.join(SKETCHES_DIR, "*.png")), reverse=True)
+    sketches = []
+    for f in files:
+        name = os.path.basename(f)
+        sketches.append({"filename": name, "url": "/api/free_sketch/image/" + name})
+    return jsonify({"ok": True, "sketches": sketches})
+
+
+@app.route("/free_sketch/load/<filename>", methods=["POST"])
+def load_free_sketch(filename):
+    if not _validate_sketch_filename(filename):
+        return jsonify({"ok": False, "error": "Invalid filename"}), 400
+    filepath = os.path.join(SKETCHES_DIR, filename)
+    if not os.path.isfile(filepath):
+        return jsonify({"ok": False, "error": "Sketch not found"}), 404
+    img = Image.open(filepath).convert("RGB")
+    if img.size != (128, 32):
+        return jsonify({"ok": False, "error": "Invalid sketch dimensions"}), 400
+    pixels = img.tobytes()
+    with shared_config.free_sketch_pixels.get_lock():
+        shared_config.free_sketch_pixels[:] = pixels
+    return jsonify({"ok": True})
+
+
+@app.route("/free_sketch/delete/<filename>", methods=["POST"])
+def delete_free_sketch(filename):
+    if not _validate_sketch_filename(filename):
+        return jsonify({"ok": False, "error": "Invalid filename"}), 400
+    filepath = os.path.join(SKETCHES_DIR, filename)
+    if not os.path.isfile(filepath):
+        return jsonify({"ok": False, "error": "Sketch not found"}), 404
+    os.remove(filepath)
+    return jsonify({"ok": True})
+
+
+@app.route("/free_sketch/image/<filename>")
+def serve_free_sketch_image(filename):
+    if not _validate_sketch_filename(filename):
+        return jsonify({"ok": False, "error": "Invalid filename"}), 400
+    return send_from_directory(SKETCHES_DIR, filename, mimetype="image/png")
 
 
 @app.route('/set_mode/<mode>')

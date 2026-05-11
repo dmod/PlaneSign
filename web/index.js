@@ -260,6 +260,7 @@ function open_free_sketch_modal() {
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
     update_free_sketch_fullscreen_ui(is_free_sketch_in_browser_fullscreen() || free_sketch_is_fullscreen);
+    load_free_sketch_gallery();
 }
 
 function close_free_sketch_modal() {
@@ -359,6 +360,84 @@ function clear_free_sketch() {
         context.fillRect(0, 0, canvas.width, canvas.height);
     }
     post_json_endpoint("/free_sketch/clear", {});
+}
+
+function save_free_sketch() {
+    post_json_endpoint("/free_sketch/save", {}, function () {
+        load_free_sketch_gallery();
+    });
+}
+
+function load_free_sketch_gallery() {
+    var gallery = document.getElementById("free_sketch_gallery");
+    if (!gallery) {
+        return;
+    }
+
+    fetch("api/free_sketch/list")
+        .then(function (resp) { return resp.json(); })
+        .then(function (data) {
+            if (!data || !data.ok) {
+                return;
+            }
+
+            gallery.innerHTML = "";
+
+            if (data.sketches.length === 0) {
+                return;
+            }
+
+            data.sketches.forEach(function (sketch) {
+                var item = document.createElement("div");
+                item.className = "free_sketch_gallery_item";
+
+                var img = document.createElement("img");
+                img.src = "api/free_sketch/image/" + sketch.filename;
+                img.alt = sketch.filename;
+                img.draggable = false;
+                img.addEventListener("click", function () {
+                    recall_free_sketch(sketch.filename);
+                });
+
+                var del_btn = document.createElement("button");
+                del_btn.className = "free_sketch_gallery_delete";
+                del_btn.textContent = "\u00d7";
+                del_btn.title = "Delete sketch";
+                del_btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    delete_free_sketch(sketch.filename);
+                });
+
+                item.appendChild(img);
+                item.appendChild(del_btn);
+                gallery.appendChild(item);
+            });
+        })
+        .catch(function (err) {
+            console.error("Failed to load sketch gallery:", err);
+        });
+}
+
+function recall_free_sketch(filename) {
+    post_json_endpoint("/free_sketch/load/" + filename, {}, function () {
+        var canvas = document.getElementById("free_sketch_canvas");
+        if (!canvas) {
+            return;
+        }
+        var img = new Image();
+        img.onload = function () {
+            var ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0);
+        };
+        img.src = "api/free_sketch/image/" + filename + "?t=" + Date.now();
+    });
+}
+
+function delete_free_sketch(filename) {
+    post_json_endpoint("/free_sketch/delete/" + filename, {}, function () {
+        load_free_sketch_gallery();
+    });
 }
 
 function stop_free_sketch_drawing() {
