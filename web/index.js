@@ -250,6 +250,13 @@ function setup_free_sketch() {
     canvas.addEventListener("pointerleave", function () {
         free_sketch_last_pixel = null;
     });
+
+    var color = document.getElementById("free_sketch_color");
+    if (color) {
+        color.addEventListener("input", function () {
+            set_free_sketch_eraser(false);
+        });
+    }
 }
 
 function open_free_sketch_modal() {
@@ -345,7 +352,11 @@ function toggle_free_sketch_fullscreen() {
 }
 
 function toggle_free_sketch_eraser() {
-    free_sketch_is_eraser = !free_sketch_is_eraser;
+    set_free_sketch_eraser(!free_sketch_is_eraser);
+}
+
+function set_free_sketch_eraser(is_eraser) {
+    free_sketch_is_eraser = is_eraser;
     var eraser = document.getElementById("free_sketch_eraser");
     if (eraser) {
         eraser.classList.toggle("active", free_sketch_is_eraser);
