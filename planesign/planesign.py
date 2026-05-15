@@ -41,6 +41,7 @@ import shared_config
 from modes import DisplayMode
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
+FREE_SKETCH_BRUSH_SIZES = {1, 2, 3}
 
 app = Flask(__name__)
 CORS(app)
@@ -164,16 +165,31 @@ def set_free_sketch_pixel():
     except (KeyError, TypeError, ValueError):
         return jsonify({"ok": False, "error": "Expected integer x, y, r, g, b"}), 400
 
+    try:
+        brush_size = int(data.get("brush_size", 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, or 3"}), 400
+
     if not 0 <= x < 128 or not 0 <= y < 32:
         return jsonify({"ok": False, "error": "Coordinates must be in range x=0-127, y=0-31"}), 400
     if not 0 <= r <= 255 or not 0 <= g <= 255 or not 0 <= b <= 255:
         return jsonify({"ok": False, "error": "RGB values must be in range 0-255"}), 400
+    if brush_size not in FREE_SKETCH_BRUSH_SIZES:
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, or 3"}), 400
 
-    index = (y * 128 + x) * 3
+    start_x = x - (brush_size // 2)
+    start_y = y - (brush_size // 2)
     with shared_config.free_sketch_pixels.get_lock():
-        shared_config.free_sketch_pixels[index] = r
-        shared_config.free_sketch_pixels[index + 1] = g
-        shared_config.free_sketch_pixels[index + 2] = b
+        for pixel_y in range(start_y, start_y + brush_size):
+            if not 0 <= pixel_y < 32:
+                continue
+            for pixel_x in range(start_x, start_x + brush_size):
+                if not 0 <= pixel_x < 128:
+                    continue
+                index = (pixel_y * 128 + pixel_x) * 3
+                shared_config.free_sketch_pixels[index] = r
+                shared_config.free_sketch_pixels[index + 1] = g
+                shared_config.free_sketch_pixels[index + 2] = b
 
     return jsonify({"ok": True})
 

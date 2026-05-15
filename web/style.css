@@ -723,6 +723,34 @@ input[type=number] {
   background: black;
 }
 
+.free_sketch_brush_sizes {
+  display: inline-flex;
+  align-items: center;
+  border: 2px solid white;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.free_sketch_brush_size {
+  min-width: 56px;
+  height: 40px;
+  border: none;
+  border-right: 2px solid white;
+  background: black;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.free_sketch_brush_size:last-child {
+  border-right: none;
+}
+
+.free_sketch_brush_size.active {
+  background: #7bb9c9;
+  color: black;
+}
+
 .free_sketch_control_button {
   min-width: 110px;
   height: 44px;

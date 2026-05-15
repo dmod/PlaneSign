@@ -6,6 +6,7 @@ var free_sketch_is_drawing = false;
 var free_sketch_is_eraser = false;
 var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
+var free_sketch_brush_size = 1;
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
@@ -363,6 +364,23 @@ function set_free_sketch_eraser(is_eraser) {
     }
 }
 
+function set_free_sketch_brush_size(size) {
+    if ([1, 2, 3].indexOf(size) === -1) {
+        return;
+    }
+
+    free_sketch_brush_size = size;
+
+    [1, 2, 3].forEach(function (brush_size) {
+        var button = document.getElementById("free_sketch_brush_" + brush_size);
+        if (button) {
+            var is_active = brush_size === size;
+            button.classList.toggle("active", is_active);
+            button.setAttribute("aria-pressed", is_active ? "true" : "false");
+        }
+    });
+}
+
 function clear_free_sketch() {
     var canvas = document.getElementById("free_sketch_canvas");
     if (canvas) {
@@ -491,11 +509,14 @@ function paint_free_sketch_pixel(event) {
     var selected_color = get_free_sketch_color();
     var context = canvas.getContext("2d");
     context.fillStyle = selected_color.hex;
-    context.fillRect(x, y, 1, 1);
+    var start_x = x - Math.floor(free_sketch_brush_size / 2);
+    var start_y = y - Math.floor(free_sketch_brush_size / 2);
+    context.fillRect(start_x, start_y, free_sketch_brush_size, free_sketch_brush_size);
 
     post_json_endpoint("/free_sketch/pixel", {
         x: x,
         y: y,
+        brush_size: free_sketch_brush_size,
         r: selected_color.r,
         g: selected_color.g,
         b: selected_color.b
