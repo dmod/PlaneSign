@@ -7,6 +7,8 @@ var free_sketch_is_eraser = false;
 var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
 var free_sketch_brush_size = 1;
+var free_sketch_hover_position = null;
+var free_sketch_brush_sizes = [1, 2, 3, 4];
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
@@ -233,23 +235,39 @@ function setup_free_sketch() {
     context.fillStyle = "#000000";
     context.fillRect(0, 0, canvas.width, canvas.height);
 
+    var hover_canvas = document.getElementById("free_sketch_hover_canvas");
+    if (hover_canvas) {
+        var hover_context = hover_canvas.getContext("2d");
+        hover_context.imageSmoothingEnabled = false;
+        hover_context.clearRect(0, 0, hover_canvas.width, hover_canvas.height);
+    }
+
     canvas.addEventListener("pointerdown", function (event) {
         free_sketch_is_drawing = true;
         free_sketch_last_pixel = null;
         canvas.setPointerCapture(event.pointerId);
         paint_free_sketch_pixel(event);
+        update_free_sketch_hover(event);
     });
 
     canvas.addEventListener("pointermove", function (event) {
         if (free_sketch_is_drawing) {
             paint_free_sketch_pixel(event);
         }
+        update_free_sketch_hover(event);
     });
 
-    canvas.addEventListener("pointerup", stop_free_sketch_drawing);
-    canvas.addEventListener("pointercancel", stop_free_sketch_drawing);
+    canvas.addEventListener("pointerup", function (event) {
+        stop_free_sketch_drawing();
+        update_free_sketch_hover(event);
+    });
+    canvas.addEventListener("pointercancel", function () {
+        stop_free_sketch_drawing();
+        clear_free_sketch_hover();
+    });
     canvas.addEventListener("pointerleave", function () {
         free_sketch_last_pixel = null;
+        clear_free_sketch_hover();
     });
 
     var color = document.getElementById("free_sketch_color");
@@ -281,6 +299,7 @@ function close_free_sketch_modal() {
     modal.setAttribute("aria-hidden", "true");
     free_sketch_is_drawing = false;
     free_sketch_last_pixel = null;
+    clear_free_sketch_hover();
 }
 
 function is_free_sketch_in_browser_fullscreen() {
@@ -365,13 +384,13 @@ function set_free_sketch_eraser(is_eraser) {
 }
 
 function set_free_sketch_brush_size(size) {
-    if ([1, 2, 3].indexOf(size) === -1) {
+    if (free_sketch_brush_sizes.indexOf(size) === -1) {
         return;
     }
 
     free_sketch_brush_size = size;
 
-    [1, 2, 3].forEach(function (brush_size) {
+    free_sketch_brush_sizes.forEach(function (brush_size) {
         var button = document.getElementById("free_sketch_brush_" + brush_size);
         if (button) {
             var is_active = brush_size === size;
@@ -379,6 +398,10 @@ function set_free_sketch_brush_size(size) {
             button.setAttribute("aria-pressed", is_active ? "true" : "false");
         }
     });
+
+    if (free_sketch_hover_position) {
+        draw_free_sketch_hover(free_sketch_hover_position.x, free_sketch_hover_position.y);
+    }
 }
 
 function clear_free_sketch() {
@@ -488,17 +511,77 @@ function get_free_sketch_color() {
     };
 }
 
-function paint_free_sketch_pixel(event) {
-    event.preventDefault();
-
+function get_free_sketch_canvas_pixel(event) {
     var canvas = document.getElementById("free_sketch_canvas");
+    if (!canvas) {
+        return null;
+    }
+
     var rect = canvas.getBoundingClientRect();
     var x = Math.floor((event.clientX - rect.left) * canvas.width / rect.width);
     var y = Math.floor((event.clientY - rect.top) * canvas.height / rect.height);
 
     if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+        return null;
+    }
+
+    return { x: x, y: y };
+}
+
+function get_free_sketch_brush_bounds(x, y) {
+    return {
+        x: x - Math.floor(free_sketch_brush_size / 2),
+        y: y - Math.floor(free_sketch_brush_size / 2),
+        size: free_sketch_brush_size
+    };
+}
+
+function clear_free_sketch_hover() {
+    var hover_canvas = document.getElementById("free_sketch_hover_canvas");
+    if (!hover_canvas) {
         return;
     }
+
+    var context = hover_canvas.getContext("2d");
+    context.clearRect(0, 0, hover_canvas.width, hover_canvas.height);
+    free_sketch_hover_position = null;
+}
+
+function draw_free_sketch_hover(x, y) {
+    var hover_canvas = document.getElementById("free_sketch_hover_canvas");
+    if (!hover_canvas) {
+        return;
+    }
+
+    var context = hover_canvas.getContext("2d");
+    var bounds = get_free_sketch_brush_bounds(x, y);
+    context.clearRect(0, 0, hover_canvas.width, hover_canvas.height);
+    context.fillStyle = "rgba(190, 190, 190, 0.55)";
+    context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+    free_sketch_hover_position = { x: x, y: y };
+}
+
+function update_free_sketch_hover(event) {
+    var pixel = get_free_sketch_canvas_pixel(event);
+    if (!pixel) {
+        clear_free_sketch_hover();
+        return;
+    }
+
+    draw_free_sketch_hover(pixel.x, pixel.y);
+}
+
+function paint_free_sketch_pixel(event) {
+    event.preventDefault();
+
+    var canvas = document.getElementById("free_sketch_canvas");
+    var pixel = get_free_sketch_canvas_pixel(event);
+    if (!canvas || !pixel) {
+        return;
+    }
+
+    var x = pixel.x;
+    var y = pixel.y;
 
     var pixel_key = x + "," + y;
     if (pixel_key === free_sketch_last_pixel) {
@@ -509,9 +592,8 @@ function paint_free_sketch_pixel(event) {
     var selected_color = get_free_sketch_color();
     var context = canvas.getContext("2d");
     context.fillStyle = selected_color.hex;
-    var start_x = x - Math.floor(free_sketch_brush_size / 2);
-    var start_y = y - Math.floor(free_sketch_brush_size / 2);
-    context.fillRect(start_x, start_y, free_sketch_brush_size, free_sketch_brush_size);
+    var bounds = get_free_sketch_brush_bounds(x, y);
+    context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
 
     post_json_endpoint("/free_sketch/pixel", {
         x: x,

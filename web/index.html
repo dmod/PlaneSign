@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=free-sketch-6">
+  <link rel="stylesheet" href="style.css?v=free-sketch-8">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=free-sketch-6"></script>
+  <script src="index.js?v=free-sketch-8"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -270,6 +270,7 @@
       </div>
       <div class="free_sketch_canvas_wrap">
         <canvas id="free_sketch_canvas" width="128" height="32"></canvas>
+        <canvas id="free_sketch_hover_canvas" width="128" height="32" aria-hidden="true"></canvas>
       </div>
       <div class="free_sketch_controls">
         <label class="free_sketch_color_label" for="free_sketch_color">Color</label>
@@ -278,6 +279,7 @@
           <button type="button" id="free_sketch_brush_1" class="free_sketch_brush_size active" onclick="set_free_sketch_brush_size(1)" aria-pressed="true">1x1</button>
           <button type="button" id="free_sketch_brush_2" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(2)" aria-pressed="false">2x2</button>
           <button type="button" id="free_sketch_brush_3" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(3)" aria-pressed="false">3x3</button>
+          <button type="button" id="free_sketch_brush_4" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(4)" aria-pressed="false">4x4</button>
         </div>
         <button type="button" id="free_sketch_eraser" class="free_sketch_control_button" onclick="toggle_free_sketch_eraser()">Eraser</button>
         <button type="button" class="free_sketch_control_button" onclick="clear_free_sketch()">Clear</button>
