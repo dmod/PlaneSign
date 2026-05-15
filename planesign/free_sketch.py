@@ -11,8 +11,9 @@ CHANNELS = 3
 @__main__.planesign_mode_handler(DisplayMode.FREE_SKETCH)
 def free_sketch(sign):
     while shared_config.shared_mode.value == DisplayMode.FREE_SKETCH.value:
+        pixel_buffer = shared_config.free_sketch_pixels.get_obj()
         with shared_config.free_sketch_pixels.get_lock():
-            pixels = bytes(shared_config.free_sketch_pixels)
+            pixels = bytes(pixel_buffer)
 
         for y in range(HEIGHT):
             row_offset = y * WIDTH * CHANNELS

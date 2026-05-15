@@ -179,6 +179,8 @@ def set_free_sketch_pixel():
 
     start_x = x - (brush_size // 2)
     start_y = y - (brush_size // 2)
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
+    color = bytes((r, g, b))
     with shared_config.free_sketch_pixels.get_lock():
         for pixel_y in range(start_y, start_y + brush_size):
             if not 0 <= pixel_y < 32:
@@ -187,17 +189,16 @@ def set_free_sketch_pixel():
                 if not 0 <= pixel_x < 128:
                     continue
                 index = (pixel_y * 128 + pixel_x) * 3
-                shared_config.free_sketch_pixels[index] = r
-                shared_config.free_sketch_pixels[index + 1] = g
-                shared_config.free_sketch_pixels[index + 2] = b
+                pixel_buffer[index:index + 3] = color
 
     return jsonify({"ok": True})
 
 
 @app.route("/free_sketch/clear", methods=["POST"])
 def clear_free_sketch():
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
-        shared_config.free_sketch_pixels[:] = b"\x00" * len(shared_config.free_sketch_pixels)
+        pixel_buffer[:] = b"\x00" * len(pixel_buffer)
     return jsonify({"ok": True})
 
 
@@ -212,8 +213,9 @@ def _validate_sketch_filename(filename):
 @app.route("/free_sketch/save", methods=["POST"])
 def save_free_sketch():
     os.makedirs(SKETCHES_DIR, exist_ok=True)
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
-        pixels = bytes(shared_config.free_sketch_pixels)
+        pixels = bytes(pixel_buffer)
     img = Image.frombytes("RGB", (128, 32), pixels)
     filename = "sketch_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
     img.save(os.path.join(SKETCHES_DIR, filename))
@@ -242,8 +244,9 @@ def load_free_sketch(filename):
     if img.size != (128, 32):
         return jsonify({"ok": False, "error": "Invalid sketch dimensions"}), 400
     pixels = img.tobytes()
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
-        shared_config.free_sketch_pixels[:] = pixels
+        pixel_buffer[:] = pixels
     return jsonify({"ok": True})
 
 
