@@ -31,17 +31,7 @@ audio_device = None
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"
 
-possible_font_dirs = [
-    "/rpi-rgb-led-matrix/fonts",
-    "../rpi-rgb-led-matrix/fonts",
-    "../../rpi-rgb-led-matrix/fonts"
-]
-font_dir = None
-for path in possible_font_dirs:
-    if os.path.exists(path):
-        print(f"Found font directory at {path}")
-        font_dir = path
-        break
+font_dir = "./fonts"
 
 sounds_dir = "sounds"
 datafiles_dir = "./datafiles"
