@@ -42,6 +42,7 @@ import moon
 import snow
 import mandelbrot
 import planesign
+import api
 import signal
 import sys
 import os
@@ -113,7 +114,7 @@ logging.getLogger('websockets').setLevel(logging.WARNING)
 utilities.read_static_airport_data()
 utilities.detect_usb_audio_device()
 
-api_server_process = Process(target=planesign.api_server, name="APIServer")
+api_server_process = Process(target=api.api_server, name="APIServer")
 plane_data_process = Process(target=planes.get_plane_data_worker, name="PlaneData", args=(shared_config.data_dict,))
 weather_data_process = Process(target=weather.get_weather_data_worker, name="WeatherData", args=(shared_config.data_dict,))
 

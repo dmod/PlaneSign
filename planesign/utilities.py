@@ -1569,6 +1569,48 @@ def get_version():
         return "unknown"
 
 
+def bresenham_line(x0, y0, x1, y1):
+    """Yield (x, y) for each point on the line from (x0,y0) to (x1,y1)."""
+    dx = abs(x1 - x0)
+    dy = -abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx + dy
+    while True:
+        yield (x0, y0)
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x0 += sx
+        if e2 <= dx:
+            err += dx
+            y0 += sy
+
+
+def paint_brush(pixel_buffer, cx, cy, brush_size, color):
+    """Paint a brush stamp centered at (cx, cy) into pixel_buffer (no lock)."""
+    start_x = cx - (brush_size // 2)
+    start_y = cy - (brush_size // 2)
+    for py in range(start_y, start_y + brush_size):
+        if not 0 <= py < 32:
+            continue
+        for px in range(start_x, start_x + brush_size):
+            if not 0 <= px < 128:
+                continue
+            index = (py * 128 + px) * 3
+            pixel_buffer[index:index + 3] = color
+
+
+def validate_sketch_filename(filename):
+    if not filename or not re.match(r'^[a-zA-Z0-9_\-]+\.png$', filename):
+        return False
+    if '..' in filename or '/' in filename or '\\' in filename:
+        return False
+    return True
+
+
 @__main__.planesign_mode_handler(DisplayMode.SIGN_OFF)
 def clear_matrix(sign):
     sign.canvas.Clear()
