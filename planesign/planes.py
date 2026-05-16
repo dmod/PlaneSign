@@ -172,6 +172,8 @@ def show_a_plane(sign, plane_to_show, scroll):
 
 
 def get_plane_data_worker(data_dict):
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     fr_api = FlightRadar24API()
 

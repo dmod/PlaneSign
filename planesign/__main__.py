@@ -62,20 +62,21 @@ shared_config.data_dict["slowest"] = None
 
 
 def exit_gracefully(*args):
-    logging.debug("Exiting...")
+    logging.info("Shutdown signal received, exiting gracefully...")
     shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
     shared_config.shared_forced_sign_update.value = 1
     shared_config.shared_shutdown_event.set()
 
 
-#signal.signal(signal.SIGINT, exit_gracefully)
-#signal.signal(signal.SIGTERM, exit_gracefully)
+signal.signal(signal.SIGINT, exit_gracefully)
+signal.signal(signal.SIGTERM, exit_gracefully)
 
 def log_file_rotation_namer(default_name):
     base_filename, ext, date = default_name.split(".")
     return f"{base_filename}.{date}.{ext}"
 
 def log_listener_process(queue):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     root = logging.getLogger()
 
     os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
@@ -86,7 +87,12 @@ def log_listener_process(queue):
     root.addHandler(log_handler)
 
     while True:
-        record = queue.get()
+        try:
+            record = queue.get(timeout=1)
+        except Exception:
+            if shared_config.shared_shutdown_event.is_set():
+                break
+            continue
         if record is None:
             break
         root.handle(record)
@@ -129,10 +135,31 @@ defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
 shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
 ps.sign_loop()
 
-api_server_process.join()
-plane_data_process.join()
-weather_data_process.join()
+logging.info("Sign loop exited, shutting down child processes...")
+shared_config.shared_shutdown_event.set()
 
-listener.join()
+api_server_process.join(timeout=5)
+if api_server_process.is_alive():
+    logging.warning("API server did not exit in time, terminating...")
+    api_server_process.terminate()
+    api_server_process.join(timeout=2)
+
+plane_data_process.join(timeout=10)
+if plane_data_process.is_alive():
+    logging.warning("Plane data process did not exit in time, terminating...")
+    plane_data_process.terminate()
+    plane_data_process.join(timeout=2)
+
+weather_data_process.join(timeout=10)
+if weather_data_process.is_alive():
+    logging.warning("Weather data process did not exit in time, terminating...")
+    weather_data_process.terminate()
+    weather_data_process.join(timeout=2)
+
+logging_queue.put(None)
+listener.join(timeout=5)
+if listener.is_alive():
+    listener.terminate()
+    listener.join(timeout=2)
 
 print("Done.")

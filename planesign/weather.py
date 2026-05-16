@@ -70,6 +70,9 @@ def show_weather(sign):
             return
 
 def get_weather_data_worker(data_dict):
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     # Check if API key is configured
     if not shared_config.CONF.get("OPENWEATHER_API_KEY"):
         logging.error("OpenWeather API key is not configured. Weather data will not be available.")

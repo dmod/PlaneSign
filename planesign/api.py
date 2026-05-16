@@ -10,6 +10,7 @@ import re
 import requests
 from datetime import datetime
 
+import gevent
 import gevent.pywsgi
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -504,5 +505,14 @@ def get_device_info():
     return jsonify(info)
 
 def api_server():
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
-    app_server.serve_forever()
+    app_server.start()
+
+    while not shared_config.shared_shutdown_event.is_set():
+        gevent.sleep(1)
+
+    logging.info("API server shutting down...")
+    app_server.stop(timeout=3)

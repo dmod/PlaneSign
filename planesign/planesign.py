@@ -79,7 +79,11 @@ class PlaneSign:
                     logging.error(f"Mode {display_mode.name} has no handler defined...")
                     shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
 
-            except:
+            except KeyboardInterrupt:
+                logging.info("KeyboardInterrupt received, shutting down sign loop...")
+                shared_config.shared_shutdown_event.set()
+                break
+            except Exception:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
                 shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value #Reset to default mode
