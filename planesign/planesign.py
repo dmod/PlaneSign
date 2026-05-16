@@ -177,19 +177,82 @@ def set_free_sketch_pixel():
     if brush_size not in FREE_SKETCH_BRUSH_SIZES:
         return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
 
-    start_x = x - (brush_size // 2)
-    start_y = y - (brush_size // 2)
-    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     color = bytes((r, g, b))
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
-        for pixel_y in range(start_y, start_y + brush_size):
-            if not 0 <= pixel_y < 32:
+        _paint_brush(pixel_buffer, x, y, brush_size, color)
+
+    return jsonify({"ok": True})
+
+
+def _bresenham_line(x0, y0, x1, y1):
+    """Yield (x, y) for each point on the line from (x0,y0) to (x1,y1)."""
+    dx = abs(x1 - x0)
+    dy = -abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx + dy
+    while True:
+        yield (x0, y0)
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x0 += sx
+        if e2 <= dx:
+            err += dx
+            y0 += sy
+
+
+def _paint_brush(pixel_buffer, cx, cy, brush_size, color):
+    """Paint a brush stamp centered at (cx, cy) into pixel_buffer (no lock)."""
+    start_x = cx - (brush_size // 2)
+    start_y = cy - (brush_size // 2)
+    for py in range(start_y, start_y + brush_size):
+        if not 0 <= py < 32:
+            continue
+        for px in range(start_x, start_x + brush_size):
+            if not 0 <= px < 128:
                 continue
-            for pixel_x in range(start_x, start_x + brush_size):
-                if not 0 <= pixel_x < 128:
-                    continue
-                index = (pixel_y * 128 + pixel_x) * 3
-                pixel_buffer[index:index + 3] = color
+            index = (py * 128 + px) * 3
+            pixel_buffer[index:index + 3] = color
+
+
+@app.route("/free_sketch/line", methods=["POST"])
+def set_free_sketch_line():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "Expected JSON object"}), 400
+
+    try:
+        x0 = int(data["x0"])
+        y0 = int(data["y0"])
+        x1 = int(data["x1"])
+        y1 = int(data["y1"])
+        r = int(data["r"])
+        g = int(data["g"])
+        b = int(data["b"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Expected integer x0, y0, x1, y1, r, g, b"}), 400
+
+    try:
+        brush_size = int(data.get("brush_size", 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
+
+    if not 0 <= x0 < 128 or not 0 <= y0 < 32 or not 0 <= x1 < 128 or not 0 <= y1 < 32:
+        return jsonify({"ok": False, "error": "Coordinates must be in range x=0-127, y=0-31"}), 400
+    if not 0 <= r <= 255 or not 0 <= g <= 255 or not 0 <= b <= 255:
+        return jsonify({"ok": False, "error": "RGB values must be in range 0-255"}), 400
+    if brush_size not in FREE_SKETCH_BRUSH_SIZES:
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
+
+    color = bytes((r, g, b))
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
+    with shared_config.free_sketch_pixels.get_lock():
+        for px, py in _bresenham_line(x0, y0, x1, y1):
+            _paint_brush(pixel_buffer, px, py, brush_size, color)
 
     return jsonify({"ok": True})
 

@@ -583,26 +583,61 @@ function paint_free_sketch_pixel(event) {
     var x = pixel.x;
     var y = pixel.y;
 
-    var pixel_key = x + "," + y;
-    if (pixel_key === free_sketch_last_pixel) {
-        return;
-    }
-    free_sketch_last_pixel = pixel_key;
-
     var selected_color = get_free_sketch_color();
     var context = canvas.getContext("2d");
     context.fillStyle = selected_color.hex;
-    var bounds = get_free_sketch_brush_bounds(x, y);
-    context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
 
-    post_json_endpoint("/free_sketch/pixel", {
-        x: x,
-        y: y,
-        brush_size: free_sketch_brush_size,
-        r: selected_color.r,
-        g: selected_color.g,
-        b: selected_color.b
-    });
+    if (free_sketch_last_pixel && (free_sketch_last_pixel.x !== x || free_sketch_last_pixel.y !== y)) {
+        // Interpolate a line from the last position to the current one
+        var points = bresenham_line(free_sketch_last_pixel.x, free_sketch_last_pixel.y, x, y);
+        for (var i = 0; i < points.length; i++) {
+            var bounds = get_free_sketch_brush_bounds(points[i].x, points[i].y);
+            context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+        }
+
+        post_json_endpoint("/free_sketch/line", {
+            x0: free_sketch_last_pixel.x,
+            y0: free_sketch_last_pixel.y,
+            x1: x,
+            y1: y,
+            brush_size: free_sketch_brush_size,
+            r: selected_color.r,
+            g: selected_color.g,
+            b: selected_color.b
+        });
+    } else if (!free_sketch_last_pixel || (free_sketch_last_pixel.x !== x || free_sketch_last_pixel.y !== y)) {
+        // First point or same check — just paint a single stamp
+        var bounds = get_free_sketch_brush_bounds(x, y);
+        context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+
+        post_json_endpoint("/free_sketch/pixel", {
+            x: x,
+            y: y,
+            brush_size: free_sketch_brush_size,
+            r: selected_color.r,
+            g: selected_color.g,
+            b: selected_color.b
+        });
+    }
+
+    free_sketch_last_pixel = { x: x, y: y };
+}
+
+function bresenham_line(x0, y0, x1, y1) {
+    var points = [];
+    var dx = Math.abs(x1 - x0);
+    var dy = -Math.abs(y1 - y0);
+    var sx = x0 < x1 ? 1 : -1;
+    var sy = y0 < y1 ? 1 : -1;
+    var err = dx + dy;
+    while (true) {
+        points.push({ x: x0, y: y0 });
+        if (x0 === x1 && y0 === y1) break;
+        var e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+    return points;
 }
 
 function close_all_flight_lists() {

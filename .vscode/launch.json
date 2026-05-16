@@ -26,7 +26,12 @@
             "program": "${workspaceFolder}/planesign",
             "args": ["--web"],
             "console": "integratedTerminal",
-            "preLaunchTask": "uv sync and start nginx"
+            "preLaunchTask": "uv sync and start nginx",
+            "serverReadyAction": {
+                "pattern": "server listening on 0\\.0\\.0\\.0:5001",
+                "uriFormat": "http://localhost/display",
+                "action": "openExternally"
+            }
         },
         {
             "name": "Bluetooth Debug",
