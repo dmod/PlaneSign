@@ -35,9 +35,6 @@
             display: block;
             width: 1024px;
             height: 256px;
-            image-rendering: pixelated;
-            image-rendering: -moz-crisp-edges;
-            image-rendering: crisp-edges;
             border: 2px solid #222;
         }
 
@@ -78,7 +75,7 @@
 
 <body>
     <div id="display-container">
-        <canvas id="matrix" width="128" height="32"></canvas>
+        <canvas id="matrix" width="1024" height="256"></canvas>
     </div>
     <div id="status" class="disconnected">
         <span id="status-dot"></span>
@@ -91,15 +88,32 @@
         const MATRIX_HEIGHT = 32;
         const FRAME_BYTES = MATRIX_WIDTH * MATRIX_HEIGHT * 4; // RGBA
 
+        const SCALE = 8;        // each source pixel = 8x8 display pixels
+        const GRID_GAP = 1;     // 1px grid line between pixels
+        const CELL = SCALE - GRID_GAP; // 7x7 filled area per pixel
+
+        const DISPLAY_WIDTH = MATRIX_WIDTH * SCALE;   // 1024
+        const DISPLAY_HEIGHT = MATRIX_HEIGHT * SCALE;  // 256
+
         const canvas = document.getElementById('matrix');
         const ctx = canvas.getContext('2d');
         const statusEl = document.getElementById('status');
         const statusText = document.getElementById('status-text');
         const fpsEl = document.getElementById('fps');
 
-        // Fill canvas black initially
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, MATRIX_WIDTH, MATRIX_HEIGHT);
+        // Pre-allocate display ImageData and typed array views
+        const displayImageData = ctx.createImageData(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        const displayBuf = new ArrayBuffer(DISPLAY_WIDTH * DISPLAY_HEIGHT * 4);
+        const displayU32 = new Uint32Array(displayBuf);
+        const displayU8 = new Uint8ClampedArray(displayBuf);
+
+        // Grid line color as ABGR uint32 (little-endian: 0xAA_BB_GG_RR)
+        const GRID_COLOR = 0xFF303030;  // #303030 fully opaque
+
+        // Fill canvas with grid color initially
+        displayU32.fill(GRID_COLOR);
+        displayImageData.data.set(displayU8);
+        ctx.putImageData(displayImageData, 0, 0);
 
         let ws = null;
         let reconnectDelay = 500;
@@ -118,6 +132,35 @@
                 frameCount = 0;
                 lastFpsTime = now;
             }
+        }
+
+        function renderFrame(frameData) {
+            // Fill entire display buffer with grid color
+            displayU32.fill(GRID_COLOR);
+
+            // For each source pixel, fill a CELL×CELL block at the correct position
+            for (let sy = 0; sy < MATRIX_HEIGHT; sy++) {
+                const baseY = sy * SCALE;
+                for (let sx = 0; sx < MATRIX_WIDTH; sx++) {
+                    const srcIdx = (sy * MATRIX_WIDTH + sx) * 4;
+                    const r = frameData[srcIdx];
+                    const g = frameData[srcIdx + 1];
+                    const b = frameData[srcIdx + 2];
+                    // Pack as ABGR uint32 (little-endian)
+                    const color = 0xFF000000 | (b << 16) | (g << 8) | r;
+
+                    const baseX = sx * SCALE;
+                    for (let dy = 0; dy < CELL; dy++) {
+                        const rowOffset = (baseY + dy) * DISPLAY_WIDTH + baseX;
+                        for (let dx = 0; dx < CELL; dx++) {
+                            displayU32[rowOffset + dx] = color;
+                        }
+                    }
+                }
+            }
+
+            displayImageData.data.set(displayU8);
+            ctx.putImageData(displayImageData, 0, 0);
         }
 
         function setStatus(state, message) {
@@ -140,9 +183,7 @@
             ws.onmessage = (event) => {
                 if (event.data.byteLength !== FRAME_BYTES) return;
 
-                const data = new Uint8ClampedArray(event.data);
-                const imageData = new ImageData(data, MATRIX_WIDTH, MATRIX_HEIGHT);
-                ctx.putImageData(imageData, 0, 0);
+                renderFrame(new Uint8Array(event.data));
 
                 frameCount++;
                 updateFps();
