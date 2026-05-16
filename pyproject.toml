@@ -23,6 +23,12 @@ dependencies = [
     "websockets>=15.0",
 ]
 
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
+[tool.ruff]
+line-length = 300
+
 [tool.uv]
 extra-build-variables = { rgbmatrix = { CFLAGS = "-I/usr/include/python3.12" } }
 
