@@ -20,6 +20,7 @@ dependencies = [
     "skyfield>=1.54",
     "timezonefinder>=8.2.4",
     "websocket-client>=1.9.0",
+    "websockets>=15.0",
 ]
 
 [tool.uv]

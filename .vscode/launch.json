@@ -19,6 +19,16 @@
             "preLaunchTask": "uv sync and start nginx"
         },
         {
+            "name": "PlaneSign Debug - Web Display",
+            "type": "debugpy",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "request": "launch",
+            "program": "${workspaceFolder}/planesign",
+            "args": ["--web"],
+            "console": "integratedTerminal",
+            "preLaunchTask": "uv sync and start nginx"
+        },
+        {
             "name": "Bluetooth Debug",
             "type": "debugpy",
             "request": "launch",

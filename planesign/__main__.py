@@ -1,3 +1,9 @@
+import sys
+if '--web' in sys.argv:
+    sys.argv.remove('--web')
+    import emulated_matrix
+    sys.modules['rgbmatrix'] = emulated_matrix
+
 from functools import wraps
 from modes import DisplayMode
 
@@ -102,6 +108,7 @@ root.setLevel(logging.DEBUG)
 logging.getLogger('PIL').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('fiona.ogrext').setLevel(logging.WARNING)
+logging.getLogger('websockets').setLevel(logging.WARNING)
 
 utilities.read_static_airport_data()
 utilities.detect_usb_audio_device()

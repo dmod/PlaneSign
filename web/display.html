@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlaneSign Display</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: #888;
+        }
+
+        #display-container {
+            position: relative;
+            background: #000;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+        }
+
+        #matrix {
+            display: block;
+            width: 1024px;
+            height: 256px;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            border: 2px solid #222;
+        }
+
+        #status {
+            margin-top: 12px;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        #status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .connected #status-dot {
+            background: #0f0;
+        }
+
+        .disconnected #status-dot {
+            background: #f00;
+        }
+
+        .connecting #status-dot {
+            background: #ff0;
+        }
+
+        #fps {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="display-container">
+        <canvas id="matrix" width="128" height="32"></canvas>
+    </div>
+    <div id="status" class="disconnected">
+        <span id="status-dot"></span>
+        <span id="status-text">Disconnected</span>
+    </div>
+    <div id="fps"></div>
+
+    <script>
+        const MATRIX_WIDTH = 128;
+        const MATRIX_HEIGHT = 32;
+        const FRAME_BYTES = MATRIX_WIDTH * MATRIX_HEIGHT * 4; // RGBA
+
+        const canvas = document.getElementById('matrix');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
+        const fpsEl = document.getElementById('fps');
+
+        // Fill canvas black initially
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, MATRIX_WIDTH, MATRIX_HEIGHT);
+
+        let ws = null;
+        let reconnectDelay = 500;
+        const MAX_RECONNECT_DELAY = 5000;
+
+        // FPS tracking
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+
+        function updateFps() {
+            const now = performance.now();
+            const elapsed = now - lastFpsTime;
+            if (elapsed >= 1000) {
+                const fps = (frameCount * 1000 / elapsed).toFixed(1);
+                fpsEl.textContent = `${fps} fps`;
+                frameCount = 0;
+                lastFpsTime = now;
+            }
+        }
+
+        function setStatus(state, message) {
+            statusEl.className = state;
+            statusText.textContent = message;
+        }
+
+        function connect() {
+            const wsUrl = `ws://${window.location.hostname}:5001`;
+            setStatus('connecting', `Connecting to ${wsUrl}...`);
+
+            ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                setStatus('connected', 'Connected');
+                reconnectDelay = 500;
+            };
+
+            ws.onmessage = (event) => {
+                if (event.data.byteLength !== FRAME_BYTES) return;
+
+                const data = new Uint8ClampedArray(event.data);
+                const imageData = new ImageData(data, MATRIX_WIDTH, MATRIX_HEIGHT);
+                ctx.putImageData(imageData, 0, 0);
+
+                frameCount++;
+                updateFps();
+            };
+
+            ws.onclose = () => {
+                setStatus('disconnected', `Disconnected — reconnecting in ${reconnectDelay}ms...`);
+                fpsEl.textContent = '';
+                setTimeout(() => {
+                    reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT_DELAY);
+                    connect();
+                }, reconnectDelay);
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+        }
+
+        connect();
+    </script>
+</body>
+
+</html>
