@@ -10,6 +10,7 @@ import shared_config
 import __main__
 from modes import DisplayMode
 
+
 @__main__.planesign_mode_handler(DisplayMode.CCA)
 def cca(sign):
     sign.canvas.Clear()
@@ -28,29 +29,27 @@ def cca(sign):
 
     tstart = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.CCA.value:
-
         for col in range(0, 128):
             for row in range(0, 32):
-
                 cs = utilities.check_matrix(col, row, current_state)
-                ns = (cs+1) % numstates
+                ns = (cs + 1) % numstates
                 curr = 0
 
-                if utilities.check_matrix(col, row-1, current_state) == ns:
+                if utilities.check_matrix(col, row - 1, current_state) == ns:
                     curr += 1
-                if utilities.check_matrix(col-1, row, current_state) == ns:
+                if utilities.check_matrix(col - 1, row, current_state) == ns:
                     curr += 1
-                if utilities.check_matrix(col+1, row, current_state) == ns:
+                if utilities.check_matrix(col + 1, row, current_state) == ns:
                     curr += 1
-                if utilities.check_matrix(col, row+1, current_state) == ns:
+                if utilities.check_matrix(col, row + 1, current_state) == ns:
                     curr += 1
 
                 if curr >= threshold:
                     utilities.set_matrix(col, row, next_state, ns)
-                    r, g, b = utilities.hsv_2_rgb(ns/numstates, 1, 1)
+                    r, g, b = utilities.hsv_2_rgb(ns / numstates, 1, 1)
                 else:
                     utilities.set_matrix(col, row, next_state, cs)
-                    r, g, b = utilities.hsv_2_rgb(cs/numstates, 1, 1)
+                    r, g, b = utilities.hsv_2_rgb(cs / numstates, 1, 1)
 
                 sign.canvas.SetPixel(col, row, r, g, b)
 
@@ -59,8 +58,8 @@ def cca(sign):
                 current_state[col][row] = next_state[col][row]
 
         tend = time.perf_counter()
-        if(tend < tstart + generation_time):
-            breakout = sign.wait_loop(tstart + generation_time-tend)
+        if tend < tstart + generation_time:
+            breakout = sign.wait_loop(tstart + generation_time - tend)
         else:
             breakout = sign.wait_loop(0)
 

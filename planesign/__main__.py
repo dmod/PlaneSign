@@ -1,22 +1,28 @@
 import sys
-if '--web' in sys.argv:
-    sys.argv.remove('--web')
+
+if "--web" in sys.argv:
+    sys.argv.remove("--web")
     import emulated_matrix
-    sys.modules['rgbmatrix'] = emulated_matrix
+
+    sys.modules["rgbmatrix"] = emulated_matrix
 
 from functools import wraps
 from modes import DisplayMode
 
 defined_mode_handlers = {}
 
+
 def planesign_mode_handler(mode: DisplayMode):
     """Decorator to register mode handlers"""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
+
         defined_mode_handlers[mode] = wrapper
         return wrapper
+
     return decorator
 
 
@@ -71,9 +77,11 @@ def exit_gracefully(*args):
 signal.signal(signal.SIGINT, exit_gracefully)
 signal.signal(signal.SIGTERM, exit_gracefully)
 
+
 def log_file_rotation_namer(default_name):
     base_filename, ext, date = default_name.split(".")
     return f"{base_filename}.{date}.{ext}"
+
 
 def log_listener_process(queue):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -82,7 +90,7 @@ def log_listener_process(queue):
     os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
     log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight", backupCount=90)
     log_handler.namer = log_file_rotation_namer
-    log_handler.setFormatter(logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s'))
+    log_handler.setFormatter(logging.Formatter("%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s"))
 
     root.addHandler(log_handler)
 
@@ -99,23 +107,23 @@ def log_listener_process(queue):
 
 
 logging_queue = Queue(-1)
-listener = Process(target=log_listener_process, args=(logging_queue, ))
+listener = Process(target=log_listener_process, args=(logging_queue,))
 listener.start()
 
 queue_handler = logging.handlers.QueueHandler(logging_queue)
 
 console_handler = logging.StreamHandler(sys.stdout)
-console_formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
+console_formatter = logging.Formatter("%(asctime)s [%(levelname)s] - %(message)s")
 console_handler.setFormatter(console_formatter)
 
-root = logging.getLogger() 
+root = logging.getLogger()
 root.addHandler(queue_handler)
 root.addHandler(console_handler)
 root.setLevel(logging.DEBUG)
-logging.getLogger('PIL').setLevel(logging.WARNING)
-logging.getLogger('urllib3').setLevel(logging.WARNING)
-logging.getLogger('fiona.ogrext').setLevel(logging.WARNING)
-logging.getLogger('websockets').setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("fiona.ogrext").setLevel(logging.WARNING)
+logging.getLogger("websockets").setLevel(logging.WARNING)
 
 utilities.read_static_airport_data()
 utilities.detect_usb_audio_device()

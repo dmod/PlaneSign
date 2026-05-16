@@ -41,23 +41,23 @@ def get_config():
         lines = f.readlines()
         lastline = None
         for line in lines:
-            if line == '\n':
+            if line == "\n":
                 continue
             if line[0] == "#":
                 lastline = line.rstrip()
                 continue
-            parts = line.split('=')
+            parts = line.split("=")
             sample[parts[0]] = parts[1].rstrip()
             if lastline:
-                comment_parts = lastline[1:].split(' ')
+                comment_parts = lastline[1:].split(" ")
                 newdict = {}
                 newdict["id"] = parts[0]
                 newdict["type"] = comment_parts[0]
                 for i in range(len(comment_parts)):
-                    if comment_parts[i] == "min" and i+1 < len(comment_parts):
-                        newdict["min"] = comment_parts[i+1]
-                    if comment_parts[i] == "max" and i+1 < len(comment_parts):
-                        newdict["max"] = comment_parts[i+1]
+                    if comment_parts[i] == "min" and i + 1 < len(comment_parts):
+                        newdict["min"] = comment_parts[i + 1]
+                    if comment_parts[i] == "max" and i + 1 < len(comment_parts):
+                        newdict["max"] = comment_parts[i + 1]
                 sample["DATATYPES"].append(newdict)
 
     for key in sample.keys():
@@ -67,7 +67,7 @@ def get_config():
     return json.dumps(sample)
 
 
-@app.route('/write_config')
+@app.route("/write_config")
 def write_config():
     try:
         keys = list(request.args.keys())
@@ -113,17 +113,20 @@ def set_color_mode(color):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/set_countdown/<datetimestr>/<countdownmsg>")
-def set_countdown(datetimestr,countdownmsg):
+def set_countdown(datetimestr, countdownmsg):
     shared_config.data_dict["countdown_datetime"] = datetime.fromisoformat(datetimestr)
     shared_config.data_dict["countdown_message"] = countdownmsg[1:].strip()
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/get_possible_flights/<query_string>")
 def get_possible_flights(query_string):
-    query_result = requests.get(f'https://www.flightradar24.com/v1/search/web/find?query={query_string}&limit=50', headers = {'User-Agent': ''})
+    query_result = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={query_string}&limit=50", headers={"User-Agent": ""})
     return query_result.json()
+
 
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
@@ -272,7 +275,7 @@ def serve_free_sketch_image(filename):
     return send_from_directory(SKETCHES_DIR, filename, mimetype="image/png")
 
 
-@app.route('/set_mode/<mode>')
+@app.route("/set_mode/<mode>")
 def set_mode(mode):
     shared_config.shared_mode.value = DisplayMode[mode].value
     if request.args:
@@ -289,7 +292,7 @@ def get_mode():
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_config.shared_current_brightness.value = int(brightness)
-    #shared_config.shared_forced_sign_update.value = 1
+    # shared_config.shared_forced_sign_update.value = 1
     return ""
 
 
@@ -317,36 +320,42 @@ def set_custom_message(message):
     shared_config.shared_forced_sign_update.value = 1
     return ""
 
+
 @app.route("/get_resort_opts")
 def get_resort_opts():
     populate_resort_lists()
     return jsonify(shared_config.data_dict["resort_info"])
+
 
 @app.route("/snow_mode/<mode>")
 def set_snow_mode(mode):
     shared_config.shared_snow_mode.value = int(mode)
     return ""
 
+
 @app.route("/display_resort/", defaults={"uuid": ""})
 @app.route("/display_resort/<uuid>")
 def display_resort(uuid):
-    if (uuid != ""):
+    if uuid != "":
         shared_config.data_dict["displayed_resort"] = uuid
         shared_config.shared_snow_mode.value = SnowMode.STATIC.value
     return ""
+
 
 @app.route("/save_current_resort")
 def save_resort():
     save_current_resort()
     return ""
 
+
 @app.route("/delete_saved_resort/", defaults={"uuid": ""})
 @app.route("/delete_saved_resort/<uuid>")
 def delete_resort(uuid):
-    if (uuid != ""):
+    if uuid != "":
         delete_user_resort(uuid)
     return ""
-    
+
+
 @app.route("/get_saved_resorts")
 def get_resorts():
     load_user_list()
@@ -354,12 +363,14 @@ def get_resorts():
         data = shared_config.data_dict["user_resorts"]
     else:
         data = ""
-    return '\n'.join(data)
+    return "\n".join(data)
+
 
 @app.route("/get_ticker_opts")
 def get_ticker_opts():
     options = get_tickers()
     return jsonify(options)
+
 
 @app.route("/submit_ticker/", defaults={"ticker": ""})
 @app.route("/submit_ticker/<ticker>")
@@ -379,20 +390,24 @@ def set_lightning_mode(mode):
     shared_config.shared_lighting_mode.value = int(mode)
     return ""
 
+
 @app.route("/mandelbrot_color/<mode>")
 def set_mandelbrot_color(mode):
     shared_config.shared_mandelbrot_color.value = int(mode)
     return ""
+
 
 @app.route("/set_mandelbrot_colorscale/<mode>")
 def set_mandelbrot_colorscale(mode):
     shared_config.shared_mandelbrot_colorscale.value = float(mode)
     return ""
 
+
 @app.route("/satellite_mode/<mode>")
 def set_satellite_mode(mode):
     shared_config.shared_satellite_mode.value = int(mode)
     return ""
+
 
 @app.route("/is_audio_supported")
 def is_audio_supported():
@@ -400,7 +415,8 @@ def is_audio_supported():
     audio_supported = p.returncode == 0
     return jsonify(audio_supported)
 
-@app.route("/play_mic_audio", methods=['POST'])
+
+@app.route("/play_mic_audio", methods=["POST"])
 def play_mic_audio():
     logging.info(f"Mic audio content length: {request.content_length}")
     request_data = request.get_data()
@@ -416,6 +432,7 @@ def play_mic_audio():
     subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
     return ""
 
+
 @app.route("/play_a_sound/<sound_id>")
 def play_a_sound(sound_id):
     logging.info(f"Playing sound: {sound_id}")
@@ -426,18 +443,22 @@ def play_a_sound(sound_id):
     subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
     return ""
 
+
 @app.route("/get_sounds")
 def get_sounds():
     return jsonify(sorted(glob.glob(f"{shared_config.sounds_dir}/*.mp3"), key=str.casefold))
+
 
 @app.route("/version")
 def get_version():
     return utilities.get_version()
 
+
 @app.route("/device_info")
 def get_device_info():
     import shutil
     import socket
+
     info = {}
 
     # Hostname
@@ -463,9 +484,9 @@ def get_device_info():
     # Disk usage
     try:
         total, used, free = shutil.disk_usage("/")
-        info["disk_total_gb"] = round(total / (1024 ** 3), 1)
-        info["disk_used_gb"] = round(used / (1024 ** 3), 1)
-        info["disk_free_gb"] = round(free / (1024 ** 3), 1)
+        info["disk_total_gb"] = round(total / (1024**3), 1)
+        info["disk_used_gb"] = round(used / (1024**3), 1)
+        info["disk_free_gb"] = round(free / (1024**3), 1)
         info["disk_usage_percent"] = round(used / total * 100, 1)
     except Exception:
         info["disk_total_gb"] = None
@@ -504,11 +525,13 @@ def get_device_info():
 
     return jsonify(info)
 
+
 def api_server():
     import signal
+
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    app_server = gevent.pywsgi.WSGIServer(('0.0.0.0', 5000), app)
+    app_server = gevent.pywsgi.WSGIServer(("0.0.0.0", 5000), app)
     app_server.start()
 
     while not shared_config.shared_shutdown_event.is_set():

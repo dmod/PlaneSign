@@ -78,11 +78,7 @@ class Canvas:
     def SetImage(self, image, offset_x: int = 0, offset_y: int = 0, unsafe: bool = True):
         """Paste a PIL Image onto the canvas, matching rgbmatrix SetImage behavior."""
         if image.mode != "RGB":
-            raise ValueError(
-                "Currently, only RGB mode is supported for SetImage(). "
-                "Please create images with mode 'RGB' or convert first with "
-                "image = image.convert('RGB')."
-            )
+            raise ValueError("Currently, only RGB mode is supported for SetImage(). Please create images with mode 'RGB' or convert first with image = image.convert('RGB').")
         img_width, img_height = image.size
         for x in range(max(0, -offset_x), min(img_width, self._width - offset_x)):
             for y in range(max(0, -offset_y), min(img_height, self._height - offset_y)):
@@ -108,10 +104,7 @@ class RGBMatrix:
         self._frame_server = FrameServer()
         self._frame_server.start()
 
-        logger.info(
-            "Emulated RGB matrix initialized: %dx%d, streaming on ws://0.0.0.0:5001",
-            self._width, self._height,
-        )
+        logger.info("Emulated RGB matrix initialized: %dx%d, streaming on ws://0.0.0.0:5001", self._width, self._height)
 
     @property
     def width(self) -> int:

@@ -70,7 +70,6 @@ class PlaneSign:
 
         while not shared_config.shared_shutdown_event.is_set():
             try:
-
                 display_mode = DisplayMode(shared_config.shared_mode.value)  # Convert int to enum
                 if display_mode in self.defined_mode_handlers:
                     logging.info(f"Setting mode to {display_mode.name}")
@@ -86,6 +85,6 @@ class PlaneSign:
             except Exception:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
-                shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value #Reset to default mode
+                shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value  # Reset to default mode
 
         logging.info("--- END OF SIGN LOOP ---")

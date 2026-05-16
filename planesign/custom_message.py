@@ -8,7 +8,8 @@ import utilities
 import os
 import __main__
 from modes import DisplayMode
-RGB = namedtuple('RGB', 'r g b')
+
+RGB = namedtuple("RGB", "r g b")
 
 COLORS = {}
 COLORS[0] = [RGB(3, 194, 255)]  # Plain
@@ -25,10 +26,10 @@ def show_custom_message(sign):
     dvd_width = 29
     dvd_height = 13
     height = 10
-    background = Image.new('RGBA', (dvd_width, dvd_height), (0, 0, 0, 255))
+    background = Image.new("RGBA", (dvd_width, dvd_height), (0, 0, 0, 255))
     dvd_text = Image.open(os.path.join(shared_config.icons_dir, "dvd.png")).resize((dvd_width, dvd_height), Image.BICUBIC)
 
-    scroll=utilities.TextScroller(sign,2,24,(3, 194, 255),boxdim=(124,18),font="fontreallybig",space=3,scrollspeed=10,holdtime=0)
+    scroll = utilities.TextScroller(sign, 2, 24, (3, 194, 255), boxdim=(124, 18), font="fontreallybig", space=3, scrollspeed=10, holdtime=0)
 
     x = None
     y = None
@@ -47,20 +48,18 @@ def show_custom_message(sign):
 
         clean_message = raw_message.strip()
 
-
-        if shared_config.shared_color_mode.value != 5 and len(clean_message)>54:
-
-            scroll.text=clean_message
+        if shared_config.shared_color_mode.value != 5 and len(clean_message) > 54:
+            scroll.text = clean_message
             scroll.color = shared_config.shared_color_mode.value
             scroll.draw()
 
-        elif shared_config.shared_color_mode.value != 5 and len(clean_message)>28:
+        elif shared_config.shared_color_mode.value != 5 and len(clean_message) > 28:
             # 3-line mode using fontbig (6x13)
             chars_per_line = 18
             char_width = 7
             line_a = clean_message[0:chars_per_line].strip()
-            line_b = clean_message[chars_per_line:chars_per_line*2].strip()
-            line_c = clean_message[chars_per_line*2:chars_per_line*3].strip()
+            line_b = clean_message[chars_per_line : chars_per_line * 2].strip()
+            line_c = clean_message[chars_per_line * 2 : chars_per_line * 3].strip()
 
             lines_3 = [line_a, line_b, line_c]
             y_positions = [10, 21, 32]
@@ -68,8 +67,7 @@ def show_custom_message(sign):
             if shared_config.shared_color_mode.value == 1:
                 selected_color_list = [RGB(random.randrange(10, 255), random.randrange(10, 255), random.randrange(10, 255))]
             elif shared_config.shared_color_mode.value >= color_mode_offset:
-                selected_color_list = [RGB(((shared_config.shared_color_mode.value-color_mode_offset) >> 16) & 255, ((shared_config.shared_color_mode.value -
-                                        color_mode_offset) >> 8) & 255, (shared_config.shared_color_mode.value-color_mode_offset) & 255)]
+                selected_color_list = [RGB(((shared_config.shared_color_mode.value - color_mode_offset) >> 16) & 255, ((shared_config.shared_color_mode.value - color_mode_offset) >> 8) & 255, (shared_config.shared_color_mode.value - color_mode_offset) & 255)]
             else:
                 selected_color_list = COLORS[shared_config.shared_color_mode.value]
 
@@ -92,7 +90,7 @@ def show_custom_message(sign):
                     graphics.DrawText(sign.canvas, sign.fontbig, x_pos, y_positions[i], char_color, ch)
                     x_pos += char_width
 
-                    color_index = color_index + 1 if ch != ' ' else color_index
+                    color_index = color_index + 1 if ch != " " else color_index
 
                     if color_index >= len(selected_color_list):
                         color_index = 0
@@ -100,7 +98,6 @@ def show_custom_message(sign):
             starting_color_index += 1
 
         else:
-            
             line_1 = clean_message[0:14]
             line_2 = clean_message[14:]
 
@@ -132,25 +129,24 @@ def show_custom_message(sign):
             elif shared_config.shared_color_mode.value == 5:
                 dvdmode = True
 
-                if clean_message.upper() == 'DVD':
+                if clean_message.upper() == "DVD":
                     logomode = True
                     width = 0
                 else:
-                    width = 9*len(line_1)-2
+                    width = 9 * len(line_1) - 2
 
                 if x == None or y == None or dx == None or dy == None:
-                    (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
+                    (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5 + random.random() * 0.5, 1)
                     if logomode:
-                        x = random.randint(1, 126-dvd_width)
-                        y = random.randint(1, 30-dvd_height)
+                        x = random.randint(1, 126 - dvd_width)
+                        y = random.randint(1, 30 - dvd_height)
                     else:
-                        x = random.randint(1, 126-width)
-                        y = random.randint(1+height, 30)
-                    dx = random.randint(0, 1)*2-1
-                    dy = random.randint(0, 1)*2-1
+                        x = random.randint(1, 126 - width)
+                        y = random.randint(1 + height, 30)
+                    dx = random.randint(0, 1) * 2 - 1
+                    dy = random.randint(0, 1) * 2 - 1
             elif shared_config.shared_color_mode.value >= color_mode_offset:
-                selected_color_list = [RGB(((shared_config.shared_color_mode.value-color_mode_offset) >> 16) & 255, ((shared_config.shared_color_mode.value -
-                                        color_mode_offset) >> 8) & 255, (shared_config.shared_color_mode.value-color_mode_offset) & 255)]
+                selected_color_list = [RGB(((shared_config.shared_color_mode.value - color_mode_offset) >> 16) & 255, ((shared_config.shared_color_mode.value - color_mode_offset) >> 8) & 255, (shared_config.shared_color_mode.value - color_mode_offset) & 255)]
             else:
                 selected_color_list = COLORS[shared_config.shared_color_mode.value]
 
@@ -161,7 +157,6 @@ def show_custom_message(sign):
                 dy = None
 
             if dvdmode:
-
                 hit = False
 
                 if logomode or width > 0:
@@ -169,37 +164,36 @@ def show_custom_message(sign):
                     y += dy
 
                 if logomode:
-                    if ((x+dvd_width) >= 128 and dx == 1) or (x <= 0 and dx == -1):
+                    if ((x + dvd_width) >= 128 and dx == 1) or (x <= 0 and dx == -1):
                         dx *= -1
                         hit = True
-                    if ((y+dvd_height) >= 32 and dy == 1) or (y <= 0 and dy == -1):
+                    if ((y + dvd_height) >= 32 and dy == 1) or (y <= 0 and dy == -1):
                         dy *= -1
                         hit = True
                     if hit:
-                        (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
+                        (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5 + random.random() * 0.5, 1)
 
                     dvd = background.copy()
                     rgba = np.array(dvd_text)
-                    mask = (rgba[:, :, 3] > 0)
+                    mask = rgba[:, :, 3] > 0
                     rgba[mask, 0:3] = [r, g, b]
                     image = Image.fromarray(rgba)
                     dvd.paste(image, (0, 0), image)
-                    sign.canvas.SetImage(dvd.convert('RGB'), x, y)
+                    sign.canvas.SetImage(dvd.convert("RGB"), x, y)
                 else:
                     if width > 0:
-                        if ((x+width) >= 127 and dx == 1) or (x < 0 and dx == -1):
+                        if ((x + width) >= 127 and dx == 1) or (x < 0 and dx == -1):
                             dx *= -1
                             hit = True
-                        if (y >= 32 and dy == 1) or ((y-height) <= 0 and dy == -1):
+                        if (y >= 32 and dy == 1) or ((y - height) <= 0 and dy == -1):
                             dy *= -1
                             hit = True
                         if hit:
-                            (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5+random.random()*0.5, 1)
+                            (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5 + random.random() * 0.5, 1)
 
                         graphics.DrawText(sign.canvas, sign.fontreallybig, x, y, graphics.Color(r, g, b), line_1)
 
             else:
-
                 if starting_color_index >= len(selected_color_list):
                     starting_color_index = 0
 
@@ -210,7 +204,7 @@ def show_custom_message(sign):
                     graphics.DrawText(sign.canvas, sign.fontreallybig, print_the_char_at_this_x_index, print_at_y_index, char_color, line_1_char)
                     print_the_char_at_this_x_index += 9
 
-                    color_index = color_index + 1 if line_1_char != ' ' else color_index
+                    color_index = color_index + 1 if line_1_char != " " else color_index
 
                     if color_index >= len(selected_color_list):
                         color_index = 0
@@ -222,7 +216,7 @@ def show_custom_message(sign):
                     graphics.DrawText(sign.canvas, sign.fontreallybig, print_the_char_at_this_x_index, 28, char_color, line_2_char)
                     print_the_char_at_this_x_index += 9
 
-                    color_index = color_index + 1 if line_2_char != ' ' else color_index
+                    color_index = color_index + 1 if line_2_char != " " else color_index
 
                     if color_index >= len(selected_color_list):
                         color_index = 0
@@ -231,7 +225,7 @@ def show_custom_message(sign):
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-        if shared_config.shared_color_mode.value != 5 and len(clean_message)>54:
+        if shared_config.shared_color_mode.value != 5 and len(clean_message) > 54:
             sign.wait_loop(0.01)
         elif shared_config.shared_color_mode.value == 1:
             sign.wait_loop(0.1)

@@ -1,6 +1,5 @@
 import logging
 import shared_config
-import time
 import requests
 from rgbmatrix import graphics
 from FlightRadar24.api import FlightRadar24API, Flight
@@ -11,9 +10,10 @@ from zoneinfo import ZoneInfo
 
 from modes import DisplayMode
 
+
 @__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
 def track_a_flight(sign):
-    
+
     if "track_a_flight_num" not in shared_config.data_dict:
         sign.canvas.Clear()
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
@@ -23,22 +23,20 @@ def track_a_flight(sign):
     blip_count = 0
 
     while shared_config.shared_mode.value == DisplayMode.TRACK_A_FLIGHT.value:
-
         flight_num_hex = shared_config.data_dict["track_a_flight_num"]
 
-        if (requests_limiter % 50 == 0):
-                
-            flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={flight_num_hex}", headers = {'User-Agent': ''})
+        if requests_limiter % 50 == 0:
+            flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={flight_num_hex}", headers={"User-Agent": ""})
             if flightdatareq and flightdatareq.status_code == requests.codes.ok:
                 flight_data = flightdatareq.json()
             else:
                 flight_data = None
-                
+
             if flight_data and "trail" in flight_data:
-                current_location = flight_data['trail'][0]
-                
+                current_location = flight_data["trail"][0]
+
                 # Perform reverse geocoding
-                formatted_address, _ = reverse_geocode(current_location['lat'], current_location['lng'])
+                formatted_address, _ = reverse_geocode(current_location["lat"], current_location["lng"])
 
                 if formatted_address == "Unknown":
                     # Show coordinates instead
@@ -58,16 +56,16 @@ def track_a_flight(sign):
 
             graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
 
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data['airport']['origin']['code']['iata'])
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data['airport']['destination']['code']['iata'])
+            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data["airport"]["origin"]["code"]["iata"])
+            graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data["airport"]["destination"]["code"]["iata"])
 
-            scheduled_start_time = flight_data['time']['scheduled']['departure']
-            real_start_time = flight_data['time']['real']['departure']
-            estimated_start_time = flight_data['time']['estimated']['departure']
+            scheduled_start_time = flight_data["time"]["scheduled"]["departure"]
+            real_start_time = flight_data["time"]["real"]["departure"]
+            estimated_start_time = flight_data["time"]["estimated"]["departure"]
 
-            scheduled_end_time = flight_data['time']['scheduled']['arrival']
-            real_end_time = flight_data['time']['real']['arrival']
-            estimated_end_time = flight_data['time']['estimated']['arrival']
+            scheduled_end_time = flight_data["time"]["scheduled"]["arrival"]
+            real_end_time = flight_data["time"]["real"]["arrival"]
+            estimated_end_time = flight_data["time"]["estimated"]["arrival"]
 
             if real_start_time is not None:
                 start_time = real_start_time
@@ -83,8 +81,10 @@ def track_a_flight(sign):
             else:
                 end_time = scheduled_end_time
 
-            origin_distance_to_destination = get_distance((flight_data['airport']['origin']['position']['latitude'], flight_data['airport']['origin']['position']['longitude']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
-            current_position_to_destination = get_distance((current_location['lat'], current_location['lng']), (flight_data['airport']['destination']['position']['latitude'], flight_data['airport']['destination']['position']['longitude']))
+            origin_distance_to_destination = get_distance(
+                (flight_data["airport"]["origin"]["position"]["latitude"], flight_data["airport"]["origin"]["position"]["longitude"]), (flight_data["airport"]["destination"]["position"]["latitude"], flight_data["airport"]["destination"]["position"]["longitude"])
+            )
+            current_position_to_destination = get_distance((current_location["lat"], current_location["lng"]), (flight_data["airport"]["destination"]["position"]["latitude"], flight_data["airport"]["destination"]["position"]["longitude"]))
 
             # Handle case where origin and destination are the same
             if origin_distance_to_destination == 0:
@@ -123,17 +123,17 @@ def track_a_flight(sign):
                 sign.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
             # Convert Unix timestamp to local time at origin airport
-            origin_timezone = flight_data['airport']['origin']['timezone']['name']
+            origin_timezone = flight_data["airport"]["origin"]["timezone"]["name"]
             origin_local_time = datetime.fromtimestamp(start_time, tz=timezone.utc).astimezone(ZoneInfo(origin_timezone))
-            destination_timezone = flight_data['airport']['destination']['timezone']['name']
+            destination_timezone = flight_data["airport"]["destination"]["timezone"]["name"]
             destination_local_time = datetime.fromtimestamp(end_time, tz=timezone.utc).astimezone(ZoneInfo(destination_timezone))
 
-            if shared_config.CONF["MILITARY_TIME"].lower() == 'true':
-                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), origin_local_time.strftime('%H:%M'))
-                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), destination_local_time.strftime('%H:%M'))
+            if shared_config.CONF["MILITARY_TIME"].lower() == "true":
+                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), origin_local_time.strftime("%H:%M"))
+                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), destination_local_time.strftime("%H:%M"))
             else:
-                graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), origin_local_time.strftime('%I:%M%p'))
-                graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), destination_local_time.strftime('%I:%M%p'))
+                graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), origin_local_time.strftime("%I:%M%p"))
+                graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), destination_local_time.strftime("%I:%M%p"))
 
             if current_location:
                 graphics.DrawText(sign.canvas, sign.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")

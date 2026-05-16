@@ -25,8 +25,7 @@ class Color:
 class _Glyph:
     """Parsed glyph from a BDF font file."""
 
-    __slots__ = ("width", "height", "x_offset", "y_offset",
-                 "device_width", "bitmap")
+    __slots__ = ("width", "height", "x_offset", "y_offset", "device_width", "bitmap")
 
     def __init__(self):
         self.width = 0
@@ -126,8 +125,7 @@ class Font:
 
                 # Bitmap row data (hex string)
                 if in_bitmap and current_glyph is not None and 0 <= row < current_glyph.height:
-                    row_bits = self._parse_bitmap_row(line, current_glyph.x_offset,
-                                                     current_glyph.device_width)
+                    row_bits = self._parse_bitmap_row(line, current_glyph.x_offset, current_glyph.device_width)
                     current_glyph.bitmap.append(row_bits)
                     row += 1
 
@@ -159,7 +157,7 @@ class Font:
         if x_offset > 0:
             all_bits = [False] * x_offset + all_bits
         elif x_offset < 0:
-            all_bits = all_bits[abs(x_offset):]
+            all_bits = all_bits[abs(x_offset) :]
 
         # Take the first device_width bits (what gets rendered)
         result = []
@@ -194,8 +192,7 @@ class Font:
             py = render_y + row_idx
             for col_idx, is_set in enumerate(row_bits):
                 if is_set:
-                    canvas.SetPixel(x_pos + col_idx, py,
-                                    color.red, color.green, color.blue)
+                    canvas.SetPixel(x_pos + col_idx, py, color.red, color.green, color.blue)
 
         return glyph.device_width
 

@@ -31,38 +31,36 @@ def cgol(sign):
 
     for i in range(0, 128):
         for j in range(0, 32):
-            if (random.random() < 0.3):
+            if random.random() < 0.3:
                 current_state[i][j] = True
             else:
                 current_state[i][j] = False
             if cgol_cellcolor:
                 # hmatrix[i][j]=random_angle()
-                hmatrix[i][j] = round(359*i/127+359*j/31) % 360
+                hmatrix[i][j] = round(359 * i / 127 + 359 * j / 31) % 360
 
     firstgen = True
 
     gen_index = 0
 
     angle = utilities.random_angle()
-    #r,g,b = random_rgb()
+    # r,g,b = random_rgb()
 
     tstart = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.CGOL.value:
-
         detect2cycle = True
         gen_index += 1
 
         if not cgol_cellcolor:
-            #angle, r, g, b = next_color_rainbow_linear(angle)
+            # angle, r, g, b = next_color_rainbow_linear(angle)
             angle, r, g, b = utilities.next_color_rainbow_sine(angle)
-            #r,g,b = next_color_random_walk_uniform_step(r,g,b,10)
-            #r,g,b = next_color_random_walk_const_sum(r,g,b,10)
+            # r,g,b = next_color_random_walk_uniform_step(r,g,b,10)
+            # r,g,b = next_color_random_walk_const_sum(r,g,b,10)
 
         next_state = [[False for j in range(32)] for i in range(128)]
 
         for col in range(0, 128):
             for row in range(0, 32):
-
                 if cgol_cellcolor:
                     candidate, r, g, b = check_life_color(col, row, current_state, hmatrix, next_hmatrix)
                 else:
@@ -84,7 +82,7 @@ def cgol(sign):
         if detect2cycle:
             for i in range(0, 128):
                 for j in range(0, 32):
-                    if (random.random() < 0.3):
+                    if random.random() < 0.3:
                         next_state[i][j] = True
                         if cgol_cellcolor:
                             hmatrix[i][j] = utilities.random_angle()
@@ -95,8 +93,8 @@ def cgol(sign):
         current_state = next_state
 
         tend = time.perf_counter()
-        if(tend < tstart + generation_time):
-            breakout = sign.wait_loop(tstart + generation_time-tend)
+        if tend < tstart + generation_time:
+            breakout = sign.wait_loop(tstart + generation_time - tend)
         else:
             breakout = sign.wait_loop(0)
 
@@ -112,25 +110,25 @@ def check_life(x, y, matrix):
     num_neighbors_alive = 0
 
     # Check neighbors above
-    if utilities.check_matrix(x-1, y-1, matrix):
+    if utilities.check_matrix(x - 1, y - 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x, y-1, matrix):
+    if utilities.check_matrix(x, y - 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x+1, y-1, matrix):
+    if utilities.check_matrix(x + 1, y - 1, matrix):
         num_neighbors_alive += 1
 
     # Check neighbors aside
-    if utilities.check_matrix(x-1, y, matrix):
+    if utilities.check_matrix(x - 1, y, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x+1, y, matrix):
+    if utilities.check_matrix(x + 1, y, matrix):
         num_neighbors_alive += 1
 
     # Check neighbors below
-    if utilities.check_matrix(x-1, y+1, matrix):
+    if utilities.check_matrix(x - 1, y + 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x, y+1, matrix):
+    if utilities.check_matrix(x, y + 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x+1, y+1, matrix):
+    if utilities.check_matrix(x + 1, y + 1, matrix):
         num_neighbors_alive += 1
 
     # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
@@ -155,25 +153,25 @@ def check_life_color(x, y, matrix, hm, nhm):
     cy = 0
 
     # Check neighbors above
-    if utilities.check_matrix(x-1, y-1, matrix):
+    if utilities.check_matrix(x - 1, y - 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x, y-1, matrix):
+    if utilities.check_matrix(x, y - 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x+1, y-1, matrix):
+    if utilities.check_matrix(x + 1, y - 1, matrix):
         num_neighbors_alive += 1
 
     # Check neighbors aside
-    if utilities.check_matrix(x-1, y, matrix):
+    if utilities.check_matrix(x - 1, y, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x+1, y, matrix):
+    if utilities.check_matrix(x + 1, y, matrix):
         num_neighbors_alive += 1
 
     # Check neighbors below
-    if utilities.check_matrix(x-1, y+1, matrix):
+    if utilities.check_matrix(x - 1, y + 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x, y+1, matrix):
+    if utilities.check_matrix(x, y + 1, matrix):
         num_neighbors_alive += 1
-    if utilities.check_matrix(x+1, y+1, matrix):
+    if utilities.check_matrix(x + 1, y + 1, matrix):
         num_neighbors_alive += 1
 
     # Any live cell with fewer than two live neighbours dies, as if by underpopulation.
@@ -184,55 +182,54 @@ def check_life_color(x, y, matrix, hm, nhm):
     if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
         h = utilities.check_matrix(x, y, hm)
         utilities.set_matrix(x, y, nhm, h)
-        r, g, b = utilities.hsv_2_rgb(h/360.0, 1, 1)
+        r, g, b = utilities.hsv_2_rgb(h / 360.0, 1, 1)
         return True, r, g, b
 
     if not matrix[x][y] and num_neighbors_alive == 3:
-
         # Find the mean color of the 3 neighbors
 
         # Check neighbors above
-        if utilities.check_matrix(x-1, y-1, matrix):
-            h = utilities.check_matrix(x-1, y-1, hm)
+        if utilities.check_matrix(x - 1, y - 1, matrix):
+            h = utilities.check_matrix(x - 1, y - 1, hm)
             cx += math.cos(h)
             cy += utilities.sin(h)
-        if utilities.check_matrix(x, y-1, matrix):
-            h = utilities.check_matrix(x, y-1, hm)
+        if utilities.check_matrix(x, y - 1, matrix):
+            h = utilities.check_matrix(x, y - 1, hm)
             cx += math.cos(h)
             cy += math.sin(h)
-        if utilities.check_matrix(x+1, y-1, matrix):
-            h = utilities.check_matrix(x+1, y-1, hm)
+        if utilities.check_matrix(x + 1, y - 1, matrix):
+            h = utilities.check_matrix(x + 1, y - 1, hm)
             cx += math.cos(h)
             cy += math.sin(h)
 
         # Check neighbors aside
-        if utilities.check_matrix(x-1, y, matrix):
-            h = utilities.check_matrix(x-1, y, hm)
+        if utilities.check_matrix(x - 1, y, matrix):
+            h = utilities.check_matrix(x - 1, y, hm)
             cx += math.cos(h)
             cy += math.sin(h)
-        if utilities.check_matrix(x+1, y, matrix):
-            h = utilities.check_matrix(x+1, y, hm)
+        if utilities.check_matrix(x + 1, y, matrix):
+            h = utilities.check_matrix(x + 1, y, hm)
             cx += math.cos(h)
             cy += math.sin(h)
 
         # Check neighbors below
-        if utilities.check_matrix(x-1, y+1, matrix):
-            h = utilities.check_matrix(x-1, y+1, hm)
+        if utilities.check_matrix(x - 1, y + 1, matrix):
+            h = utilities.check_matrix(x - 1, y + 1, hm)
             cx += math.cos(h)
             cy += math.sin(h)
-        if utilities.check_matrix(x, y+1, matrix):
-            h = utilities.check_matrix(x, y+1, hm)
+        if utilities.check_matrix(x, y + 1, matrix):
+            h = utilities.check_matrix(x, y + 1, hm)
             cx += math.cos(h)
             cy += math.sin(h)
-        if utilities.check_matrix(x+1, y+1, matrix):
-            h = utilities.check_matrix(x+1, y+1, hm)
+        if utilities.check_matrix(x + 1, y + 1, matrix):
+            h = utilities.check_matrix(x + 1, y + 1, hm)
             cx += math.cos(h)
             cy += math.sin(h)
 
-        h = round(math.atan2(cy, cx)/utilities.DEG_2_RAD) % 360
+        h = round(math.atan2(cy, cx) / utilities.DEG_2_RAD) % 360
         utilities.set_matrix(x, y, nhm, h)
 
-        r, g, b = utilities.hsv_2_rgb(h/360.0, 1, 1)
+        r, g, b = utilities.hsv_2_rgb(h / 360.0, 1, 1)
 
         return True, r, g, b
 

@@ -2,27 +2,27 @@ from multiprocessing import Array, Value
 from modes import DisplayMode
 import os
 
-shared_mode = Value('i', DisplayMode.WELCOME.value)
-shared_prev_mode = Value('i', DisplayMode.PLANES_ALERT.value)
+shared_mode = Value("i", DisplayMode.WELCOME.value)
+shared_prev_mode = Value("i", DisplayMode.PLANES_ALERT.value)
 
-shared_pong_player1 = Value('i', 0)
-shared_pong_player2 = Value('i', 0)
+shared_pong_player1 = Value("i", 0)
+shared_pong_player2 = Value("i", 0)
 
-shared_current_brightness = Value('i', 80)
-shared_color_mode = Value('i', 0)
-shared_forced_sign_update = Value('i', 0)
+shared_current_brightness = Value("i", 80)
+shared_color_mode = Value("i", 0)
+shared_forced_sign_update = Value("i", 0)
 
-shared_satellite_mode = Value('i', 1)
+shared_satellite_mode = Value("i", 1)
 
-shared_lighting_zoomind = Value('i', 6)
-shared_lighting_mode = Value('i', 1)
+shared_lighting_zoomind = Value("i", 6)
+shared_lighting_mode = Value("i", 1)
 
-shared_mandelbrot_color = Value('i', 0)
-shared_mandelbrot_colorscale = Value('d', 3)
+shared_mandelbrot_color = Value("i", 0)
+shared_mandelbrot_colorscale = Value("d", 3)
 
-shared_snow_mode = Value('i', 1)
+shared_snow_mode = Value("i", 1)
 
-free_sketch_pixels = Array('B', 128 * 32 * 3)
+free_sketch_pixels = Array("B", 128 * 32 * 3)
 
 local_timezone = None
 

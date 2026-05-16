@@ -38,12 +38,7 @@ class FrameServer:
         self._loop.run_until_complete(self._serve())
 
     async def _serve(self):
-        async with websockets.serve(
-            self._handler,
-            _LISTEN_HOST,
-            _LISTEN_PORT,
-            compression=None,
-        ):
+        async with websockets.serve(self._handler, _LISTEN_HOST, _LISTEN_PORT, compression=None):
             await asyncio.Future()  # run forever
 
     async def _handler(self, websocket: websockets.ServerConnection):

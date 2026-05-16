@@ -23,13 +23,13 @@ def welcome(self, duration=None):
     title_y = 12
 
     # Shimmer / gloss parameters
-    base_r, base_g, base_b = 46, 210, 255
+    base_r, base_g = 46, 210
     shimmer_width = 22
     sweep_start = title_x - shimmer_width
     sweep_end = title_x + 85 + shimmer_width
     sweep_range = sweep_end - sweep_start
-    sweep_speed_1 = 90   # primary sweep speed
-    sweep_speed_2 = 55   # secondary slower sweep
+    sweep_speed_1 = 90  # primary sweep speed
+    sweep_speed_2 = 55  # secondary slower sweep
 
     # Sparkle setup — stars across the entire 128x32 matrix (night sky)
     star_spots = []
@@ -63,9 +63,9 @@ def welcome(self, duration=None):
         self.canvas.Clear()
 
         # Draw twinkling night sky background across entire matrix
-        for (sx, sy, phase, speed, max_bright) in star_spots:
+        for sx, sy, phase, speed, max_bright in star_spots:
             brightness = (math.sin(elapsed * speed + phase) + 1.0) / 2.0  # 0..1
-            brightness = brightness ** 2.0  # sharpen the twinkle
+            brightness = brightness**2.0  # sharpen the twinkle
             if brightness > 0.15:
                 sv = int(max_bright * brightness)
                 self.canvas.SetPixel(sx, sy, sv, sv, sv)

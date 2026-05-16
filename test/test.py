@@ -12,7 +12,7 @@ options.chain_length = 2
 # "adafruit-hat" or "regular"
 options.hardware_mapping = "adafruit-hat"
 
-myMatrix = RGBMatrix(options = options)
+myMatrix = RGBMatrix(options=options)
 myCanvas = myMatrix.CreateFrameCanvas()
 
 # Set every pixel to white
