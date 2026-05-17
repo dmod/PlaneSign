@@ -1,6 +1,8 @@
 #!/bin/bash
 
-if [ "$USER" = root ]; then
+set -euo pipefail
+
+if [ "$(id -u)" -eq 0 ]; then
     echo "This script shouldn't be run as root. Aborting."
     exit 1
 fi
@@ -9,17 +11,45 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 INSTALL_DIR=/home/pi/PlaneSign
+GITHUB_BASE_URL=${GITHUB_BASE_URL:-https://raw.githubusercontent.com/dmod/PlaneSign/main}
+COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
+RUN_USER="$(id -un)"
+
+download_required_file() {
+  local url="$1"
+  local destination="$2"
+  local temporary
+
+  echo "Downloading $url"
+  temporary="$(mktemp "${destination}.tmp.XXXXXX")"
+  if wget -q --show-progress -O "$temporary" "$url"; then
+    mv "$temporary" "$destination"
+  else
+    rm -f "$temporary"
+    echo "Failed to download $url" >&2
+    exit 1
+  fi
+}
 
 echo "PlaneSign install starting..."
 
-# Performance upgrade for isolcpus
-grep "isolcpus" /boot/firmware/cmdline.txt
-if [ $? -ne 0 ]
-then
-  echo "Adding isolcpus config to /boot/firmware/cmdline.txt"
-  sudo bash -c "echo ' isolcpus=3' >> /boot/firmware/cmdline.txt"
+if [ -f /boot/firmware/cmdline.txt ]; then
+  BOOT_DIR=/boot/firmware
 else
-  echo "isolcpus config found in /boot/firmware/cmdline.txt"
+  BOOT_DIR=/boot
+fi
+
+CMDLINE_FILE="$BOOT_DIR/cmdline.txt"
+CONFIG_FILE="$BOOT_DIR/config.txt"
+
+# Performance upgrade for isolcpus
+if [ -f "$CMDLINE_FILE" ] && ! grep -qw "isolcpus" "$CMDLINE_FILE"; then
+  echo "Adding isolcpus config to $CMDLINE_FILE"
+  sudo sed -i '$ s/$/ isolcpus=3/' "$CMDLINE_FILE"
+elif [ -f "$CMDLINE_FILE" ]; then
+  echo "isolcpus config found in $CMDLINE_FILE"
+else
+  echo "Warning: $CMDLINE_FILE not found; skipping isolcpus config"
 fi
 
 # Turn off onboard audio
@@ -27,7 +57,11 @@ if lsmod | grep -wq "snd_bcm2835"; then
   echo "snd_bcm2835 is loaded!"
   sudo rmmod snd_bcm2835
 fi
-sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' /boot/firmware/config.txt
+if [ -f "$CONFIG_FILE" ]; then
+  sudo sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
+else
+  echo "Warning: $CONFIG_FILE not found; skipping onboard audio config"
+fi
 if [ ! -f /etc/modprobe.d/alsa-blacklist.conf ] || ! grep -q "blacklist snd_bcm2835" /etc/modprobe.d/alsa-blacklist.conf; then
   echo "Blacklisting snd_bcm2835 module..."
   echo "blacklist snd_bcm2835" | sudo tee -a /etc/modprobe.d/alsa-blacklist.conf
@@ -42,21 +76,19 @@ if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-fi
 fi
 
 # Download required files from GitHub
-GITHUB_BASE_URL=https://raw.githubusercontent.com/dmod/PlaneSign/main
-
 BLE_DIR="$INSTALL_DIR/ble"
 mkdir -p "$BLE_DIR"
 for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
-  wget -q --show-progress -O "$BLE_DIR/$file" "$GITHUB_BASE_URL/ble/$file"
+  download_required_file "$GITHUB_BASE_URL/ble/$file" "$BLE_DIR/$file"
 done
 
-wget -q --show-progress -O "$INSTALL_DIR/sign.conf.sample" "$GITHUB_BASE_URL/sign.conf.sample"
-wget -q --show-progress -O "$INSTALL_DIR/compose.yml" "$GITHUB_BASE_URL/compose.yml"
+download_required_file "$GITHUB_BASE_URL/sign.conf.sample" "$INSTALL_DIR/sign.conf.sample"
+download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 
 # Install bluetooth support
 sudo apt-get update
 sudo apt install -y python3-dbus
-sudo rfkill unblock bluetooth
+sudo rfkill unblock bluetooth || echo "Warning: unable to unblock Bluetooth"
 
 sudo ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -64,7 +96,7 @@ sudo systemctl enable planesign-ble.service
 
 # Verify bluetooth adapter status
 echo "Bluetooth status:"
-rfkill list bluetooth | grep -E "Soft|Hard"
+rfkill list bluetooth | grep -E "Soft|Hard" || echo "  Warning: no rfkill Bluetooth status found"
 bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
 
 # Add Docker's official GPG key:
@@ -83,7 +115,7 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 sudo groupadd --force docker
-sudo usermod -aG docker $USER
+sudo usermod -aG docker "$RUN_USER"
 
 sudo systemctl enable docker.service
 sudo systemctl enable containerd.service
@@ -94,8 +126,9 @@ fi
 
 mkdir -p "$INSTALL_DIR/sketches"
 
-sudo docker compose -f "$INSTALL_DIR/compose.yaml" pull
-sudo docker compose -f "$INSTALL_DIR/compose.yaml" up --detach --force-recreate
+sudo docker compose -f "$COMPOSE_FILE" config >/dev/null
+sudo docker compose -f "$COMPOSE_FILE" pull
+sudo docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
 
 echo "Installation and configuration completed! Rebooting..."
 sudo reboot

@@ -44,6 +44,10 @@
 curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash
 ```
 
+Run the same command again to update an existing Docker installation. The script downloads the current deployment files from GitHub, keeps `sign.conf` if it already exists, pulls the latest PlaneSign image, and recreates the container with Docker Compose.
+
+The Docker updater is intentionally self-contained so older checkouts on the device do not have to know about newer deployment file names.
+
 #### Classic Installation
 ```sh
 cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
