@@ -13,6 +13,7 @@ export DEBIAN_FRONTEND=noninteractive
 INSTALL_DIR=/home/pi/PlaneSign
 GITHUB_BASE_URL=${GITHUB_BASE_URL:-https://raw.githubusercontent.com/dmod/PlaneSign/main}
 COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
+CONTAINER_NAME=PlaneSignRuntime
 RUN_USER="$(id -un)"
 
 download_required_file() {
@@ -28,6 +29,13 @@ download_required_file() {
     rm -f "$temporary"
     echo "Failed to download $url" >&2
     exit 1
+  fi
+}
+
+remove_existing_planesign_container() {
+  if sudo docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    echo "Removing existing $CONTAINER_NAME container before Compose recreates it..."
+    sudo docker rm --force "$CONTAINER_NAME"
   fi
 }
 
@@ -128,6 +136,7 @@ mkdir -p "$INSTALL_DIR/sketches"
 
 sudo docker compose -f "$COMPOSE_FILE" config >/dev/null
 sudo docker compose -f "$COMPOSE_FILE" pull
+remove_existing_planesign_container
 sudo docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
 
 echo "Installation and configuration completed! Rebooting..."
