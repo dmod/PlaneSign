@@ -38,6 +38,7 @@ import planes
 import welcome
 import pong
 import custom_message
+import countdown
 import cca
 import cgol
 import lightning
