@@ -213,6 +213,10 @@ legend {
   cursor: pointer;
 }
 
+#lightning_div {
+  overflow: hidden;
+}
+
 #lightning_button_div {
   float: left;
   padding: 20px;
