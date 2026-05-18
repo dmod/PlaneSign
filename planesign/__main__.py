@@ -47,6 +47,7 @@ import free_sketch
 import weather
 import moon
 import snow
+import snowfall
 import santa
 import mandelbrot
 import planesign
