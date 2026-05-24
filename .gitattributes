@@ -1,0 +1,20 @@
+# Default: auto-detect text files and normalize to LF
+* text=auto eol=lf
+
+# Binary files — don't diff, don't merge, don't normalize
+*.png binary
+*.jpeg binary
+*.gif binary
+*.pbm binary
+*.pil binary
+*.mp3 binary
+*.wav binary
+*.stl binary
+
+# Lock files — exact content matters, no merge
+uv.lock merge=binary
+
+# GitHub language stats — exclude non-source files
+*.bdf linguist-vendored
+*.geojson linguist-data
+*.csv linguist-data
