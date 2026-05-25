@@ -1,52 +1,65 @@
-// Theme switcher for PlaneSign frontend
-// Each theme is a separate CSS file that overrides the base style.css
-// To remove a theme: delete its CSS file and remove its entry from THEMES below.
+// Layout switcher for PlaneSign frontend
+// Each layout is a completely different HTML+CSS structural refactor.
+// To remove a layout: delete its HTML/CSS files and remove its entry from LAYOUTS below.
 
-var THEMES = [
-    { id: "original", name: "Original", css: null },
-    { id: "retro", name: "Retro", css: "style-retro.css" },
-    { id: "futuristic", name: "Futuristic", css: "style-futuristic.css" },
-    { id: "midnight", name: "Midnight", css: "style-midnight.css" },
-    { id: "terminal", name: "Terminal", css: "style-terminal.css" },
-    { id: "warm-minimal", name: "Warm Minimal", css: "style-warm-minimal.css" }
+var LAYOUTS = [
+    { id: "original", name: "Original", page: "index.html" },
+    { id: "dashboard", name: "Dashboard", page: "layout-dashboard.html" },
+    { id: "tabbed", name: "Tabbed", page: "layout-tabbed.html" },
+    { id: "cards", name: "Cards", page: "layout-cards.html" },
+    { id: "compact", name: "Compact", page: "layout-compact.html" },
+    { id: "command", name: "Command Center", page: "layout-command.html" }
 ];
 
-var THEME_LINK_ID = "theme-override-css";
-
-function apply_theme(themeId) {
-    var existing = document.getElementById(THEME_LINK_ID);
-    var theme = THEMES.find(function (t) { return t.id === themeId; });
-    if (!theme) theme = THEMES[0];
-
-    if (theme.css) {
-        if (existing) {
-            existing.href = theme.css;
-        } else {
-            var link = document.createElement("link");
-            link.id = THEME_LINK_ID;
-            link.rel = "stylesheet";
-            link.href = theme.css;
-            document.head.appendChild(link);
-        }
-    } else {
-        if (existing) existing.remove();
+function get_current_layout_id() {
+    var path = window.location.pathname.split("/").pop() || "index.html";
+    for (var i = 0; i < LAYOUTS.length; i++) {
+        if (LAYOUTS[i].page === path) return LAYOUTS[i].id;
     }
-
-    try {
-        localStorage.setItem("planesign_theme", theme.id);
-    } catch (e) { }
-
-    var selector = document.getElementById("theme_selector");
-    if (selector) selector.value = theme.id;
+    return "original";
 }
 
-function init_theme_selector() {
+function apply_layout(layoutId) {
+    var layout = LAYOUTS.find(function (l) { return l.id === layoutId; });
+    if (!layout) layout = LAYOUTS[0];
+
+    try {
+        localStorage.setItem("planesign_layout", layout.id);
+    } catch (e) { }
+
+    // Navigate to the layout page if we're not already on it
+    var currentPage = window.location.pathname.split("/").pop() || "index.html";
+    if (currentPage !== layout.page) {
+        window.location.href = layout.page;
+    }
+}
+
+function populate_layout_selector() {
+    var selector = document.getElementById("layout_selector");
+    if (!selector) return;
+    var currentId = get_current_layout_id();
+    selector.innerHTML = "";
+    for (var i = 0; i < LAYOUTS.length; i++) {
+        var opt = document.createElement("option");
+        opt.value = LAYOUTS[i].id;
+        opt.textContent = LAYOUTS[i].name;
+        if (LAYOUTS[i].id === currentId) opt.selected = true;
+        selector.appendChild(opt);
+    }
+}
+
+function check_layout_redirect() {
     var saved = null;
     try {
-        saved = localStorage.getItem("planesign_theme");
+        saved = localStorage.getItem("planesign_layout");
     } catch (e) { }
-    if (saved) apply_theme(saved);
+    if (saved) {
+        var current = get_current_layout_id();
+        if (saved !== current) {
+            apply_layout(saved);
+        }
+    }
 }
 
-// Apply saved theme as early as possible
-init_theme_selector();
+// On first load, redirect to saved layout if needed
+check_layout_redirect();
