@@ -273,16 +273,58 @@
         <canvas id="free_sketch_hover_canvas" width="128" height="32" aria-hidden="true"></canvas>
       </div>
       <div class="free_sketch_controls">
-        <label class="free_sketch_color_label" for="free_sketch_color">Color</label>
-        <input type="color" id="free_sketch_color" value="#ff0000">
-        <div class="free_sketch_brush_sizes" role="group" aria-label="Brush size">
-          <button type="button" id="free_sketch_brush_1" class="free_sketch_brush_size active" onclick="set_free_sketch_brush_size(1)" aria-pressed="true">1x1</button>
-          <button type="button" id="free_sketch_brush_2" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(2)" aria-pressed="false">2x2</button>
-          <button type="button" id="free_sketch_brush_3" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(3)" aria-pressed="false">3x3</button>
-          <button type="button" id="free_sketch_brush_4" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(4)" aria-pressed="false">4x4</button>
+        <!-- Color Palette Section -->
+        <div class="free_sketch_color_section">
+          <div class="free_sketch_color_palette">
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #ff0000;" onclick="set_free_sketch_color('#ff0000')" aria-label="Red" title="Red"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #ff7f00;" onclick="set_free_sketch_color('#ff7f00')" aria-label="Orange" title="Orange"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #ffff00;" onclick="set_free_sketch_color('#ffff00')" aria-label="Yellow" title="Yellow"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #00ff00;" onclick="set_free_sketch_color('#00ff00')" aria-label="Green" title="Green"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #0000ff;" onclick="set_free_sketch_color('#0000ff')" aria-label="Blue" title="Blue"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #8b00ff;" onclick="set_free_sketch_color('#8b00ff')" aria-label="Purple" title="Purple"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #ff00ff;" onclick="set_free_sketch_color('#ff00ff')" aria-label="Magenta" title="Magenta"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #ffffff;" onclick="set_free_sketch_color('#ffffff')" aria-label="White" title="White"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #7f7f7f;" onclick="set_free_sketch_color('#7f7f7f')" aria-label="Gray" title="Gray"></button>
+            <button type="button" class="free_sketch_color_swatch" style="background-color: #000000;" onclick="set_free_sketch_color('#000000')" aria-label="Black" title="Black"></button>
+          </div>
+          <div class="free_sketch_color_controls">
+            <label class="free_sketch_color_label" for="free_sketch_color">Custom:</label>
+            <input type="color" id="free_sketch_color" value="#ff0000">
+          </div>
+          <div id="free_sketch_recent_colors" class="free_sketch_recent_colors" aria-label="Recent colors"></div>
         </div>
+        
+        <!-- Brush Sizes -->
+        <div class="free_sketch_brush_sizes" role="group" aria-label="Brush size">
+          <button type="button" id="free_sketch_brush_1" class="free_sketch_brush_size active" onclick="set_free_sketch_brush_size(1)" aria-pressed="true">1</button>
+          <button type="button" id="free_sketch_brush_2" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(2)" aria-pressed="false">2</button>
+          <button type="button" id="free_sketch_brush_3" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(3)" aria-pressed="false">3</button>
+          <button type="button" id="free_sketch_brush_4" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(4)" aria-pressed="false">4</button>
+          <button type="button" id="free_sketch_brush_5" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(5)" aria-pressed="false">5</button>
+        </div>
+        
+        <!-- Brush Shapes -->
+        <div class="free_sketch_brush_shapes" role="group" aria-label="Brush shape">
+          <button type="button" id="free_sketch_brush_shape_square" class="free_sketch_brush_shape active" onclick="set_free_sketch_brush_shape('square')" aria-pressed="true" title="Square">
+            <svg viewBox="0 0 20 20" width="20" height="20"><rect x="4" y="4" width="12" height="12" fill="currentColor"/></svg>
+          </button>
+          <button type="button" id="free_sketch_brush_shape_circle" class="free_sketch_brush_shape" onclick="set_free_sketch_brush_shape('circle')" aria-pressed="false" title="Circle">
+            <svg viewBox="0 0 20 20" width="20" height="20"><circle cx="10" cy="10" r="6" fill="currentColor"/></svg>
+          </button>
+          <button type="button" id="free_sketch_brush_shape_plus" class="free_sketch_brush_shape" onclick="set_free_sketch_brush_shape('plus')" aria-pressed="false" title="Plus">
+            <svg viewBox="0 0 20 20" width="20" height="20"><path d="M9 5h2v10H9z M5 9h10v2H5z" fill="currentColor"/></svg>
+          </button>
+          <button type="button" id="free_sketch_brush_shape_x" class="free_sketch_brush_shape" onclick="set_free_sketch_brush_shape('x')" aria-pressed="false" title="X">
+            <svg viewBox="0 0 20 20" width="20" height="20"><path d="M6.5 5.086l7.414 7.414-1.414 1.414L5.086 6.5z M13.914 5.086l1.414 1.414-7.414 7.414-1.414-1.414z" fill="currentColor"/></svg>
+          </button>
+        </div>
+        
+        <!-- Tools -->
         <button type="button" id="free_sketch_eraser" class="free_sketch_control_button" onclick="toggle_free_sketch_eraser()">Eraser</button>
+        <button type="button" id="free_sketch_color_picker" class="free_sketch_control_button" onclick="toggle_free_sketch_color_picker()">Pick Color</button>
+        <button type="button" id="free_sketch_paint_bucket" class="free_sketch_control_button" onclick="toggle_free_sketch_paint_bucket()">Fill</button>
         <button type="button" id="free_sketch_stamp" class="free_sketch_control_button free_sketch_stamp_button" onclick="toggle_free_sketch_stamp()">&#10052;</button>
+        <button type="button" id="free_sketch_undo" class="free_sketch_control_button" onclick="undo_free_sketch()" disabled>Undo</button>
         <button type="button" class="free_sketch_control_button" onclick="clear_free_sketch()">Clear</button>
         <button type="button" class="free_sketch_control_button" onclick="save_free_sketch()">Save</button>
       </div>

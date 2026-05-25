@@ -1589,18 +1589,45 @@ def bresenham_line(x0, y0, x1, y1):
             y0 += sy
 
 
-def paint_brush(pixel_buffer, cx, cy, brush_size, color):
+def paint_brush(pixel_buffer, cx, cy, brush_size, color, brush_shape="square"):
     """Paint a brush stamp centered at (cx, cy) into pixel_buffer (no lock)."""
-    start_x = cx - (brush_size // 2)
-    start_y = cy - (brush_size // 2)
-    for py in range(start_y, start_y + brush_size):
-        if not 0 <= py < 32:
-            continue
-        for px in range(start_x, start_x + brush_size):
-            if not 0 <= px < 128:
-                continue
+    pixels = get_brush_shape_pixels(cx, cy, brush_size, brush_shape)
+    for px, py in pixels:
+        if 0 <= px < 128 and 0 <= py < 32:
             index = (py * 128 + px) * 3
             pixel_buffer[index : index + 3] = color
+
+
+def get_brush_shape_pixels(cx, cy, size, shape):
+    """Get the list of (x, y) pixels for a brush stamp centered at (cx, cy)."""
+    pixels = []
+    half = size // 2
+    
+    if shape == "square":
+        for dy in range(-half, size - half):
+            for dx in range(-half, size - half):
+                pixels.append((cx + dx, cy + dy))
+    elif shape == "plus":
+        # Vertical and horizontal lines
+        for d in range(-half, size - half):
+            pixels.append((cx, cy + d))  # vertical
+            pixels.append((cx + d, cy))  # horizontal
+    elif shape == "x":
+        # Diagonal lines
+        for d in range(-half, size - half):
+            pixels.append((cx + d, cy + d))  # diagonal \
+            pixels.append((cx + d, cy - d))  # diagonal /
+    elif shape == "circle":
+        # Circle approximation using distance formula
+        radius_squared = (size / 2.0) * (size / 2.0)
+        for dy in range(-half, size - half):
+            for dx in range(-half, size - half):
+                dist_squared = dx * dx + dy * dy
+                if dist_squared <= radius_squared:
+                    pixels.append((cx + dx, cy + dy))
+    
+    # Remove duplicates
+    return list(set(pixels))
 
 
 def stamp_sprite_on_buffer(pixel_buffer, sprite, cx, cy):
