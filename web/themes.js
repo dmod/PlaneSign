@@ -1,51 +1,22 @@
 // Layout switcher for PlaneSign frontend
-// Each layout is a completely different HTML+CSS structural refactor.
-// To remove a layout: delete its HTML/CSS files and remove its entry from LAYOUTS below.
+// Supports two layouts: Original (index.html) and Command Center (layout-command.html)
 
-var LAYOUTS = [
-    { id: "original", name: "Original", page: "index.html" },
-    { id: "dashboard", name: "Dashboard", page: "layout-dashboard.html" },
-    { id: "tabbed", name: "Tabbed", page: "layout-tabbed.html" },
-    { id: "cards", name: "Cards", page: "layout-cards.html" },
-    { id: "compact", name: "Compact", page: "layout-compact.html" },
-    { id: "command", name: "Command Center", page: "layout-command.html" }
-];
-
-function get_current_layout_id() {
+function is_command_center() {
     var path = window.location.pathname.split("/").pop() || "index.html";
-    for (var i = 0; i < LAYOUTS.length; i++) {
-        if (LAYOUTS[i].page === path) return LAYOUTS[i].id;
-    }
-    return "original";
+    return path === "layout-command.html";
 }
 
-function apply_layout(layoutId) {
-    var layout = LAYOUTS.find(function (l) { return l.id === layoutId; });
-    if (!layout) layout = LAYOUTS[0];
-
+function toggle_layout() {
+    var goingToCommand = !is_command_center();
     try {
-        localStorage.setItem("planesign_layout", layout.id);
+        localStorage.setItem("planesign_layout", goingToCommand ? "command" : "original");
     } catch (e) { }
-
-    // Navigate to the layout page if we're not already on it
-    var currentPage = window.location.pathname.split("/").pop() || "index.html";
-    if (currentPage !== layout.page) {
-        window.location.href = layout.page;
-    }
+    window.location.href = goingToCommand ? "layout-command.html" : "index.html";
 }
 
-function populate_layout_selector() {
-    var selector = document.getElementById("layout_selector");
-    if (!selector) return;
-    var currentId = get_current_layout_id();
-    selector.innerHTML = "";
-    for (var i = 0; i < LAYOUTS.length; i++) {
-        var opt = document.createElement("option");
-        opt.value = LAYOUTS[i].id;
-        opt.textContent = LAYOUTS[i].name;
-        if (LAYOUTS[i].id === currentId) opt.selected = true;
-        selector.appendChild(opt);
-    }
+function init_layout_toggle() {
+    var toggle = document.getElementById("layout_toggle");
+    if (toggle) toggle.checked = is_command_center();
 }
 
 function check_layout_redirect() {
@@ -54,9 +25,11 @@ function check_layout_redirect() {
         saved = localStorage.getItem("planesign_layout");
     } catch (e) { }
     if (saved) {
-        var current = get_current_layout_id();
-        if (saved !== current) {
-            apply_layout(saved);
+        var onCommand = is_command_center();
+        if (saved === "command" && !onCommand) {
+            window.location.href = "layout-command.html";
+        } else if (saved === "original" && onCommand) {
+            window.location.href = "index.html";
         }
     }
 }

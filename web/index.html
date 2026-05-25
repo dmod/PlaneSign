@@ -21,27 +21,67 @@
       padding: 8px 0;
       background: #f0f0f0;
       border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
     }
-    #layout_bar label {
+    #layout_bar .layout-label {
       font-size: 14px;
-      margin-right: 8px;
       color: #555;
+      cursor: default;
     }
-    #layout_selector {
-      font-size: 14px;
-      padding: 4px 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+    #layout_bar .layout-label.active {
+      color: #000;
+      font-weight: bold;
+    }
+    .layout-switch {
+      position: relative;
+      width: 48px;
+      height: 26px;
+    }
+    .layout-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .layout-slider {
+      position: absolute;
       cursor: pointer;
+      inset: 0;
+      background-color: #7bb9c9;
+      border-radius: 26px;
+      transition: background-color 0.3s;
+    }
+    .layout-slider:before {
+      content: "";
+      position: absolute;
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: transform 0.3s;
+    }
+    .layout-switch input:checked + .layout-slider {
+      background-color: #30a14e;
+    }
+    .layout-switch input:checked + .layout-slider:before {
+      transform: translateX(22px);
     }
   </style>
 </head>
 
 <body>
   <div id="layout_bar">
-    <label for="layout_selector">Layout:</label>
-    <select id="layout_selector" onchange="apply_layout(this.value)"></select>
-    <script>populate_layout_selector();</script>
+    <span class="layout-label active">Original</span>
+    <label class="layout-switch">
+      <input type="checkbox" id="layout_toggle" onchange="toggle_layout()">
+      <span class="layout-slider"></span>
+    </label>
+    <span class="layout-label">Command Center</span>
+    <script>init_layout_toggle();</script>
   </div>
   <div id="title_header">Plane Sign</div>
   <div id="topbar">
