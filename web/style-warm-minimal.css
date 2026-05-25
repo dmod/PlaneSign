@@ -1,0 +1,243 @@
+/* PlaneSign Theme: Warm Minimal
+   Clean, light theme with warm earth tones - sand, terracotta, olive.
+   Generous whitespace, soft shadows, comfortable to read.
+   To remove this theme: delete this file and remove its entry from THEMES in themes.js */
+
+body {
+  background: #f5f0e8;
+  color: #3d3630;
+  font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+}
+
+#title_header {
+  font-family: "Palatino Linotype", "Book Antiqua", serif;
+  color: #8b5e3c;
+  font-size: 120px;
+  font-weight: normal;
+  letter-spacing: 4px;
+}
+
+.groups_wrapper {
+  column-gap: 28px;
+  row-gap: 28px;
+}
+
+.mode_selector_button_group {
+  border-radius: 12px;
+  background: #faf7f2;
+  border: 1px solid #d4c5b0;
+  margin: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+legend {
+  color: #8b5e3c;
+  font-family: "Palatino Linotype", serif;
+  font-size: 34px;
+  font-weight: normal;
+  padding: 3px 10px;
+}
+
+.mode_button {
+  color: #3d3630;
+  background-color: #f5f0e8;
+  border: 1px solid #d4c5b0;
+  font-family: "Palatino Linotype", serif;
+  font-size: 18px;
+  padding: 10px 35px;
+  margin: 12px;
+  border-radius: 8px;
+}
+
+.mode_button:hover {
+  background-color: #ede5d8;
+  border-color: #8b5e3c;
+}
+
+.mode_button:active {
+  background-color: #8b5e3c;
+  color: #faf7f2;
+}
+
+.device_info_box {
+  border-radius: 12px;
+  background: #faf7f2;
+  border: 1px solid #d4c5b0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  color: #3d3630;
+}
+
+.device_info_header {
+  font-family: "Palatino Linotype", serif;
+  color: #8b5e3c;
+}
+
+.device_info_label {
+  background: #f5f0e8;
+  color: #8a7d6e;
+  font-family: "Palatino Linotype", serif;
+  border-radius: 8px 0 0 8px;
+}
+
+.device_info_value {
+  background: #f5f0e8;
+  color: #5a7355;
+  font-family: "SF Mono", "Fira Code", monospace;
+  border-radius: 0 8px 8px 0;
+}
+
+#brightness_slider {
+  background: #ede5d8;
+  height: 44px;
+  border-radius: 22px;
+}
+
+#brightness_slider::-webkit-slider-thumb {
+  background: #8b5e3c;
+  border-radius: 10px;
+  width: 120px;
+  height: 44px;
+}
+
+#brightness_slider::-moz-range-thumb {
+  background: #8b5e3c;
+  border-radius: 10px;
+  width: 120px;
+  height: 44px;
+}
+
+#optionsbutton {
+  border-radius: 50%;
+  background-color: #faf7f2;
+  border: 1px solid #d4c5b0;
+}
+
+#optionsbutton:hover {
+  border-color: #8b5e3c;
+}
+
+#optionsbutton svg {
+  fill: #8a7d6e;
+}
+
+.sidenav {
+  background-color: #f5f0e8;
+  color: #3d3630;
+}
+
+.closebutton {
+  color: #8a7d6e;
+}
+
+span.configline {
+  color: #3d3630;
+}
+
+input.configline {
+  background: #faf7f2;
+  color: #3d3630;
+  border: 1px solid #d4c5b0;
+  border-radius: 6px;
+}
+
+#submit_config_button {
+  background: #8b5e3c;
+  color: #faf7f2;
+  border: none;
+  border-radius: 8px;
+}
+
+.custom_colors_button {
+  background: #faf7f2;
+  color: #3d3630;
+  border: 1px solid #d4c5b0;
+  border-radius: 6px;
+}
+
+#custom_message {
+  background: #faf7f2;
+  color: #3d3630;
+  border: 1px solid #d4c5b0;
+  border-radius: 8px;
+}
+
+#countdown_message {
+  background: #faf7f2;
+  color: #3d3630;
+  border: 1px solid #d4c5b0;
+  border-radius: 8px;
+}
+
+.free_sketch_modal {
+  background: #f5f0e8;
+  border: 1px solid #d4c5b0;
+  border-radius: 12px;
+  color: #3d3630;
+}
+
+.free_sketch_canvas_wrap {
+  border-color: #8b5e3c;
+}
+
+.free_sketch_icon_button {
+  background: #faf7f2;
+  border-color: #d4c5b0;
+  color: #3d3630;
+  border-radius: 8px;
+}
+
+.free_sketch_control_button {
+  background: #faf7f2;
+  border-color: #d4c5b0;
+  color: #3d3630;
+  border-radius: 8px;
+}
+
+.free_sketch_control_button.active {
+  background: #8b5e3c;
+  color: #faf7f2;
+}
+
+.free_sketch_brush_size,
+.free_sketch_brush_shape {
+  background: #faf7f2;
+  border-color: #d4c5b0;
+  color: #3d3630;
+}
+
+.free_sketch_brush_size.active,
+.free_sketch_brush_shape.active {
+  background: #8b5e3c;
+  color: #faf7f2;
+}
+
+.free_sketch_brush_sizes,
+.free_sketch_brush_shapes {
+  border-color: #d4c5b0;
+  border-radius: 8px;
+}
+
+.free_sketch_color_swatch {
+  border-color: #d4c5b0;
+  border-radius: 6px;
+}
+
+#theme_bar {
+  background: #faf7f2;
+  border-bottom: 1px solid #d4c5b0;
+}
+
+#theme_selector {
+  background: #f5f0e8;
+  color: #3d3630;
+  border: 1px solid #d4c5b0;
+  border-radius: 6px;
+}
+
+#theme_bar label {
+  color: #8a7d6e;
+}
+
+.modal_backdrop {
+  background: rgba(61, 54, 48, 0.5);
+}

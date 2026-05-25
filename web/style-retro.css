@@ -1,0 +1,219 @@
+/* PlaneSign Theme: Retro
+   Inspired by 80s/90s computing - amber/green CRT tones, pixel-style borders,
+   dark backgrounds with warm accent colors.
+   To remove this theme: delete this file and remove its entry from THEMES in themes.js */
+
+body {
+  background: #1a1a0e;
+  color: #f5c842;
+  font-family: "Courier New", "Lucida Console", monospace;
+}
+
+#title_header {
+  font-family: "Courier New", monospace;
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.3);
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  font-size: 100px;
+}
+
+.groups_wrapper {
+  column-gap: 20px;
+  row-gap: 20px;
+}
+
+.mode_selector_button_group {
+  border-radius: 0;
+  background: #2a2a1a;
+  border: 2px solid #33ff33;
+  margin: 8px;
+}
+
+legend {
+  color: #33ff33;
+  font-family: "Courier New", monospace;
+  font-size: 32px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  padding: 3px 10px;
+}
+
+.mode_button {
+  color: #33ff33;
+  background-color: #0d0d06;
+  border: 1px solid #33ff33;
+  font-family: "Courier New", monospace;
+  font-size: 18px;
+  padding: 8px 30px;
+  margin: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.mode_button:hover {
+  background-color: #1a3310;
+  color: #66ff66;
+}
+
+.mode_button:active {
+  background-color: #33ff33;
+  color: #0d0d06;
+}
+
+.device_info_box {
+  border-radius: 0;
+  background: #2a2a1a;
+  border: 2px solid #f5c842;
+}
+
+.device_info_header {
+  font-family: "Courier New", monospace;
+  color: #f5c842;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+
+.device_info_label {
+  background: #1a1a0e;
+  color: #f5c842;
+  font-family: "Courier New", monospace;
+  border-radius: 0;
+}
+
+.device_info_value {
+  background: #1a1a0e;
+  color: #33ff33;
+  font-family: "Courier New", monospace;
+  border-radius: 0;
+}
+
+#brightness_slider {
+  background: #2a2a1a;
+  height: 40px;
+  border: 1px solid #33ff33;
+}
+
+#brightness_slider::-webkit-slider-thumb {
+  background: #33ff33;
+  width: 120px;
+  height: 40px;
+}
+
+#brightness_slider::-moz-range-thumb {
+  background: #33ff33;
+  width: 120px;
+  height: 40px;
+}
+
+#optionsbutton {
+  border-radius: 0;
+  background-color: #2a2a1a;
+  border: 2px solid #33ff33;
+}
+
+#optionsbutton:hover {
+  background-color: #1a3310;
+}
+
+#optionsbutton svg {
+  fill: #33ff33;
+}
+
+.sidenav {
+  background-color: #1a1a0e;
+  color: #33ff33;
+}
+
+.closebutton {
+  color: #33ff33;
+}
+
+span.configline {
+  color: #f5c842;
+}
+
+input.configline {
+  background: #0d0d06;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+}
+
+#submit_config_button {
+  background: #0d0d06;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+}
+
+.custom_colors_button {
+  background: #0d0d06;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+}
+
+#custom_message {
+  background: #0d0d06;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+}
+
+#countdown_message {
+  background: #0d0d06;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+}
+
+.free_sketch_modal {
+  background: #1a1a0e;
+  border: 2px solid #33ff33;
+  color: #33ff33;
+}
+
+.free_sketch_canvas_wrap {
+  border-color: #33ff33;
+}
+
+.free_sketch_icon_button {
+  background: #0d0d06;
+  border-color: #33ff33;
+  color: #33ff33;
+}
+
+.free_sketch_control_button {
+  background: #0d0d06;
+  border-color: #33ff33;
+  color: #33ff33;
+}
+
+.free_sketch_control_button.active {
+  background: #33ff33;
+  color: #0d0d06;
+}
+
+.free_sketch_brush_size,
+.free_sketch_brush_shape {
+  background: #0d0d06;
+  border-color: #33ff33;
+  color: #33ff33;
+}
+
+.free_sketch_brush_size.active,
+.free_sketch_brush_shape.active {
+  background: #33ff33;
+  color: #0d0d06;
+}
+
+#theme_bar {
+  background: #2a2a1a;
+  border-bottom: 1px solid #33ff33;
+}
+
+#theme_selector {
+  background: #0d0d06;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+}
+
+#theme_bar label {
+  color: #f5c842;
+}

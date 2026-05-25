@@ -1,0 +1,228 @@
+/* PlaneSign Theme: Midnight
+   Deep navy and purple palette with soft lavender accents.
+   Elegant, dark UI with rounded cards and muted contrast.
+   To remove this theme: delete this file and remove its entry from THEMES in themes.js */
+
+body {
+  background: #0f0e17;
+  color: #d4d0e0;
+  font-family: "Georgia", "Times New Roman", serif;
+}
+
+#title_header {
+  font-family: "Georgia", serif;
+  color: #b8a9d4;
+  letter-spacing: 6px;
+  font-size: 120px;
+  font-weight: normal;
+}
+
+.groups_wrapper {
+  column-gap: 24px;
+  row-gap: 24px;
+}
+
+.mode_selector_button_group {
+  border-radius: 16px;
+  background: #1a1730;
+  border: 1px solid #2e2950;
+  margin: 10px;
+}
+
+legend {
+  color: #b8a9d4;
+  font-family: "Georgia", serif;
+  font-size: 34px;
+  font-weight: normal;
+  padding: 3px 10px;
+}
+
+.mode_button {
+  color: #d4d0e0;
+  background-color: #12101f;
+  border: 1px solid #2e2950;
+  font-family: "Georgia", serif;
+  font-size: 18px;
+  padding: 10px 35px;
+  margin: 12px;
+  border-radius: 8px;
+}
+
+.mode_button:hover {
+  background-color: #201d3a;
+  border-color: #b8a9d4;
+}
+
+.mode_button:active {
+  background-color: #b8a9d4;
+  color: #0f0e17;
+}
+
+.device_info_box {
+  border-radius: 16px;
+  background: #1a1730;
+  border: 1px solid #2e2950;
+}
+
+.device_info_header {
+  font-family: "Georgia", serif;
+  color: #b8a9d4;
+}
+
+.device_info_label {
+  background: #12101f;
+  color: #7a7394;
+  font-family: "Georgia", serif;
+  border-radius: 8px 0 0 8px;
+}
+
+.device_info_value {
+  background: #12101f;
+  color: #b8a9d4;
+  font-family: "SF Mono", "Fira Code", monospace;
+  border-radius: 0 8px 8px 0;
+}
+
+#brightness_slider {
+  background: #1a1730;
+  height: 44px;
+  border-radius: 22px;
+}
+
+#brightness_slider::-webkit-slider-thumb {
+  background: #b8a9d4;
+  border-radius: 10px;
+  width: 120px;
+  height: 44px;
+}
+
+#brightness_slider::-moz-range-thumb {
+  background: #b8a9d4;
+  border-radius: 10px;
+  width: 120px;
+  height: 44px;
+}
+
+#optionsbutton {
+  border-radius: 50%;
+  background-color: #1a1730;
+  border: 1px solid #2e2950;
+}
+
+#optionsbutton:hover {
+  border-color: #b8a9d4;
+}
+
+#optionsbutton svg {
+  fill: #7a7394;
+}
+
+.sidenav {
+  background-color: #0f0e17;
+  color: #d4d0e0;
+}
+
+.closebutton {
+  color: #7a7394;
+}
+
+span.configline {
+  color: #d4d0e0;
+}
+
+input.configline {
+  background: #12101f;
+  color: #b8a9d4;
+  border: 1px solid #2e2950;
+}
+
+#submit_config_button {
+  background: #12101f;
+  color: #b8a9d4;
+  border: 1px solid #2e2950;
+  border-radius: 8px;
+}
+
+.custom_colors_button {
+  background: #12101f;
+  color: #d4d0e0;
+  border: 1px solid #2e2950;
+  border-radius: 6px;
+}
+
+#custom_message {
+  background: #12101f;
+  color: #b8a9d4;
+  border: 1px solid #2e2950;
+  border-radius: 8px;
+}
+
+#countdown_message {
+  background: #12101f;
+  color: #b8a9d4;
+  border: 1px solid #2e2950;
+  border-radius: 8px;
+}
+
+.free_sketch_modal {
+  background: #0f0e17;
+  border: 1px solid #2e2950;
+  border-radius: 16px;
+  color: #d4d0e0;
+}
+
+.free_sketch_canvas_wrap {
+  border-color: #b8a9d4;
+}
+
+.free_sketch_icon_button {
+  background: #12101f;
+  border-color: #2e2950;
+  color: #d4d0e0;
+  border-radius: 8px;
+}
+
+.free_sketch_control_button {
+  background: #12101f;
+  border-color: #2e2950;
+  color: #d4d0e0;
+  border-radius: 8px;
+}
+
+.free_sketch_control_button.active {
+  background: #b8a9d4;
+  color: #0f0e17;
+}
+
+.free_sketch_brush_size,
+.free_sketch_brush_shape {
+  background: #12101f;
+  border-color: #2e2950;
+  color: #d4d0e0;
+}
+
+.free_sketch_brush_size.active,
+.free_sketch_brush_shape.active {
+  background: #b8a9d4;
+  color: #0f0e17;
+}
+
+#theme_bar {
+  background: #1a1730;
+  border-bottom: 1px solid #2e2950;
+}
+
+#theme_selector {
+  background: #12101f;
+  color: #b8a9d4;
+  border: 1px solid #2e2950;
+  border-radius: 6px;
+}
+
+#theme_bar label {
+  color: #7a7394;
+}
+
+.modal_backdrop {
+  background: rgba(10, 8, 18, 0.85);
+}

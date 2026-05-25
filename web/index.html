@@ -11,11 +11,53 @@
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
+  <script src="themes.js"></script>
   <script src="index.js?v=free-sketch-8"></script>
   <title>Plane Sign</title>
+  <style>
+    #theme_bar {
+      width: 100%;
+      text-align: center;
+      padding: 8px 0;
+      background: #f0f0f0;
+      border-bottom: 1px solid #ddd;
+    }
+    #theme_bar label {
+      font-size: 14px;
+      margin-right: 8px;
+      color: #555;
+    }
+    #theme_selector {
+      font-size: 14px;
+      padding: 4px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 
 <body>
+  <div id="theme_bar">
+    <label for="theme_selector">Theme:</label>
+    <select id="theme_selector" onchange="apply_theme(this.value)">
+      <!-- Options populated by themes.js list; static fallback here -->
+    </select>
+    <script>
+      (function() {
+        var sel = document.getElementById("theme_selector");
+        var saved = null;
+        try { saved = localStorage.getItem("planesign_theme"); } catch(e) {}
+        for (var i = 0; i < THEMES.length; i++) {
+          var opt = document.createElement("option");
+          opt.value = THEMES[i].id;
+          opt.textContent = THEMES[i].name;
+          if (THEMES[i].id === saved) opt.selected = true;
+          sel.appendChild(opt);
+        }
+      })();
+    </script>
+  </div>
   <div id="title_header">Plane Sign</div>
   <div id="topbar">
     <div id="centered">
