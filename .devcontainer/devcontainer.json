@@ -8,6 +8,12 @@
 		}
 	},
 	"runArgs": ["--privileged", "--network=host"],
+	"forwardPorts": [80, 443, 5000],
+	"portsAttributes": {
+		"80": { "label": "PlaneSign HTTP", "protocol": "http" },
+		"443": { "label": "PlaneSign HTTPS", "protocol": "https" },
+		"5000": { "label": "Flask API" }
+	},
 	"customizations": {
 		"vscode": {
 			"extensions": [

@@ -786,6 +786,11 @@ input[type=number] {
   color: black;
 }
 
+.free_sketch_stamp_button {
+  font-size: 26px;
+  line-height: 1;
+}
+
 .free_sketch_gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

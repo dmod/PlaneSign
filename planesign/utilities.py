@@ -1603,6 +1603,31 @@ def paint_brush(pixel_buffer, cx, cy, brush_size, color):
             pixel_buffer[index : index + 3] = color
 
 
+def stamp_sprite_on_buffer(pixel_buffer, sprite, cx, cy):
+    """Composite an RGBA PIL sprite centered at (cx, cy) onto pixel_buffer (no lock).
+
+    Only writes pixels where the sprite alpha is > 0.
+    """
+    w, h = sprite.size
+    ox = cx - w // 2
+    oy = cy - h // 2
+    rgba = np.array(sprite)
+    for sy in range(h):
+        py = oy + sy
+        if not 0 <= py < 32:
+            continue
+        for sx in range(w):
+            px = ox + sx
+            if not 0 <= px < 128:
+                continue
+            if rgba[sy, sx, 3] == 0:
+                continue
+            index = (py * 128 + px) * 3
+            pixel_buffer[index] = rgba[sy, sx, 0]
+            pixel_buffer[index + 1] = rgba[sy, sx, 1]
+            pixel_buffer[index + 2] = rgba[sy, sx, 2]
+
+
 def validate_sketch_filename(filename):
     if not filename or not re.match(r"^[a-zA-Z0-9_\-]+\.png$", filename):
         return False

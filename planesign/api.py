@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import glob
+import random
 import subprocess
 import re
 import requests
@@ -273,6 +274,104 @@ def serve_free_sketch_image(filename):
     if not utilities.validate_sketch_filename(filename):
         return jsonify({"ok": False, "error": "Invalid filename"}), 400
     return send_from_directory(SKETCHES_DIR, filename, mimetype="image/png")
+
+
+STAMP_CATEGORIES = {
+    "snowflake": {
+        "dir": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "santa"),
+        "prefix": "snowflake",
+        "max_num": 22,
+    },
+}
+
+
+def _pick_random_stamp_num(category):
+    """Pick a random stamp number using weighted distribution (matches snowfall.py)."""
+    info = STAMP_CATEGORIES[category]
+    if category == "snowflake":
+        r = random.random()
+        if r < 0.5:
+            return 3
+        elif r < 0.75:
+            return random.choice([1, 4, 6, 16, 17, 18])
+        elif r < 0.9:
+            return random.choice([2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 21, 22])
+        else:
+            return random.randint(1, info["max_num"])
+    return random.randint(1, info["max_num"])
+
+
+@app.route("/free_sketch/stamp", methods=["POST"])
+def place_free_sketch_stamp():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "Expected JSON object"}), 400
+
+    try:
+        x = int(data["x"])
+        y = int(data["y"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Expected integer x, y"}), 400
+
+    category = data.get("category", "")
+    if category not in STAMP_CATEGORIES:
+        return jsonify({"ok": False, "error": "Invalid stamp category"}), 400
+
+    if not 0 <= x < 128 or not 0 <= y < 32:
+        return jsonify({"ok": False, "error": "Coordinates must be in range x=0-127, y=0-31"}), 400
+
+    info = STAMP_CATEGORIES[category]
+    num = _pick_random_stamp_num(category)
+    stamp_id = f"{info['prefix']}{num}"
+    filepath = os.path.join(info["dir"], f"{stamp_id}.png")
+
+    if not os.path.isfile(filepath):
+        return jsonify({"ok": False, "error": "Stamp image not found"}), 500
+
+    sprite = Image.open(filepath).convert("RGBA")
+    w, h = sprite.size
+
+    if category == "snowflake":
+        import numpy as np
+        sat = random.random() * 0.8
+        r_tint, g_tint, b_tint = utilities.hsv_2_rgb(0.56, sat, 1.0)
+        rgba = np.array(sprite)
+        mask = (rgba[:, :, 0] == 255) & (rgba[:, :, 1] == 255) & (rgba[:, :, 2] == 255) & (rgba[:, :, 3] == 255)
+        rgba[mask] = [r_tint, g_tint, b_tint, 255]
+        sprite = Image.fromarray(rgba)
+        tint = [int(r_tint), int(g_tint), int(b_tint)]
+    else:
+        tint = None
+
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
+    with shared_config.free_sketch_pixels.get_lock():
+        utilities.stamp_sprite_on_buffer(pixel_buffer, sprite, x, y)
+
+    return jsonify({"ok": True, "stamp_id": stamp_id, "width": w, "height": h, "tint": tint})
+
+
+STAMP_ID_RE = re.compile(r"^([a-z]+)(\d+)$")
+
+
+@app.route("/free_sketch/stamp_image/<stamp_id>")
+def serve_stamp_image(stamp_id):
+    m = STAMP_ID_RE.match(stamp_id)
+    if not m:
+        return jsonify({"ok": False, "error": "Invalid stamp ID"}), 400
+
+    prefix = m.group(1)
+    num = int(m.group(2))
+
+    cat_info = None
+    for info in STAMP_CATEGORIES.values():
+        if info["prefix"] == prefix:
+            cat_info = info
+            break
+
+    if not cat_info or not 1 <= num <= cat_info["max_num"]:
+        return jsonify({"ok": False, "error": "Invalid stamp ID"}), 400
+
+    return send_from_directory(cat_info["dir"], f"{prefix}{num}.png", mimetype="image/png")
 
 
 @app.route("/set_mode/<mode>")

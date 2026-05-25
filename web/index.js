@@ -4,6 +4,8 @@ var valid_tickers = null;
 var valid_resorts = null;
 var free_sketch_is_drawing = false;
 var free_sketch_is_eraser = false;
+var free_sketch_is_stamp = false;
+var free_sketch_stamp_category = "snowflake";
 var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
 var free_sketch_brush_size = 1;
@@ -274,6 +276,7 @@ function setup_free_sketch() {
     if (color) {
         color.addEventListener("input", function () {
             set_free_sketch_eraser(false);
+            set_free_sketch_stamp(false);
         });
     }
 }
@@ -380,6 +383,24 @@ function set_free_sketch_eraser(is_eraser) {
     var eraser = document.getElementById("free_sketch_eraser");
     if (eraser) {
         eraser.classList.toggle("active", free_sketch_is_eraser);
+    }
+    if (is_eraser) {
+        set_free_sketch_stamp(false);
+    }
+}
+
+function toggle_free_sketch_stamp() {
+    set_free_sketch_stamp(!free_sketch_is_stamp);
+}
+
+function set_free_sketch_stamp(is_stamp) {
+    free_sketch_is_stamp = is_stamp;
+    var btn = document.getElementById("free_sketch_stamp");
+    if (btn) {
+        btn.classList.toggle("active", is_stamp);
+    }
+    if (is_stamp) {
+        set_free_sketch_eraser(false);
     }
 }
 
@@ -554,10 +575,19 @@ function draw_free_sketch_hover(x, y) {
     }
 
     var context = hover_canvas.getContext("2d");
-    var bounds = get_free_sketch_brush_bounds(x, y);
     context.clearRect(0, 0, hover_canvas.width, hover_canvas.height);
-    context.fillStyle = "rgba(190, 190, 190, 0.55)";
-    context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+
+    if (free_sketch_is_stamp) {
+        context.font = "10px sans-serif";
+        context.fillStyle = "rgba(255, 255, 255, 0.7)";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText("\u2744", x, y);
+    } else {
+        var bounds = get_free_sketch_brush_bounds(x, y);
+        context.fillStyle = "rgba(190, 190, 190, 0.55)";
+        context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+    }
     free_sketch_hover_position = { x: x, y: y };
 }
 
@@ -571,6 +601,48 @@ function update_free_sketch_hover(event) {
     draw_free_sketch_hover(pixel.x, pixel.y);
 }
 
+function place_free_sketch_stamp(canvas, x, y) {
+    post_json_endpoint("/free_sketch/stamp", {
+        x: x,
+        y: y,
+        category: free_sketch_stamp_category
+    }, function (result) {
+        if (!result || !result.ok) {
+            return;
+        }
+        var img = new Image();
+        img.onload = function () {
+            var ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = false;
+            var dx = x - Math.floor(img.width / 2);
+            var dy = y - Math.floor(img.height / 2);
+
+            if (result.tint) {
+                // Draw sprite to an offscreen canvas and tint white pixels
+                var off = document.createElement("canvas");
+                off.width = img.width;
+                off.height = img.height;
+                var oc = off.getContext("2d");
+                oc.drawImage(img, 0, 0);
+                var id = oc.getImageData(0, 0, off.width, off.height);
+                var d = id.data;
+                for (var i = 0; i < d.length; i += 4) {
+                    if (d[i] === 255 && d[i + 1] === 255 && d[i + 2] === 255 && d[i + 3] === 255) {
+                        d[i] = result.tint[0];
+                        d[i + 1] = result.tint[1];
+                        d[i + 2] = result.tint[2];
+                    }
+                }
+                oc.putImageData(id, 0, 0);
+                ctx.drawImage(off, dx, dy);
+            } else {
+                ctx.drawImage(img, dx, dy);
+            }
+        };
+        img.src = "api/free_sketch/stamp_image/" + result.stamp_id + "?t=" + Date.now();
+    });
+}
+
 function paint_free_sketch_pixel(event) {
     event.preventDefault();
 
@@ -582,6 +654,14 @@ function paint_free_sketch_pixel(event) {
 
     var x = pixel.x;
     var y = pixel.y;
+
+    if (free_sketch_is_stamp) {
+        if (!free_sketch_last_pixel) {
+            place_free_sketch_stamp(canvas, x, y);
+        }
+        free_sketch_last_pixel = { x: x, y: y };
+        return;
+    }
 
     var selected_color = get_free_sketch_color();
     var context = canvas.getContext("2d");
