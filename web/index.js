@@ -5,12 +5,19 @@ var valid_resorts = null;
 var free_sketch_is_drawing = false;
 var free_sketch_is_eraser = false;
 var free_sketch_is_stamp = false;
+var free_sketch_is_color_picker = false;
+var free_sketch_is_paint_bucket = false;
 var free_sketch_stamp_category = "snowflake";
 var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
 var free_sketch_brush_size = 1;
+var free_sketch_brush_shape = "square"; // square, plus, x, circle
 var free_sketch_hover_position = null;
-var free_sketch_brush_sizes = [1, 2, 3, 4];
+var free_sketch_brush_sizes = [1, 2, 3, 4, 5];
+var free_sketch_undo_stack = [];
+var free_sketch_max_undo = 20;
+var free_sketch_recent_colors = [];
+var free_sketch_max_recent_colors = 6;
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
@@ -277,8 +284,15 @@ function setup_free_sketch() {
         color.addEventListener("input", function () {
             set_free_sketch_eraser(false);
             set_free_sketch_stamp(false);
+            add_color_to_recent(color.value);
         });
     }
+    
+    // Load recent colors from localStorage
+    load_recent_colors();
+    
+    // Initialize with default state
+    update_undo_button_state();
 }
 
 function open_free_sketch_modal() {
@@ -386,6 +400,8 @@ function set_free_sketch_eraser(is_eraser) {
     }
     if (is_eraser) {
         set_free_sketch_stamp(false);
+        set_free_sketch_color_picker(false);
+        set_free_sketch_paint_bucket(false);
     }
 }
 
@@ -401,6 +417,42 @@ function set_free_sketch_stamp(is_stamp) {
     }
     if (is_stamp) {
         set_free_sketch_eraser(false);
+        set_free_sketch_color_picker(false);
+        set_free_sketch_paint_bucket(false);
+    }
+}
+
+function toggle_free_sketch_color_picker() {
+    set_free_sketch_color_picker(!free_sketch_is_color_picker);
+}
+
+function set_free_sketch_color_picker(is_picker) {
+    free_sketch_is_color_picker = is_picker;
+    var btn = document.getElementById("free_sketch_color_picker");
+    if (btn) {
+        btn.classList.toggle("active", is_picker);
+    }
+    if (is_picker) {
+        set_free_sketch_eraser(false);
+        set_free_sketch_stamp(false);
+        set_free_sketch_paint_bucket(false);
+    }
+}
+
+function toggle_free_sketch_paint_bucket() {
+    set_free_sketch_paint_bucket(!free_sketch_is_paint_bucket);
+}
+
+function set_free_sketch_paint_bucket(is_bucket) {
+    free_sketch_is_paint_bucket = is_bucket;
+    var btn = document.getElementById("free_sketch_paint_bucket");
+    if (btn) {
+        btn.classList.toggle("active", is_bucket);
+    }
+    if (is_bucket) {
+        set_free_sketch_eraser(false);
+        set_free_sketch_stamp(false);
+        set_free_sketch_color_picker(false);
     }
 }
 
@@ -425,7 +477,35 @@ function set_free_sketch_brush_size(size) {
     }
 }
 
+function set_free_sketch_brush_shape(shape) {
+    free_sketch_brush_shape = shape;
+    
+    ["square", "plus", "x", "circle"].forEach(function (s) {
+        var button = document.getElementById("free_sketch_brush_shape_" + s);
+        if (button) {
+            var is_active = s === shape;
+            button.classList.toggle("active", is_active);
+            button.setAttribute("aria-pressed", is_active ? "true" : "false");
+        }
+    });
+
+    if (free_sketch_hover_position) {
+        draw_free_sketch_hover(free_sketch_hover_position.x, free_sketch_hover_position.y);
+    }
+}
+
+function set_free_sketch_color(colorHex) {
+    var colorInput = document.getElementById("free_sketch_color");
+    if (colorInput) {
+        colorInput.value = colorHex;
+    }
+    set_free_sketch_eraser(false);
+    set_free_sketch_stamp(false);
+    add_color_to_recent(colorHex);
+}
+
 function clear_free_sketch() {
+    save_free_sketch_undo_state();
     var canvas = document.getElementById("free_sketch_canvas");
     if (canvas) {
         var context = canvas.getContext("2d");
@@ -518,6 +598,102 @@ function stop_free_sketch_drawing() {
     free_sketch_last_pixel = null;
 }
 
+function save_free_sketch_undo_state() {
+    var canvas = document.getElementById("free_sketch_canvas");
+    if (!canvas) {
+        return;
+    }
+    var ctx = canvas.getContext("2d");
+    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    free_sketch_undo_stack.push(imageData);
+    if (free_sketch_undo_stack.length > free_sketch_max_undo) {
+        free_sketch_undo_stack.shift();
+    }
+    update_undo_button_state();
+}
+
+function undo_free_sketch() {
+    if (free_sketch_undo_stack.length === 0) {
+        return;
+    }
+    var canvas = document.getElementById("free_sketch_canvas");
+    if (!canvas) {
+        return;
+    }
+    var ctx = canvas.getContext("2d");
+    var imageData = free_sketch_undo_stack.pop();
+    ctx.putImageData(imageData, 0, 0);
+    
+    // Sync the state back to the server
+    sync_free_sketch_to_server(canvas);
+    update_undo_button_state();
+}
+
+function sync_free_sketch_to_server(canvas) {
+    var ctx = canvas.getContext("2d");
+    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var pixels = [];
+    for (var i = 0; i < imageData.data.length; i += 4) {
+        pixels.push(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
+    }
+    post_json_endpoint("/free_sketch/sync", { pixels: pixels });
+}
+
+function update_undo_button_state() {
+    var btn = document.getElementById("free_sketch_undo");
+    if (btn) {
+        btn.disabled = free_sketch_undo_stack.length === 0;
+    }
+}
+
+function add_color_to_recent(colorHex) {
+    // Remove if already exists
+    var index = free_sketch_recent_colors.indexOf(colorHex);
+    if (index !== -1) {
+        free_sketch_recent_colors.splice(index, 1);
+    }
+    // Add to beginning
+    free_sketch_recent_colors.unshift(colorHex);
+    // Keep only max
+    if (free_sketch_recent_colors.length > free_sketch_max_recent_colors) {
+        free_sketch_recent_colors.pop();
+    }
+    // Save to localStorage
+    localStorage.setItem("free_sketch_recent_colors", JSON.stringify(free_sketch_recent_colors));
+    update_recent_colors_ui();
+}
+
+function load_recent_colors() {
+    var stored = localStorage.getItem("free_sketch_recent_colors");
+    if (stored) {
+        try {
+            free_sketch_recent_colors = JSON.parse(stored);
+        } catch (e) {
+            free_sketch_recent_colors = [];
+        }
+    }
+    update_recent_colors_ui();
+}
+
+function update_recent_colors_ui() {
+    var container = document.getElementById("free_sketch_recent_colors");
+    if (!container) {
+        return;
+    }
+    container.innerHTML = "";
+    free_sketch_recent_colors.forEach(function (color) {
+        var btn = document.createElement("button");
+        btn.className = "free_sketch_color_swatch";
+        btn.style.backgroundColor = color;
+        btn.title = color;
+        btn.setAttribute("aria-label", "Select color " + color);
+        btn.onclick = function () {
+            set_free_sketch_color(color);
+        };
+        container.appendChild(btn);
+    });
+}
+
 function get_free_sketch_color() {
     if (free_sketch_is_eraser) {
         return { r: 0, g: 0, b: 0, hex: "#000000" };
@@ -577,16 +753,35 @@ function draw_free_sketch_hover(x, y) {
     var context = hover_canvas.getContext("2d");
     context.clearRect(0, 0, hover_canvas.width, hover_canvas.height);
 
-    if (free_sketch_is_stamp) {
+    if (free_sketch_is_color_picker) {
+        // Show eyedropper icon
+        context.font = "12px sans-serif";
+        context.fillStyle = "rgba(255, 255, 255, 0.9)";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText("💧", x, y);
+    } else if (free_sketch_is_paint_bucket) {
+        // Show paint bucket icon
+        context.font = "12px sans-serif";
+        context.fillStyle = "rgba(255, 255, 255, 0.9)";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText("🪣", x, y);
+    } else if (free_sketch_is_stamp) {
         context.font = "10px sans-serif";
         context.fillStyle = "rgba(255, 255, 255, 0.7)";
         context.textAlign = "center";
         context.textBaseline = "middle";
         context.fillText("\u2744", x, y);
     } else {
-        var bounds = get_free_sketch_brush_bounds(x, y);
+        // Show brush preview
         context.fillStyle = "rgba(190, 190, 190, 0.55)";
-        context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+        var brushPixels = get_brush_shape_pixels(x, y, free_sketch_brush_size, free_sketch_brush_shape);
+        brushPixels.forEach(function (p) {
+            if (p.x >= 0 && p.x < hover_canvas.width && p.y >= 0 && p.y < hover_canvas.height) {
+                context.fillRect(p.x, p.y, 1, 1);
+            }
+        });
     }
     free_sketch_hover_position = { x: x, y: y };
 }
@@ -655,12 +850,37 @@ function paint_free_sketch_pixel(event) {
     var x = pixel.x;
     var y = pixel.y;
 
-    if (free_sketch_is_stamp) {
+    // Handle color picker tool
+    if (free_sketch_is_color_picker) {
         if (!free_sketch_last_pixel) {
-            place_free_sketch_stamp(canvas, x, y);
+            pick_color_from_canvas(event);
         }
         free_sketch_last_pixel = { x: x, y: y };
         return;
+    }
+
+    // Handle paint bucket tool
+    if (free_sketch_is_paint_bucket) {
+        if (!free_sketch_last_pixel) {
+            paint_bucket_fill(event);
+        }
+        free_sketch_last_pixel = { x: x, y: y };
+        return;
+    }
+
+    // Handle stamp tool
+    if (free_sketch_is_stamp) {
+        if (!free_sketch_last_pixel) {
+            place_free_sketch_stamp(canvas, x, y);
+            save_free_sketch_undo_state();
+        }
+        free_sketch_last_pixel = { x: x, y: y };
+        return;
+    }
+
+    // Save undo state before first stroke
+    if (!free_sketch_last_pixel) {
+        save_free_sketch_undo_state();
     }
 
     var selected_color = get_free_sketch_color();
@@ -671,8 +891,12 @@ function paint_free_sketch_pixel(event) {
         // Interpolate a line from the last position to the current one
         var points = bresenham_line(free_sketch_last_pixel.x, free_sketch_last_pixel.y, x, y);
         for (var i = 0; i < points.length; i++) {
-            var bounds = get_free_sketch_brush_bounds(points[i].x, points[i].y);
-            context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+            var brushPixels = get_brush_shape_pixels(points[i].x, points[i].y, free_sketch_brush_size, free_sketch_brush_shape);
+            brushPixels.forEach(function (p) {
+                if (p.x >= 0 && p.x < canvas.width && p.y >= 0 && p.y < canvas.height) {
+                    context.fillRect(p.x, p.y, 1, 1);
+                }
+            });
         }
 
         post_json_endpoint("/free_sketch/line", {
@@ -681,19 +905,25 @@ function paint_free_sketch_pixel(event) {
             x1: x,
             y1: y,
             brush_size: free_sketch_brush_size,
+            brush_shape: free_sketch_brush_shape,
             r: selected_color.r,
             g: selected_color.g,
             b: selected_color.b
         });
     } else if (!free_sketch_last_pixel || (free_sketch_last_pixel.x !== x || free_sketch_last_pixel.y !== y)) {
-        // First point or same check — just paint a single stamp
-        var bounds = get_free_sketch_brush_bounds(x, y);
-        context.fillRect(bounds.x, bounds.y, bounds.size, bounds.size);
+        // First point or same check - just paint a single stamp
+        var brushPixels = get_brush_shape_pixels(x, y, free_sketch_brush_size, free_sketch_brush_shape);
+        brushPixels.forEach(function (p) {
+            if (p.x >= 0 && p.x < canvas.width && p.y >= 0 && p.y < canvas.height) {
+                context.fillRect(p.x, p.y, 1, 1);
+            }
+        });
 
         post_json_endpoint("/free_sketch/pixel", {
             x: x,
             y: y,
             brush_size: free_sketch_brush_size,
+            brush_shape: free_sketch_brush_shape,
             r: selected_color.r,
             g: selected_color.g,
             b: selected_color.b
@@ -718,6 +948,138 @@ function bresenham_line(x0, y0, x1, y1) {
         if (e2 <= dx) { err += dx; y0 += sy; }
     }
     return points;
+}
+
+function get_brush_shape_pixels(cx, cy, size, shape) {
+    var pixels = [];
+    var half = Math.floor(size / 2);
+    
+    if (shape === "square") {
+        for (var dy = -half; dy <= half && dy < size - half; dy++) {
+            for (var dx = -half; dx <= half && dx < size - half; dx++) {
+                pixels.push({ x: cx + dx, y: cy + dy });
+            }
+        }
+    } else if (shape === "plus") {
+        // Vertical and horizontal lines
+        for (var d = -half; d <= half && d < size - half; d++) {
+            pixels.push({ x: cx, y: cy + d }); // vertical
+            pixels.push({ x: cx + d, y: cy }); // horizontal
+        }
+    } else if (shape === "x") {
+        // Diagonal lines
+        for (var d = -half; d <= half && d < size - half; d++) {
+            pixels.push({ x: cx + d, y: cy + d }); // diagonal \
+            pixels.push({ x: cx + d, y: cy - d }); // diagonal /
+        }
+    } else if (shape === "circle") {
+        // Circle approximation using distance formula
+        var radiusSquared = (size / 2) * (size / 2);
+        for (var dy = -half; dy <= half && dy < size - half; dy++) {
+            for (var dx = -half; dx <= half && dx < size - half; dx++) {
+                var distSquared = dx * dx + dy * dy;
+                if (distSquared <= radiusSquared) {
+                    pixels.push({ x: cx + dx, y: cy + dy });
+                }
+            }
+        }
+    }
+    
+    // Remove duplicates
+    var seen = {};
+    return pixels.filter(function (p) {
+        var key = p.x + "," + p.y;
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+    });
+}
+
+function pick_color_from_canvas(event) {
+    var canvas = document.getElementById("free_sketch_canvas");
+    var pixel = get_free_sketch_canvas_pixel(event);
+    if (!canvas || !pixel) {
+        return;
+    }
+    
+    var ctx = canvas.getContext("2d");
+    var imageData = ctx.getImageData(pixel.x, pixel.y, 1, 1);
+    var data = imageData.data;
+    var r = data[0];
+    var g = data[1];
+    var b = data[2];
+    var hex = "#" + 
+        ("0" + r.toString(16)).slice(-2) +
+        ("0" + g.toString(16)).slice(-2) +
+        ("0" + b.toString(16)).slice(-2);
+    
+    set_free_sketch_color(hex);
+    set_free_sketch_color_picker(false);
+}
+
+function paint_bucket_fill(event) {
+    var canvas = document.getElementById("free_sketch_canvas");
+    var pixel = get_free_sketch_canvas_pixel(event);
+    if (!canvas || !pixel) {
+        return;
+    }
+    
+    save_free_sketch_undo_state();
+    
+    var ctx = canvas.getContext("2d");
+    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var targetPixel = (pixel.y * canvas.width + pixel.x) * 4;
+    var targetR = imageData.data[targetPixel];
+    var targetG = imageData.data[targetPixel + 1];
+    var targetB = imageData.data[targetPixel + 2];
+    
+    var selected_color = get_free_sketch_color();
+    var fillR = selected_color.r;
+    var fillG = selected_color.g;
+    var fillB = selected_color.b;
+    
+    // Don't fill if target color is the same as fill color
+    if (targetR === fillR && targetG === fillG && targetB === fillB) {
+        return;
+    }
+    
+    // Flood fill algorithm
+    var stack = [{ x: pixel.x, y: pixel.y }];
+    var filled = {};
+    
+    while (stack.length > 0) {
+        var p = stack.pop();
+        var key = p.x + "," + p.y;
+        
+        if (p.x < 0 || p.x >= canvas.width || p.y < 0 || p.y >= canvas.height) {
+            continue;
+        }
+        
+        if (filled[key]) {
+            continue;
+        }
+        
+        var index = (p.y * canvas.width + p.x) * 4;
+        if (imageData.data[index] !== targetR ||
+            imageData.data[index + 1] !== targetG ||
+            imageData.data[index + 2] !== targetB) {
+            continue;
+        }
+        
+        imageData.data[index] = fillR;
+        imageData.data[index + 1] = fillG;
+        imageData.data[index + 2] = fillB;
+        filled[key] = true;
+        
+        stack.push({ x: p.x + 1, y: p.y });
+        stack.push({ x: p.x - 1, y: p.y });
+        stack.push({ x: p.x, y: p.y + 1 });
+        stack.push({ x: p.x, y: p.y - 1 });
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    sync_free_sketch_to_server(canvas);
+    set_free_sketch_paint_bucket(false);
 }
 
 function close_all_flight_lists() {

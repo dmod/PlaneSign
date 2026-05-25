@@ -25,7 +25,8 @@ from finance import get_tickers
 from snow import populate_resort_lists, load_user_list, save_current_resort, delete_user_resort, SnowMode
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
-FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4}
+FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4, 5}
+FREE_SKETCH_BRUSH_SHAPES = {"square", "plus", "x", "circle"}
 
 app = Flask(__name__)
 CORS(app)
@@ -155,19 +156,23 @@ def set_free_sketch_pixel():
     try:
         brush_size = int(data.get("brush_size", 1))
     except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
+    
+    brush_shape = data.get("brush_shape", "square")
+    if brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
+        brush_shape = "square"
 
     if not 0 <= x < 128 or not 0 <= y < 32:
         return jsonify({"ok": False, "error": "Coordinates must be in range x=0-127, y=0-31"}), 400
     if not 0 <= r <= 255 or not 0 <= g <= 255 or not 0 <= b <= 255:
         return jsonify({"ok": False, "error": "RGB values must be in range 0-255"}), 400
     if brush_size not in FREE_SKETCH_BRUSH_SIZES:
-        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
 
     color = bytes((r, g, b))
     pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
-        utilities.paint_brush(pixel_buffer, x, y, brush_size, color)
+        utilities.paint_brush(pixel_buffer, x, y, brush_size, color, brush_shape)
 
     return jsonify({"ok": True})
 
@@ -192,21 +197,53 @@ def set_free_sketch_line():
     try:
         brush_size = int(data.get("brush_size", 1))
     except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
+    
+    brush_shape = data.get("brush_shape", "square")
+    if brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
+        brush_shape = "square"
 
     if not 0 <= x0 < 128 or not 0 <= y0 < 32 or not 0 <= x1 < 128 or not 0 <= y1 < 32:
         return jsonify({"ok": False, "error": "Coordinates must be in range x=0-127, y=0-31"}), 400
     if not 0 <= r <= 255 or not 0 <= g <= 255 or not 0 <= b <= 255:
         return jsonify({"ok": False, "error": "RGB values must be in range 0-255"}), 400
     if brush_size not in FREE_SKETCH_BRUSH_SIZES:
-        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, or 4"}), 400
+        return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
 
     color = bytes((r, g, b))
     pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
         for px, py in utilities.bresenham_line(x0, y0, x1, y1):
-            utilities.paint_brush(pixel_buffer, px, py, brush_size, color)
+            utilities.paint_brush(pixel_buffer, px, py, brush_size, color, brush_shape)
 
+    return jsonify({"ok": True})
+
+
+@app.route("/free_sketch/sync", methods=["POST"])
+def sync_free_sketch():
+    """Sync the entire canvas state from the client (used for undo)."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "Expected JSON object"}), 400
+    
+    pixels = data.get("pixels")
+    if not isinstance(pixels, list):
+        return jsonify({"ok": False, "error": "Expected pixels array"}), 400
+    
+    # Expected: 128 * 32 * 3 = 12288 values
+    if len(pixels) != 128 * 32 * 3:
+        return jsonify({"ok": False, "error": "Invalid pixel data length"}), 400
+    
+    # Validate all values are 0-255
+    try:
+        pixel_bytes = bytes([int(v) for v in pixels])
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid pixel values"}), 400
+    
+    pixel_buffer = shared_config.free_sketch_pixels.get_obj()
+    with shared_config.free_sketch_pixels.get_lock():
+        pixel_buffer[:] = pixel_bytes
+    
     return jsonify({"ok": True})
 
 
