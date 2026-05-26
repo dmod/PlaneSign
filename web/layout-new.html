@@ -24,12 +24,25 @@
       <input type="checkbox" id="layout_toggle" onchange="toggle_layout()" style="opacity:0;width:0;height:0;">
       <span style="position:absolute;cursor:pointer;inset:0;background-color:#7bb9c9;border-radius:22px;transition:background-color 0.3s;"></span>
       <style>
-        #layout_toggle:checked+span { background-color: #30a14e; }
-        #layout_toggle+span::before {
-          content:''; position:absolute; height:16px; width:16px; left:3px; bottom:3px;
-          background-color:white; border-radius:50%; transition:transform 0.3s;
+        #layout_toggle:checked+span {
+          background-color: #30a14e;
         }
-        #layout_toggle:checked+span::before { transform: translateX(18px); }
+
+        #layout_toggle+span::before {
+          content: '';
+          position: absolute;
+          height: 16px;
+          width: 16px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          border-radius: 50%;
+          transition: transform 0.3s;
+        }
+
+        #layout_toggle:checked+span::before {
+          transform: translateX(18px);
+        }
       </style>
     </label>
     <span style="font-size:12px;color:#c9d1d9;font-weight:bold;white-space:nowrap;">New Interface (Beta)</span>

@@ -23,32 +23,37 @@
       display: flex;
       align-items: center;
       gap: 7px;
-      background: rgba(240,240,240,0.92);
+      background: rgba(240, 240, 240, 0.92);
       border: 1px solid #ddd;
       border-radius: 20px;
       padding: 4px 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
     }
+
     #layout_bar .layout-label {
       font-size: 12px;
       color: #555;
       cursor: default;
       white-space: nowrap;
     }
+
     #layout_bar .layout-label.active {
       color: #000;
       font-weight: bold;
     }
+
     .layout-switch {
       position: relative;
       width: 40px;
       height: 22px;
     }
+
     .layout-switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
+
     .layout-slider {
       position: absolute;
       cursor: pointer;
@@ -57,6 +62,7 @@
       border-radius: 22px;
       transition: background-color 0.3s;
     }
+
     .layout-slider:before {
       content: "";
       position: absolute;
@@ -68,10 +74,12 @@
       border-radius: 50%;
       transition: transform 0.3s;
     }
-    .layout-switch input:checked + .layout-slider {
+
+    .layout-switch input:checked+.layout-slider {
       background-color: #30a14e;
     }
-    .layout-switch input:checked + .layout-slider:before {
+
+    .layout-switch input:checked+.layout-slider:before {
       transform: translateX(18px);
     }
   </style>
@@ -364,7 +372,7 @@
           </div>
           <div id="free_sketch_recent_colors" class="free_sketch_recent_colors" aria-label="Recent colors"></div>
         </div>
-        
+
         <!-- Brush Sizes -->
         <div class="free_sketch_brush_sizes" role="group" aria-label="Brush size">
           <button type="button" id="free_sketch_brush_1" class="free_sketch_brush_size active" onclick="set_free_sketch_brush_size(1)" aria-pressed="true">1</button>
@@ -373,23 +381,31 @@
           <button type="button" id="free_sketch_brush_4" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(4)" aria-pressed="false">4</button>
           <button type="button" id="free_sketch_brush_5" class="free_sketch_brush_size" onclick="set_free_sketch_brush_size(5)" aria-pressed="false">5</button>
         </div>
-        
+
         <!-- Brush Shapes -->
         <div class="free_sketch_brush_shapes" role="group" aria-label="Brush shape">
           <button type="button" id="free_sketch_brush_shape_square" class="free_sketch_brush_shape active" onclick="set_free_sketch_brush_shape('square')" aria-pressed="true" title="Square">
-            <svg viewBox="0 0 20 20" width="20" height="20"><rect x="4" y="4" width="12" height="12" fill="currentColor"/></svg>
+            <svg viewBox="0 0 20 20" width="20" height="20">
+              <rect x="4" y="4" width="12" height="12" fill="currentColor" />
+            </svg>
           </button>
           <button type="button" id="free_sketch_brush_shape_circle" class="free_sketch_brush_shape" onclick="set_free_sketch_brush_shape('circle')" aria-pressed="false" title="Circle">
-            <svg viewBox="0 0 20 20" width="20" height="20"><circle cx="10" cy="10" r="6" fill="currentColor"/></svg>
+            <svg viewBox="0 0 20 20" width="20" height="20">
+              <circle cx="10" cy="10" r="6" fill="currentColor" />
+            </svg>
           </button>
           <button type="button" id="free_sketch_brush_shape_plus" class="free_sketch_brush_shape" onclick="set_free_sketch_brush_shape('plus')" aria-pressed="false" title="Plus">
-            <svg viewBox="0 0 20 20" width="20" height="20"><path d="M9 5h2v10H9z M5 9h10v2H5z" fill="currentColor"/></svg>
+            <svg viewBox="0 0 20 20" width="20" height="20">
+              <path d="M9 5h2v10H9z M5 9h10v2H5z" fill="currentColor" />
+            </svg>
           </button>
           <button type="button" id="free_sketch_brush_shape_x" class="free_sketch_brush_shape" onclick="set_free_sketch_brush_shape('x')" aria-pressed="false" title="X">
-            <svg viewBox="0 0 20 20" width="20" height="20"><path d="M6.5 5.086l7.414 7.414-1.414 1.414L5.086 6.5z M13.914 5.086l1.414 1.414-7.414 7.414-1.414-1.414z" fill="currentColor"/></svg>
+            <svg viewBox="0 0 20 20" width="20" height="20">
+              <path d="M6.5 5.086l7.414 7.414-1.414 1.414L5.086 6.5z M13.914 5.086l1.414 1.414-7.414 7.414-1.414-1.414z" fill="currentColor" />
+            </svg>
           </button>
         </div>
-        
+
         <!-- Tools -->
         <button type="button" id="free_sketch_eraser" class="free_sketch_control_button" onclick="toggle_free_sketch_eraser()">Eraser</button>
         <button type="button" id="free_sketch_color_picker" class="free_sketch_control_button" onclick="toggle_free_sketch_color_picker()">Pick Color</button>
