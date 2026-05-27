@@ -316,7 +316,7 @@ Open Price={self.open_price}"
 
             if self.type == "CRYPTO":
                 logo = get_crypto(self.display_ticker)
-                if logo == None:
+                if logo is None:
                     logging.debug(f"Could not get logo from CoinMarketCap for crypto {self.display_ticker}.")
                 else:
                     logging.debug(f"Got logo from CoinMarketCap for crypto {self.display_ticker}.")
@@ -325,18 +325,18 @@ Open Price={self.open_price}"
                 profile = self.client.company_profile2(symbol=self.ticker)
                 if "logo" in profile and profile["logo"] != "":
                     logo = getLogo(headers, profile["logo"])
-                    if logo == None:
+                    if logo is None:
                         logging.debug(f"Could not get logo from Finnhub for ticker {self.ticker}.")
                     else:
                         logging.debug(f"Got logo from Finnhub for ticker {self.ticker} ({profile['logo']}).")
-                if logo == None and "weburl" in profile and profile["weburl"] != "":
+                if logo is None and "weburl" in profile and profile["weburl"] != "":
                     logo = getFavicon(profile["weburl"], headers)
-                    if logo == None:
+                    if logo is None:
                         logging.debug(f"Could not get favicon from website for ticker {self.ticker}.")
                     else:
                         logging.debug(f"Got favicon from company website for ticker {self.ticker} ({profile['weburl']}).")
 
-            if logo == None:
+            if logo is None:
                 logo = Image.open(f"{shared_config.icons_dir}/finance/UNKNOWN.png")
                 logging.debug(f"Could not get logo for ticker {self.ticker} from web.")
             else:
@@ -394,7 +394,7 @@ Open Price={self.open_price}"
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
         with self.errLock:
-            if err == None:
+            if err is None:
                 self.errCode = -1
             elif str(err).startswith("Connection to remote host was lost"):
                 self.errCode = 1
@@ -407,7 +407,7 @@ Open Price={self.open_price}"
             err = self.errCode
         logging.debug(f"Got error code {err}")
         if err == 1:
-            logging.debug(f"Attempting to reconnect to websocket.")
+            logging.debug("Attempting to reconnect to websocket.")
             time.sleep(10)
             self.connect()
 
@@ -417,7 +417,7 @@ Open Price={self.open_price}"
 
     def drawlogo(self):
 
-        if self.logo == None:
+        if self.logo is None:
             return
         width, height = self.logo.size
         self.sign.canvas.SetImage(self.logo, 7 + round((20 - width) / 2.0), 11 + round((20 - height) / 2.0))
@@ -432,7 +432,7 @@ Open Price={self.open_price}"
 
     def drawticker(self):
 
-        if self.display_ticker == None:
+        if self.display_ticker is None:
             return
         if len(self.display_ticker) <= 4:
             graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 17 - round(4.5 * len(self.display_ticker)), 10, graphics.Color(20, 200, 20), self.display_ticker)

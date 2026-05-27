@@ -3,7 +3,7 @@ import types
 
 import shared_config
 import utilities
-from FlightRadar24.api import FlightRadar24API
+from FlightRadar24 import FlightRadar24API
 from modes import DisplayMode
 from rgbmatrix import graphics
 
@@ -197,7 +197,7 @@ def get_plane_data_worker(data_dict):
             else:
                 try:
                     flights = fr_api.get_flights(bounds=bounds)
-                except:
+                except Exception:
                     try:
                         flights
                     except NameError:
@@ -241,7 +241,7 @@ def get_plane_data_worker(data_dict):
                     data_dict["slowest"] = slowest
                 else:
                     logging.exception("No flights found")
-        except:
+        except Exception:
             logging.exception("Error getting FR24 data...")
 
         shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=7)

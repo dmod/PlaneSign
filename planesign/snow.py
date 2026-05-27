@@ -419,7 +419,7 @@ class SnowReport:
                 if "forecast" in resort:
                     try:
                         forecast = resort["forecast"][i + 7]
-                    except:
+                    except Exception:
                         forecast = {}
                     if "snowfall" in forecast:
                         snowfall = forecast["snowfall"] * CM_2_IN
@@ -588,7 +588,7 @@ class SnowReport:
                     if "forecast" in resort:
                         try:
                             forecast = resort["forecast"][i + 7]
-                        except:
+                        except Exception:
                             forecast = {}
                         if "snowfall" in forecast:
                             snowfall = forecast["snowfall"] * CM_2_IN

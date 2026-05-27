@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import time
 import utilities
 import random
@@ -58,7 +58,7 @@ def moon(sign):
     # ---------------------------------------------------------
     # Load Ephemeris
     # ---------------------------------------------------------
-    load = Loader(shared_config.datafiles_dir)
+    Loader(shared_config.datafiles_dir)
 
     # Move ephemeris file from old location if needed
     if os.path.isfile("./de421.bsp") and not os.path.isfile(f"{shared_config.datafiles_dir}/de421.bsp"):
@@ -152,7 +152,7 @@ def moon(sign):
     while shared_config.shared_mode.value == DisplayMode.MOON.value:
         blink_tic = (blink_tic + 1) % 25
 
-        if lastcalc == None or time.perf_counter() - lastcalc > 5:
+        if lastcalc is None or time.perf_counter() - lastcalc > 5:
             # ---------------------------------------------------------
             # Current Barycentric Positions
             # ---------------------------------------------------------
@@ -429,7 +429,7 @@ def moon(sign):
                     bg.paste(pumpkin, (0, 0), pumpkin)
                 else:
                     pumpkin = Image.open(f"{shared_config.icons_dir}/moon/pumpkin.png").convert("RGBA")
-                    bg.paste(pumpkin, (shadow_center, 0), pumpkin)
+                    bg.paste(pumpkin, (int(cx), 0), pumpkin)
 
             moon_image = bg.resize((36, 36), Image.BICUBIC)
 

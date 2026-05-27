@@ -2,7 +2,6 @@ import logging
 import shared_config
 import requests
 from rgbmatrix import graphics
-from FlightRadar24.api import FlightRadar24API, Flight
 from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode
 import __main__
 from datetime import datetime, timezone

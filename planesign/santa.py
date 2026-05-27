@@ -427,7 +427,7 @@ def santa(sign):
             else:
                 deerflag = True
 
-                if weatherpoll == None or time.perf_counter() - weatherpoll > 900:
+                if weatherpoll is None or time.perf_counter() - weatherpoll > 900:
                     weatherpoll = time.perf_counter()
                     weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat=90&lon=0&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial").json()
                     isNight = True
@@ -457,12 +457,12 @@ def santa(sign):
 
             sign.canvas.SetImage(lightstring2, 0, 0)
 
-            for l in lights:
+            for light in lights:
                 if change:
-                    l.color = (l.color - 1) % 5
-                    l.evalcolor()
-                if l.y < 26:
-                    l.draw()
+                    light.color = (light.color - 1) % 5
+                    light.evalcolor()
+                if light.y < 26:
+                    light.draw()
 
             deltasec = (now - santastart).total_seconds()
 
@@ -584,11 +584,11 @@ def santa(sign):
 
             sign.canvas.SetImage(lightstring, 0, 0)
 
-            for l in lights:
+            for light in lights:
                 if change:
-                    l.color = (l.color - 1) % 5
-                    l.evalcolor()
-                l.draw()
+                    light.color = (light.color - 1) % 5
+                    light.evalcolor()
+                light.draw()
 
             if int(deltasec / 15) % 2 == 0:
                 if int(deltasec / 2) % 2 == 0:
@@ -598,7 +598,7 @@ def santa(sign):
                 scroll2.draw()
                 index = None
             elif int(deltasec / 15) % 2 == 1:
-                if index == None:
+                if index is None:
                     index = random.sample(range(6), 2)
                     w1, h1 = decorations[index[0]].size
                     w2, h2 = decorations[index[1]].size
