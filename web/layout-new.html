@@ -22,13 +22,21 @@
     <span style="font-size:12px;color:#8b949e;white-space:nowrap;">Original</span>
     <label style="position:relative;width:40px;height:22px;display:inline-block;">
       <input type="checkbox" id="layout_toggle" onchange="toggle_layout()" style="opacity:0;width:0;height:0;">
-      <span style="position:absolute;cursor:pointer;inset:0;background-color:#7bb9c9;border-radius:22px;transition:background-color 0.3s;"></span>
+      <span id="layout_slider_span" style="position:absolute;cursor:pointer;inset:0;border-radius:22px;transition:background-color 0.3s,border-color 0.3s,box-shadow 0.3s;"></span>
       <style>
-        #layout_toggle:checked+span {
-          background-color: #30a14e;
+        #layout_slider_span {
+          background-color: #ffffff;
+          border: 1px solid #d1d1d6;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
         }
 
-        #layout_toggle+span::before {
+        #layout_toggle:checked+#layout_slider_span {
+          background-color: #30a14e;
+          border-color: #30a14e;
+          box-shadow: none;
+        }
+
+        #layout_toggle+#layout_slider_span::before {
           content: '';
           position: absolute;
           height: 16px;
@@ -38,9 +46,10 @@
           background-color: white;
           border-radius: 50%;
           transition: transform 0.3s;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
         }
 
-        #layout_toggle:checked+span::before {
+        #layout_toggle:checked+#layout_slider_span::before {
           transform: translateX(18px);
         }
       </style>

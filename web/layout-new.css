@@ -118,7 +118,7 @@ input::placeholder {
 .command-shell {
   max-width: 1500px;
   margin: 0 auto;
-  padding: 18px;
+  padding: 50px 18px 18px;
 }
 
 .command-status-bar {
