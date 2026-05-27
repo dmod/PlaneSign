@@ -2,11 +2,9 @@
 # -*- coding: utf-8 -*-
 import time
 import finnhub
-from PIL import Image, ImageDraw
+from PIL import Image
 from threading import Thread, Lock
 import websocket
-import numpy as np
-import favicon
 import re
 import json
 from utilities import convert_unix_to_local_time, getFavicon, improcess
@@ -112,8 +110,8 @@ def finance(self):
     while shared_config.shared_mode.value == DisplayMode.FINANCE.value:
         ticker = shared_config.data_dict["ticker"]
 
-        if ticker != None:
-            if s == None:
+        if ticker is not None:
+            if s is None:
                 s = Stock(self, client, ticker)
             elif s.ticker != ticker:
                 s.setticker(ticker)
@@ -159,7 +157,7 @@ def getLogo(headers, website):
             image = improcess(image.convert("RGBA"))
             image = image.convert("RGB")
             return image
-        except:
+        except Exception:
             return None
     else:
         return None
@@ -182,7 +180,7 @@ def get_crypto(symbol):
         coinid = 0
         try:
             coinid = [x for x in data["data"] if x["symbol"] == symbol][0]["id"]
-        except:
+        except Exception:
             coinid = 0
         if coinid == 0:
             return None
@@ -194,7 +192,7 @@ def get_crypto(symbol):
                     image = improcess(image.convert("RGBA"))
                     image = image.convert("RGB")
                     return image
-                except:
+                except Exception:
                     return None
             else:
                 return None
@@ -296,11 +294,11 @@ Open Price={self.open_price}"
         # First try to get saved logo
         try:
             logo = Image.open(f"{shared_config.icons_dir}/finance/logos/{self.logo_name}.png")
-        except:
+        except Exception:
             logo = None
 
         # Need to go get logo from web
-        if logo == None:
+        if logo is None:
             logging.debug(f"No previously saved logo for ticker {self.ticker} ({self.logo_name}). Getting from web.")
 
             headers = {

@@ -4,6 +4,7 @@
     "diffEditor.wordWrap": "off",
     "html.format.wrapLineLength": 0,
     "python.analysis.typeCheckingMode": "off",
+    "python.analysis.diagnosticMode": "workspace",
     "[python]": {
         "editor.wordWrap": "off",
         "editor.formatOnSave": false,

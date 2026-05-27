@@ -2,7 +2,7 @@ import random
 from collections import namedtuple
 import shared_config
 from rgbmatrix import graphics
-from PIL import Image, ImageDraw
+from PIL import Image
 import numpy as np
 import utilities
 import os
@@ -135,7 +135,7 @@ def show_custom_message(sign):
                 else:
                     width = 9 * len(line_1) - 2
 
-                if x == None or y == None or dx == None or dy == None:
+                if x is None or y is None or dx is None or dy is None:
                     (r, g, b) = utilities.hsv_2_rgb(random.random(), 0.5 + random.random() * 0.5, 1)
                     if logomode:
                         x = random.randint(1, 126 - dvd_width)
