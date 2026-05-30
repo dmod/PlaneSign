@@ -12,7 +12,6 @@ from modes import DisplayMode
 
 @__main__.planesign_mode_handler(DisplayMode.WEATHER)
 def show_weather(sign):
-
     polltime = None
 
     while shared_config.shared_mode.value == DisplayMode.WEATHER.value:
@@ -32,12 +31,27 @@ def show_weather(sign):
         if polltime is None or time.perf_counter() - polltime > 30:
             polltime = time.perf_counter()
 
-            day0 = shared_config.data_dict["weather"]["daily"][start_index_day]
-            day1 = shared_config.data_dict["weather"]["daily"][start_index_day + 1]
-            day2 = shared_config.data_dict["weather"]["daily"][start_index_day + 2]
+            weather = shared_config.data_dict.get("weather")
+            if not weather:
+                breakout = sign.wait_loop(0.2)
+                if breakout:
+                    return
+                continue
 
-            sunrise_time = utilities.convert_unix_to_local_time(shared_config.data_dict["weather"]["current"]["sunrise"])
-            sunset_time = utilities.convert_unix_to_local_time(shared_config.data_dict["weather"]["current"]["sunset"])
+            current = weather.get("current")
+            daily = weather.get("daily")
+            if not current or not isinstance(daily, list) or len(daily) < start_index_day + 3:
+                breakout = sign.wait_loop(0.2)
+                if breakout:
+                    return
+                continue
+
+            day0 = daily[start_index_day]
+            day1 = daily[start_index_day + 1]
+            day2 = daily[start_index_day + 2]
+
+            sunrise_time = utilities.convert_unix_to_local_time(current["sunrise"])
+            sunset_time = utilities.convert_unix_to_local_time(current["sunset"])
 
         draw_daily_forcast(sign, day0, day_0_xoffset)
         draw_daily_forcast(sign, day1, day_1_xoffset)
@@ -85,10 +99,20 @@ def get_weather_data_worker(data_dict):
 
     while not shutdown_flag:
         try:
-            weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial")
-            data_dict["weather"] = weather_data.json()
-            logging.info(f"At: {utilities.convert_unix_to_local_time(data_dict['weather']['current']['dt'])} Temp: {data_dict['weather']['current']['temp']}")
-            timeout = 900
+            weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial", timeout=20)
+            weather_json = weather_data.json()
+
+            current = weather_json.get("current")
+            daily = weather_json.get("daily")
+            if current and isinstance(daily, list) and len(daily) >= 3:
+                data_dict["weather"] = weather_json
+                logging.info(f"At: {utilities.convert_unix_to_local_time(current['dt'])} Temp: {current['temp']}")
+                timeout = 900
+            else:
+                cod = weather_json.get("cod", weather_data.status_code)
+                message = weather_json.get("message", "missing expected weather fields")
+                logging.error(f"OpenWeather response invalid (cod={cod}): {message}")
+                timeout = 30
         except Exception as e:
             logging.exception("Error getting weather data...", exc_info=e)
             timeout = 15

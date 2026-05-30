@@ -1329,8 +1329,10 @@ def show_time(sign):
         print_time = convert_unix_to_local_time(time.time()).strftime("%-I:%M%p")
 
     xloc = 86
-    if "weather" in shared_config.data_dict:
-        tempval = round(shared_config.data_dict["weather"]["current"]["temp"])
+    weather = shared_config.data_dict.get("weather")
+    current = weather.get("current") if weather else None
+    if current and "temp" in current:
+        tempval = round(current["temp"])
         if tempval < 0 or tempval > 99:
             xloc = 77
         temp = str(tempval)
@@ -1602,7 +1604,7 @@ def get_brush_shape_pixels(cx, cy, size, shape):
     """Get the list of (x, y) pixels for a brush stamp centered at (cx, cy)."""
     pixels = []
     half = size // 2
-    
+
     if shape == "square":
         for dy in range(-half, size - half):
             for dx in range(-half, size - half):
@@ -1625,7 +1627,7 @@ def get_brush_shape_pixels(cx, cy, size, shape):
                 dist_squared = dx * dx + dy * dy
                 if dist_squared <= radius_squared:
                     pixels.append((cx + dx, cy + dy))
-    
+
     # Remove duplicates
     return list(set(pixels))
 
