@@ -10,30 +10,27 @@ html {
 }
 
 :root {
-  color-scheme: dark;
-  --cc-bg: #0d1117;
-  --cc-bg-soft: #111821;
-  --cc-panel: #121922;
-  --cc-panel-alt: #161f2a;
-  --cc-panel-strong: #0f151d;
-  --cc-border: rgba(88, 166, 255, 0.22);
-  --cc-border-strong: rgba(48, 161, 78, 0.4);
-  --cc-text: #e6edf3;
-  --cc-muted: #8b949e;
-  --cc-blue: #58a6ff;
-  --cc-green: #30a14e;
+  color-scheme: light;
+  --cc-bg: #f7f4ee;
+  --cc-bg-soft: #fffaf2;
+  --cc-panel: #fffdf8;
+  --cc-panel-alt: #eef6f2;
+  --cc-panel-strong: #e8f1f8;
+  --cc-border: rgba(47, 111, 159, 0.2);
+  --cc-border-strong: rgba(47, 143, 91, 0.32);
+  --cc-text: #1f2933;
+  --cc-muted: #667085;
+  --cc-blue: #2f6f9f;
+  --cc-green: #2f8f5b;
   --cc-grid-gap: 8px;
-  --cc-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  --cc-shadow: 0 14px 32px rgba(31, 41, 51, 0.12);
   --cc-radius: 16px;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(88, 166, 255, 0.08), transparent 28%),
-    radial-gradient(circle at top right, rgba(48, 161, 78, 0.08), transparent 24%),
-    var(--cc-bg);
+  background: linear-gradient(180deg, #fbf8f1 0%, #f5f3ec 52%, #eef5f8 100%);
   color: var(--cc-text);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
   user-select: none;
@@ -63,9 +60,9 @@ input[type="submit"],
 input[type="color"],
 select,
 textarea {
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(31, 41, 51, 0.16);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.9);
   color: var(--cc-text);
 }
 
@@ -82,7 +79,7 @@ input[type="submit"] {
 }
 
 input::placeholder {
-  color: #7d8894;
+  color: #8a939f;
 }
 
 [hidden] {
@@ -100,10 +97,10 @@ input::placeholder {
   width: auto;
   padding: 4px 10px;
   text-align: left;
-  background: rgba(13, 17, 23, 0.92);
-  border: 1px solid #30363d;
+  background: rgba(255, 251, 244, 0.94);
+  border: 1px solid rgba(31, 41, 51, 0.14);
   border-radius: 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 6px rgba(31, 41, 51, 0.14);
 }
 
 #layout_bar label {
@@ -122,7 +119,7 @@ input::placeholder {
 }
 
 .command-status-bar {
-  background: linear-gradient(180deg, rgba(18, 25, 34, 0.96), rgba(13, 17, 23, 0.96));
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(242, 248, 243, 0.98));
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
   padding: 16px 18px 18px;
@@ -165,16 +162,17 @@ input::placeholder {
 
 .command-power {
   justify-self: center;
-  min-width: 150px;
+  min-width: 170px;
   display: flex;
   justify-content: center;
 }
 
 #header_switch {
   position: relative;
-  display: inline-block;
-  width: 145px;
-  height: 70px;
+  display: grid;
+  place-items: center;
+  width: 170px;
+  height: 85px;
 }
 
 #header_switch > div {
@@ -192,8 +190,8 @@ input::placeholder {
   width: 62px;
   height: 62px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: linear-gradient(180deg, #182231, #111821);
+  border: 1px solid rgba(47, 111, 159, 0.18);
+  background: linear-gradient(180deg, #ffffff, #edf5f8);
   display: grid;
   place-items: center;
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -202,7 +200,7 @@ input::placeholder {
 #optionsbutton svg {
   width: 28px;
   height: 28px;
-  fill: #cdd9e5;
+  fill: #2f4658;
 }
 
 #optionsbutton:hover,
@@ -217,7 +215,7 @@ input::placeholder {
   gap: 8px;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(31, 41, 51, 0.1);
 }
 
 #brightness_slider,
@@ -262,7 +260,7 @@ input::placeholder {
   width: 18px;
   height: 18px;
   margin-top: -5px;
-  border: 2px solid #fff;
+  border: 2px solid #fffaf2;
   border-radius: 50%;
   background: var(--cc-green);
   box-shadow: 0 0 0 4px rgba(48, 161, 78, 0.16);
@@ -274,7 +272,7 @@ input::placeholder {
 .pong_slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
-  border: 2px solid #fff;
+  border: 2px solid #fffaf2;
   border-radius: 50%;
   background: var(--cc-green);
   box-shadow: 0 0 0 4px rgba(48, 161, 78, 0.16);
@@ -304,16 +302,16 @@ input::placeholder {
 }
 
 .command-right-column {
-  background: linear-gradient(180deg, rgba(22, 31, 42, 0.94), rgba(17, 24, 33, 0.94));
-  border: 1px solid rgba(88, 166, 255, 0.12);
+  background: linear-gradient(180deg, rgba(255, 250, 242, 0.96), rgba(238, 246, 242, 0.96));
+  border: 1px solid rgba(47, 111, 159, 0.16);
   border-radius: var(--cc-radius);
   padding: 16px;
 }
 
 .command-group-panel,
 .command-right-panel {
-  background: linear-gradient(180deg, rgba(18, 25, 34, 0.95), rgba(15, 21, 29, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(248, 250, 246, 0.98));
+  border: 1px solid rgba(31, 41, 51, 0.1);
   border-radius: 12px;
   padding: 12px;
   box-shadow: var(--cc-shadow);
@@ -323,8 +321,8 @@ input::placeholder {
 .command-side-header {
   margin-bottom: 10px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(48, 161, 78, 0.28);
-  color: #9be9a8;
+  border-bottom: 1px solid rgba(47, 143, 91, 0.28);
+  color: #2f8f5b;
 }
 
 .command-group-grid {
@@ -354,16 +352,16 @@ input::placeholder {
   width: 100%;
   min-height: 42px;
   padding: 7px 8px;
-  border: 1px solid rgba(88, 166, 255, 0.2);
+  border: 1px solid rgba(47, 111, 159, 0.22);
   border-radius: 10px;
-  background: #000;
+  background: #ffffff;
   color: var(--cc-text);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1.15;
   text-align: center;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -372,6 +370,13 @@ input::placeholder {
   border-color: rgba(88, 166, 255, 0.48);
   transform: translateY(-1px);
   box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.12);
+}
+
+.mode_button.mode_button_active {
+  border-color: rgba(220, 38, 38, 0.52);
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
 }
 
 #track-a-flight_div,
@@ -386,9 +391,9 @@ input::placeholder {
 #pong_div {
   width: 100%;
   padding: 10px;
-  border: 1px solid rgba(48, 161, 78, 0.2);
+  border: 1px solid rgba(47, 143, 91, 0.22);
   border-radius: 12px;
-  background: rgba(48, 161, 78, 0.05);
+  background: rgba(238, 246, 242, 0.84);
   text-align: center;
 }
 
@@ -422,7 +427,7 @@ input::placeholder {
 }
 
 #tracked_resorts b {
-  color: #c9d1d9;
+  color: #374151;
 }
 
 #user_resort_list {
@@ -433,7 +438,7 @@ input::placeholder {
 #save_resort,
 #countdown_div input[type="submit"] {
   margin-top: 10px;
-  background: linear-gradient(180deg, rgba(88, 166, 255, 0.2), rgba(48, 161, 78, 0.2));
+  background: linear-gradient(180deg, rgba(47, 111, 159, 0.14), rgba(47, 143, 91, 0.14));
 }
 
 #lightning_div {
@@ -457,9 +462,9 @@ input::placeholder {
   min-width: 42px;
   min-height: 36px;
   padding: 6px 10px;
-  border: 1px solid rgba(88, 166, 255, 0.24);
+  border: 1px solid rgba(47, 111, 159, 0.22);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.86);
   color: var(--cc-text);
 }
 
@@ -525,8 +530,8 @@ input::placeholder {
 .command-right-panel-info .device_info_box {
   margin: 0;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(9, 14, 20, 0.98), rgba(15, 21, 29, 0.98));
-  border: 1px solid rgba(88, 166, 255, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 250, 0.98));
+  border: 1px solid rgba(47, 111, 159, 0.18);
   padding: 14px;
   color: var(--cc-text);
   box-shadow: none;
@@ -550,9 +555,9 @@ input::placeholder {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(31, 41, 51, 0.08);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .device_info_label {
@@ -560,7 +565,7 @@ input::placeholder {
 }
 
 .device_info_value {
-  color: #9cdcfe;
+  color: #236491;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 14px;
   text-align: right;
@@ -576,8 +581,8 @@ input::placeholder {
   width: 100%;
   margin: 0;
   border-radius: 12px;
-  border: 1px solid rgba(48, 161, 78, 0.18);
-  background: rgba(13, 17, 23, 0.65);
+  border: 1px solid rgba(47, 143, 91, 0.18);
+  background: rgba(255, 255, 255, 0.74);
   padding: 14px;
 }
 
@@ -601,9 +606,9 @@ input::placeholder {
 .a_sound_button {
   width: 58px;
   height: 48px;
-  border: 1px solid rgba(88, 166, 255, 0.24);
+  border: 1px solid rgba(47, 111, 159, 0.22);
   border-radius: 12px;
-  background: rgba(88, 166, 255, 0.08);
+  background: rgba(47, 111, 159, 0.08);
   font-size: 26px;
 }
 
@@ -612,7 +617,7 @@ input::placeholder {
   inset: 0;
   z-index: 999999;
   overflow: auto;
-  background: rgba(13, 17, 23, 0.98);
+  background: rgba(255, 250, 242, 0.98);
   color: var(--cc-text);
   text-align: center;
   padding-bottom: 40px;
@@ -636,7 +641,7 @@ label.configline {
   width: 45%;
   display: inline-block;
   overflow: hidden;
-  color: #c9d1d9;
+  color: #374151;
 }
 
 input.configline,
@@ -679,8 +684,8 @@ input[type=number] {
   min-height: 52px;
   font-size: clamp(18px, 3vw, 26px);
   margin-top: 8px;
-  background: linear-gradient(180deg, rgba(48, 161, 78, 0.26), rgba(88, 166, 255, 0.22));
-  border: 1px solid rgba(88, 166, 255, 0.22);
+  background: linear-gradient(180deg, rgba(47, 143, 91, 0.16), rgba(47, 111, 159, 0.14));
+  border: 1px solid rgba(47, 111, 159, 0.2);
 }
 
 #submit_config_button.config-save-success {
@@ -746,7 +751,7 @@ input[type=number] {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.78);
+  background: rgba(31, 41, 51, 0.38);
 }
 
 .modal_backdrop[hidden] {
@@ -758,8 +763,8 @@ input[type=number] {
   padding: 18px;
   border: 1px solid var(--cc-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(18, 25, 34, 1), rgba(13, 17, 23, 1));
-  color: white;
+  background: linear-gradient(180deg, #fffdf8, #f1f7f4);
+  color: var(--cc-text);
 }
 
 .free_sketch_header {
@@ -786,10 +791,10 @@ input[type=number] {
 .free_sketch_icon_button {
   width: 44px;
   height: 44px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(31, 41, 51, 0.16);
   border-radius: 6px;
-  background: #0b0f14;
-  color: white;
+  background: #ffffff;
+  color: var(--cc-text);
   font-size: 36px;
   line-height: 36px;
   cursor: pointer;
@@ -799,7 +804,7 @@ input[type=number] {
   position: relative;
   width: 100%;
   aspect-ratio: 128 / 32;
-  border: 1px solid rgba(88, 166, 255, 0.35);
+  border: 1px solid rgba(47, 111, 159, 0.28);
   background: black;
 }
 
@@ -872,7 +877,7 @@ input[type=number] {
 .free_sketch_color_swatch {
   width: 36px;
   height: 36px;
-  border: 2px solid white;
+  border: 2px solid #ffffff;
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
@@ -902,9 +907,9 @@ input[type=number] {
   width: 60px;
   height: 36px;
   padding: 0;
-  border: 2px solid white;
+  border: 2px solid rgba(31, 41, 51, 0.18);
   border-radius: 4px;
-  background: black;
+  background: #ffffff;
   cursor: pointer;
 }
 
@@ -919,7 +924,7 @@ input[type=number] {
 .free_sketch_brush_shapes {
   display: inline-flex;
   align-items: center;
-  border: 2px solid white;
+  border: 2px solid rgba(31, 41, 51, 0.16);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -929,9 +934,9 @@ input[type=number] {
   min-width: 44px;
   height: 40px;
   border: none;
-  border-right: 2px solid white;
-  background: black;
-  color: white;
+  border-right: 2px solid rgba(31, 41, 51, 0.16);
+  background: #ffffff;
+  color: var(--cc-text);
   font-size: 18px;
   cursor: pointer;
   display: flex;
@@ -948,16 +953,16 @@ input[type=number] {
 .free_sketch_brush_size.active,
 .free_sketch_brush_shape.active {
   background: var(--cc-blue);
-  color: black;
+  color: #ffffff;
 }
 
 .free_sketch_control_button {
   min-width: 90px;
   height: 44px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(31, 41, 51, 0.16);
   border-radius: 6px;
-  background: black;
-  color: white;
+  background: #ffffff;
+  color: var(--cc-text);
   font-size: 18px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -970,7 +975,7 @@ input[type=number] {
 
 .free_sketch_control_button.active {
   background: var(--cc-blue);
-  color: black;
+  color: #ffffff;
 }
 
 .free_sketch_stamp_button {
@@ -990,7 +995,7 @@ input[type=number] {
 
 .free_sketch_gallery_item {
   position: relative;
-  border: 2px solid #37404a;
+  border: 2px solid rgba(31, 41, 51, 0.18);
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;

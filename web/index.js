@@ -21,6 +21,32 @@ var free_sketch_max_recent_colors = 6;
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
+function set_mode_button_active(mode, is_active) {
+    var button = document.getElementById(mode);
+    if (!button) {
+        return;
+    }
+
+    button.style.backgroundColor = "";
+    button.classList.toggle("mode_button_active", is_active);
+}
+
+function set_current_mode_button(mode) {
+    if (global_current_mode && global_current_mode !== mode) {
+        set_mode_button_active(global_current_mode, false);
+    }
+
+    set_mode_button_active(mode, true);
+    global_current_mode = mode;
+}
+
+function clear_current_mode_button() {
+    if (global_current_mode) {
+        set_mode_button_active(global_current_mode, false);
+    }
+    global_current_mode = null;
+}
+
 window.onload = function () {
     update_sign_status();
     update_brightness_slider();
@@ -121,15 +147,12 @@ window.onload = function () {
             call_endpoint('/turn_on')
             call_endpoint("/get_mode", function (current_mode) {
                 if (current_mode && current_mode !== "0") {
-                    document.getElementById(current_mode).style.backgroundColor = "red";
-                    global_current_mode = current_mode;
+                    set_current_mode_button(current_mode);
                 }
             });
         } else {
             call_endpoint('/turn_off')
-            if (global_current_mode) {
-                document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
-            }
+            clear_current_mode_button();
         }
     }
 
@@ -1692,11 +1715,7 @@ function populate_sound_dropdown() {
 }
 
 function set_mode(mode) {
-    if (global_current_mode) {
-        document.getElementById(global_current_mode).style.backgroundColor = "black"; // Turn off current button
-    }
-    document.getElementById(mode).style.backgroundColor = "red"; // Turn on new button
-    global_current_mode = mode;
+    set_current_mode_button(mode);
 
     if (mode !== 'CUSTOM_MESSAGE') {
         document.getElementById('custom_message_div').hidden = true;
@@ -1966,8 +1985,7 @@ function update_sign_status() {
 
     call_endpoint("/get_mode", function (current_mode) {
         if (current_mode && current_mode !== "0") {
-            document.getElementById(current_mode).style.backgroundColor = "red";
-            global_current_mode = current_mode;
+            set_current_mode_button(current_mode);
 
             // Unhide any special options for this mode. These are all currently placed
             // as divs immediately after the mode button in the HTML

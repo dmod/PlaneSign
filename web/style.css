@@ -158,6 +158,10 @@ body {
   border: 3px solid black;
 }
 
+.mode_button.mode_button_active {
+  background-color: red;
+}
+
 .mode_selector_button_group {
   border-radius: 25px;
 
