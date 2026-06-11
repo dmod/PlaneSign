@@ -114,6 +114,7 @@ window.onload = function () {
     document.getElementById("lightning_slider").oninput = function () {
         call_endpoint("/lightning/" + this.value);
     }
+    sync_lightning_controls();
 
     toggle_switch.onchange = function () {
         if (document.getElementById("toggle_switch").checked) {
@@ -287,10 +288,10 @@ function setup_free_sketch() {
             add_color_to_recent(color.value);
         });
     }
-    
+
     // Load recent colors from localStorage
     load_recent_colors();
-    
+
     // Initialize with default state
     update_undo_button_state();
 }
@@ -479,7 +480,7 @@ function set_free_sketch_brush_size(size) {
 
 function set_free_sketch_brush_shape(shape) {
     free_sketch_brush_shape = shape;
-    
+
     ["square", "plus", "x", "circle"].forEach(function (s) {
         var button = document.getElementById("free_sketch_brush_shape_" + s);
         if (button) {
@@ -623,7 +624,7 @@ function undo_free_sketch() {
     var ctx = canvas.getContext("2d");
     var imageData = free_sketch_undo_stack.pop();
     ctx.putImageData(imageData, 0, 0);
-    
+
     // Sync the state back to the server
     sync_free_sketch_to_server(canvas);
     update_undo_button_state();
@@ -953,7 +954,7 @@ function bresenham_line(x0, y0, x1, y1) {
 function get_brush_shape_pixels(cx, cy, size, shape) {
     var pixels = [];
     var half = Math.floor(size / 2);
-    
+
     if (shape === "square") {
         for (var dy = -half; dy <= half && dy < size - half; dy++) {
             for (var dx = -half; dx <= half && dx < size - half; dx++) {
@@ -984,7 +985,7 @@ function get_brush_shape_pixels(cx, cy, size, shape) {
             }
         }
     }
-    
+
     // Remove duplicates
     var seen = {};
     return pixels.filter(function (p) {
@@ -1001,18 +1002,18 @@ function pick_color_from_canvas(event) {
     if (!canvas || !pixel) {
         return;
     }
-    
+
     var ctx = canvas.getContext("2d");
     var imageData = ctx.getImageData(pixel.x, pixel.y, 1, 1);
     var data = imageData.data;
     var r = data[0];
     var g = data[1];
     var b = data[2];
-    var hex = "#" + 
+    var hex = "#" +
         ("0" + r.toString(16)).slice(-2) +
         ("0" + g.toString(16)).slice(-2) +
         ("0" + b.toString(16)).slice(-2);
-    
+
     set_free_sketch_color(hex);
     set_free_sketch_color_picker(false);
 }
@@ -1023,60 +1024,60 @@ function paint_bucket_fill(event) {
     if (!canvas || !pixel) {
         return;
     }
-    
+
     save_free_sketch_undo_state();
-    
+
     var ctx = canvas.getContext("2d");
     var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     var targetPixel = (pixel.y * canvas.width + pixel.x) * 4;
     var targetR = imageData.data[targetPixel];
     var targetG = imageData.data[targetPixel + 1];
     var targetB = imageData.data[targetPixel + 2];
-    
+
     var selected_color = get_free_sketch_color();
     var fillR = selected_color.r;
     var fillG = selected_color.g;
     var fillB = selected_color.b;
-    
+
     // Don't fill if target color is the same as fill color
     if (targetR === fillR && targetG === fillG && targetB === fillB) {
         return;
     }
-    
+
     // Flood fill algorithm
     var stack = [{ x: pixel.x, y: pixel.y }];
     var filled = {};
-    
+
     while (stack.length > 0) {
         var p = stack.pop();
         var key = p.x + "," + p.y;
-        
+
         if (p.x < 0 || p.x >= canvas.width || p.y < 0 || p.y >= canvas.height) {
             continue;
         }
-        
+
         if (filled[key]) {
             continue;
         }
-        
+
         var index = (p.y * canvas.width + p.x) * 4;
         if (imageData.data[index] !== targetR ||
             imageData.data[index + 1] !== targetG ||
             imageData.data[index + 2] !== targetB) {
             continue;
         }
-        
+
         imageData.data[index] = fillR;
         imageData.data[index + 1] = fillG;
         imageData.data[index + 2] = fillB;
         filled[key] = true;
-        
+
         stack.push({ x: p.x + 1, y: p.y });
         stack.push({ x: p.x - 1, y: p.y });
         stack.push({ x: p.x, y: p.y + 1 });
         stack.push({ x: p.x, y: p.y - 1 });
     }
-    
+
     ctx.putImageData(imageData, 0, 0);
     sync_free_sketch_to_server(canvas);
     set_free_sketch_paint_bucket(false);
@@ -1715,6 +1716,9 @@ function set_mode(mode) {
     if (mode !== 'LIGHTNING') {
         document.getElementById('lightning_div').hidden = true;
     }
+    if (mode == 'LIGHTNING') {
+        show_lightning_controls();
+    }
     if (mode !== 'SATELLITE') {
         document.getElementById('satellite_div').hidden = true;
     }
@@ -1749,6 +1753,29 @@ function set_mode(mode) {
 
 function set_lightning_mode(mode) {
     call_endpoint("/lightning_mode/" + mode);
+    sync_lightning_controls(mode);
+}
+
+function show_lightning_controls() {
+    var lightningDiv = document.getElementById('lightning_div');
+    if (lightningDiv) {
+        lightningDiv.hidden = false;
+    }
+    sync_lightning_controls();
+}
+
+function sync_lightning_controls(mode) {
+    var sliderDiv = document.getElementById('lightning_slider_div');
+    var selectedMode = mode;
+
+    if (!selectedMode) {
+        var selectedButton = document.querySelector('input[name="lightningmode"]:checked');
+        selectedMode = selectedButton ? selectedButton.value : '1';
+    }
+
+    if (sliderDiv) {
+        sliderDiv.hidden = String(selectedMode) !== '2';
+    }
 }
 
 function set_snow_mode(mode) {
@@ -1953,6 +1980,10 @@ function update_sign_status() {
             // yet or not
             if (global_current_mode == "FINANCE") {
                 sib.hidden = (valid_tickers === null);
+            }
+
+            if (global_current_mode == "LIGHTNING") {
+                sync_lightning_controls();
             }
 
             if (global_current_mode == "FREE_SKETCH") {

@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="layout-new.css">
+  <link rel="stylesheet" href="layout-new.css?v=lightning-slider-4">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=free-sketch-8"></script>
+  <script src="index.js?v=lightning-slider-1"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -140,16 +140,16 @@
               <button id="MOON" class="mode_button" onclick="set_mode(this.id)">Moon 🌘</button>
             </div>
             <div class="command-mode-item">
-              <button id="LIGHTNING" class="mode_button" onclick="set_mode(this.id); document.getElementById('lightning_div').hidden = false">Lightning ⛈️</button>
+              <button id="LIGHTNING" class="mode_button" onclick="set_mode(this.id)">Lightning ⛈️</button>
               <div id="lightning_div" hidden>
-                <div id="lightning_button_div">
-                  <label for="local">USA</label>
-                  <input type="radio" class="lightning_button" id="local" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = true" value="1" checked>
-                  <label for="usa">Local</label>
-                  <input type="radio" class="lightning_button" id="usa" name="lightningmode" onclick="set_lightning_mode(this.value); document.getElementById('lightning_slider').hidden = false" value="2">
+                <div id="lightning_button_div" aria-label="Lightning map mode">
+                  <input type="radio" id="lightning_usa" name="lightningmode" onclick="set_lightning_mode(this.value)" value="1" checked>
+                  <label for="lightning_usa">USA</label>
+                  <input type="radio" id="lightning_local" name="lightningmode" onclick="set_lightning_mode(this.value)" value="2">
+                  <label for="lightning_local">Local</label>
                 </div>
-                <div id="lightning_slider_div">
-                  <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" orient="vertical" hidden>
+                <div id="lightning_slider_div" hidden>
+                  <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" aria-label="Local lightning zoom">
                 </div>
               </div>
             </div>

@@ -214,48 +214,21 @@ legend {
 }
 
 #lightning_div {
-  overflow: hidden;
+  margin: 10px auto 20px;
+  overflow: visible;
+}
+
+#lightning_div[hidden],
+#lightning_slider_div[hidden] {
+  display: none;
 }
 
 #lightning_button_div {
-  float: left;
-  padding: 20px;
-  margin-left: 25%;
-  margin-top: 5%;
-  margin-bottom: 10%;
+  margin: 8px 0 12px;
 }
 
 #lightning_slider_div {
-  width: 25%;
-  float: left;
-  margin-bottom: 5%;
-}
-
-#lightning_slider {
-  writing-mode: bt-lr;
-  margin-right: 10px;
-  margin-left: 10px;
-  width: 50px;
-  background: #d3d3d3;
-  outline: none;
-}
-
-#lightning_slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 50px;
-  height: 50px;
-  cursor: pointer;
-  background: #ffee22;
-}
-
-#lightning_slider::-moz-range-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 50px;
-  height: 50px;
-  cursor: pointer;
-  background: #ffee22;
+  margin: 0 auto 8px;
 }
 
 #satellite_div,
@@ -356,11 +329,6 @@ legend {
   text-align: center;
   display: inline;
   float: none;
-}
-
-.lightning_button {
-  display: block;
-  margin: auto auto 20px auto;
 }
 
 /*
@@ -927,6 +895,10 @@ input[type=number] {
 }
 
 @media (max-width: 700px) {
+  #lightning_div {
+    width: 100%;
+  }
+
   .modal_backdrop {
     padding: 10px;
   }
