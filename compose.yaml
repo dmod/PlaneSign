@@ -8,3 +8,4 @@ services:
     volumes:
       - ./sign.conf:/planesign/sign.conf
       - ./sketches:/planesign/sketches
+      - ./icons/lightning:/planesign/icons/lightning

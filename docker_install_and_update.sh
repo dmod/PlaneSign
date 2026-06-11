@@ -132,7 +132,7 @@ if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
   cp "$INSTALL_DIR/sign.conf.sample" "$INSTALL_DIR/sign.conf"
 fi
 
-mkdir -p "$INSTALL_DIR/sketches"
+mkdir -p "$INSTALL_DIR/sketches" "$INSTALL_DIR/icons/lightning"
 
 sudo docker compose -f "$COMPOSE_FILE" config >/dev/null
 sudo docker compose -f "$COMPOSE_FILE" pull
