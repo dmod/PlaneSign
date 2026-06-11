@@ -129,6 +129,11 @@ class LightningManager:
         self.usa = None
         self.last_drawn_zoomind = Value("i", 6)
         self.last_drawn_mode = Value("i", 1)
+        self.county_polygons = []
+        self.state_polygons = []
+        self._closest_bg_cache = None
+        self._closest_bg_center = None
+        self._closest_bg_scale = None
         self.genBackgrounds()
 
     def draw_loading(self):
@@ -161,22 +166,20 @@ class LightningManager:
 
         if genmaps:
             self.draw_loading()
-            response = requests.get(countyurl, stream=True, timeout=10)
-            if response.status_code == requests.codes.ok:
-                countydata = response.json()
-            else:
-                countydata = None
 
-            response = requests.get(usaurl, stream=True, timeout=10)
-            if response.status_code == requests.codes.ok:
-                usadata = response.json()
-            else:
-                usadata = None
-        else:
-            usadata = None
+        try:
+            response = requests.get(countyurl, stream=True, timeout=10)
+            countydata = response.json() if response.status_code == requests.codes.ok else None
+        except Exception:
             countydata = None
 
-        if usadata and genmaps:
+        try:
+            response = requests.get(usaurl, stream=True, timeout=10)
+            usadata = response.json() if response.status_code == requests.codes.ok else None
+        except Exception:
+            usadata = None
+
+        if usadata:
             usapoints = []
             for feature in usadata["features"]:
                 shape = feature["geometry"]
@@ -194,6 +197,26 @@ class LightningManager:
                                 x, y = mercator_proj(coord[1], coord[0])
                                 points.append((x, y))
                             usapoints.append(points)
+            self.state_polygons = usapoints
+
+        if countydata:
+            countypoints = []
+            for record in countydata["records"]:
+                shape = record["fields"]["geo_shape"]
+                if shape["type"] == "Polygon":
+                    points = []
+                    for coord in shape["coordinates"][0]:
+                        x, y = mercator_proj(coord[1], coord[0])
+                        points.append((x, y))
+                    countypoints.append(points)
+                elif shape["type"] == "MultiPolygon":
+                    for subshape in shape["coordinates"]:
+                        points = []
+                        for coord in subshape[0]:
+                            x, y = mercator_proj(coord[1], coord[0])
+                            points.append((x, y))
+                        countypoints.append(points)
+            self.county_polygons = countypoints
 
         if (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png").getcolors()) == 1:
             self.usa = Image.new("RGB", (self.bgwidth, self.bgheight))
@@ -255,6 +278,33 @@ class LightningManager:
             if genmaps:
                 self.sign.matrix.SetPixel(15 + loadingind, 28, 20, 180, 0)
                 loadingind += 1
+
+    def genDynamicBackground(self, center_x_merc, center_y_merc, scale):
+        if self._closest_bg_cache is not None and self._closest_bg_scale == scale and self._closest_bg_center is not None:
+            dx = abs((center_x_merc - self._closest_bg_center[0]) * scale)
+            dy = abs((center_y_merc - self._closest_bg_center[1]) * scale)
+            if dx < 1 and dy < 1:
+                return self._closest_bg_cache
+
+        bg = Image.new("RGB", (self.bgwidth, self.bgheight))
+        draw = ImageDraw.Draw(bg)
+
+        for polygon in self.county_polygons:
+            temp = []
+            for p in polygon:
+                temp.append((self.bgwidth / 2 + (p[0] - center_x_merc) * scale, self.bgheight / 2 - (p[1] - center_y_merc) * scale))
+            draw.polygon(temp, outline=(30, 30, 30))
+
+        for polygon in self.state_polygons:
+            temp = []
+            for p in polygon:
+                temp.append((self.bgwidth / 2 + (p[0] - center_x_merc) * scale, self.bgheight / 2 - (p[1] - center_y_merc) * scale))
+            draw.polygon(temp, outline=(80, 80, 80))
+
+        self._closest_bg_cache = bg
+        self._closest_bg_center = (center_x_merc, center_y_merc)
+        self._closest_bg_scale = scale
+        return bg
 
     def decode(self, b):
         e = {}
@@ -415,8 +465,13 @@ class LightningManager:
 
         if shared_config.shared_lighting_mode.value == 2:
             local = True
+            closest_mode = False
+        elif shared_config.shared_lighting_mode.value == 3:
+            local = False
+            closest_mode = True
         else:
             local = False
+            closest_mode = False
 
         now = time.time()
 
@@ -466,48 +521,74 @@ class LightningManager:
                 break
 
         lightningmap = None
+        center_x_merc = None
+        center_y_merc = None
+
         if local:
             self.background = self.backgrounds[shared_config.shared_lighting_zoomind.value]
+        elif closest_mode:
+            if closest1:
+                center_x_merc, center_y_merc = mercator_proj(closest1["lat"], closest1["lon"])
+                zoom_scale = self.zooms[shared_config.shared_lighting_zoomind.value]
+                self.background = self.genDynamicBackground(center_x_merc, center_y_merc, zoom_scale)
+            else:
+                self.background = None
         else:
             self.background = self.usa
 
-        if self.background:
-            lightningmap = self.background.copy()
-            draw = ImageDraw.Draw(lightningmap)
+        if closest_mode and closest1 is None:
+            # No nearby strikes — show fallback message on map area
+            fallback = Image.new("RGB", (self.bgwidth, self.bgheight))
+            self.sign.canvas.SetImage(fallback.convert("RGB"), 64, 0)
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 68, 14, graphics.Color(70, 70, 215), "No nearby")
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 72, 22, graphics.Color(70, 70, 215), "strikes")
+        else:
+            if self.background:
+                lightningmap = self.background.copy()
+                draw = ImageDraw.Draw(lightningmap)
 
-        if lightningmap:
-            if local:
-                x = self.bgwidth / 2
-                y = self.bgheight / 2
-            else:
-                x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
-                x = self.bgwidth / 2 + (x - self.x0) * USAscale
-                y = self.bgheight / 2 - (y - self.y0) * USAscale
-            draw.point([x, y], fill=(0, 0, 255))
-
-        if oldest:
-            for strike in oldest:
-                strike_time = strike["time"]
-
-                if strike_time > now:  # desync in server and local clock
-                    continue
-                elif strike_time + 600 <= now:
-                    self.strikes.remove(strike)  # strike hit more than 10 mins ago
-                    continue
+            if lightningmap:
+                if local:
+                    x = self.bgwidth / 2
+                    y = self.bgheight / 2
+                elif closest_mode:
+                    x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                    zoom_scale = self.zooms[shared_config.shared_lighting_zoomind.value]
+                    x = self.bgwidth / 2 + (x - center_x_merc) * zoom_scale
+                    y = self.bgheight / 2 - (y - center_y_merc) * zoom_scale
                 else:
-                    color = get_lightning_color(strike_time, now, True)
+                    x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                    x = self.bgwidth / 2 + (x - self.x0) * USAscale
+                    y = self.bgheight / 2 - (y - self.y0) * USAscale
+                draw.point([x, y], fill=(0, 0, 255))
 
-                if lightningmap:
-                    x, y = mercator_proj(strike["lat"], strike["lon"])
-                    if local:
-                        x = self.bgwidth / 2 + (x - self.x1) * self.zooms[shared_config.shared_lighting_zoomind.value]
-                        y = self.bgheight / 2 - (y - self.y1) * self.zooms[shared_config.shared_lighting_zoomind.value]
+            if oldest:
+                for strike in oldest:
+                    strike_time = strike["time"]
+
+                    if strike_time > now:  # desync in server and local clock
+                        continue
+                    elif strike_time + 600 <= now:
+                        self.strikes.remove(strike)  # strike hit more than 10 mins ago
+                        continue
                     else:
-                        x = self.bgwidth / 2 + (x - self.x0) * USAscale
-                        y = self.bgheight / 2 - (y - self.y0) * USAscale
-                    draw.point([x, y], fill=color)
+                        color = get_lightning_color(strike_time, now, True)
 
-        self.sign.canvas.SetImage(lightningmap.convert("RGB"), 64, 0)
+                    if lightningmap:
+                        x, y = mercator_proj(strike["lat"], strike["lon"])
+                        if local:
+                            x = self.bgwidth / 2 + (x - self.x1) * self.zooms[shared_config.shared_lighting_zoomind.value]
+                            y = self.bgheight / 2 - (y - self.y1) * self.zooms[shared_config.shared_lighting_zoomind.value]
+                        elif closest_mode:
+                            zoom_scale = self.zooms[shared_config.shared_lighting_zoomind.value]
+                            x = self.bgwidth / 2 + (x - center_x_merc) * zoom_scale
+                            y = self.bgheight / 2 - (y - center_y_merc) * zoom_scale
+                        else:
+                            x = self.bgwidth / 2 + (x - self.x0) * USAscale
+                            y = self.bgheight / 2 - (y - self.y0) * USAscale
+                        draw.point([x, y], fill=color)
+
+            self.sign.canvas.SetImage(lightningmap.convert("RGB"), 64, 0)
 
         for i in range(32):
             self.sign.canvas.SetPixel(64, i, 50, 50, 200)
@@ -564,6 +645,9 @@ class LightningManager:
         if local:
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
             graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Near")
+        elif closest_mode:
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
+            graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Close")
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
             graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Global")

@@ -142,6 +142,8 @@
           <label for="lightning_usa">USA</label>
           <input type="radio" id="lightning_local" name="lightningmode" onclick="set_lightning_mode(this.value)" value="2">
           <label for="lightning_local">Local</label>
+          <input type="radio" id="lightning_closest" name="lightningmode" onclick="set_lightning_mode(this.value)" value="3">
+          <label for="lightning_closest">Closest</label>
         </div>
         <div id="lightning_slider_div" hidden>
           <input id="lightning_slider" type="range" min="0" max="8" step="1" value="6" aria-label="Local lightning zoom">

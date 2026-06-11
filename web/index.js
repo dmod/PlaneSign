@@ -1793,7 +1793,7 @@ function sync_lightning_controls(mode) {
     }
 
     if (sliderDiv) {
-        sliderDiv.hidden = String(selectedMode) !== '2';
+        sliderDiv.hidden = String(selectedMode) !== '2' && String(selectedMode) !== '3';
     }
 }
 
