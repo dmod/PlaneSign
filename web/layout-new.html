@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
+  <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
   <script src="index.js?v=free-sketch-8"></script>
@@ -18,43 +19,13 @@
 </head>
 
 <body>
-  <div id="layout_bar" style="position:fixed;top:10px;right:12px;z-index:1000;display:flex;align-items:center;gap:7px;background:rgba(13,17,23,0.92);border:1px solid #30363d;border-radius:20px;padding:4px 10px;box-shadow:0 1px 4px rgba(0,0,0,0.4);">
-    <span style="font-size:12px;color:#8b949e;white-space:nowrap;">Original</span>
-    <label style="position:relative;width:40px;height:22px;display:inline-block;">
-      <input type="checkbox" id="layout_toggle" onchange="toggle_layout()" style="opacity:0;width:0;height:0;">
-      <span id="layout_slider_span" style="position:absolute;cursor:pointer;inset:0;border-radius:22px;transition:background-color 0.3s,border-color 0.3s,box-shadow 0.3s;"></span>
-      <style>
-        #layout_slider_span {
-          background-color: #ffffff;
-          border: 1px solid #d1d1d6;
-          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
-        }
-
-        #layout_toggle:checked+#layout_slider_span {
-          background-color: #30a14e;
-          border-color: #30a14e;
-          box-shadow: none;
-        }
-
-        #layout_toggle+#layout_slider_span::before {
-          content: '';
-          position: absolute;
-          height: 16px;
-          width: 16px;
-          left: 3px;
-          bottom: 3px;
-          background-color: white;
-          border-radius: 50%;
-          transition: transform 0.3s;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
-        }
-
-        #layout_toggle:checked+#layout_slider_span::before {
-          transform: translateX(18px);
-        }
-      </style>
+  <div id="layout_bar" class="layout-toggle-bar layout-toggle-bar--dark">
+    <span class="layout-toggle-label">Original</span>
+    <label class="layout-switch" aria-label="Switch to original interface">
+      <input type="checkbox" id="layout_toggle" onchange="toggle_layout()">
+      <span class="layout-slider"></span>
     </label>
-    <span style="font-size:12px;color:#c9d1d9;font-weight:bold;white-space:nowrap;">New Interface (Beta)</span>
+    <span class="layout-toggle-label active">New Interface (Beta)</span>
     <script>init_layout_toggle();</script>
   </div>
 
