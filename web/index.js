@@ -576,6 +576,17 @@ function load_free_sketch_gallery() {
                     recall_free_sketch(sketch.filename);
                 });
 
+                var dl_btn = document.createElement("a");
+                dl_btn.className = "free_sketch_gallery_download";
+                dl_btn.href = "api/free_sketch/image/" + sketch.filename;
+                dl_btn.download = sketch.filename;
+                dl_btn.title = "Download sketch";
+                dl_btn.setAttribute("aria-label", "Download sketch");
+                dl_btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+                dl_btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                });
+
                 var del_btn = document.createElement("button");
                 del_btn.className = "free_sketch_gallery_delete";
                 del_btn.textContent = "\u00d7";
@@ -586,6 +597,7 @@ function load_free_sketch_gallery() {
                 });
 
                 item.appendChild(img);
+                item.appendChild(dl_btn);
                 item.appendChild(del_btn);
                 gallery.appendChild(item);
             });

@@ -857,6 +857,36 @@ input[type=number] {
   background: black;
 }
 
+.free_sketch_gallery_download {
+  position: absolute;
+  top: 2px;
+  right: 28px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.free_sketch_gallery_item:hover .free_sketch_gallery_download {
+  opacity: 1;
+}
+
+.free_sketch_gallery_download:hover {
+  background: #2a7ab5;
+}
+
 .free_sketch_gallery_delete {
   position: absolute;
   top: 2px;
