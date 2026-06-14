@@ -58,40 +58,60 @@ def moon(sign):
     # ---------------------------------------------------------
     # Load Ephemeris
     # ---------------------------------------------------------
-    Loader(shared_config.datafiles_dir)
+    load = Loader(shared_config.datafiles_dir)
 
-    # Move ephemeris file from old location if needed
-    if os.path.isfile("./de421.bsp") and not os.path.isfile(f"{shared_config.datafiles_dir}/de421.bsp"):
-        logging.debug("Moving de421.bsp to datafiles directory")
-        shutil.move("./de421.bsp", f"{shared_config.datafiles_dir}/de421.bsp")
+    # Move data files from old location if needed
+    datfiles = ["de421.bsp", "moon_080317.tf", "pck00008.tpc", "moon_pa_de421_1900-2050.bpc"]
+    datsource = ["https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp",
+                 "https://naif.jpl.nasa.gov/pub/naif/LADEE/kernels/fk/moon_080317.tf",
+                 "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00008.tpc",
+                 "https://ssd.jpl.nasa.gov/ftp/eph/planets/bpc/moon_pa_de421_1900-2050.bpc"]
+    for datfile in datfiles:
+        if os.path.isfile(f"./{datfile}"):
+            logging.debug(f"Moving {datfile} to datafiles directory")
+            shutil.move(f"./{datfile}", f"{shared_config.datafiles_dir}/{datfile}")
 
     msg = ""
     try:
-        eph = load("de421.bsp")
+        eph = load(datfiles[0])
     except Exception as e:
         msg = "Error getting ephemeris!"
-        logging.error(f"Error loading {shared_config.datafiles_dir}/de421.bsp: %s", e)
+        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[0]}: %s", e)
         logging.error(
             f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
-                      or manually download from https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp and place\
-                      it in {shared_config.datafiles_dir}."
+              or manually download from {datfiles[0]} and place it in {shared_config.datafiles_dir}."
         )
 
     pc = PlanetaryConstants()
 
     try:
-        pc.read_text(load("moon_080317.tf"))
-        pc.read_text(load("pck00008.tpc"))
-        pc.read_binary(load("moon_pa_de421_1900-2050.bpc"))
+        pc.read_text(load(datfiles[1]))
     except Exception as e:
-        msg = "Error getting moon eph!"
-        logging.error(f"Error loading {shared_config.datafiles_dir}/de421.bsp: %s", e)
+        msg = "Error getting lunar ref frame!"
+        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[1]}: %s", e)
         logging.error(
             f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
-                      or manually download from https://naif.jpl.nasa.gov/pub/naif/LADEE/kernels/fk/moon_080317.tf, \
-                      https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00008.tpc, \
-                      https://ssd.jpl.nasa.gov/ftp/eph/planets/bpc/moon_pa_de421_1900-2050.bpc \
-                      and place them in {shared_config.datafiles_dir}."
+              or manually download from {datfiles[1]} and place it in {shared_config.datafiles_dir}."
+        )
+
+    try:
+        pc.read_text(load(datfiles[2]))
+    except Exception as e:
+        msg = "Error getting planetary consts!"
+        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[2]}: %s", e)
+        logging.error(
+            f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
+              or manually download from {datfiles[2]} and place it in {shared_config.datafiles_dir}."
+        )
+
+    try:
+        pc.read_binary(load(datfiles[3]))
+    except Exception as e:
+        msg = "Error getting lunar orient data!"
+        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[3]}: %s", e)
+        logging.error(
+            f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
+              or manually download from {datfiles[3]} and place it in {shared_config.datafiles_dir}."
         )
 
     if msg != "":
