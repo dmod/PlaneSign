@@ -145,8 +145,8 @@ def show_a_plane(sign, plane_to_show, scroll):
         # Front pad the flight number to a max of 7 for spacing
         formatted_flight = plane_to_show.callsign.rjust(7, " ")
 
-        from_airport = plane_to_show.origin_airport_iata if plane_to_show.origin_airport_iata else "   "
-        to_airport = plane_to_show.destination_airport_iata if plane_to_show.destination_airport_iata else "   "
+        from_airport = plane_to_show.origin_airport_iata if plane_to_show.origin_airport_iata else "???"
+        to_airport = plane_to_show.destination_airport_iata if plane_to_show.destination_airport_iata else "???"
 
         for i in range(utilities.NUM_STEPS):
             sign.canvas.Clear()
