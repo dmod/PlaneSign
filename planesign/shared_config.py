@@ -14,8 +14,8 @@ shared_forced_sign_update = Value("i", 0)
 
 shared_satellite_mode = Value("i", 1)
 
-shared_lighting_zoomind = Value("i", 6)
-shared_lighting_mode = Value("i", 1)
+shared_lightning_zoomind = Value("i", 6)
+shared_lightning_mode = Value("i", 1)
 
 shared_mandelbrot_color = Value("i", 0)
 shared_mandelbrot_colorscale = Value("d", 3)

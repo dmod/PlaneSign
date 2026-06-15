@@ -517,13 +517,13 @@ def submit_ticker(ticker):
 
 @app.route("/lightning/<zi>")
 def set_zoom(zi):
-    shared_config.shared_lighting_zoomind.value = int(zi)
+    shared_config.shared_lightning_zoomind.value = int(zi)
     return ""
 
 
 @app.route("/lightning_mode/<mode>")
 def set_lightning_mode(mode):
-    shared_config.shared_lighting_mode.value = int(mode)
+    shared_config.shared_lightning_mode.value = int(mode)
     return ""
 
 

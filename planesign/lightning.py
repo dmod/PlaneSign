@@ -26,7 +26,7 @@ from modes import DisplayMode
 USAlong = -96
 USAlat = 38
 USAscale = 55
-
+global_map_ver = "V1"
 
 @__main__.planesign_mode_handler(DisplayMode.LIGHTNING)
 def lightning(sign):
@@ -46,7 +46,7 @@ def lightning(sign):
             failed_connections = 0
 
             while LM.connected.value:
-                if last_draw is None or time.perf_counter() - last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lighting_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lighting_mode.value):
+                if last_draw is None or time.perf_counter() - last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lightning_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lightning_mode.value):
                     LM.draw()
                     last_draw = time.perf_counter()
 
@@ -115,7 +115,7 @@ class LightningManager:
         self.sign = sign
         self.bgwidth = 64
         self.bgheight = 32
-        self.minzoom = 800
+        self.minzoom = 500
         self.maxzoom = 3200
         self.zoomstep = 300
         self.numzooms = ((self.maxzoom - self.minzoom) // self.zoomstep) + 1
@@ -143,168 +143,190 @@ class LightningManager:
         self.sign.canvas.SetImage(image.convert("RGB"), 93, -1)
 
         graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 15, graphics.Color(180, 180, 40), "Storm Sign")
-        graphics.DrawText(self.sign.canvas, self.sign.font57, 10, 26, graphics.Color(180, 180, 40), "Drawing Maps...")
-        for i in range(self.numzooms + 1):
-            self.sign.canvas.SetPixel(15 + i, 28, 180, 20, 0)
-
-        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
 
     def genBackgrounds(self):
         self.x0, self.y0 = mercator_proj(USAlat, USAlong)
         self.x1, self.y1 = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
 
-        countyurl = f"https://public.opendatasoft.com/api/records/1.0/search/?dataset=us-county-boundaries&q=&lang=EN&rows=200&facet=countyfp&geofilter.distance={shared_config.CONF['SENSOR_LAT']}%2C{shared_config.CONF['SENSOR_LON']}%2C220000"
-        usaurl = "https://public.opendatasoft.com/explore/dataset/georef-united-states-of-america-state/download/?format=geojson&timezone=America/New_York&lang=en"
+        countyfile = f"{shared_config.datafiles_dir}/geoBoundaries-USA-ADM2_simplified.geojson"
+        usafile = f"{shared_config.datafiles_dir}/geoBoundaries-USA-ADM1_simplified.geojson"
 
-        genmaps = (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png").getcolors()) == 1
+        self.draw_loading()
+
+        genmaps = (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png").getcolors()) == 1
 
         if not genmaps:
-            for scale in range(self.minzoom, self.maxzoom + self.zoomstep, self.zoomstep):
-                if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}.png")) or len(Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}.png").getcolors()) == 1:
+            for scale in self.zooms:
+                if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png").getcolors()) == 1:
                     genmaps = True
                     break
 
+        # Load static state and county map data from geojson files
+        with open(countyfile, "r") as f:
+            try:
+                countydata = json.load(f)
+            except:
+                countydata = None
+        
+        with open(usafile, "r") as f:
+            try:
+                usadata = json.load(f)
+            except:
+                usadata = None
+
+        if (usadata == None or countydata == None):
+            logging.error("Error loading map data, cannot generate maps")
+            raise ValueError("Map data error")
+            return
+
         if genmaps:
-            self.draw_loading()
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 10, 26, graphics.Color(180, 180, 40), "Drawing Maps...")
+            for i in range(self.numzooms + 1):
+                self.sign.canvas.SetPixel(15 + i, 28, 180, 20, 0)
 
-        try:
-            response = requests.get(countyurl, stream=True, timeout=10)
-            countydata = response.json() if response.status_code == requests.codes.ok else None
-        except Exception:
-            countydata = None
+        else:
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 10, 26, graphics.Color(180, 180, 40), "Loading...")
 
-        try:
-            response = requests.get(usaurl, stream=True, timeout=10)
-            usadata = response.json() if response.status_code == requests.codes.ok else None
-        except Exception:
-            usadata = None
+        self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
 
-        if usadata:
-            usapoints = []
-            for feature in usadata["features"]:
-                shape = feature["geometry"]
-                if int(feature["properties"]["ste_code"]) not in [60, 2, 78, 66, 15, 69, 72]:  # ["AS","AK","VI","GU","HI","MP","PR"]:
-                    if shape["type"] == "Polygon":
-                        points = []
-                        for coord in shape["coordinates"][0]:
-                            x, y = mercator_proj(coord[1], coord[0])
-                            points.append((x, y))
-                        usapoints.append(points)
-                    elif shape["type"] == "MultiPolygon":
-                        for subshape in shape["coordinates"]:
-                            points = []
-                            for coord in subshape[0]:
-                                x, y = mercator_proj(coord[1], coord[0])
-                                points.append((x, y))
-                            usapoints.append(points)
-            self.state_polygons = usapoints
-
-        if countydata:
-            countypoints = []
-            for record in countydata["records"]:
-                shape = record["fields"]["geo_shape"]
+        # Extract verticies from datafiles and convert to mercator projection coordinates, then store in lists for drawing later
+        usapoints = []
+        for feature in usadata["features"]:
+            shape = feature["geometry"]
+            if feature["properties"]["shapeISO"] not in ["US-AS", "US-AK", "US-VI", "US-GU", "US-HI", "US-MP", "US-PR"]:
                 if shape["type"] == "Polygon":
                     points = []
                     for coord in shape["coordinates"][0]:
                         x, y = mercator_proj(coord[1], coord[0])
                         points.append((x, y))
-                    countypoints.append(points)
+                    usapoints.append(points)
                 elif shape["type"] == "MultiPolygon":
                     for subshape in shape["coordinates"]:
                         points = []
                         for coord in subshape[0]:
                             x, y = mercator_proj(coord[1], coord[0])
                             points.append((x, y))
-                        countypoints.append(points)
-            self.county_polygons = countypoints
+                        usapoints.append(points)
 
-        if (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png").getcolors()) == 1:
+        countypoints = []
+        for feature in countydata["features"]:
+            shape = feature["geometry"]
+            if shape["type"] == "Polygon":
+                points = []
+                for coord in shape["coordinates"][0]:
+                    x, y = mercator_proj(coord[1], coord[0])
+                    points.append((x, y))
+                countypoints.append(points)
+            elif shape["type"] == "MultiPolygon":
+                for subshape in shape["coordinates"]:
+                    points = []
+                    for coord in subshape[0]:
+                        x, y = mercator_proj(coord[1], coord[0])
+                        points.append((x, y))
+                    countypoints.append(points)
+
+        self.state_polygons = usapoints
+        self.county_polygons = countypoints
+
+        if (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png").getcolors()) == 1:
             self.usa = Image.new("RGB", (self.bgwidth, self.bgheight))
+
+            # Draw and save new USA map centered on the middle of the country with state lines only
             usadraw = ImageDraw.Draw(self.usa)
 
-            if usadata:
-                for polygon in usapoints:
-                    temp = []
-                    for p in polygon:
-                        temp.append((self.bgwidth / 2 + (p[0] - self.x0) * USAscale, self.bgheight / 2 - (p[1] - self.y0) * USAscale))
-                    usadraw.polygon((temp), outline=(40, 40, 40))
+            for polygon in usapoints:
+                temp = []
+                for p in polygon:
+                    temp.append((self.bgwidth / 2 + (p[0] - self.x0) * USAscale, self.bgheight / 2 - (p[1] - self.y0) * USAscale))
+                usadraw.polygon((temp), outline=(40, 40, 40))
 
-            self.usa.save(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png")
+            self.usa.save(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png")
 
         else:
-            self.usa = Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}.png")
+            # Load USA map
+            self.usa = Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png")
 
         if genmaps:
+            # Finished loading USA map
             loadingind = 0
             self.sign.matrix.SetPixel(15 + loadingind, 28, 20, 180, 0)
             loadingind += 1
 
-        i = -1
-        for scale in range(self.minzoom, self.maxzoom + self.zoomstep, self.zoomstep):
-            i += 1
-            if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}.png")) or len(Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}.png").getcolors()) == 1:
+        for i, scale in enumerate(self.zooms):
+            if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png").getcolors()) == 1:
                 self.backgrounds[i] = Image.new("RGB", (self.bgwidth, self.bgheight))
                 draw = ImageDraw.Draw(self.backgrounds[i])
 
-                if countydata:
-                    for record in countydata["records"]:
-                        shape = record["fields"]["geo_shape"]
-                        if shape["type"] == "Polygon":
-                            points = []
-                            for coord in shape["coordinates"][0]:
-                                x, y = mercator_proj(coord[1], coord[0])
-                                points.append((self.bgwidth / 2 + (x - self.x1) * scale, self.bgheight / 2 - (y - self.y1) * scale))
-                            draw.polygon((points), outline=(30, 30, 30))
-                        elif shape["type"] == "MultiPolygon":
-                            for subshape in shape["coordinates"]:
-                                points = []
-                                for coord in subshape[0]:
-                                    x, y = mercator_proj(coord[1], coord[0])
-                                    points.append((self.bgwidth / 2 + (x - self.x1) * scale, self.bgheight / 2 - (y - self.y1) * scale))
-                                draw.polygon((points), outline=(30, 30, 30))
+                for polygon in countypoints:
+                    temp = []
+                    for p in polygon:
+                        temp.append((self.bgwidth / 2 + (p[0] - self.x1) * scale, self.bgheight / 2 - (p[1] - self.y1) * scale))
+                    draw.polygon((temp), outline=(30, 30, 30))
 
-                if usadata:
-                    for polygon in usapoints:
-                        temp = []
-                        for p in polygon:
-                            temp.append((self.bgwidth / 2 + (p[0] - self.x1) * scale, self.bgheight / 2 - (p[1] - self.y1) * scale))
-                        draw.polygon((temp), outline=(80, 80, 80))
+                for polygon in usapoints:
+                    temp = []
+                    for p in polygon:
+                        temp.append((self.bgwidth / 2 + (p[0] - self.x1) * scale, self.bgheight / 2 - (p[1] - self.y1) * scale))
+                    draw.polygon((temp), outline=(80, 80, 80))
 
-                self.backgrounds[i].save(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}.png")
+                self.backgrounds[i].save(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")
 
             else:
-                self.backgrounds[i] = Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}.png")
+                self.backgrounds[i] = Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")
 
             if genmaps:
+                # Finished loading this local map
                 self.sign.matrix.SetPixel(15 + loadingind, 28, 20, 180, 0)
                 loadingind += 1
 
-    def genDynamicBackground(self, center_x_merc, center_y_merc, scale):
-        if self._closest_bg_cache is not None and self._closest_bg_scale == scale and self._closest_bg_center is not None:
-            dx = abs((center_x_merc - self._closest_bg_center[0]) * scale)
-            dy = abs((center_y_merc - self._closest_bg_center[1]) * scale)
-            if dx < 1 and dy < 1:
-                return self._closest_bg_cache
+    def genDynamicBackground(self, x_merc, y_merc, zoomind):
 
+        zoom_scale = self.zooms[zoomind]
+
+        if self._closest_bg_cache is not None and self._closest_bg_scale == zoom_scale and self._closest_bg_center is not None:
+            dx = abs((x_merc - self._closest_bg_center[0]) * zoom_scale)
+            dy = abs((y_merc - self._closest_bg_center[1]) * zoom_scale)
+            if dx < 1 and dy < 1:
+                # Cached background is close enough to the current strike location that we can keep using it without redrawing
+                return self._closest_bg_cache, self._closest_bg_center[0], self._closest_bg_center[1]
+
+        # Need to draw a new map centered on the current strike location -
+        # first check if the strike is within the drawable area around the USA.
+
+        testx = abs(x_merc - self.x0) * USAscale <= self.bgwidth / 2
+        testy = abs(y_merc - self.y0) * USAscale <= self.bgheight / 2
+        if not (testx and testy):
+            # Point is outside of the drawable USA, do not generate a
+            # new background centered on this location as it will not
+            # have any of the state or county lines to orient us!
+            if self._closest_bg_cache is not None and self._closest_bg_scale == zoom_scale and self._closest_bg_center is not None:
+                # Keep the previous cached background if we have one
+                return self._closest_bg_cache, self._closest_bg_center[0], self._closest_bg_center[1]
+            else:
+                # Show the local map background if we don't have a cached background to show
+                x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                return self.backgrounds[zoomind], x, y
+
+        # Draw a new background centered on the current strike location
         bg = Image.new("RGB", (self.bgwidth, self.bgheight))
         draw = ImageDraw.Draw(bg)
 
         for polygon in self.county_polygons:
             temp = []
             for p in polygon:
-                temp.append((self.bgwidth / 2 + (p[0] - center_x_merc) * scale, self.bgheight / 2 - (p[1] - center_y_merc) * scale))
+                temp.append((self.bgwidth / 2 + (p[0] - x_merc) * zoom_scale, self.bgheight / 2 - (p[1] - y_merc) * zoom_scale))
             draw.polygon(temp, outline=(30, 30, 30))
 
         for polygon in self.state_polygons:
             temp = []
             for p in polygon:
-                temp.append((self.bgwidth / 2 + (p[0] - center_x_merc) * scale, self.bgheight / 2 - (p[1] - center_y_merc) * scale))
+                temp.append((self.bgwidth / 2 + (p[0] - x_merc) * zoom_scale, self.bgheight / 2 - (p[1] - y_merc) * zoom_scale))
             draw.polygon(temp, outline=(80, 80, 80))
 
         self._closest_bg_cache = bg
-        self._closest_bg_center = (center_x_merc, center_y_merc)
-        self._closest_bg_scale = scale
-        return bg
+        self._closest_bg_center = (x_merc, y_merc)
+        self._closest_bg_scale = zoom_scale
+        return bg, x_merc, y_merc
 
     def decode(self, b):
         e = {}
@@ -463,10 +485,11 @@ class LightningManager:
 
     def draw(self):
 
-        if shared_config.shared_lighting_mode.value == 2:
+        mode = shared_config.shared_lightning_mode.value
+        if mode == 2:
             local = True
             closest_mode = False
-        elif shared_config.shared_lighting_mode.value == 3:
+        elif mode == 3:
             local = False
             closest_mode = True
         else:
@@ -505,8 +528,10 @@ class LightningManager:
                 closest3 = strike
 
         if local:
+            # Local mode only considers strikes within 250 miles
             strikescopy = sorted(filter(lambda n: n["dist"] < 250, strikescopy), key=lambda k: k["time"], reverse=True)
         else:
+            # USA and Closest mode list all strikes, not just nearby strikes
             strikescopy = sorted(strikescopy, key=lambda k: k["time"], reverse=True)
 
         recent = strikescopy
@@ -524,70 +549,72 @@ class LightningManager:
         center_x_merc = None
         center_y_merc = None
 
+        zoomind = shared_config.shared_lightning_zoomind.value
+
         if local:
-            self.background = self.backgrounds[shared_config.shared_lighting_zoomind.value]
+            self.background = self.backgrounds[zoomind]
         elif closest_mode:
             if closest1:
-                center_x_merc, center_y_merc = mercator_proj(closest1["lat"], closest1["lon"])
-                zoom_scale = self.zooms[shared_config.shared_lighting_zoomind.value]
-                self.background = self.genDynamicBackground(center_x_merc, center_y_merc, zoom_scale)
+                x_merc, y_merc = mercator_proj(closest1["lat"], closest1["lon"])
+                bg, center_x, center_y = self.genDynamicBackground(x_merc, y_merc, zoomind)
+                self.background = bg
             else:
-                self.background = None
+                # No closest strike - just show the local map
+                center_x, center_y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                self.background = self.backgrounds[zoomind]
         else:
             self.background = self.usa
 
-        if closest_mode and closest1 is None:
-            # No nearby strikes — show fallback message on map area
-            fallback = Image.new("RGB", (self.bgwidth, self.bgheight))
-            self.sign.canvas.SetImage(fallback.convert("RGB"), 64, 0)
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 68, 14, graphics.Color(70, 70, 215), "No nearby")
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 72, 22, graphics.Color(70, 70, 215), "strikes")
-        else:
-            if self.background:
-                lightningmap = self.background.copy()
-                draw = ImageDraw.Draw(lightningmap)
+        if self.background:
+            lightningmap = self.background.copy()
+            draw = ImageDraw.Draw(lightningmap)
 
-            if lightningmap:
-                if local:
-                    x = self.bgwidth / 2
-                    y = self.bgheight / 2
-                elif closest_mode:
-                    x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
-                    zoom_scale = self.zooms[shared_config.shared_lighting_zoomind.value]
-                    x = self.bgwidth / 2 + (x - center_x_merc) * zoom_scale
-                    y = self.bgheight / 2 - (y - center_y_merc) * zoom_scale
+        if lightningmap:
+            # Draw our home location in blue
+            if local:
+                # Map is centered on us
+                x = self.bgwidth / 2
+                y = self.bgheight / 2
+            elif closest_mode:
+                # Map is centered on a dynamically generated map point (which may not
+                # be the current closest strike due to caching)
+                x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                zoom_scale = self.zooms[zoomind]
+                x = self.bgwidth / 2 + (x - center_x) * zoom_scale
+                y = self.bgheight / 2 - (y - center_y) * zoom_scale
+            else:
+                x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                x = self.bgwidth / 2 + (x - self.x0) * USAscale
+                y = self.bgheight / 2 - (y - self.y0) * USAscale
+            draw.point([x, y], fill=(0, 0, 255))
+
+        if oldest:
+            for strike in oldest:
+                strike_time = strike["time"]
+
+                if strike_time > now:  # desync in server and local clock
+                    continue
+                elif strike_time + 600 <= now:
+                    self.strikes.remove(strike)  # strike hit more than 10 mins ago
+                    continue
                 else:
-                    x, y = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
-                    x = self.bgwidth / 2 + (x - self.x0) * USAscale
-                    y = self.bgheight / 2 - (y - self.y0) * USAscale
-                draw.point([x, y], fill=(0, 0, 255))
+                    color = get_lightning_color(strike_time, now, True)
 
-            if oldest:
-                for strike in oldest:
-                    strike_time = strike["time"]
-
-                    if strike_time > now:  # desync in server and local clock
-                        continue
-                    elif strike_time + 600 <= now:
-                        self.strikes.remove(strike)  # strike hit more than 10 mins ago
-                        continue
+                if lightningmap:
+                    x, y = mercator_proj(strike["lat"], strike["lon"])
+                    if local:
+                        x = self.bgwidth / 2 + (x - self.x1) * self.zooms[zoomind]
+                        y = self.bgheight / 2 - (y - self.y1) * self.zooms[zoomind]
+                    elif closest_mode:
+                        zoom_scale = self.zooms[zoomind]
+                        x = self.bgwidth / 2 + (x - center_x) * zoom_scale
+                        y = self.bgheight / 2 - (y - center_y) * zoom_scale
                     else:
-                        color = get_lightning_color(strike_time, now, True)
+                        x = self.bgwidth / 2 + (x - self.x0) * USAscale
+                        y = self.bgheight / 2 - (y - self.y0) * USAscale
+                    draw.point([x, y], fill=color)
 
-                    if lightningmap:
-                        x, y = mercator_proj(strike["lat"], strike["lon"])
-                        if local:
-                            x = self.bgwidth / 2 + (x - self.x1) * self.zooms[shared_config.shared_lighting_zoomind.value]
-                            y = self.bgheight / 2 - (y - self.y1) * self.zooms[shared_config.shared_lighting_zoomind.value]
-                        elif closest_mode:
-                            zoom_scale = self.zooms[shared_config.shared_lighting_zoomind.value]
-                            x = self.bgwidth / 2 + (x - center_x_merc) * zoom_scale
-                            y = self.bgheight / 2 - (y - center_y_merc) * zoom_scale
-                        else:
-                            x = self.bgwidth / 2 + (x - self.x0) * USAscale
-                            y = self.bgheight / 2 - (y - self.y0) * USAscale
-                        draw.point([x, y], fill=color)
-
+        if lightningmap:
             self.sign.canvas.SetImage(lightningmap.convert("RGB"), 64, 0)
 
         for i in range(32):
@@ -645,9 +672,6 @@ class LightningManager:
         if local:
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
             graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Near")
-        elif closest_mode:
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
-            graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Close")
         else:
             graphics.DrawText(self.sign.canvas, self.sign.font46, 33, 22, graphics.Color(20, 20, 210), "#")
             graphics.DrawText(self.sign.canvas, self.sign.font46, 39, 22, graphics.Color(20, 20, 210), "Global")
@@ -685,8 +709,8 @@ class LightningManager:
 
         self.sign.canvas.Clear()
 
-        self.last_drawn_zoomind.value = shared_config.shared_lighting_zoomind.value
-        self.last_drawn_mode.value = shared_config.shared_lighting_mode.value
+        self.last_drawn_zoomind.value = zoomind
+        self.last_drawn_mode.value = mode
 
     def connect(self):
 
@@ -699,7 +723,7 @@ class LightningManager:
 
                 self.ws_key = base64.b64encode(os.urandom(16)).decode("ascii")
 
-                self.host = "wss://" + self.ws_server + "/"  #'wss://' + self.ws_server + ':3000'
+                self.host = "wss://" + self.ws_server  #'wss://' + self.ws_server + ':3000'
 
                 self.header = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0",
@@ -724,9 +748,13 @@ class LightningManager:
 
                 # self.ws.on_open = self.onOpen
 
+                logging.debug(f"Connecting to blitzortung server: {self.ws_server}...")
+
                 self.thread = Process(target=self.ws.run_forever, kwargs={"host": self.ws_server, "origin": "https://map.blitzortung.org", "sslopt": {"cert_reqs": ssl.CERT_NONE}})
                 self.thread.daemon = True
                 self.thread.start()
+
+                logging.debug("Websocket thread started.")
 
             except Exception as e:
                 logging.error(f"Websocket Exception: {e}")
