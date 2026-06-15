@@ -624,6 +624,9 @@ function recall_free_sketch(filename) {
 }
 
 function delete_free_sketch(filename) {
+    if (!window.confirm("Delete this sketch? This cannot be undone.")) {
+        return;
+    }
     post_json_endpoint("/free_sketch/delete/" + filename, {}, function () {
         load_free_sketch_gallery();
     });
