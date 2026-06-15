@@ -52,16 +52,14 @@ def lightning(sign):
 
                 breakout = sign.wait_loop(0.1)
                 if breakout:
-                    break
+                    return
             LM.close()
         elif LM.connected.value == 0:
             failed_connections += 1
             logging.error(f"Websocket failed to connect {failed_connections} times")
 
-        if breakout:
-            return
-
     shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
+    return
 
 
 def mercator_proj(lat, lon):
