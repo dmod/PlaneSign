@@ -132,7 +132,8 @@ if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
   cp "$INSTALL_DIR/sign.conf.sample" "$INSTALL_DIR/sign.conf"
 fi
 
-mkdir -p "$INSTALL_DIR/sketches" "$INSTALL_DIR/icons/lightning"
+# Make the necessary directories which contain persistent data
+mkdir -p "$INSTALL_DIR/datafiles/" "$INSTALL_DIR/sketches" "$INSTALL_DIR/icons/finance/logos"  "$INSTALL_DIR/icons/lightning" "$INSTALL_DIR/icons/snow/logos"
 
 sudo docker compose -f "$COMPOSE_FILE" config >/dev/null
 sudo docker compose -f "$COMPOSE_FILE" pull
