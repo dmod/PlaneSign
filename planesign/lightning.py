@@ -134,14 +134,6 @@ class LightningManager:
         self._closest_bg_scale = None
         self.genBackgrounds()
 
-    def draw_loading(self):
-        self.sign.canvas.Clear()
-        image = Image.open(f"{shared_config.icons_dir}/11d.png")
-        image = image.resize((35, 35), Image.BICUBIC)
-        self.sign.canvas.SetImage(image.convert("RGB"), 93, -1)
-
-        graphics.DrawText(self.sign.canvas, self.sign.fontreallybig, 7, 15, graphics.Color(180, 180, 40), "Storm Sign")
-
     def genBackgrounds(self):
         self.x0, self.y0 = mercator_proj(USAlat, USAlong)
         self.x1, self.y1 = mercator_proj(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
@@ -149,7 +141,10 @@ class LightningManager:
         countyfile = f"{shared_config.datafiles_dir}/geoBoundaries-USA-ADM2_simplified.geojson"
         usafile = f"{shared_config.datafiles_dir}/geoBoundaries-USA-ADM1_simplified.geojson"
 
-        self.draw_loading()
+        # Draw loading background
+        self.sign.canvas.Clear()
+        image = Image.open(f"{shared_config.icons_dir}/storm.png")
+        self.sign.canvas.SetImage(image.convert('RGB'), 0, 0)
 
         genmaps = (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png").getcolors()) == 1
 
@@ -178,12 +173,18 @@ class LightningManager:
             return
 
         if genmaps:
-            graphics.DrawText(self.sign.canvas, self.sign.font57, 10, 26, graphics.Color(180, 180, 40), "Drawing Maps...")
-            for i in range(self.numzooms + 1):
-                self.sign.canvas.SetPixel(15 + i, 28, 180, 20, 0)
-
+            msg = "Drawing Maps..."
         else:
-            graphics.DrawText(self.sign.canvas, self.sign.font57, 10, 26, graphics.Color(180, 180, 40), "Loading...")
+            msg = "Loading..."
+
+        for i in range(-1, 2):
+            for j in range(-1, 2):
+                graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3 + i, 12 + j, graphics.Color(0, 0, 0), msg)
+        graphics.DrawText(self.sign.canvas, self.sign.fontbig, 3, 12, graphics.Color(255, 255, 120), msg)
+
+        if genmaps:
+            for i in range(self.numzooms + 1):
+                self.sign.canvas.SetPixel(5 + i, 13, 180, 20, 0)
 
         self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
 
@@ -247,7 +248,7 @@ class LightningManager:
         if genmaps:
             # Finished loading USA map
             loadingind = 0
-            self.sign.matrix.SetPixel(15 + loadingind, 28, 20, 180, 0)
+            self.sign.matrix.SetPixel(5 + loadingind, 13, 20, 180, 0)
             loadingind += 1
 
         for i, scale in enumerate(self.zooms):
@@ -273,8 +274,8 @@ class LightningManager:
                 self.backgrounds[i] = Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")
 
             if genmaps:
-                # Finished loading this local map
-                self.sign.matrix.SetPixel(15 + loadingind, 28, 20, 180, 0)
+                # Finished loading a local map
+                self.sign.matrix.SetPixel(5 + loadingind, 13, 20, 180, 0)
                 loadingind += 1
 
     def genDynamicBackground(self, x_merc, y_merc, zoomind):
