@@ -51,6 +51,7 @@ import snowfall
 import santa
 import mandelbrot
 import planesign
+import plants
 import api
 import signal
 import sys

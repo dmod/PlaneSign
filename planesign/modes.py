@@ -21,6 +21,7 @@ class DisplayMode(Enum):
     SANTA = auto()  # Santa tracker
     COUNTDOWN = auto()  # Countdown display
     AQUARIUM = auto()  # Aquarium display
+    PLANTS = auto()  # Plant display
     FIREWORKS = auto()  # Fireworks display
     TRACK_A_FLIGHT = auto()  # Track-a-flight
     CCA = auto()  # Cyclic cellular automata
