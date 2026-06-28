@@ -27,6 +27,8 @@ WORKDIR /planesign
 EXPOSE 80/tcp 443/tcp
 
 COPY . .
+RUN cp -a /planesign/datafiles /planesign/datafiles.init
+RUN chmod +x /planesign/docker-entrypoint.sh
 
 RUN uv sync --frozen --no-install-project --no-dev
 
@@ -44,4 +46,5 @@ RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_n
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
 
+ENTRYPOINT ["/planesign/docker-entrypoint.sh"]
 CMD ["sh", "-c", "service nginx start && uv run planesign/"]
