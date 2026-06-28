@@ -9,6 +9,4 @@ services:
       - ./sign.conf:/planesign/sign.conf
       - ./datafiles:/planesign/datafiles
       - ./sketches:/planesign/sketches
-      - ./icons/finance/logos/:/planesign/icons/finance/logos
-      - ./icons/lightning:/planesign/icons/lightning
-      - ./icons/snow/logos/:/planesign/icons/snow/logos
+      - ./icons:/planesign/icons

@@ -132,8 +132,20 @@ if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
   cp "$INSTALL_DIR/sign.conf.sample" "$INSTALL_DIR/sign.conf"
 fi
 
-# Make the necessary directories which contain persistent data
-mkdir -p "$INSTALL_DIR/datafiles/" "$INSTALL_DIR/sketches" "$INSTALL_DIR/icons/finance/logos"  "$INSTALL_DIR/icons/lightning" "$INSTALL_DIR/icons/snow/logos"
+# Create persistent host directories and seed them from the PlaneSign git source.
+mkdir -p "$INSTALL_DIR"
+temp_clone="$(mktemp -d)"
+git clone --depth 1 https://github.com/dmod/PlaneSign.git "$temp_clone"
+for dir in datafiles sketches icons; do
+  if [ -d "$temp_clone/$dir" ]; then
+    mkdir -p "$INSTALL_DIR/$dir"
+    echo "Syncing $dir from git source into host directory..."
+    cp -a "$temp_clone/$dir/." "$INSTALL_DIR/$dir/"
+  else
+    mkdir -p "$INSTALL_DIR/$dir"
+  fi
+done
+rm -rf "$temp_clone"
 
 sudo docker compose -f "$COMPOSE_FILE" config >/dev/null
 sudo docker compose -f "$COMPOSE_FILE" pull
