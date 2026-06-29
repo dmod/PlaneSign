@@ -80,22 +80,27 @@ def plantmode(sign):
     background = Image.open(f"{shared_config.icons_dir}/plants/Background.png").convert('RGB')
 
     # Format is: (Plant name, x0, y0, growthInterval (mins), 0 <= availability weight <= 1)
-    plantlist = [("Anthurium",       6,   21,    1+random.random(),      1.0),
+    plantlist = [("Alocasia",        8,   25,    1.5+random.random(),    1.0),
+                ("Anthurium",        6,   21,    1+random.random(),      1.0),
                 ("Begonia",          10,  22,    1.5+random.random(),    0.9),
                 ("Bromeliad",        11,  22,    2+random.random(),      1.0),
                 ("Cactus",           4,   13,    5+random.random(),      1.0),
                 ("CrownOfThorns",    8,   22,    3+random.random(),      1.0),
+                ("Codiaeum",         9,   27,    1.5+random.random(),    1.0),
                 ("Daisy",            4,   19,    1.5+random.random(),    1.0),
                 ("EnglishIvy",       15,  18,    1+random.random(),      1.0),
                 ("Fern",             6,   13,    1+random.random(),      1.0),
+                ("Kalanchoe",        6,   14,    1+random.random(),      1.0),
                 ("Lavender",         6,   25,    1+random.random(),      1.0),
                 ("Orchid",           8,   22,    3+random.random(),      1.0),
+                ("PeaceLily",        7,   22,    1+random.random(),      1.0),
                 ("Philodendron",     13,  23,    2+random.random(),      0.9),
                 ("Pitcherplant",     13,  20,    3+random.random(),      0.7),
                 ("Pothos",           8,   18,    1+random.random(),      1.0),
                 ("Prayerplant",      13,  23,    2+random.random(),      0.8),
                 ("Rafflesia",        13,  23,    10*(1+random.random()), 0.05),
                 ("Rubberplant",      7,   26,    2+random.random(),      0.8),
+                ("SagoPalm",         11,  24,    1.5+random.random(),    0.9),
                 ("Succulent",        4,   9,     3+random.random(),      1.0),
                 ("Violet",           5,   15,    1+random.random(),      1.0),
                 ("XmasCactus",       12,  14,    1+random.random(),      1.0)]
