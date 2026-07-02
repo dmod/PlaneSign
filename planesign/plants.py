@@ -81,6 +81,7 @@ def plantmode(sign):
 
     # Format is: (Plant name, x0, y0, growthInterval (mins), 0 <= availability weight <= 1)
     plantlist = [("Alocasia",        8,   25,    1.5+random.random(),    1.0),
+                ("Amaryllis",        8,   27,    1+random.random(),      1.0),
                 ("Anthurium",        6,   21,    1+random.random(),      1.0),
                 ("Begonia",          10,  22,    1.5+random.random(),    0.9),
                 ("Bonsai",           8,   17,    9+random.random(),      0.1),
@@ -92,6 +93,7 @@ def plantmode(sign):
                 ("Dracaena",         8,   23,    2.5+random.random(),    1.0),
                 ("EnglishIvy",       15,  18,    1+random.random(),      1.0),
                 ("Fern",             6,   13,    1+random.random(),      1.0),
+                ("Hibiscus",         10,  26,    1+random.random(),      1.0),
                 ("Kalanchoe",        6,   14,    1+random.random(),      1.0),
                 ("Lavender",         6,   25,    1+random.random(),      1.0),
                 ("Orchid",           8,   22,    3+random.random(),      1.0),
@@ -104,6 +106,7 @@ def plantmode(sign):
                 ("Rafflesia",        13,  23,    10*(1+random.random()), 0.05),
                 ("Rubberplant",      7,   26,    2+random.random(),      0.8),
                 ("SagoPalm",         11,  24,    1.5+random.random(),    0.9),
+                ("SpiderPlant",      9,   16,    1+random.random(),      1.0),
                 ("Succulent",        4,   9,     3+random.random(),      1.0),
                 ("Violet",           5,   15,    1+random.random(),      1.0),
                 ("XmasCactus",       12,  14,    1+random.random(),      1.0)]
@@ -154,9 +157,6 @@ def plantmode(sign):
                 # Plant fits on the table
                 plants.append(plant)
                 extent = test_extent
-            else:
-                # Can't fit any more plants on the table
-                break
 
         if (len(plants) >= min_plants or attempt >= max_attempts):
             # Try and get more than 5 plants on the table at once
