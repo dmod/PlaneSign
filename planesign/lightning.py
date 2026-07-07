@@ -8,7 +8,8 @@ import time
 import os
 import base64
 import ssl
-from multiprocessing import Process, Manager, Value
+from multiprocessing import Process, Value, Manager
+import threading
 import numpy as np
 import utilities
 from rgbmatrix import graphics
@@ -34,32 +35,35 @@ def lightning(sign):
 
     LM = LightningManager(sign)
 
-    sign.canvas.Clear()
-    last_draw = None
-    failed_connections = 0
-    breakout = False
-    while failed_connections < 3:
-        if LM.connected.value == 0:
-            LM.connect()
+    try:
+        sign.canvas.Clear()
+        last_draw = None
+        failed_connections = 0
+        breakout = False
+        while failed_connections < 3:
+            if LM.connected.value == 0:
+                LM.connect()
 
-        if LM.connected.value == 1:
-            failed_connections = 0
+            if LM.connected.value == 1:
+                failed_connections = 0
 
-            while LM.connected.value:
-                if last_draw is None or time.perf_counter() - last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lightning_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lightning_mode.value):
-                    LM.draw()
-                    last_draw = time.perf_counter()
+                while LM.connected.value:
+                    if last_draw is None or time.perf_counter() - last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lightning_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lightning_mode.value):
+                        LM.draw()
+                        last_draw = time.perf_counter()
 
-                breakout = sign.wait_loop(0.1)
-                if breakout:
-                    return
-            LM.close()
-        elif LM.connected.value == 0:
-            failed_connections += 1
-            logging.error(f"Websocket failed to connect {failed_connections} times")
+                    breakout = sign.wait_loop(0.1)
+                    if breakout:
+                        return
+                LM.close()
+            elif LM.connected.value == 0:
+                failed_connections += 1
+                logging.error(f"Websocket failed to connect {failed_connections} times")
 
-    shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
-    return
+        shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
+        return
+    finally:
+        LM.close()
 
 
 def mercator_proj(lat, lon):
@@ -109,7 +113,6 @@ class LightningManager:
         self.header = None
         self.floc = f"{shared_config.icons_dir}/lightning/"
         self.connected = Value("i", 0)
-        self.strikes = Manager().list()
         self.sign = sign
         self.bgwidth = 64
         self.bgheight = 32
@@ -129,6 +132,10 @@ class LightningManager:
         self.last_drawn_mode = Value("i", 1)
         self.county_polygons = []
         self.state_polygons = []
+        self._manager = Manager()
+        self.strikes = self._manager.list()
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread = None
         self._closest_bg_cache = None
         self._closest_bg_center = None
         self._closest_bg_scale = None
@@ -363,17 +370,19 @@ class LightningManager:
 
         strike = {"time": strike_js["time"] / 1e9, "lat": strike_js["lat"], "lon": strike_js["lon"], "dist": utilities.get_distance((strike_js["lat"], strike_js["lon"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))), "radius": dets[len(dets) - 2]}
         # print(strike)
-        self.strikes.append(strike)
+        try:
+            self.strikes.append(strike)
+        except Exception as exc:
+            logging.warning(f"Failed to queue lightning strike: {exc}")
+            self.connected.value = 0
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
         self.connected.value = 0
-        # self.close()
 
     def onClose(self, ws, close_status_code="", close_msg=""):
         logging.debug(f"Websocket Closed: {close_status_code} : {close_msg}")
         self.connected.value = 0
-        # self.close()
 
     def onOpen(self, ws):
 
@@ -469,18 +478,39 @@ class LightningManager:
             def heartbeat(*args):
                 tmp = {}
                 tmp[heartbeatmode] = heartbeatkey
-                while True:
-                    json_data = json.dumps(tmp)
+                while not self._heartbeat_stop.is_set():
+                    if self.connected.value != 1 or self.ws is None:
+                        break
+                    try:
+                        json_data = json.dumps(tmp)
+                        self.ws.send(json_data)
+                    except Exception as exc:
+                        logging.debug(f"Heartbeat send failed: {exc}")
+                        break
                     time.sleep(heartbeatinterval)
-                    ws.send(json_data)
 
-            thread.start_new_thread(heartbeat, ())
+            self._heartbeat_stop = threading.Event()
+            self._heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+            self._heartbeat_thread.start()
 
     def close(self):
-        # if self.connected.value == 1:
-        #    self.ws.close()
+        self._heartbeat_stop.set()
+        if self._heartbeat_thread and self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.join(timeout=1)
+            self._heartbeat_thread = None
+
+        if self.ws is not None:
+            try:
+                self.ws.close()
+            except Exception as exc:
+                logging.debug(f"Websocket close failed: {exc}")
+            self.ws = None
+
         if self.thread and self.thread.is_alive():
             self.thread.terminate()
+            self.thread.join(timeout=2)
+
+        self.connected.value = 0
 
     def draw(self):
 
@@ -716,6 +746,9 @@ class LightningManager:
         if not self.connected.value:
             self.connected.value = 2
             try:
+                if self.thread and self.thread.is_alive():
+                    self.close()
+
                 ws_servers = ["ws1.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
 
                 self.ws_server = ws_servers[random.randint(0, len(ws_servers) - 1)]
