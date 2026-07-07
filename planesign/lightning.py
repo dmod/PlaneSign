@@ -55,11 +55,12 @@ def lightning(sign):
                     breakout = sign.wait_loop(0.1)
                     if breakout:
                         return
-                LM.close()
+
             elif LM.connected.value == 0:
                 failed_connections += 1
                 logging.error(f"Websocket failed to connect {failed_connections} times")
 
+        # Only set mode to PLANES_ALERT if we exited due to connection failures, not if we're switching modes
         shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
         return
     finally:
@@ -506,11 +507,11 @@ class LightningManager:
                 logging.debug(f"Websocket close failed: {exc}")
             self.ws = None
 
-        if self.thread and self.thread.is_alive():
-            self.thread.terminate()
-            self.thread.join(timeout=2)
-
+        # Signal the connected value and wait for the thread to exit
         self.connected.value = 0
+
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2)
 
     def draw(self):
 
@@ -782,8 +783,8 @@ class LightningManager:
 
                 logging.debug(f"Connecting to blitzortung server: {self.ws_server}...")
 
-                self.thread = Process(target=self.ws.run_forever, kwargs={"host": self.ws_server, "origin": "https://map.blitzortung.org", "sslopt": {"cert_reqs": ssl.CERT_NONE}})
-                self.thread.daemon = True
+                # Using threading instead of multiprocessing, so we can close the websocket directly
+                self.thread = threading.Thread(target=self.ws.run_forever, kwargs={"host": self.ws_server, "origin": "https://map.blitzortung.org", "sslopt": {"cert_reqs": ssl.CERT_NONE}}, daemon=True)
                 self.thread.start()
 
                 logging.debug("Websocket thread started.")
