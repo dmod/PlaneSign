@@ -513,6 +513,17 @@ class LightningManager:
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=2)
 
+    def mark_strike_warned(self, strike):
+        if strike is None:
+            return False
+
+        for index, current in enumerate(self.strikes):
+            if current is strike:
+                self.strikes[index] = {**dict(current), "warned": True}
+                return True
+
+        return False
+
     def draw(self):
 
         mode = shared_config.shared_lightning_mode.value
@@ -710,9 +721,9 @@ class LightningManager:
 
         graphics.DrawText(self.sign.canvas, self.sign.font57, 33, 30, graphics.Color(180, 180, 40), str(numstrikes))
 
-        if closest1 and closest1["dist"] < 2 and closest1["time"] + 30 > now and ("warned" not in closest1):
+        if closest1 and closest1["dist"] < 2 and closest1["time"] + 30 > now and not closest1.get("warned", False):
             logging.info(f"LIGHTNING STRIKE DANGER: Strike detected {closest1['dist']} miles away!")
-            self.strikes[self.strikes.index(closest1)]["warned"] = True
+            self.mark_strike_warned(closest1)
             old = self.sign.matrix.SwapOnVSync(self.sign.canvas)
             for j in range(6):
                 if j % 2 == 0:
