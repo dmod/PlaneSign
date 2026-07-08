@@ -70,7 +70,7 @@ class Advertisement(dbus.service.Object):
             properties["ServiceData"] = dbus.Dictionary(self.service_data, signature="sv")
         if self.local_name is not None:
             properties["LocalName"] = dbus.String(self.local_name)
-        if self.include_tx_power is not None:
+        if self.include_tx_power:
             properties["IncludeTxPower"] = dbus.Boolean(self.include_tx_power)
 
         if self.data is not None:
@@ -143,6 +143,16 @@ def find_adapter(bus):
             print("Selecting adapter:", o)
             return o
         print("Skip adapter:", o)
+    return None
+
+
+def find_adapter_wait(bus, timeout_seconds=15, interval=0.5):
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        adapter = find_adapter(bus)
+        if adapter:
+            return adapter
+        time.sleep(interval)
     return None
 
 

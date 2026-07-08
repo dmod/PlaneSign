@@ -2,6 +2,7 @@ import dbus, dbus.mainloop.glib
 import fcntl
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -9,14 +10,16 @@ import urllib.error
 import urllib.request
 from gi.repository import GLib
 from gatt import Application, Advertisement, Service, Characteristic
-from gatt import find_adapter, set_adapter_name, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
+from gatt import find_adapter_wait, set_adapter_name, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
 from wifi import get_current_wifi_status, scan_wifi, configure_wifi
 
 BLUEZ_SERVICE_NAME = "org.bluez"
 DBUS_OM_IFACE = "org.freedesktop.DBus.ObjectManager"
+DBUS_PROP_IFACE = "org.freedesktop.DBus.Properties"
 LE_ADVERTISING_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
 GATT_MANAGER_IFACE = "org.bluez.GattManager1"
 GATT_CHRC_IFACE = "org.bluez.GattCharacteristic1"
+ADAPTER_IFACE = "org.bluez.Adapter1"
 PLANESIGN_MASTER_UUID = "3d951a35-76c5-4207-a150-2d0cf7d2bfdd"
 DOCKER_CONTAINER_NAME = "PlaneSignRuntime"
 DOCKER_IMAGE = "ghcr.io/dmod/planesign:latest"
@@ -340,7 +343,14 @@ class PlanesignBLEAdvertisement(Advertisement):
     def __init__(self, bus, index, device_name):
         Advertisement.__init__(self, bus, index, "peripheral")
         self.add_service_uuid(PLANESIGN_MASTER_UUID)
-        self.add_local_name(device_name)
+        self.add_local_name(device_name or "PlaneSign")
+        self.include_tx_power = False
+
+
+class PlanesignBLEFallbackAdvertisement(Advertisement):
+    def __init__(self, bus, index, device_name):
+        Advertisement.__init__(self, bus, index, "peripheral")
+        self.add_local_name(device_name or "PlaneSign")
         self.include_tx_power = True
 
 
@@ -544,6 +554,21 @@ class DockerContainerControlCharacteristic(Characteristic):
         return f"status unavailable: {stderr or stderr2 or 'unknown error'}"
 
 
+def wait_for_adapter_powered(bus, adapter, timeout_seconds=15):
+    props = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), DBUS_PROP_IFACE)
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            powered = props.Get(ADAPTER_IFACE, "Powered")
+            if powered:
+                return True
+            props.Set(ADAPTER_IFACE, "Powered", dbus.Boolean(True))
+        except Exception as exc:
+            print(f"Bluetooth power wait failed: {exc}")
+        time.sleep(0.5)
+    return False
+
+
 class WiFiScanCharacteristic(Characteristic):
     WIFI_SCAN_CHRC_UUID = "99945678-1234-5678-1234-56789abcdef3"
 
@@ -561,16 +586,18 @@ def main():
     global mainloop
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
-    adapter = find_adapter(bus)
+    adapter = find_adapter_wait(bus, timeout_seconds=15)
     if not adapter:
-        print("BLE adapter not found")
+        print("BLE adapter not found after waiting")
         return
 
     # Set device name consistently
     device_name = f"PlaneSign-BLE-{get_mac_id()}"
 
-    # Set the Bluetooth device name
+    # Set the Bluetooth device name and wait for the adapter to settle.
     set_adapter_name(bus, adapter, device_name)
+    if not wait_for_adapter_powered(bus, adapter, timeout_seconds=15):
+        print("Warning: Bluetooth adapter did not become powered in time")
 
     service_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), GATT_MANAGER_IFACE)
     ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), LE_ADVERTISING_MANAGER_IFACE)
@@ -579,9 +606,48 @@ def main():
     adv = PlanesignBLEAdvertisement(bus, 0, device_name)
 
     mainloop = GLib.MainLoop()
+    ad_state = {"count": 0, "fallback": False, "adv": adv}
 
-    service_manager.RegisterApplication(app.get_path(), {}, reply_handler=register_app_cb, error_handler=register_app_error_cb)
-    ad_manager.RegisterAdvertisement(adv.get_path(), {}, reply_handler=register_ad_cb, error_handler=register_ad_error_cb)
+    def on_ad_registered():
+        register_ad_cb()
+
+    def on_ad_error(error):
+        ad_state["count"] += 1
+        print(f"Advertisement registration error (attempt {ad_state['count']}): {error}")
+        if not ad_state["fallback"]:
+            print("Falling back to minimal advertisement payload")
+            ad_state["fallback"] = True
+            ad_state["count"] = 0
+            ad_state["adv"] = PlanesignBLEFallbackAdvertisement(bus, 1, device_name)
+            GLib.timeout_add_seconds(2, try_register_ad)
+            return
+        if ad_state["count"] < 5:
+            print("Retrying advertisement registration in 2 seconds...")
+            GLib.timeout_add_seconds(2, try_register_ad)
+        else:
+            print("Advertisement registration failed after retries")
+            mainloop.quit()
+
+    def try_register_ad():
+        try:
+            adv_obj = ad_state["adv"]
+            print(f"Attempting advertisement registration (attempt {ad_state['count'] + 1})")
+            ad_manager.RegisterAdvertisement(adv_obj.get_path(), {}, reply_handler=on_ad_registered, error_handler=on_ad_error)
+        except Exception as exc:
+            print(f"Synchronous advertisement registration call failed: {exc}")
+            ad_state["count"] += 1
+            if ad_state["count"] < 5:
+                GLib.timeout_add_seconds(2, try_register_ad)
+            else:
+                print("Advertisement registration failed after retries")
+                mainloop.quit()
+        return False
+
+    def on_app_registered():
+        register_app_cb()
+        try_register_ad()
+
+    service_manager.RegisterApplication(app.get_path(), {}, reply_handler=on_app_registered, error_handler=register_app_error_cb)
     try:
         mainloop.run()
     except KeyboardInterrupt:
