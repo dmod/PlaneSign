@@ -1,3 +1,5 @@
+import time
+
 import dbus
 import dbus.exceptions
 import dbus.mainloop.glib
@@ -123,9 +125,14 @@ def register_ad_cb():
     print("Advertisement registered")
 
 
+def _quit_mainloop():
+    if mainloop is not None:
+        mainloop.quit()
+
+
 def register_ad_error_cb(error):
     print("Failed to register advertisement: " + str(error))
-    mainloop.quit()
+    _quit_mainloop()
 
 
 def find_adapter(bus):
@@ -144,13 +151,32 @@ def set_adapter_name(bus, adapter, name):
     adapter_props.Set(ADAPTER_IFACE, "Alias", name)
 
 
+def ensure_adapter_ready(bus, adapter, timeout_seconds=15):
+    adapter_props = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter), DBUS_PROP_IFACE)
+    try:
+        adapter_props.Set(ADAPTER_IFACE, "Powered", dbus.Boolean(True))
+    except Exception as exc:
+        print(f"Unable to enable Bluetooth adapter: {exc}")
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            powered = adapter_props.Get(ADAPTER_IFACE, "Powered")
+            if powered:
+                return True
+        except Exception as exc:
+            print(f"Adapter readiness probe failed: {exc}")
+        time.sleep(0.5)
+    return False
+
+
 def register_app_cb():
     print("GATT application registered")
 
 
 def register_app_error_cb(error):
     print("Failed to register application: " + str(error))
-    mainloop.quit()
+    _quit_mainloop()
 
 
 class Service(dbus.service.Object):

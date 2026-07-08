@@ -95,8 +95,11 @@ download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 
 # Install bluetooth support
 sudo apt-get update
-sudo apt install -y python3-dbus
+sudo apt install -y bluez python3-dbus
+sudo systemctl enable bluetooth
+sudo systemctl restart bluetooth
 sudo rfkill unblock bluetooth || echo "Warning: unable to unblock Bluetooth"
+(echo "power on"; echo "quit") | bluetoothctl >/dev/null 2>&1 || true
 
 sudo ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
 sudo systemctl daemon-reload

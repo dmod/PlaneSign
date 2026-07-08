@@ -1,11 +1,15 @@
 [Unit]
 Description=Start the BLE server
+After=bluetooth.service
+Wants=bluetooth.service
+
 [Service]
 User=root
 Group=root
 Type=oneshot
-ExecStartPre=/bin/sleep 30
-ExecStart=/usr/bin/python -u /home/pi/PlaneSign/ble/planesign_ble.py
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do systemctl is-active --quiet bluetooth.service && break; sleep 1; done'
+ExecStart=/usr/bin/python3 -u /home/pi/PlaneSign/ble/planesign_ble.py
+
 [Install]
 WantedBy=multi-user.target
 
