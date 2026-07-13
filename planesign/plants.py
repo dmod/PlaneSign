@@ -4,6 +4,7 @@
 from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 import random
 import time
+import math
 import logging
 from PIL import Image, ImageEnhance, ImageFilter
 import shared_config
@@ -17,6 +18,7 @@ class Sprite:
         self.maxFrames = 0
         self.currFrame = 0
         self.lastFrame = None
+        self.lastDraw = None
         self.lastFrameChange = None
         self.brighten = False
         self.width = 0
@@ -47,10 +49,12 @@ class Sprite:
 
     def draw(self, im):
         if self.maxFrames > 0:
+            now = time.perf_counter()
             frame = self.frames[self.currFrame].convert("RGBA")
             im.paste(frame, (self.x-self.x0, self.y-self.y0), frame)
+            self.lastDraw = now
             if self.currFrame != self.lastFrame:
-                self.lastFrameChange = time.perf_counter()
+                self.lastFrameChange = now
                 self.lastFrame = self.currFrame
 
 class Plant(Sprite):
@@ -69,6 +73,93 @@ class Plant(Sprite):
         if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.growthInterval):
             if (self.currFrame < self.maxFrames - 1):
                 self.currFrame = self.currFrame + 1
+
+        super().draw(im)
+
+class Bee(Sprite):
+    def __init__(self):
+        Sprite.__init__(self)
+        self.brighten = True
+        self.maxSpeed = 15.0
+        self.minSpeed = 2.0
+        self.accel = 5.0
+        self.speed = 5.0
+        self.frameRate = 0.05
+        self.lastMove = None
+        self.moveInterval = 3
+        self.maxMoveInterval = 6
+        self.minMoveInterval = 3
+        self.realx = None
+        self.realy = None
+        self.targetX = None
+        self.targetY = None
+        self.increment = 1
+        self.facing = None
+
+    def loadframes(self, name):
+        super().loadframes(name)
+        if self.maxFrames > 0:
+            self.currFrame = 0
+            self.facing = [-1 for _ in range(self.maxFrames)]
+        
+    def move(self):
+        now = time.perf_counter()
+        if self.lastDraw is not None:
+            dt = now - self.lastDraw
+        else:
+            dt = 0
+
+        if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or \
+           (self.targetX is not None and self.targetY is not None and \
+            math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
+            self.moveInterval = random.uniform(self.minMoveInterval, self.maxMoveInterval)
+            self.lastMove = now
+
+            while True:
+                self.targetX = random.uniform(3.0, 124.0)
+                self.targetY = random.uniform(3.0, 28.0)
+
+                dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
+                if (dist > 10.0) and abs(self.realx - self.targetX) > 5.0:
+                    break
+
+
+        dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
+        direction = math.atan2(self.targetY - self.realy, self.targetX - self.realx)
+
+        dv = self.accel * dt
+        if dist <= 10.0:
+            dv *= -1
+
+        self.speed = max(self.minSpeed, min(self.speed + dv, self.maxSpeed))
+        self.realx += math.cos(direction) * self.speed * dt
+        self.realy += math.sin(direction) * self.speed * dt
+
+        self.x = round(self.realx)
+        self.y = round(self.realy)
+
+    def draw(self, im):
+        # Change frames if we need to before drawing
+        if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.frameRate):
+            if (self.currFrame >= self.maxFrames - 1):
+                self.increment = -1
+            elif (self.currFrame <= 0):
+                self.increment = 1
+            
+            self.currFrame += self.increment
+
+        # Move
+        self.move()
+
+        # Change spire direction
+        if self.realx > self.targetX:
+            facing = -1
+        elif self.realx < self.targetX:
+            facing = 1
+        
+        if self.facing[self.currFrame] != facing:
+            self.facing[self.currFrame] = facing
+            self.frames[self.currFrame] = self.frames[self.currFrame].transpose(Image.FLIP_LEFT_RIGHT)
 
         super().draw(im)
 
@@ -171,6 +262,16 @@ def plantmode(sign):
 
     plants = sorted(plants, key=lambda p: p.y)
 
+    # Summon critters
+    bee = Bee()
+    bee.loadframes("bee")
+    bee.x0 = 2
+    bee.y0 = 2
+    bee.realx = random.uniform(3.0, 124.0)
+    bee.realy = random.uniform(3.0, 28.0)
+    bee.x = round(bee.realx)
+    bee.y = round(bee.realy)
+
     while shared_config.shared_mode.value == DisplayMode.PLANTS.value:
 
         bg = background.copy()
@@ -178,11 +279,13 @@ def plantmode(sign):
         for plant in plants:
             plant.draw(bg)
 
+        bee.draw(bg)
+
         sign.canvas.SetImage(bg.convert('RGB'), 0, 0)
         
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
 
-        breakout = sign.wait_loop(0.1)
+        breakout = sign.wait_loop(0.01)
         if breakout:
             break
