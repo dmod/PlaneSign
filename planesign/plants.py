@@ -232,7 +232,7 @@ def handle_critters(critters):
 
     #fireflies = [critter for critter in critters if critter.__class__.__name__ == "Firefly"]
 
-    if handle_critters.lastSummonAttempt is None or now >= handle_critters.lastSummon + handle_critters.summonAttemptInterval:
+    if handle_critters.lastSummonAttempt is None or now >= handle_critters.lastSummonAttempt + handle_critters.summonAttemptInterval:
         
         handle_critters.lastSummonAttempt = now
 
