@@ -232,19 +232,21 @@ def handle_critters(critters):
 
     #fireflies = [critter for critter in critters if critter.__class__.__name__ == "Firefly"]
 
-    if handle_critters.lastSummon is None or now >= handle_critters.lastSummon + handle_critters.summonAttemptInterval:
+    if handle_critters.lastSummonAttempt is None or now >= handle_critters.lastSummon + handle_critters.summonAttemptInterval:
+        
+        handle_critters.lastSummonAttempt = now
+
         if num_critters < handle_critters.maxCritters and random.random() < 0.1:
 
             if num_bees < 3:
                 critter = Bee()
                 critters.append(critter)
-                handle_critters.lastSummon = now
 
 @__main__.planesign_mode_handler(DisplayMode.PLANTS)
 def plantmode(sign):
     sign.canvas.Clear()
 
-    handle_critters.lastSummon = None
+    handle_critters.lastSummonAttempt = None
     handle_critters.summonAttemptInterval = 30
     handle_critters.maxCritters = 5
 
