@@ -59,7 +59,7 @@ class Sprite:
 
 class Plant(Sprite):
     def __init__(self):
-        Sprite.__init__(self)
+        super().__init__()
         self.growthInterval = 1
         self.brighten = True
 
@@ -76,10 +76,11 @@ class Plant(Sprite):
 
         super().draw(im)
 
-class Bee(Sprite):
+class Critter(Sprite):
     def __init__(self):
-        Sprite.__init__(self)
-        self.brighten = True
+        super().__init__()
+        self.summonTime = None
+        self.lifeTime = 60.0
         self.maxSpeed = 15.0
         self.minSpeed = 2.0
         self.accel = 5.0
@@ -95,58 +96,50 @@ class Bee(Sprite):
         self.targetY = None
         self.increment = 1
         self.facing = None
+        self.boomerang = False
+        self.leaveFlag = False
+        self.despawnFlag = False
+
+    def summon(self):
+        now = time.perf_counter()
+        self.summonTime = now
+        self.targetX = random.uniform(3.0, 124.0)
+        self.targetY = random.uniform(3.0, 28.0)
+        self.realx = (random.uniform(-10.0, 0.0) if random.random()<0.5 else random.uniform(128.0, 138.0))
+        self.realy = random.uniform(3.0, 28.0)
+        self.x = round(self.realx)
+        self.y = round(self.realy)
+
+    def leave(self):
+        self.leaveFlag = True
+        self.targetX = (random.uniform(-10.0, -5.0) if random.random()<0.5 else random.uniform(133.0, 138.0))
+        self.targetY = random.uniform(3.0, 28.0)
 
     def loadframes(self, name):
         super().loadframes(name)
         if self.maxFrames > 0:
             self.currFrame = 0
             self.facing = [-1 for _ in range(self.maxFrames)]
-        
+
     def move(self):
-        now = time.perf_counter()
-        if self.lastDraw is not None:
-            dt = now - self.lastDraw
-        else:
-            dt = 0
-
-        if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or \
-           (self.targetX is not None and self.targetY is not None and \
-            math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
-            self.moveInterval = random.uniform(self.minMoveInterval, self.maxMoveInterval)
-            self.lastMove = now
-
-            while True:
-                self.targetX = random.uniform(3.0, 124.0)
-                self.targetY = random.uniform(3.0, 28.0)
-
-                dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
-                if (dist > 10.0) and abs(self.realx - self.targetX) > 5.0:
-                    break
-
-
-        dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
-        direction = math.atan2(self.targetY - self.realy, self.targetX - self.realx)
-
-        dv = self.accel * dt
-        if dist <= 10.0:
-            dv *= -1
-
-        self.speed = max(self.minSpeed, min(self.speed + dv, self.maxSpeed))
-        self.realx += math.cos(direction) * self.speed * dt
-        self.realy += math.sin(direction) * self.speed * dt
-
-        self.x = round(self.realx)
-        self.y = round(self.realy)
+        # Critter base class has no implementation for moving.
+        # Derived classes will implement their own
+        return
 
     def draw(self, im):
         # Change frames if we need to before drawing
         if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.frameRate):
-            if (self.currFrame >= self.maxFrames - 1):
-                self.increment = -1
-            elif (self.currFrame <= 0):
-                self.increment = 1
+
+            if self.boomerang:
+                if (self.currFrame >= self.maxFrames - 1):
+                    self.increment = -1
+                elif (self.currFrame <= 0):
+                    self.increment = 1
+
+                self.currFrame += self.increment
+            else:
             
-            self.currFrame += self.increment
+                self.currFrame = (self.currframe + 1) % self.maxFrames
 
         # Move
         self.move()
@@ -163,10 +156,97 @@ class Bee(Sprite):
 
         super().draw(im)
 
+class FlyingBug(Critter):
+    def __init__(self):
+        super().__init__()
+        self.brighten = True
+
+    def move(self):
+        now = time.perf_counter()
+        if self.lastDraw is not None:
+            dt = now - self.lastDraw
+        else:
+            dt = 0
+
+        if self.leaveFlag:
+            # Leaving
+            if math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0 \
+               or self.realx < -10.0 or self.realx > 138.0 or self.realy < -10.0 or self.realy > 41.0:
+                # Set despawn flag
+                self.despawnFlag = True
+        else:
+            if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or \
+            (self.targetX is not None and self.targetY is not None and \
+                math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
+                self.moveInterval = random.uniform(self.minMoveInterval, self.maxMoveInterval)
+                self.lastMove = now
+
+                while True:
+                    self.targetX = random.uniform(3.0, 124.0)
+                    self.targetY = random.uniform(3.0, 28.0)
+
+                    dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
+                    if (dist > 10.0) and abs(self.realx - self.targetX) > 5.0:
+                        break
+
+        dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
+        direction = math.atan2(self.targetY - self.realy, self.targetX - self.realx)
+
+        dv = self.accel * dt
+        if dist <= 10.0:
+            dv *= -1
+
+        self.speed = max(self.minSpeed, min(self.speed + dv, self.maxSpeed))
+        self.realx += math.cos(direction) * self.speed * dt
+        self.realy += math.sin(direction) * self.speed * dt
+
+        self.x = round(self.realx)
+        self.y = round(self.realy)
+
+class Bee(FlyingBug):
+    def __init__(self):
+        super().__init__()
+        super().loadframes("bee")
+        self.lifeTime = random.uniform(60.0, 120.0)
+        self.boomerang = True
+        self.x0 = 2
+        self.y0 = 2
+        self.summon()
+
+def handle_critters(critters):
+
+    now = time.perf_counter()
+
+    # Handle despawning
+    for critter in critters:
+        if (critter.despawnFlag):
+            critters.remove(critter)
+        elif (not critter.leaveFlag):
+            if (critter.summonTime is not None and now >= critter.summonTime + critter.lifeTime):
+                critter.leave()
+
+    num_critters = len(critters)
+
+    bees = [critter for critter in critters if critter.__class__.__name__ == "Bee"]
+    num_bees = len(bees)
+
+    #fireflies = [critter for critter in critters if critter.__class__.__name__ == "Firefly"]
+
+    if handle_critters.lastSummon is None or now >= handle_critters.lastSummon + handle_critters.summonAttemptInterval:
+        if num_critters < handle_critters.maxCritters and random.random() < 0.1:
+
+            if num_bees < 3:
+                critter = Bee()
+                critters.append(critter)
+                handle_critters.lastSummon = now
 
 @__main__.planesign_mode_handler(DisplayMode.PLANTS)
 def plantmode(sign):
     sign.canvas.Clear()
+
+    handle_critters.lastSummon = None
+    handle_critters.summonAttemptInterval = 30
+    handle_critters.maxCritters = 5
 
     background = Image.open(f"{shared_config.icons_dir}/plants/Background.png").convert('RGB')
 
@@ -262,15 +342,8 @@ def plantmode(sign):
 
     plants = sorted(plants, key=lambda p: p.y)
 
-    # Summon critters
-    bee = Bee()
-    bee.loadframes("bee")
-    bee.x0 = 2
-    bee.y0 = 2
-    bee.realx = random.uniform(3.0, 124.0)
-    bee.realy = random.uniform(3.0, 28.0)
-    bee.x = round(bee.realx)
-    bee.y = round(bee.realy)
+    # Summoned critters list
+    critters = []
 
     while shared_config.shared_mode.value == DisplayMode.PLANTS.value:
 
@@ -279,7 +352,10 @@ def plantmode(sign):
         for plant in plants:
             plant.draw(bg)
 
-        bee.draw(bg)
+        handle_critters(critters)
+
+        for critter in critters:
+            critter.draw(bg)
 
         sign.canvas.SetImage(bg.convert('RGB'), 0, 0)
         
