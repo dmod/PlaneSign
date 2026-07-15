@@ -85,7 +85,7 @@ class Critter(Sprite):
         self.minSpeed = 2.0
         self.accel = 5.0
         self.speed = 5.0
-        self.frameRate = 0.05
+        self.frameRate = 0.1
         self.lastMove = None
         self.moveInterval = 3
         self.maxMoveInterval = 6
@@ -139,7 +139,7 @@ class Critter(Sprite):
                 self.currFrame += self.increment
             else:
             
-                self.currFrame = (self.currframe + 1) % self.maxFrames
+                self.currFrame = (self.currFrame + 1) % self.maxFrames
 
         # Move
         self.move()
@@ -203,6 +203,15 @@ class FlyingBug(Critter):
         self.x = round(self.realx)
         self.y = round(self.realy)
 
+class FireFly(FlyingBug):
+    def __init__(self):
+        super().__init__()
+        super().loadframes("firefly")
+        self.lifeTime = random.uniform(60.0, 120.0)
+        self.x0 = 2
+        self.y0 = 2
+        self.summon()
+
 class Bee(FlyingBug):
     def __init__(self):
         super().__init__()
@@ -230,17 +239,28 @@ def handle_critters(critters):
     bees = [critter for critter in critters if critter.__class__.__name__ == "Bee"]
     num_bees = len(bees)
 
-    #fireflies = [critter for critter in critters if critter.__class__.__name__ == "Firefly"]
+    fireflies = [critter for critter in critters if critter.__class__.__name__ == "FireFly"]
+    num_fireflies = len(fireflies)
 
     if handle_critters.lastSummonAttempt is None or now >= handle_critters.lastSummonAttempt + handle_critters.summonAttemptInterval:
         
         handle_critters.lastSummonAttempt = now
 
-        if num_critters < handle_critters.maxCritters and random.random() < 0.1:
+        if num_critters < handle_critters.maxCritters and random.random() < 0.15:
 
-            if num_bees < 3:
-                critter = Bee()
-                critters.append(critter)
+            r = random.random()
+
+            if r < 0.5:
+                # Bee
+                if num_bees < 3:
+                    critter = Bee()
+                    critters.append(critter)
+            else:
+                # Firefly
+                if num_fireflies < 5:
+                    critter = FireFly()
+                    critters.append(critter)
+
 
 @__main__.planesign_mode_handler(DisplayMode.PLANTS)
 def plantmode(sign):
