@@ -1,0 +1,12 @@
+.git
+.venv
+vendor
+logs
+.data
+test
+sketches
+.devcontainer
+.github
+.vscode
+**/__pycache__
+**/*.pyc
