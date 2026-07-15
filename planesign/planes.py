@@ -1,18 +1,67 @@
 import logging
 import types
 
+import requests
+
 import shared_config
 import utilities
-from FlightRadar24 import FlightRadar24API
 from modes import DisplayMode
 from rgbmatrix import graphics
 
 import __main__
 
+FR24_FEED_URL = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js"
+FR24_HEADERS = {"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Origin": "https://www.flightradar24.com", "Referer": "https://www.flightradar24.com/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"}
+FR24_PARAMS = {"faa": "1", "satellite": "1", "mlat": "1", "flarm": "1", "adsb": "1", "gnd": "1", "air": "1", "vehicles": "1", "estimated": "1", "maxage": "14400", "gliders": "1", "stats": "1", "limit": "5000"}
+
 prev_stats = types.SimpleNamespace()
 prev_stats.distance = 0
 prev_stats.altitude = 0
 prev_stats.ground_speed = 0
+
+
+def get_flights(bounds):
+    params = FR24_PARAMS | {"bounds": bounds}
+    response = requests.get(FR24_FEED_URL, params=params, headers=FR24_HEADERS, timeout=30)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("FR24 returned an unexpected response")
+
+    flights = []
+    for flight_id, flight_info in payload.items():
+        if not isinstance(flight_id, str) or not flight_id[:1].isnumeric() or not isinstance(flight_info, list) or len(flight_info) < 19:
+            continue
+
+        def value(index, default="N/A"):
+            return flight_info[index] if flight_info[index] not in (None, "N/A") else default
+
+        number = value(13)
+        flights.append(
+            types.SimpleNamespace(
+                id=flight_id,
+                icao_24bit=value(0),
+                latitude=value(1),
+                longitude=value(2),
+                heading=value(3),
+                altitude=value(4),
+                ground_speed=value(5),
+                squawk=value(6),
+                aircraft_code=value(8),
+                registration=value(9),
+                time=value(10),
+                origin_airport_iata=value(11),
+                destination_airport_iata=value(12),
+                number=number,
+                airline_iata=number[:2] if number != "N/A" else "N/A",
+                on_ground=value(14),
+                vertical_speed=value(15),
+                callsign=value(16),
+                airline_icao=value(18),
+            )
+        )
+
+    return flights
 
 
 def shorten_airport_name(name, desired_length):
@@ -184,8 +233,6 @@ def get_plane_data_worker(data_dict):
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    fr_api = FlightRadar24API()
-
     bounds = f"{float(shared_config.CONF['SENSOR_LAT']) + 2},{float(shared_config.CONF['SENSOR_LAT']) - 2},{float(shared_config.CONF['SENSOR_LON']) - 2},{float(shared_config.CONF['SENSOR_LON']) + 2}"
 
     shutdown_flag = False
@@ -196,12 +243,10 @@ def get_plane_data_worker(data_dict):
                 logging.info("Sign off, skipping FR24 request...")
             else:
                 try:
-                    flights = fr_api.get_flights(bounds=bounds)
+                    flights = get_flights(bounds)
                 except Exception:
-                    try:
-                        flights
-                    except NameError:
-                        flights = None
+                    logging.exception("Error requesting FR24 flight data")
+                    flights = None
 
                 closest = None
                 highest = None
@@ -240,7 +285,7 @@ def get_plane_data_worker(data_dict):
                     data_dict["fastest"] = fastest
                     data_dict["slowest"] = slowest
                 else:
-                    logging.exception("No flights found")
+                    logging.warning("No flights found")
         except Exception:
             logging.exception("Error getting FR24 data...")
 
