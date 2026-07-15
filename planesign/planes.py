@@ -278,7 +278,7 @@ def get_plane_data_worker(data_dict):
                         if slowest is None or flight.ground_speed < slowest.ground_speed:
                             slowest = flight
 
-                    logging.info(f"{closest.distance:.2f} miles away: {closest}")
+                    logging.info(f"{closest.distance:.2f} miles away: {closest.callsign}/{closest.registration} {closest.origin_airport_iata}->{closest.destination_airport_iata}")
 
                     data_dict["closest"] = closest
                     data_dict["highest"] = highest
