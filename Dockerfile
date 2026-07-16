@@ -30,6 +30,7 @@ FROM ubuntu:24.04
 RUN apt update && apt -y install --no-install-recommends \
   nginx \
   openssl \
+  ca-certificates \
   python3 \
   libpython3.12t64 \
   python3-pil \
