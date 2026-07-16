@@ -51,3 +51,12 @@ jobs:
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
 
+      - name: Clean up Docker artifacts
+        if: always()
+        run: |
+          docker image rm --force \
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest \
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.version.outputs.version }} || true
+          docker builder prune --all --force
+          docker image prune --all --force
+
