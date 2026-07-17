@@ -29,8 +29,5 @@ skip-magic-trailing-comma = true
 [tool.ruff]
 line-length = 300
 
-[tool.uv]
-extra-build-variables = { rgbmatrix = { CFLAGS = "-I/usr/include/python3.12" } }
-
 [tool.uv.sources]
-rgbmatrix = { path = "/rpi-rgb-led-matrix" }
+rgbmatrix = { git = "https://github.com/hzeller/rpi-rgb-led-matrix.git", rev = "41809e40e912b7f278ad34046f20abf5609b2b07" }

@@ -1,4 +1,4 @@
-# ---- Build stage: compile the rgbmatrix bindings and build the venv ----
+# ---- Build stage: compile native dependencies and build the venv ----
 FROM ubuntu:24.04 AS builder
 
 RUN apt update && apt -y install --no-install-recommends \
@@ -7,17 +7,12 @@ RUN apt update && apt -y install --no-install-recommends \
   python3 \
   python3-dev \
   python3-pil \
-  cython3 \
-  file \
-  make \
+  build-essential \
   cmake \
-  g++ \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# rgbmatrix python bindings are compiled from this source (see pyproject [tool.uv.sources])
-RUN git clone --depth 1 https://github.com/hzeller/rpi-rgb-led-matrix.git
+COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /uvx /bin/
+ENV CFLAGS="-I/usr/include/python3.12"
 
 WORKDIR /planesign
 
@@ -33,7 +28,6 @@ RUN apt update && apt -y install --no-install-recommends \
   ca-certificates \
   python3 \
   libpython3.12t64 \
-  python3-pil \
   ffmpeg \
   alsa-utils \
   && apt clean \
