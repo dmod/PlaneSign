@@ -174,7 +174,7 @@ class SystemUpdateLogCharacteristic(Characteristic):
 
 class SystemUpdateCharacteristic(Characteristic):
     UPDATE_CHRC_UUID = "32d1b76b-9532-44da-9a43-3b682b8be90c"
-    UPDATE_CMD = "curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | sudo -u pi bash"
+    UPDATE_CMD = "curl -fsSL https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash"
 
     def __init__(self, bus, index, service, log_characteristic=None):
         Characteristic.__init__(self, bus, index, self.UPDATE_CHRC_UUID, ["read", "write", "notify"], service)
