@@ -112,8 +112,8 @@ download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 # Install bluetooth support
 apt-get update
 apt install -y bluez python3-dbus
-systemctl enable bluetooth
-systemctl restart bluetooth
+systemctl enable bluetooth.service >/dev/null 2>&1 || true
+systemctl restart bluetooth.service
 rfkill unblock bluetooth || echo "Warning: unable to unblock Bluetooth"
 (echo "power on"; echo "quit") | bluetoothctl >/dev/null 2>&1 || true
 
