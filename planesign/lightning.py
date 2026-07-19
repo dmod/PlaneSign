@@ -40,7 +40,7 @@ def lightning(sign):
         last_draw = None
         failed_connections = 0
         breakout = False
-        while failed_connections < 3:
+        while failed_connections < 5:
             if LM.connected.value == 0:
                 LM.connect()
 
@@ -59,6 +59,7 @@ def lightning(sign):
             elif LM.connected.value == 0:
                 failed_connections += 1
                 logging.error(f"Websocket failed to connect {failed_connections} times")
+                sign.wait_loop(1.0 * failed_connections)
 
         # Only set mode to PLANES_ALERT if we exited due to connection failures, not if we're switching modes
         shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
@@ -761,7 +762,7 @@ class LightningManager:
                 if self.thread and self.thread.is_alive():
                     self.close()
 
-                ws_servers = ["ws1.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
+                ws_servers = ["ws1.blitzortung.org", "ws2.blitzortung.org", "ws7.blitzortung.org", "ws8.blitzortung.org"]
 
                 self.ws_server = ws_servers[random.randint(0, len(ws_servers) - 1)]
 
@@ -770,20 +771,12 @@ class LightningManager:
                 self.host = "wss://" + self.ws_server  #'wss://' + self.ws_server + ':3000'
 
                 self.header = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
                     "Accept": "*/*",
                     "Accept-Language": "en-US,en;q=0.5",
                     "Accept-Encoding": "gzip, deflate, br",
-                    "Sec-WebSocket-Version": "13",
-                    "Sec-WebSocket-Extensions": "permessage-deflate",
-                    "Sec-WebSocket-Key": self.ws_key,
-                    "Connection": "keep-alive, Upgrade",
-                    "Sec-Fetch-Dest": "websocket",
-                    "Sec-Fetch-Mode": "websocket",
-                    "Sec-Fetch-Site": "same-site",
                     "Pragma": "no-cache",
-                    "Cache-Control": "no-cache",
-                    "Upgrade": "websocket",
+                    "Cache-Control": "no-cache"
                 }
 
                 websocket.enableTrace(False)
@@ -795,7 +788,7 @@ class LightningManager:
                 logging.debug(f"Connecting to blitzortung server: {self.ws_server}...")
 
                 # Using threading instead of multiprocessing, so we can close the websocket directly
-                self.thread = threading.Thread(target=self.ws.run_forever, kwargs={"host": self.ws_server, "origin": "https://map.blitzortung.org", "sslopt": {"cert_reqs": ssl.CERT_NONE}}, daemon=True)
+                self.thread = threading.Thread(target=self.ws.run_forever, kwargs={"origin": "https://www.blitzortung.org", "sslopt": {"cert_reqs": ssl.CERT_NONE}}, daemon=True)
                 self.thread.start()
 
                 logging.debug("Websocket thread started.")
