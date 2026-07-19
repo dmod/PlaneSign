@@ -30,6 +30,7 @@ download_required_file() {
   temporary="$(mktemp "${destination}.tmp.XXXXXX")"
   if wget -q --show-progress -O "$temporary" "$url"; then
     mv "$temporary" "$destination"
+    chmod 644 "$destination"
     chown "$RUN_USER:$RUN_GROUP" "$destination"
   else
     rm -f "$temporary"
@@ -111,10 +112,17 @@ download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 
 # Install bluetooth support
 apt-get update
-apt install -y bluez python3-dbus
+
+apt-get install -y \
+    bluez \
+    python3-dbus
+
+systemctl daemon-reload
 systemctl enable bluetooth.service >/dev/null 2>&1 || true
-systemctl restart bluetooth.service
-rfkill unblock bluetooth || echo "Warning: unable to unblock Bluetooth"
+systemctl is-active --quiet bluetooth.service || \
+    systemctl start bluetooth.service
+rfkill unblock bluetooth || \
+    echo "Warning: unable to unblock Bluetooth"
 (echo "power on"; echo "quit") | bluetoothctl >/dev/null 2>&1 || true
 
 ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
@@ -157,7 +165,6 @@ if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
 fi
 
 # Create persistent host directories and seed them from the PlaneSign git source.
-mkdir -p "$INSTALL_DIR"
 temp_clone="$(mktemp -d)"
 git clone --depth 1 https://github.com/dmod/PlaneSign.git "$temp_clone"
 for dir in datafiles sketches icons; do
@@ -182,4 +189,5 @@ docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
 chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
 
 echo "Installation and configuration completed! Rebooting..."
+sync
 reboot
