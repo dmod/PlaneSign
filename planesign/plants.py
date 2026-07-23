@@ -232,9 +232,6 @@ class Bird_Base(Critter):
         self.accel = 5.0
         self.speed = 10.0
         self.frameRate = 0.2
-        self.moveInterval = 5
-        self.maxMoveInterval = 8
-        self.minMoveInterval = 5
 
     def move(self):
         now = time.perf_counter()
@@ -301,6 +298,67 @@ class BlueJay(Bird_Base):
         self.y0 = 6
         self.summon()
 
+class LadyBug(Critter):
+    def __init__(self):
+        super().__init__()
+        super().loadframes("ladybug_flying")
+        self.x0 = 4
+        self.y0 = 3
+        self.brighten = True
+        self.lifeTime = random.uniform(85.0, 120.0)
+        self.maxSpeed = 15.0
+        self.minSpeed = 5.0
+        self.air_accel = 5.0
+        self.ground_accel = 1.0
+        self.speed = 10.0
+        self.frameRate = 0.1
+        self.moveInterval = 5
+        self.maxMoveInterval = 8
+        self.minMoveInterval = 5
+        self.summon()
+
+    def move(self):
+        now = time.perf_counter()
+        if self.lastDraw is not None:
+            dt = now - self.lastDraw
+        else:
+            dt = 0
+
+        if self.leaveFlag:
+            # Leaving
+            if math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0 \
+               or self.realx < -10.0 or self.realx > 138.0 or self.realy < -10.0 or self.realy > 41.0:
+                # Set despawn flag
+                self.despawnFlag = True
+        else:
+            if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or \
+            (self.targetX is not None and self.targetY is not None and \
+                math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
+                self.moveInterval = random.uniform(self.minMoveInterval, self.maxMoveInterval)
+                self.lastMove = now
+
+                while True:
+                    self.targetX = random.uniform(3.0, 124.0)
+                    self.targetY = random.uniform(3.0, 28.0)
+
+                    dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
+                    if (dist > 10.0) and abs(self.realx - self.targetX) > 8.0:
+                        break
+
+        dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
+        direction = math.atan2(self.targetY - self.realy, self.targetX - self.realx)
+
+        dv = self.accel * dt
+        if dist <= 10.0:
+            dv *= -1
+
+        self.speed = max(self.minSpeed, min(self.speed + dv, self.maxSpeed))
+        self.realx += math.cos(direction) * self.speed * dt
+        self.realy += math.sin(direction) * self.speed * dt
+
+        self.x = round(self.realx)
+        self.y = round(self.realy)
+
 def handle_critters(critters):
 
     now = time.perf_counter()
@@ -324,6 +382,9 @@ def handle_critters(critters):
     birds = [critter for critter in critters if critter.__class__.__name__ in ["Bird", "Cardinal", "BlueJay"]]
     num_birds = len(birds)
 
+    ladybugs = [critter for critter in critters if critter.__class__.__name__ == "LadyBug"]
+    num_ladybugs = len(ladybugs)
+
     if handle_critters.lastSummonAttempt is None or now >= handle_critters.lastSummonAttempt + handle_critters.summonAttemptInterval:
         
         handle_critters.lastSummonAttempt = now
@@ -333,15 +394,20 @@ def handle_critters(critters):
             # Determine which type of critter to try summoning
             r = random.random()
 
-            if r < 0.33:
+            if r < 0.25:
                 # Bee
                 if num_bees < 3 and random.random() < 0.2:
                     critter = Bee()
                     critters.append(critter)
-            elif r < 0.66:
+            elif r < 0.5:
                 # Firefly
                 if num_fireflies < 5  and random.random() < 0.25:
                     critter = FireFly()
+                    critters.append(critter)
+            elif r < 0.75:
+                # Ladybug
+                if num_ladybugs < 2 and random.random() < 0.3:
+                    critter = LadyBug()
                     critters.append(critter)
             else:
                 # Bird
