@@ -92,3 +92,14 @@ cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/instal
 - zapsplat.com
 - myinstants.com
 - pixabay.com
+
+### Additional Information
+
+**Connect via Serial USB**
+https://forums.raspberrypi.com/viewtopic.php?t=307094
+
+**Fix Bluetooth**
+raspberrypi/linux#7473.
+```sh
+sudo rpi-update
+```
