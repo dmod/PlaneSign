@@ -8,6 +8,7 @@ import glob
 import random
 import subprocess
 import re
+import tempfile
 import requests
 from datetime import datetime
 
@@ -577,12 +578,15 @@ def play_mic_audio():
     if shared_config.audio_device is None:
         return jsonify({"ok": False, "error": "No audio output device detected"}), 503
 
-    temp_audio_file = ".data/audio"
-
-    with open(temp_audio_file, "wb") as f:
+    with tempfile.NamedTemporaryFile(prefix="planesign-mic-", delete=False) as f:
         f.write(request_data)
+        temp_audio_file = f.name
 
-    subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=_ffplay_env(), check=False)
+    try:
+        subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=_ffplay_env(), check=False)
+    finally:
+        os.unlink(temp_audio_file)
+
     return jsonify({"ok": True, "playback": "sign"})
 
 
