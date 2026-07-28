@@ -104,6 +104,51 @@ SPRITE_W = 9
 SPRITE_H = 6
 NOSE_DX = 8
 
+# Winner's enclosure portrait, 26 wide x 21 tall, standing and facing right.
+#   H = coat, M = mane / tail, B = saddle cloth, D = sock, S = smile
+#   E = open eye only, P = pupil, W = closed eye only
+WINNER_FRAME = (
+    "...................H.H....",
+    "..................MHHHHH..",
+    "..................MHEEHHH.",
+    ".................MHWPWHHHH",
+    "...............MMHHHHHHHHS",
+    "..............MMHHHHHHHSS.",
+    ".............MMHHHHHHH....",
+    "............MMHHHHHHH.....",
+    "...........MMHHHHHHH......",
+    "......HHHHHHHHHHHHHHH.....",
+    "..MMHHHHHHHHHHHHHHHHHH....",
+    "..MHHHHHHHBBBBBHHHHHHH....",
+    "..MHHHHHHHBBBBBHHHHHHH....",
+    "..MHHHHHHHHHHHHHHHHHH.....",
+    ".MM.HHHHHHHHHHHHHHHH......",
+    ".MM..HHH........HHH.......",
+    "..M..HHH........HHH.......",
+    ".....HHH........HHH.......",
+    ".....HHH........HHH.......",
+    ".....HHH........HHH.......",
+    ".....DDD........DDD.......",
+)
+WINNER_H = 21
+
+# The groom who brings the garland out, 6 wide x 10 tall, facing left
+#   C = cap, K = skin, A = arm, J = jacket, T = trousers, O = boots
+GROOM_FRAMES = [
+    ("..CC..", ".CCCC.", "..KK..", ".JJJJ.", "AJJJJ.", ".JJJJ.", ".JJJJ.", ".TT.TT", ".TT.TT", ".OO.OO"),
+    ("..CC..", ".CCCC.", "..KK..", ".JJJJ.", ".JJJJ.", "AJJJJ.", ".JJJJ.", "..TT..", "..TT..", ".OOOO."),
+    ("A.CC..", "ACCCC.", "A.KK..", "AJJJJ.", ".JJJJ.", ".JJJJ.", ".JJJJ.", ".TT.TT", ".TT.TT", ".OO.OO"),
+    ("..CC..", ".CCCC.", "A.KK..", "AJJJJ.", ".JJJJ.", ".JJJJ.", ".JJJJ.", ".TT.TT", ".TT.TT", ".OO.OO"),
+]
+GROOM_WALK = (0, 1)
+GROOM_REACH = 2
+GROOM_WAVE = (2, 3)
+GROOM_H = 10
+
+# Ring of flowers, coloured per pixel from GARLAND_COLORS
+GARLAND_FRAME = ("..FFFFF..", ".F.....F.", "F.......F", "F.......F", "F.......F", ".F.....F.", "..FFFFF..")
+GARLAND_COLORS = [(235, 45, 70), (255, 250, 245), (250, 205, 70), (235, 45, 70), (110, 195, 95), (255, 250, 245), (250, 205, 70), (110, 195, 95)]
+
 
 def _compile_frames(frames):
     compiled = []
@@ -119,10 +164,31 @@ def _compile_frames(frames):
 
 GALLOP_SPRITES = _compile_frames(GALLOP_FRAMES)
 IDLE_SPRITES = _compile_frames(IDLE_FRAMES)
+WINNER_SPRITE = _compile_frames([WINNER_FRAME])[0]
+GROOM_SPRITES = _compile_frames(GROOM_FRAMES)
+GARLAND_PIXELS = _compile_frames([GARLAND_FRAME])[0]
+
+# Winner's enclosure layout, everything stands on the bottom row
+BANNER_HORSE_X = 48
+BANNER_HORSE_Y = HEIGHT - WINNER_H
+BANNER_GROOM_X = 74
+BANNER_GROOM_Y = HEIGHT - GROOM_H
+GARLAND_HOME = (BANNER_HORSE_X + 12, BANNER_HORSE_Y + 5)
+GARLAND_CARRY = (BANNER_GROOM_X - 10, HEIGHT - 9)
+GROOM_WALK_SPEED = 46.0
+CROWN_TIME = 0.85
+WINK_START = 0.25
+WINK_END = 0.6
 
 
 def _scale_color(color, factor):
     return (min(255, max(0, int(color[0] * factor))), min(255, max(0, int(color[1] * factor))), min(255, max(0, int(color[2] * factor))))
+
+
+def _ink_color(color):
+    """Eye and smile shade that stays readable on any coat."""
+    luminance = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+    return (28, 22, 26) if luminance > 110 else (245, 238, 232)
 
 
 def _put(pix, x, y, color):
@@ -553,22 +619,33 @@ class Race:
         return crop.resize((WIDTH, HEIGHT), Image.NEAREST)
 
     def run_banner(self):
-        """Flash the winner and keep celebrating until the sign is sent somewhere else."""
+        """Winner's enclosure: a groom walks out and garlands the winner, then the party carries on."""
         self.confetti = [Confetti(seeded=True) for _ in range(70)]
         winner = self.winner
         text = f"HORSE {winner.number} WINS!"
-        text_x = int(utilities.get_centered_text_x_offset_value(6, text))
+        text_x = int(utilities.get_centered_text_x_offset_value(5, text))
+        coat = dict(winner.colors)
+        coat["E"] = coat["P"] = coat["W"] = coat["S"] = _ink_color(coat["H"])
+        groom_colors = {"C": winner.color, "K": (238, 190, 152), "A": (238, 190, 152), "J": (240, 240, 246), "T": (72, 84, 126), "O": (126, 110, 98)}
         start = time.perf_counter()
         self.last_frame_time = start
-        scroll = 0.0
-        gallop = 0.0
-        screen_dust = []
+        groom_x = float(WIDTH + 4)
+        crown_start = None
 
         while self.alive():
             dt = self.tick()
             elapsed = time.perf_counter() - start
-            scroll = (scroll + dt * 70.0) % 6.0
-            gallop += dt * 11.0
+
+            if crown_start is None:
+                groom_x = max(float(BANNER_GROOM_X), groom_x - dt * GROOM_WALK_SPEED)
+                lift = 0.0
+                if groom_x <= BANNER_GROOM_X:
+                    crown_start = elapsed
+            else:
+                lift = min(1.0, (elapsed - crown_start) / CROWN_TIME)
+            crowned = lift >= 1.0
+            settled = (elapsed - crown_start - CROWN_TIME) if crowned else -1.0
+            winking = WINK_START <= settled < WINK_END
 
             image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
             pix = image.load()
@@ -577,28 +654,39 @@ class Race:
                 particle.update(dt, elapsed)
                 particle.draw(pix, elapsed)
 
-            # Ground streaking past under the celebrating winner
             for x in range(WIDTH):
-                if (x + int(scroll)) % 6 < 3:
+                if x % 7 < 5:
                     _put(pix, x, HEIGHT - 1, _scale_color(RAIL_COLOR, 0.8))
 
-            screen_dust = [(dx - dt * 55.0, dy, age + dt) for dx, dy, age in screen_dust if age + dt < 0.4 and dx > 0]
-            if random.random() < 0.5:
-                screen_dust.append((62.0, HEIGHT - 2 - random.choice([0, 1]), 0.0))
-            for dx, dy, age in screen_dust:
-                _put(pix, int(dx), int(dy), _scale_color(DUST_COLOR, 0.25 + 0.5 * (1.0 - age / 0.4)))
+            # Once the flowers are on, the winner bobs along to the crowd
+            bob = -1 if crowned and int(elapsed * 4) % 2 == 0 else 0
+            hidden = {"E"} if winking else {"W"}
+            if settled < WINK_END:
+                hidden.add("S")
+            for dx, dy, code in WINNER_SPRITE:
+                _put(pix, BANNER_HORSE_X + dx, BANNER_HORSE_Y + dy + bob, coat["H"] if code in hidden else coat[code])
 
-            index = int(gallop) % len(GALLOP_SPRITES)
-            left = 72 - NOSE_DX
-            top = HEIGHT - SPRITE_H + GALLOP_BOB[index]
-            for dx, dy, code in GALLOP_SPRITES[index]:
-                _put(pix, left + dx, top + dy, winner.colors[code])
+            if crowned:
+                groom = GROOM_SPRITES[GROOM_WAVE[int(elapsed * 4) % 2]]
+            elif crown_start is not None:
+                groom = GROOM_SPRITES[GROOM_REACH]
+            else:
+                groom = GROOM_SPRITES[GROOM_WALK[int(elapsed * 8) % 2]]
+            for dx, dy, code in groom:
+                _put(pix, int(groom_x) + dx, BANNER_GROOM_Y + dy, groom_colors[code])
+
+            # Garland is carried in, lifted over the head and left hanging on the neck
+            ease = lift * lift * (3.0 - 2.0 * lift)
+            garland_x = int(groom_x) - 10 if crown_start is None else GARLAND_CARRY[0] + (GARLAND_HOME[0] - GARLAND_CARRY[0]) * ease
+            garland_y = GARLAND_CARRY[1] + (GARLAND_HOME[1] - GARLAND_CARRY[1]) * ease - 5.0 * math.sin(math.pi * ease)
+            for index, (dx, dy, _) in enumerate(GARLAND_PIXELS):
+                _put(pix, int(garland_x) + dx, int(garland_y) + dy + (bob if crowned else 0), GARLAND_COLORS[index % len(GARLAND_COLORS)])
 
             texts = []
             if elapsed > BANNER_INTRO:
                 flash = int(elapsed * 3) % 2 == 0
                 color = WHITE if flash else winner.color
-                texts.append((self.sign.fontbig, text_x, 13, graphics.Color(*color), text))
+                texts.append((self.sign.font57, text_x, 8, graphics.Color(*color), text))
             else:
                 image = ImageEnhance.Brightness(image).enhance(elapsed / BANNER_INTRO)
 
