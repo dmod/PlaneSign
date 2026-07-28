@@ -29,3 +29,4 @@ class DisplayMode(Enum):
     MOON = auto()  # Moon phase display
     CUSTOM_MESSAGE = auto()  # Custom message display
     FREE_SKETCH = auto()  # Browser sketch pad
+    HORSE_RACE = auto()  # Arcade horse race
