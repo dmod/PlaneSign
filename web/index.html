@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=lightning-slider-2">
+  <link rel="stylesheet" href="style.css?v=sliders-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=lightning-slider-1"></script>
+  <script src="index.js?v=sliders-1"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -56,7 +56,29 @@
   </div>
 
 
-  <input id="brightness_slider" type="range" min="0" max="100" step="1" value="100">
+  <div class="ps-slider-stack">
+    <div class="ps-slider-row" id="brightness_slider_row">
+      <svg class="ps-slider-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="4.5" fill="currentColor" />
+        <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M19.4 4.6l-2.1 2.1M6.7 17.3l-2.1 2.1" />
+        </g>
+      </svg>
+      <input id="brightness_slider" class="ps-range" type="range" min="0" max="100" step="1" value="100" aria-label="Brightness">
+      <span class="ps-slider-value" id="brightness_value">100%</span>
+    </div>
+    <div class="ps-slider-row is-disabled" id="volume_slider_row">
+      <svg class="ps-slider-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M4 9.5h3.2L12 5.2v13.6L7.2 14.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" />
+        <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.5a7.8 7.8 0 0 1 0 11" />
+        </g>
+      </svg>
+      <input id="volume_slider" class="ps-range" type="range" min="0" max="100" step="1" value="0" aria-label="Volume" disabled>
+      <span class="ps-slider-value" id="volume_value">--</span>
+    </div>
+  </div>
+
 
   <div class="groups_wrapper">
 

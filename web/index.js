@@ -1,5 +1,6 @@
 var global_current_mode;
 var recordButton, recorder;
+var volume_send_timer = null;
 var valid_tickers = null;
 var valid_resorts = null;
 var free_sketch_is_drawing = false;
@@ -50,6 +51,7 @@ function clear_current_mode_button() {
 window.onload = function () {
     update_sign_status();
     update_brightness_slider();
+    update_volume_slider();
     set_version();
     update_device_info();
     setInterval(update_device_info, 10000);
@@ -118,7 +120,18 @@ window.onload = function () {
     }
 
     document.getElementById("brightness_slider").oninput = function () {
+        set_slider_display(this, "brightness_value");
         call_endpoint("/set_brightness/" + this.value);
+    }
+
+    document.getElementById("volume_slider").oninput = function () {
+        set_slider_display(this, "volume_value");
+        // amixer spawns a process per call, so don't fire one per pixel of drag
+        clearTimeout(volume_send_timer);
+        var value = this.value;
+        volume_send_timer = setTimeout(function () {
+            call_endpoint("/set_volume/" + value);
+        }, 100);
     }
 
     document.getElementById("custom_message").oninput = function () {
@@ -1644,7 +1657,48 @@ function get_possible_autofill_tickers(query_string) {
 
 function update_brightness_slider() {
     call_endpoint("/get_brightness", function (value) {
-        document.getElementById("brightness_slider").value = value;
+        var slider = document.getElementById("brightness_slider");
+        slider.value = value;
+        set_slider_display(slider, "brightness_value");
+    });
+}
+
+function set_slider_display(slider, value_element_id) {
+    var min = Number(slider.min);
+    var max = Number(slider.max);
+    var percent = max > min ? ((Number(slider.value) - min) / (max - min)) * 100 : 0;
+    slider.style.setProperty("--fill", percent + "%");
+
+    if (value_element_id) {
+        document.getElementById(value_element_id).textContent = slider.value + "%";
+    }
+}
+
+function update_volume_slider() {
+    var slider = document.getElementById("volume_slider");
+    var row = document.getElementById("volume_slider_row");
+
+    call_endpoint("/get_volume", function (value) {
+        var resp;
+        try {
+            resp = JSON.parse(value);
+        } catch (err) {
+            resp = null;
+        }
+
+        if (!resp || !resp.supported) {
+            slider.disabled = true;
+            row.classList.add("is-disabled");
+            slider.value = 0;
+            set_slider_display(slider, null);
+            document.getElementById("volume_value").textContent = "--";
+            return;
+        }
+
+        slider.disabled = false;
+        row.classList.remove("is-disabled");
+        slider.value = resp.volume;
+        set_slider_display(slider, "volume_value");
     });
 }
 

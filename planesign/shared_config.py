@@ -30,7 +30,11 @@ local_timezone = None
 # no audio hardware attached to the sign, so sound playback is delegated to the browser.
 emulated_display = os.environ.get("PLANESIGN_EMULATED_DISPLAY") == "1"
 
+# Set once by utilities.detect_usb_audio_device() in the parent process, before the API server
+# process is forked, so the API process inherits them.
 audio_device = None
+audio_card = None
+audio_mixer_control = None
 
 log_filename = "logs/planesign.log"
 icons_dir = "./icons"

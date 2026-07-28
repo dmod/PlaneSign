@@ -124,43 +124,77 @@ def detect_usb_audio_device():
             card_num = parts[card_index].replace(":", "")
             device_num = parts[device_index].replace(":", "")
             shared_config.audio_device = f"hw:{card_num},{device_num}"
-            logging.info(f"Detected USB Audio device: {shared_config.audio_device}")
-            set_usb_audio_volume(card_num)
+            shared_config.audio_card = card_num
+            shared_config.audio_mixer_control = find_usb_volume_control(card_num)
+            logging.info(f"Detected USB Audio device: {shared_config.audio_device} (mixer control: {shared_config.audio_mixer_control})")
             return
 
 
-def set_usb_audio_volume(card_num):
+def find_usb_volume_control(card_num):
+    """Return the name of the best available playback volume control on a card, or None."""
     try:
-        # First, get list of available controls
         result = subprocess.run(["amixer", "-c", card_num, "controls"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
-            logging.error(f"Failed to get controls: {result.stderr}")
-            return
+            logging.error(f"Failed to get controls for card {card_num}: {result.stderr}")
+            return None
 
-        # Look for common volume control names
-        volume_controls = ["Master", "PCM", "Speaker", "Headphone", "Playback"]
-        found_control = None
-
-        for line in result.stdout.splitlines():
-            for control in volume_controls:
+        for control in ["Master", "PCM", "Speaker", "Headphone", "Playback"]:
+            for line in result.stdout.splitlines():
                 if control in line:
-                    found_control = control
-                    break
-            if found_control:
-                break
+                    return control
 
-        if not found_control:
-            logging.error("No suitable volume control found")
-            return
+        logging.error(f"No suitable volume control found for card {card_num}")
+        return None
+    except Exception as e:
+        logging.error(f"Error looking up USB audio volume control: {e}")
+        return None
 
-        volume_percent = "90%"
-        result = subprocess.run(["amixer", "-c", card_num, "set", found_control, volume_percent], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if result.returncode == 0:
-            logging.info(f"Successfully set USB audio volume to {volume_percent} using {found_control} control")
-        else:
+
+def get_usb_audio_volume():
+    """Return the current USB audio volume as a 0-100 percentage, or None if unavailable."""
+    if shared_config.audio_card is None or shared_config.audio_mixer_control is None:
+        return None
+
+    try:
+        # -M uses the mapped (perceptual) scale so it round-trips with set_usb_audio_volume
+        result = subprocess.run(["amixer", "-M", "-c", shared_config.audio_card, "sget", shared_config.audio_mixer_control], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            logging.error(f"Failed to read volume: {result.stderr}")
+            return None
+
+        if re.search(r"\[off\]", result.stdout):
+            return 0
+
+        match = re.search(r"\[(\d{1,3})%\]", result.stdout)
+        if not match:
+            logging.error("Could not parse volume from amixer output")
+            return None
+
+        return min(100, int(match.group(1)))
+    except Exception as e:
+        logging.error(f"Error reading USB audio volume: {e}")
+        return None
+
+
+def set_usb_audio_volume(percent):
+    """Set the USB audio volume to a 0-100 percentage. Returns True on success."""
+    if shared_config.audio_card is None or shared_config.audio_mixer_control is None:
+        logging.error("Cannot set volume, no USB audio device detected")
+        return False
+
+    percent = max(0, min(100, int(percent)))
+
+    try:
+        result = subprocess.run(["amixer", "-M", "-c", shared_config.audio_card, "set", shared_config.audio_mixer_control, f"{percent}%", "unmute"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
             logging.error(f"Failed to set volume: {result.stderr}")
+            return False
+
+        logging.info(f"Set USB audio volume to {percent}% using {shared_config.audio_mixer_control} control")
+        return True
     except Exception as e:
         logging.error(f"Error setting USB audio volume: {e}")
+        return False
 
 
 def read_static_airport_data():

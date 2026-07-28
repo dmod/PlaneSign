@@ -448,6 +448,26 @@ def get_brightness():
     return str(shared_config.shared_current_brightness.value)
 
 
+@app.route("/get_volume")
+def get_volume():
+    volume = utilities.get_usb_audio_volume()
+    return jsonify({"supported": volume is not None, "volume": volume})
+
+
+@app.route("/set_volume/<volume>")
+def set_volume(volume):
+    try:
+        requested = int(volume)
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid volume"}), 400
+
+    requested = max(0, min(100, requested))
+    if not utilities.set_usb_audio_volume(requested):
+        return jsonify({"ok": False, "error": "No audio output device detected"}), 503
+
+    return jsonify({"ok": True, "volume": requested})
+
+
 @app.route("/set_custom_message/", defaults={"message": ""})
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
@@ -561,9 +581,7 @@ def _ffplay_env():
 def is_audio_supported():
     if shared_config.emulated_display:
         return jsonify(True)
-    p = subprocess.run("aplay -l | grep 'USB Audio'", shell=True)
-    audio_supported = p.returncode == 0
-    return jsonify(audio_supported)
+    return jsonify(shared_config.audio_device is not None)
 
 
 @app.route("/play_mic_audio", methods=["POST"])
