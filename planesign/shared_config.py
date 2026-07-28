@@ -26,6 +26,10 @@ free_sketch_pixels = Array("B", 128 * 32 * 3)
 
 local_timezone = None
 
+# True when running with --web (emulated matrix streamed to a browser). In that case there is
+# no audio hardware attached to the sign, so sound playback is delegated to the browser.
+emulated_display = os.environ.get("PLANESIGN_EMULATED_DISPLAY") == "1"
+
 audio_device = None
 
 log_filename = "logs/planesign.log"

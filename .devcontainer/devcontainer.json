@@ -19,11 +19,12 @@
 		"CFLAGS": "-I/usr/include/python3.12"
 	},
 	"postCreateCommand": "uv sync --frozen --no-install-project --no-dev",
-	"forwardPorts": [80, 443, 5000],
+	"forwardPorts": [80, 443, 5055, 5056],
 	"portsAttributes": {
 		"80": { "label": "PlaneSign HTTP", "protocol": "http" },
 		"443": { "label": "PlaneSign HTTPS", "protocol": "https" },
-		"5000": { "label": "Flask API" }
+		"5055": { "label": "Flask API" },
+		"5056": { "label": "Emulated Display WebSocket" }
 	},
 	"customizations": {
 		"vscode": {

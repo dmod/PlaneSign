@@ -2,7 +2,7 @@
 WebSocket server for streaming emulated matrix frames to browser clients.
 
 Runs in a daemon thread with its own asyncio event loop.
-Listens on port 5001 and broadcasts raw RGBA frame data (16,384 bytes
+Broadcasts raw RGBA frame data (16,384 bytes
 per frame for a 128x32 display) as binary WebSocket messages.
 """
 
@@ -15,7 +15,9 @@ import websockets
 logger = logging.getLogger(__name__)
 
 _LISTEN_HOST = "0.0.0.0"
-_LISTEN_PORT = 5001
+# Avoid 5000/5001/7000: macOS AirPlay Receiver listens on those and Docker Desktop's host
+# networking leaks them into the container's loopback.
+LISTEN_PORT = 5056
 
 
 class FrameServer:
@@ -31,14 +33,14 @@ class FrameServer:
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        logger.info("WebSocket frame server starting on ws://%s:%d", _LISTEN_HOST, _LISTEN_PORT)
+        logger.info("WebSocket frame server starting on ws://%s:%d", _LISTEN_HOST, LISTEN_PORT)
 
     def _run(self):
         asyncio.set_event_loop(self._loop)
         self._loop.run_until_complete(self._serve())
 
     async def _serve(self):
-        async with websockets.serve(self._handler, _LISTEN_HOST, _LISTEN_PORT, compression=None):
+        async with websockets.serve(self._handler, _LISTEN_HOST, LISTEN_PORT, compression=None):
             await asyncio.Future()  # run forever
 
     async def _handler(self, websocket: websockets.ServerConnection):

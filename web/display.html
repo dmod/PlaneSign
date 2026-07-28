@@ -169,7 +169,7 @@
         }
 
         function connect() {
-            const wsUrl = `ws://${window.location.hostname}:5001`;
+            const wsUrl = `ws://${window.location.hostname}:5056`;
             setStatus('connecting', `Connecting to ${wsUrl}...`);
 
             ws = new WebSocket(wsUrl);

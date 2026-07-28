@@ -25,6 +25,9 @@ from finance import get_tickers
 from snow import populate_resort_lists, load_user_list, save_current_resort, delete_user_resort, SnowMode
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
+# Avoid 5000/5001/7000: macOS AirPlay Receiver listens on those and Docker Desktop's host
+# networking leaks them into the container's loopback, which silently hijacks the API.
+API_PORT = 5055
 FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4, 5}
 FREE_SKETCH_BRUSH_SHAPES = {"square", "plus", "x", "circle"}
 
@@ -157,7 +160,7 @@ def set_free_sketch_pixel():
         brush_size = int(data.get("brush_size", 1))
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
-    
+
     brush_shape = data.get("brush_shape", "square")
     if brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
         brush_shape = "square"
@@ -198,7 +201,7 @@ def set_free_sketch_line():
         brush_size = int(data.get("brush_size", 1))
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
-    
+
     brush_shape = data.get("brush_shape", "square")
     if brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
         brush_shape = "square"
@@ -225,25 +228,25 @@ def sync_free_sketch():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "Expected JSON object"}), 400
-    
+
     pixels = data.get("pixels")
     if not isinstance(pixels, list):
         return jsonify({"ok": False, "error": "Expected pixels array"}), 400
-    
+
     # Expected: 128 * 32 * 3 = 12288 values
     if len(pixels) != 128 * 32 * 3:
         return jsonify({"ok": False, "error": "Invalid pixel data length"}), 400
-    
+
     # Validate all values are 0-255
     try:
         pixel_bytes = bytes([int(v) for v in pixels])
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "Invalid pixel values"}), 400
-    
+
     pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
         pixel_buffer[:] = pixel_bytes
-    
+
     return jsonify({"ok": True})
 
 
@@ -313,13 +316,7 @@ def serve_free_sketch_image(filename):
     return send_from_directory(SKETCHES_DIR, filename, mimetype="image/png")
 
 
-STAMP_CATEGORIES = {
-    "snowflake": {
-        "dir": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "santa"),
-        "prefix": "snowflake",
-        "max_num": 22,
-    },
-}
+STAMP_CATEGORIES = {"snowflake": {"dir": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "santa"), "prefix": "snowflake", "max_num": 22}}
 
 
 def _pick_random_stamp_num(category):
@@ -370,6 +367,7 @@ def place_free_sketch_stamp():
 
     if category == "snowflake":
         import numpy as np
+
         sat = random.random() * 0.8
         r_tint, g_tint, b_tint = utilities.hsv_2_rgb(0.56, sat, 1.0)
         rgba = np.array(sprite)
@@ -545,8 +543,19 @@ def set_satellite_mode(mode):
     return ""
 
 
+SOUND_FILENAME_RE = re.compile(r"^[A-Za-z0-9 _.()\-]+\.mp3$")
+
+
+def _validate_sound_filename(filename):
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        return False
+    return bool(SOUND_FILENAME_RE.match(filename))
+
+
 @app.route("/is_audio_supported")
 def is_audio_supported():
+    if shared_config.emulated_display:
+        return jsonify(True)
     p = subprocess.run("aplay -l | grep 'USB Audio'", shell=True)
     audio_supported = p.returncode == 0
     return jsonify(audio_supported)
@@ -571,13 +580,28 @@ def play_mic_audio():
 
 @app.route("/play_a_sound/<sound_id>")
 def play_a_sound(sound_id):
+    if not _validate_sound_filename(sound_id):
+        return jsonify({"ok": False, "error": "Invalid sound"}), 400
+
+    if shared_config.emulated_display:
+        # Emulated sign (--web): no audio hardware here, so the browser plays the file instead.
+        logging.info(f"Delegating sound to browser: {sound_id}")
+        return jsonify({"ok": True, "playback": "browser", "sound_id": sound_id})
+
     logging.info(f"Playing sound: {sound_id}")
 
     my_env = {}
     my_env["SDL_AUDIODRIVER"] = "alsa"
     my_env["AUDIODEV"] = shared_config.audio_device
     subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
-    return ""
+    return jsonify({"ok": True, "playback": "sign"})
+
+
+@app.route("/sound_file/<sound_id>")
+def serve_sound_file(sound_id):
+    if not _validate_sound_filename(sound_id):
+        return jsonify({"ok": False, "error": "Invalid sound"}), 400
+    return send_from_directory(os.path.abspath(shared_config.sounds_dir), sound_id, mimetype="audio/mpeg")
 
 
 @app.route("/get_sounds")
@@ -667,7 +691,7 @@ def api_server():
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    app_server = gevent.pywsgi.WSGIServer(("0.0.0.0", 5000), app)
+    app_server = gevent.pywsgi.WSGIServer(("0.0.0.0", API_PORT), app)
     app_server.start()
 
     while not shared_config.shared_shutdown_event.is_set():

@@ -1636,14 +1636,28 @@ function play_selected_sound() {
     e = document.getElementById("sound-list");
     sound_id = e.options[e.selectedIndex].value;
     if (sound_id) {
-        console.log("Sending request to play: " + sound_id)
-        call_endpoint("/play_a_sound/" + sound_id);
+        play_a_sound(sound_id);
     }
 }
 
 function play_a_sound(sound_id) {
     console.log("Sending request to play: " + sound_id)
-    call_endpoint("/play_a_sound/" + sound_id);
+    call_endpoint("/play_a_sound/" + encodeURIComponent(sound_id), function (value) {
+        var resp;
+        try {
+            resp = JSON.parse(value);
+        } catch (err) {
+            return;
+        }
+        // When the sign is emulated (--web) there is no speaker attached to it,
+        // so the server asks this browser to play the sound locally instead.
+        if (resp && resp.playback === "browser" && resp.sound_id) {
+            var audio = new Audio("api/sound_file/" + encodeURIComponent(resp.sound_id));
+            audio.play().catch(function (err) {
+                console.error("Browser sound playback failed:", err);
+            });
+        }
+    });
 }
 
 function get_audio_support() {

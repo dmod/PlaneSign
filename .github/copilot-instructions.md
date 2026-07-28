@@ -37,7 +37,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 ## Docker / Deployment
 - Runs with `--network host` (container shares host network stack — no port mapping needed, host interfaces like `wlan0` are directly accessible).
 - Production install script: `docker_install_and_update.sh`. Nginx config: `docker_nginx_planesign.conf`.
-- Flask API listens on port 5000; nginx proxies `/api/` to it and serves `web/` static files on ports 80/443.
+- Flask API listens on port 5055; nginx proxies `/api/` to it and serves `web/` static files on ports 80/443.
 
 ## Dev Environment
 - Uses VS Code devcontainer (`.devcontainer/devcontainer.json`) built from the project `Dockerfile`.

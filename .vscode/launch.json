@@ -28,7 +28,7 @@
             "console": "integratedTerminal",
             "preLaunchTask": "uv sync and start nginx",
             "serverReadyAction": {
-                "pattern": "server listening on 0\\.0\\.0\\.0:5001",
+                "pattern": "server listening on 0\\.0\\.0\\.0:5056",
                 "uriFormat": "http://localhost/display",
                 "action": "openExternally"
             }

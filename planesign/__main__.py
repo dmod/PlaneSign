@@ -1,7 +1,9 @@
+import os
 import sys
 
 if "--web" in sys.argv:
     sys.argv.remove("--web")
+    os.environ["PLANESIGN_EMULATED_DISPLAY"] = "1"
     import emulated_matrix
 
     sys.modules["rgbmatrix"] = emulated_matrix
