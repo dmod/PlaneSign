@@ -5,8 +5,11 @@
 # Arcade style horse race. Four horses, a random race every time, no predetermined winner.
 ###
 
+import logging
 import math
+import os
 import random
+import subprocess
 import time
 
 from PIL import Image, ImageDraw, ImageEnhance
@@ -76,6 +79,13 @@ COAT_STYLES = [
 
 CONFETTI_COLORS = [(255, 70, 70), (255, 200, 40), (70, 220, 120), (80, 160, 255), (240, 100, 230), (255, 255, 255)]
 
+# Chiptune backing, see sounds/horse_race/generate_music.py
+FFPLAY = "/usr/bin/ffplay"
+MUSIC_DIR = os.path.join(shared_config.sounds_dir, "horse_race")
+POST_CALL = "post_call.mp3"  # bugle over the countdown
+RACE_LOOP = "race_gallop.mp3"  # gallop groove, looped for as long as they are running
+WIN_FANFARE = "win_fanfare.mp3"  # victory sting as the winner hits the line
+
 # Pixel art, 9 wide x 6 tall, facing right, muzzle on column 8 and hooves on row 5.
 #   H = coat, M = mane / tail, B = saddle cloth (lane accent), J = jockey silk, D = sock
 GALLOP_FRAMES = [
@@ -118,6 +128,39 @@ def _scale_color(color, factor):
 def _put(pix, x, y, color):
     if 0 <= x < WIDTH and 0 <= y < HEIGHT:
         pix[x, y] = color
+
+
+class Music:
+    """Fire and forget soundtrack. Stays quiet unless the sign itself has a speaker to play it."""
+
+    def __init__(self):
+        self.process = None
+        self.enabled = shared_config.audio_device is not None and not shared_config.emulated_display and os.path.exists(FFPLAY)
+
+    def play(self, filename, loop=False):
+        self.stop()
+        if not self.enabled:
+            return
+        path = os.path.join(MUSIC_DIR, filename)
+        if not os.path.exists(path):
+            logging.warning(f"Horse race music missing: {path}")
+            return
+        command = [FFPLAY, path, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"]
+        if loop:
+            command += ["-loop", "0"]
+        try:
+            self.process = subprocess.Popen(command, env={"SDL_AUDIODRIVER": "alsa", "AUDIODEV": shared_config.audio_device})
+        except OSError:
+            logging.exception("Could not start the horse race music")
+            self.enabled = False
+
+    def stop(self):
+        try:
+            if self.process is not None and self.process.poll() is None:
+                self.process.terminate()
+        except OSError:
+            logging.exception("Could not stop the horse race music")
+        self.process = None
 
 
 class Dust:
@@ -246,8 +289,9 @@ class Horse:
 
 
 class Race:
-    def __init__(self, sign):
+    def __init__(self, sign, music):
         self.sign = sign
+        self.music = music
         coats = random.sample(COAT_STYLES, NUM_HORSES)
         self.horses = [Horse(lane, coats[lane]) for lane in range(NUM_HORSES)]
         self.dust = []
@@ -393,6 +437,7 @@ class Race:
         """Horses fidget at the gate while 3 / 2 / 1 counts down."""
         start = time.perf_counter()
         total = COUNTDOWN_STEP * 3
+        self.music.play(POST_CALL)
 
         while self.alive():
             self.tick()
@@ -426,6 +471,7 @@ class Race:
         finish_started = None
         photo_finish = False
         white_flash = 0.0
+        self.music.play(RACE_LOOP, loop=True)
 
         while self.alive():
             dt = self.tick()
@@ -457,6 +503,7 @@ class Race:
                         photo_finish = self.finish_gap < PHOTO_FINISH_GAP
                         finish_started = time.perf_counter()
                         white_flash = 0.85
+                        self.music.play(WIN_FANFARE)
 
             self.update_dust(sim_dt)
             self.camera = min(max(leader.progress - LEAD_UNITS, CAMERA_START), CAMERA_FINISH)
@@ -564,11 +611,15 @@ class Race:
 @__main__.planesign_mode_handler(DisplayMode.HORSE_RACE)
 def horse_race(sign):
     sign.canvas.Clear()
+    music = Music()
 
-    while shared_config.shared_mode.value == DisplayMode.HORSE_RACE.value:
-        race = Race(sign)
-        if not race.run_countdown():
-            continue
-        if not race.run_race():
-            continue
-        race.run_banner()
+    try:
+        while shared_config.shared_mode.value == DisplayMode.HORSE_RACE.value:
+            race = Race(sign, music)
+            if not race.run_countdown():
+                continue
+            if not race.run_race():
+                continue
+            race.run_banner()
+    finally:
+        music.stop()
