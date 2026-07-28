@@ -149,6 +149,22 @@ GROOM_H = 10
 GARLAND_FRAME = ("..FFFFF..", ".F.....F.", "F.......F", "F.......F", "F.......F", ".F.....F.", "..FFFFF..")
 GARLAND_COLORS = [(235, 45, 70), (255, 250, 245), (250, 205, 70), (235, 45, 70), (110, 195, 95), (255, 250, 245), (250, 205, 70), (110, 195, 95)]
 
+# Winner's pennant numerals, 5 wide x 7 tall.
+# Only 1-4 can come up today but the whole set keeps it safe if the field ever grows.
+FLAG_DIGITS = {
+    "0": (".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."),
+    "1": ("..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."),
+    "2": (".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"),
+    "3": ("####.", "....#", "...#.", "..##.", "....#", "#...#", ".###."),
+    "4": ("...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."),
+    "5": ("#####", "#....", "####.", "....#", "....#", "#...#", ".###."),
+    "6": (".###.", "#....", "#....", "####.", "#...#", "#...#", ".###."),
+    "7": ("#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."),
+    "8": (".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."),
+    "9": (".###.", "#...#", "#...#", ".####", "....#", "....#", ".###."),
+}
+FLAG_DIGIT_H = 7
+
 
 def _compile_frames(frames):
     compiled = []
@@ -167,6 +183,7 @@ IDLE_SPRITES = _compile_frames(IDLE_FRAMES)
 WINNER_SPRITE = _compile_frames([WINNER_FRAME])[0]
 GROOM_SPRITES = _compile_frames(GROOM_FRAMES)
 GARLAND_PIXELS = _compile_frames([GARLAND_FRAME])[0]
+FLAG_DIGIT_PIXELS = {digit: _compile_frames([rows])[0] for digit, rows in FLAG_DIGITS.items()}
 
 # Winner's enclosure layout, everything stands on the bottom row
 BANNER_HORSE_X = 48
@@ -179,6 +196,24 @@ GROOM_WALK_SPEED = 46.0
 CROWN_TIME = 0.85
 WINK_START = 0.25
 WINK_END = 0.6
+
+# Winner's pennant. It lives in the empty strip left of the horse: the winner sprite starts at x 49
+# and the "HORSE N WINS!" caption starts at x 31, so staying at x <= 30 buys the full panel height.
+FLAG_POLE_X = 2
+FLAG_POLE_COLORS = ((152, 148, 160), (92, 88, 102))
+FLAG_FINIAL_COLOR = (250, 205, 70)
+FLAG_FABRIC_X = FLAG_POLE_X + 2  # fabric hangs off the right hand side of the pole
+FLAG_LEN = 14  # pole to apex, leaving more open space beside the winner
+FLAG_H = 14  # base height where it is lashed to the pole
+FLAG_TOP_Y = 3  # the smaller flag occupies only the upper portion of the pole
+FLAG_STOWED_Y = HEIGHT + 4  # starts below the panel so it climbs into view
+FLAG_HOIST_DELAY = 0.25
+FLAG_HOIST_TIME = 1.4
+FLAG_SETTLE = 3.0  # px of recoil as the halyard snaps taut at the top
+FLAG_WAVE_AMP = 2.0  # px of flap at the free end
+FLAG_WAVE_SPEED = 6.5  # radians per second
+FLAG_WAVE_FREQ = 0.42  # radians per column, so the ripple travels out along the fabric
+FLAG_DIGIT_DX = 1  # digit columns 1..5, where the triangle still clears the 7px glyph
 
 
 def _scale_color(color, factor):
@@ -270,6 +305,74 @@ class Confetti:
         # tumbling paper flickers as it turns edge on
         if math.sin(t * self.flip + self.phase) > -0.35:
             _put(pix, int(round(self.x)), int(round(self.y)), self.color)
+
+
+class WinnerFlag:
+    """Winner's pennant: a triangular flag that is hoisted up its pole and then flaps in the wind."""
+
+    def __init__(self, winner):
+        self.fabric = winner.color
+        self.ink = _ink_color(winner.color)
+        self.digit = FLAG_DIGIT_PIXELS.get(str(winner.number), FLAG_DIGIT_PIXELS["1"])
+
+    def _hoist(self, elapsed):
+        """0 while it is still stowed on the ground, 1 once it is home at the top of the pole."""
+        return min(1.0, max(0.0, (elapsed - FLAG_HOIST_DELAY) / FLAG_HOIST_TIME))
+
+    def _base_top(self, hoist, elapsed):
+        # Near enough a steady haul on the rope rather than a soft ease, so it has some pace
+        top = FLAG_STOWED_Y + (FLAG_TOP_Y - FLAG_STOWED_Y) * hoist**0.85
+        if hoist >= 1.0:
+            # Damped recoil once it hits the stop at the top of the pole
+            settled = elapsed - (FLAG_HOIST_DELAY + FLAG_HOIST_TIME)
+            top += FLAG_SETTLE * math.exp(-4.5 * settled) * math.sin(12.0 * settled)
+        return top
+
+    def _wave(self, column, elapsed, strength):
+        """Vertical offset of the fabric at this column. Pinned at the pole, loose at the tip."""
+        amplitude = FLAG_WAVE_AMP * strength * (column / FLAG_LEN) ** 1.3
+        phase = elapsed * FLAG_WAVE_SPEED - column * FLAG_WAVE_FREQ
+        return amplitude * (math.sin(phase) + 0.35 * math.sin(phase * 1.7 + 1.1)) / 1.35, phase
+
+    def draw(self, pix, elapsed):
+        for offset, color in enumerate(FLAG_POLE_COLORS):
+            for y in range(HEIGHT):
+                _put(pix, FLAG_POLE_X + offset, y, color)
+        _put(pix, FLAG_POLE_X, 0, FLAG_FINIAL_COLOR)
+        _put(pix, FLAG_POLE_X + 1, 0, FLAG_FINIAL_COLOR)
+
+        hoist = self._hoist(elapsed)
+        if hoist <= 0.0:
+            return
+
+        top = self._base_top(hoist, elapsed)
+        center = top + FLAG_H / 2.0
+        # Only half catches the wind while it is still climbing, and the gust breathes in and out
+        strength = (0.35 + 0.65 * hoist) * (0.82 + 0.18 * math.sin(elapsed * 0.7))
+
+        spans = []
+        for column in range(FLAG_LEN + 1):
+            offset, phase = self._wave(column, elapsed, strength)
+            half = (FLAG_H / 2.0) * (1.0 - column / FLAG_LEN)
+            top_y = int(round(center + offset - half))
+            bottom_y = int(round(center + offset + half))
+            spans.append((offset, top_y, bottom_y))
+
+            shade = 0.72 + 0.28 * (0.5 + 0.5 * math.cos(phase))
+            body = _scale_color(self.fabric, shade)
+            hem = _scale_color(self.fabric, shade * 0.55)
+            x = FLAG_FABRIC_X + column
+            for y in range(top_y, bottom_y + 1):
+                _put(pix, x, y, hem if y in (top_y, bottom_y) else body)
+
+        # The number rides the same ripple as the cloth instead of sitting flat on top of it
+        digit_top = center - FLAG_DIGIT_H / 2.0
+        for dx, dy, _ in self.digit:
+            column = FLAG_DIGIT_DX + dx
+            offset, span_top, span_bottom = spans[column]
+            y = int(round(digit_top + offset + dy))
+            if span_top < y < span_bottom:
+                _put(pix, FLAG_FABRIC_X + column, y, self.ink)
 
 
 class Horse:
@@ -622,6 +725,7 @@ class Race:
         """Winner's enclosure: a groom walks out and garlands the winner, then the party carries on."""
         self.confetti = [Confetti(seeded=True) for _ in range(70)]
         winner = self.winner
+        flag = WinnerFlag(winner)
         text = f"HORSE {winner.number} WINS!"
         text_x = int(utilities.get_centered_text_x_offset_value(5, text))
         coat = dict(winner.colors)
@@ -657,6 +761,8 @@ class Race:
             for x in range(WIDTH):
                 if x % 7 < 5:
                     _put(pix, x, HEIGHT - 1, _scale_color(RAIL_COLOR, 0.8))
+
+            flag.draw(pix, elapsed)
 
             # Once the flowers are on, the winner bobs along to the crowd
             bob = -1 if crowned and int(elapsed * 4) % 2 == 0 else 0
