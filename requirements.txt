@@ -5,10 +5,10 @@ favicon==0.7.0
 Flask==3.1.0
 Flask-Cors==4.0.2
 pytz==2022.1
-requests==2.31.0
+requests==2.34.2
 websocket-client==1.9.0
 gevent==23.9.1
 skyfield==1.51
 numba==0.60.0
-geopandas==1.0.1
+geopandas==1.1.4
 finnhub-python==2.4.25
