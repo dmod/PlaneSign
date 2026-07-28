@@ -57,28 +57,38 @@ RAIL_COLOR = (70, 58, 46)
 DUST_COLOR = (150, 122, 86)
 WHITE = (255, 255, 255)
 
-HORSE_STYLES = [
-    {"body": (235, 70, 45), "mane": (255, 190, 150), "silk": (255, 220, 60), "hoof": (225, 195, 165)},
-    {"body": (60, 140, 255), "mane": (175, 212, 255), "silk": (245, 245, 245), "hoof": (200, 210, 235)},
-    {"body": (70, 225, 100), "mane": (190, 255, 205), "silk": (255, 70, 200), "hoof": (205, 230, 200)},
-    {"body": (255, 175, 40), "mane": (255, 228, 165), "silk": (165, 90, 255), "hoof": (230, 210, 170)},
+# Lane identity: the saddle cloth, the jockey silks and the lane number all use this.
+# Deliberately not horse coloured so it never blends into a coat.
+LANE_ACCENTS = [(235, 70, 45), (60, 140, 255), (70, 225, 100), (255, 80, 210)]
+
+# Real horse coats, one drawn at random per horse. "sock" is the leg marking, kept light
+# so the gallop still reads against the dirt.
+COAT_STYLES = [
+    {"name": "chestnut", "body": (165, 82, 38), "mane": (205, 130, 65), "sock": (235, 200, 165)},
+    {"name": "bay", "body": (128, 68, 32), "mane": (58, 46, 42), "sock": (225, 205, 180)},
+    {"name": "cream", "body": (233, 214, 176), "mane": (250, 242, 224), "sock": (250, 244, 230)},
+    {"name": "buckskin", "body": (206, 158, 82), "mane": (62, 50, 44), "sock": (232, 214, 180)},
+    {"name": "dun", "body": (186, 154, 100), "mane": (70, 58, 48), "sock": (228, 214, 186)},
+    {"name": "silver dapple", "body": (124, 100, 96), "mane": (214, 206, 202), "sock": (222, 214, 210)},
+    {"name": "roan", "body": (192, 134, 118), "mane": (128, 66, 50), "sock": (236, 216, 206)},
+    {"name": "grey", "body": (178, 178, 186), "mane": (238, 238, 244), "sock": (245, 245, 250)},
 ]
 
 CONFETTI_COLORS = [(255, 70, 70), (255, 200, 40), (70, 220, 120), (80, 160, 255), (240, 100, 230), (255, 255, 255)]
 
 # Pixel art, 9 wide x 6 tall, facing right, muzzle on column 8 and hooves on row 5.
-#   H = body, M = mane / tail, J = jockey silk, D = hoof
+#   H = coat, M = mane / tail, B = saddle cloth (lane accent), J = jockey silk, D = sock
 GALLOP_FRAMES = [
-    ("...J...HH", "...JJJHHH", "MHHHHHHH.", ".HHHHHH..", ".H....H..", "D......D."),
-    ("...J...HH", "...JJJHHH", "MHHHHHHH.", ".HHHHHH..", "..H..H...", ".D....D.."),
-    ("...J...HH", "M..JJJHHH", "MHHHHHHH.", ".HHHHHH..", "..H.H....", "..DD....."),
-    ("...J...HH", "M..JJJHHH", "MHHHHHHH.", ".HHHHHH..", ".H...H...", "D...D...."),
+    ("...J..MHH", "...JJJHHH", "MHBBBHHH.", ".HHHHHH..", ".H....H..", "D......D."),
+    ("...J..MHH", "...JJJHHH", "MHBBBHHH.", ".HHHHHH..", "..H..H...", ".D....D.."),
+    ("...J..MHH", "M..JJJHHH", "MHBBBHHH.", ".HHHHHH..", "..H.H....", "..DD....."),
+    ("...J..MHH", "M..JJJHHH", "MHBBBHHH.", ".HHHHHH..", ".H...H...", "D...D...."),
 ]
 
 # Airborne bounce for the tucked up frames of the gallop cycle
 GALLOP_BOB = [0, -1, -1, 0]
 
-IDLE_FRAMES = [("...J...HH", "...JJJHHH", "MHHHHHHH.", ".HHHHHH..", ".H...H...", ".D...D..."), ("...J...HH", "M..JJJHHH", "MHHHHHHH.", ".HHHHHH..", ".H...H...", ".D...D..."), ("...J....H", "M..JJJHHH", "MHHHHHHH.", ".HHHHHH..", ".H...H...", ".D..D....")]
+IDLE_FRAMES = [("...J..MHH", "...JJJHHH", "MHBBBHHH.", ".HHHHHH..", ".H...H...", ".D...D..."), ("...J..MHH", "M..JJJHHH", "MHBBBHHH.", ".HHHHHH..", ".H...H...", ".D...D..."), ("...J..M.H", "M..JJJHHH", "MHBBBHHH.", ".HHHHHH..", ".H...H...", ".D..D....")]
 
 SPRITE_W = 9
 SPRITE_H = 6
@@ -154,12 +164,12 @@ class Confetti:
 
 
 class Horse:
-    def __init__(self, lane):
+    def __init__(self, lane, coat):
         self.lane = lane
         self.number = lane + 1
-        style = HORSE_STYLES[lane]
-        self.colors = {"H": style["body"], "M": style["mane"], "J": style["silk"], "D": style["hoof"]}
-        self.color = style["body"]
+        self.color = LANE_ACCENTS[lane]  # lane identity, not the horse itself
+        self.coat = coat["name"]
+        self.colors = {"H": coat["body"], "M": coat["mane"], "D": coat["sock"], "B": self.color, "J": self.color}
 
         self.progress = 0.0
         self.speed = 0.0
@@ -238,7 +248,8 @@ class Horse:
 class Race:
     def __init__(self, sign):
         self.sign = sign
-        self.horses = [Horse(lane) for lane in range(NUM_HORSES)]
+        coats = random.sample(COAT_STYLES, NUM_HORSES)
+        self.horses = [Horse(lane, coats[lane]) for lane in range(NUM_HORSES)]
         self.dust = []
         self.confetti = []
         self.camera = CAMERA_START
@@ -392,7 +403,7 @@ class Race:
             image, pix = self.new_frame()
             self.draw_track(pix)
             self.draw_horses(pix, running=False, elapsed=elapsed)
-            image = ImageEnhance.Brightness(image).enhance(0.4)
+            image = ImageEnhance.Brightness(image).enhance(0.5)
 
             step = int(elapsed / COUNTDOWN_STEP)
             digit = str(3 - step)
