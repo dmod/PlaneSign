@@ -213,11 +213,27 @@ function stop_recording() {
 }
 
 function on_recording_ready(e) {
+    if (!e.data || e.data.size === 0) {
+        return;
+    }
     fetch('api/play_mic_audio', {
         method: "POST",
         body: e.data
     })
-        .then(_ => console.log('Audio blob uploaded'))
+        .then(function (resp) {
+            return resp.json().catch(function () { return null; });
+        })
+        .then(function (body) {
+            // Emulated sign (--web): nothing to play it on, so play the recording back here.
+            if (body && body.playback === "browser") {
+                var url = URL.createObjectURL(e.data);
+                var audio = new Audio(url);
+                audio.onended = function () { URL.revokeObjectURL(url); };
+                audio.play().catch(function (err) { console.error("Browser mic playback failed:", err); });
+            } else {
+                console.log('Audio blob uploaded');
+            }
+        })
         .catch(err => console.error(err));
 }
 

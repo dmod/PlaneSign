@@ -552,6 +552,10 @@ def _validate_sound_filename(filename):
     return bool(SOUND_FILENAME_RE.match(filename))
 
 
+def _ffplay_env():
+    return {"SDL_AUDIODRIVER": "alsa", "AUDIODEV": shared_config.audio_device}
+
+
 @app.route("/is_audio_supported")
 def is_audio_supported():
     if shared_config.emulated_display:
@@ -566,16 +570,20 @@ def play_mic_audio():
     logging.info(f"Mic audio content length: {request.content_length}")
     request_data = request.get_data()
 
+    if shared_config.emulated_display:
+        # Emulated sign (--web): no speaker attached, so the browser plays back its own recording.
+        return jsonify({"ok": True, "playback": "browser"})
+
+    if shared_config.audio_device is None:
+        return jsonify({"ok": False, "error": "No audio output device detected"}), 503
+
     temp_audio_file = ".data/audio"
 
     with open(temp_audio_file, "wb") as f:
         f.write(request_data)
 
-    my_env = {}
-    my_env["SDL_AUDIODRIVER"] = "alsa"
-    my_env["AUDIODEV"] = shared_config.audio_device
-    subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
-    return ""
+    subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=_ffplay_env(), check=False)
+    return jsonify({"ok": True, "playback": "sign"})
 
 
 @app.route("/play_a_sound/<sound_id>")
@@ -588,12 +596,12 @@ def play_a_sound(sound_id):
         logging.info(f"Delegating sound to browser: {sound_id}")
         return jsonify({"ok": True, "playback": "browser", "sound_id": sound_id})
 
+    if shared_config.audio_device is None:
+        return jsonify({"ok": False, "error": "No audio output device detected"}), 503
+
     logging.info(f"Playing sound: {sound_id}")
 
-    my_env = {}
-    my_env["SDL_AUDIODRIVER"] = "alsa"
-    my_env["AUDIODEV"] = shared_config.audio_device
-    subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=my_env)
+    subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=_ffplay_env())
     return jsonify({"ok": True, "playback": "sign"})
 
 
