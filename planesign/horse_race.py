@@ -181,21 +181,26 @@ def _compile_frames(frames):
 GALLOP_SPRITES = _compile_frames(GALLOP_FRAMES)
 IDLE_SPRITES = _compile_frames(IDLE_FRAMES)
 WINNER_SPRITE = _compile_frames([WINNER_FRAME])[0]
+WINNER_W = max(dx for dx, dy, _ in WINNER_SPRITE) + 1
 GROOM_SPRITES = _compile_frames(GROOM_FRAMES)
 GARLAND_PIXELS = _compile_frames([GARLAND_FRAME])[0]
 FLAG_DIGIT_PIXELS = {digit: _compile_frames([rows])[0] for digit, rows in FLAG_DIGITS.items()}
 
 # Winner's enclosure layout, everything stands on the bottom row
+GROOM_SCALE = 2  # the groom is drawn twice life size so he reads next to the horse
 BANNER_HORSE_X = 48
 BANNER_HORSE_Y = HEIGHT - WINNER_H
-BANNER_GROOM_X = 74
-BANNER_GROOM_Y = HEIGHT - GROOM_H
+BANNER_GROOM_X = BANNER_HORSE_X + WINNER_W + 3  # a little breathing room beside the horse
+BANNER_GROOM_Y = HEIGHT - GROOM_H * GROOM_SCALE
 GARLAND_HOME = (BANNER_HORSE_X + 12, BANNER_HORSE_Y + 5)
-GARLAND_CARRY = (BANNER_GROOM_X - 10, HEIGHT - 9)
+GARLAND_CARRY = (BANNER_GROOM_X - 10, BANNER_GROOM_Y + 3)
 GROOM_WALK_SPEED = 46.0
 CROWN_TIME = 0.85
 WINK_START = 0.25
 WINK_END = 0.6
+FLIP_DELAY = 0.3  # pause after the garland lands before the victory flip
+FLIP_DURATION = 0.9  # seconds for the full 360
+FLIP_JUMP_HEIGHT = 8.0  # px of hop while spinning
 
 # Winner's pennant. It lives in the empty strip left of the horse: the winner sprite starts at x 49
 # and the "HORSE N WINS!" caption starts at x 31, so staying at x <= 30 buys the full panel height.
@@ -229,6 +234,12 @@ def _ink_color(color):
 def _put(pix, x, y, color):
     if 0 <= x < WIDTH and 0 <= y < HEIGHT:
         pix[x, y] = color
+
+
+def _put_scaled(pix, x, y, scale, color):
+    for ox in range(scale):
+        for oy in range(scale):
+            _put(pix, x + ox, y + oy, color)
 
 
 class Music:
@@ -373,6 +384,24 @@ class WinnerFlag:
             y = int(round(digit_top + offset + dy))
             if span_top < y < span_bottom:
                 _put(pix, FLAG_FABRIC_X + column, y, self.ink)
+
+
+def _draw_winner_flip(image, coat, hidden, flip_t):
+    """Paste the winner mid victory flip: one full rotation with a little hang time, garland along for the ride."""
+    sprite = Image.new("RGBA", (WINNER_W, WINNER_H), (0, 0, 0, 0))
+    for dx, dy, code in WINNER_SPRITE:
+        sprite.putpixel((dx, dy), (*(coat["H"] if code in hidden else coat[code]), 255))
+    garland_x, garland_y = GARLAND_HOME[0] - BANNER_HORSE_X, GARLAND_HOME[1] - BANNER_HORSE_Y
+    for index, (dx, dy, _) in enumerate(GARLAND_PIXELS):
+        x, y = garland_x + dx, garland_y + dy
+        if 0 <= x < WINNER_W and 0 <= y < WINNER_H:
+            sprite.putpixel((x, y), (*GARLAND_COLORS[index % len(GARLAND_COLORS)], 255))
+
+    rotated = sprite.rotate(360.0 * flip_t, resample=Image.NEAREST, expand=True)
+    hop = FLIP_JUMP_HEIGHT * 4.0 * flip_t * (1.0 - flip_t)
+    paste_x = int(round(BANNER_HORSE_X + WINNER_W / 2.0 - rotated.width / 2.0))
+    paste_y = int(round(BANNER_HORSE_Y + WINNER_H / 2.0 - rotated.height / 2.0 - hop))
+    image.paste(rotated, (paste_x, paste_y), rotated)
 
 
 class Horse:
@@ -750,6 +779,8 @@ class Race:
             crowned = lift >= 1.0
             settled = (elapsed - crown_start - CROWN_TIME) if crowned else -1.0
             winking = WINK_START <= settled < WINK_END
+            flip_elapsed = settled - FLIP_DELAY
+            flip_t = flip_elapsed / FLIP_DURATION if 0.0 <= flip_elapsed < FLIP_DURATION else -1.0
 
             image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
             pix = image.load()
@@ -764,13 +795,16 @@ class Race:
 
             flag.draw(pix, elapsed)
 
-            # Once the flowers are on, the winner bobs along to the crowd
+            # Once the flowers are on, the winner bobs along to the crowd (and takes a victory flip)
             bob = -1 if crowned and int(elapsed * 4) % 2 == 0 else 0
             hidden = {"E"} if winking else {"W"}
             if settled < WINK_END:
                 hidden.add("S")
-            for dx, dy, code in WINNER_SPRITE:
-                _put(pix, BANNER_HORSE_X + dx, BANNER_HORSE_Y + dy + bob, coat["H"] if code in hidden else coat[code])
+            if flip_t >= 0.0:
+                _draw_winner_flip(image, coat, hidden, flip_t)
+            else:
+                for dx, dy, code in WINNER_SPRITE:
+                    _put(pix, BANNER_HORSE_X + dx, BANNER_HORSE_Y + dy + bob, coat["H"] if code in hidden else coat[code])
 
             if crowned:
                 groom = GROOM_SPRITES[GROOM_WAVE[int(elapsed * 4) % 2]]
@@ -779,14 +813,16 @@ class Race:
             else:
                 groom = GROOM_SPRITES[GROOM_WALK[int(elapsed * 8) % 2]]
             for dx, dy, code in groom:
-                _put(pix, int(groom_x) + dx, BANNER_GROOM_Y + dy, groom_colors[code])
+                _put_scaled(pix, int(groom_x) + dx * GROOM_SCALE, BANNER_GROOM_Y + dy * GROOM_SCALE, GROOM_SCALE, groom_colors[code])
 
-            # Garland is carried in, lifted over the head and left hanging on the neck
-            ease = lift * lift * (3.0 - 2.0 * lift)
-            garland_x = int(groom_x) - 10 if crown_start is None else GARLAND_CARRY[0] + (GARLAND_HOME[0] - GARLAND_CARRY[0]) * ease
-            garland_y = GARLAND_CARRY[1] + (GARLAND_HOME[1] - GARLAND_CARRY[1]) * ease - 5.0 * math.sin(math.pi * ease)
-            for index, (dx, dy, _) in enumerate(GARLAND_PIXELS):
-                _put(pix, int(garland_x) + dx, int(garland_y) + dy + (bob if crowned else 0), GARLAND_COLORS[index % len(GARLAND_COLORS)])
+            # Garland is carried in, lifted over the head and left hanging on the neck.
+            # Once worn, it rides along inside the flip sprite instead of being drawn separately.
+            if flip_t < 0.0:
+                ease = lift * lift * (3.0 - 2.0 * lift)
+                garland_x = int(groom_x) - 10 if crown_start is None else GARLAND_CARRY[0] + (GARLAND_HOME[0] - GARLAND_CARRY[0]) * ease
+                garland_y = GARLAND_CARRY[1] + (GARLAND_HOME[1] - GARLAND_CARRY[1]) * ease - 5.0 * math.sin(math.pi * ease)
+                for index, (dx, dy, _) in enumerate(GARLAND_PIXELS):
+                    _put(pix, int(garland_x) + dx, int(garland_y) + dy + (bob if crowned else 0), GARLAND_COLORS[index % len(GARLAND_COLORS)])
 
             texts = []
             if elapsed > BANNER_INTRO:
