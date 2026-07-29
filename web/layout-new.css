@@ -664,23 +664,64 @@ input::placeholder {
 }
 
 #sounds_div {
-  display: flex;
+  display: grid;
   gap: 10px;
-  align-items: center;
 }
 
-#sound-list {
-  flex: 1 1 auto;
-  min-width: 0;
+.soundboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 2px;
 }
 
-.a_sound_button {
-  width: 58px;
-  height: 48px;
+.soundboard_button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: 78px;
+  padding: 8px 6px;
   border: 1px solid rgba(47, 111, 159, 0.22);
   border-radius: 12px;
-  background: rgba(47, 111, 159, 0.08);
+  background: linear-gradient(180deg, #ffffff, #eef5f8);
+  color: var(--cc-text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.soundboard_button:hover,
+.soundboard_button:focus-visible {
+  border-color: rgba(88, 166, 255, 0.48);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.12);
+}
+
+.soundboard_button:active {
+  transform: translateY(0);
+  background: linear-gradient(180deg, #eef5f8, #ffffff);
+}
+
+.soundboard_icon {
   font-size: 26px;
+  line-height: 1;
+}
+
+.soundboard_label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .sidenav {
@@ -1177,8 +1218,17 @@ input[type=number] {
   }
 
   #sounds_div {
-    flex-direction: column;
-    align-items: stretch;
+    padding: 10px;
+  }
+
+  .soundboard {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .soundboard_button {
+    min-height: 72px;
   }
 
   .modal_backdrop {

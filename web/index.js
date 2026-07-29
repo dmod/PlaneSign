@@ -1793,12 +1793,98 @@ function get_audio_support() {
     });
 }
 
+// Ordered keyword rules: the first match wins, so put specific names before generic ones.
+var sound_icon_rules = [
+    [/weather|storm|thunder|lightning/, "⛈️"],
+    [/police|siren|whoop|red ?alert|alarm|alert/, "🚨"],
+    [/clock|time ?up|timer/, "⏰"],
+    [/birthday|party/, "🎉"],
+    [/fog/, "🚢"],
+    [/fail|wah|wrong|sad/, "👎"],
+    [/airhorn|air ?horn|awooga|horn/, "📣"],
+    [/plane|airplane|flight|ding/, "✈️"],
+    [/cat/, "🐱"],
+    [/dog|bark/, "🐶"],
+    [/cricket|bug/, "🦗"],
+    [/dialup|dial ?up|modem|phone/, "☎️"],
+    [/excellent|nice|good|yay|cheer|clap|applause/, "🎉"],
+    [/fart|toot/, "💨"],
+    [/jeopardy|quiz|think/, "🧠"],
+    [/correct|right|win|success/, "✅"],
+    [/cena|muscle|strong/, "💪"],
+    [/joke|laugh|haha|funny/, "🤣"],
+    [/money|change|cash|coin|cha ?ching/, "💵"],
+    [/record|scratch|vinyl|dj/, "💿"],
+    [/whistle|slide/, "🎶"],
+    [/easy/, "👍"],
+    [/windows|startup|boot/, "🪟"],
+    [/zelda|secret|game/, "🎮"],
+    [/drum|rimshot/, "🥁"],
+    [/bell|ding ?dong|chime/, "🔔"],
+    [/music|theme|song|tune/, "🎵"]
+];
+
+function get_sound_icon(name) {
+    var lower = name.toLowerCase();
+    for (var i = 0; i < sound_icon_rules.length; i++) {
+        if (sound_icon_rules[i][0].test(lower)) {
+            return sound_icon_rules[i][1];
+        }
+    }
+    return "🔊";
+}
+
+function get_sound_label(name) {
+    return name
+        .replace(/[-_]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+}
+
+function build_soundboard(board, filenames) {
+    board.textContent = "";
+
+    for (var i = 0; i < filenames.length; i++) {
+        var parts = filenames[i].split("/");
+        var filename = parts[parts.length - 1];
+        var name = filename.replace(/\.[^.]+$/, "");
+        var label = get_sound_label(name);
+
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "soundboard_button";
+        button.title = label;
+        button.setAttribute("aria-label", "Play " + label);
+        button.addEventListener("click", play_a_sound.bind(null, filename));
+
+        var icon = document.createElement("span");
+        icon.className = "soundboard_icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = get_sound_icon(name);
+
+        var text = document.createElement("span");
+        text.className = "soundboard_label";
+        text.textContent = label;
+
+        button.appendChild(icon);
+        button.appendChild(text);
+        board.appendChild(button);
+    }
+}
+
 function populate_sound_dropdown() {
+    var board = document.getElementById("soundboard");
     var e = document.getElementById("sound-list");
     call_endpoint("/get_sounds", function (value) {
         console.log("Found files: " + value);
 
         var jsn = JSON.parse(value);
+
+        if (board) {
+            build_soundboard(board, jsn);
+            return;
+        }
 
         for (let i = 0; i < jsn.length; i++) {
             var option = document.createElement("option");

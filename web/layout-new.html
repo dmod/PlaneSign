@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="layout-new.css?v=sliders-1">
+  <link rel="stylesheet" href="layout-new.css?v=soundboard-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=sliders-1"></script>
+  <script src="index.js?v=soundboard-1"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -341,9 +341,7 @@
               <audio id="audio"></audio>
             </div>
             <div id="sounds_div" class="box5" hidden>
-              <select name="sounds" id="sound-list">
-              </select>
-              <button class="a_sound_button" onclick="play_selected_sound();">🎺</button>
+              <div id="soundboard" class="soundboard" role="group" aria-label="Soundboard"></div>
             </div>
           </div>
         </section>
