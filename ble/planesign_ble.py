@@ -42,6 +42,7 @@ class SystemControlService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, "312f08be-a717-40b0-9730-6d3d7c929856", True)
         self.add_characteristic(SafeCommandCharacteristic(bus, 0, self))
+        self.add_characteristic(PlanesignIdentifyCharacteristic(bus, 1, self))
 
 
 class ContainerControlService(Service):
@@ -468,9 +469,42 @@ class SafeCommandCharacteristic(Characteristic):
             self.last_result = f"Command '{command}' not in allowed list"
 
 
+class PlanesignIdentifyCharacteristic(Characteristic):
+    IDENTIFY_CHRC_UUID = "e64fcf70-97d7-4f4e-a5b7-8ac6004f0786"
+    IDENTIFY_URL = "http://localhost/api/identify"
+    TIMEOUT_SECONDS = 3
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(self, bus, index, self.IDENTIFY_CHRC_UUID, ["read", "write"], service)
+        self.value = []
+        self.last_result = "idle"
+
+    def ReadValue(self, options):
+        print("PlanesignIdentifyCharacteristic Read: " + self.last_result)
+        return [dbus.Byte(x.encode()) for x in self.last_result]
+
+    def WriteValue(self, value, options):
+        command = bytes(value).decode().strip()
+        print("PlanesignIdentifyCharacteristic Write: " + command)
+
+        if command != "identify":
+            self.last_result = f"Command '{command}' not in allowed list"
+            return
+
+        self.last_result = self._trigger_identify()
+
+    def _trigger_identify(self):
+        try:
+            req = urllib.request.Request(self.IDENTIFY_URL, method="GET")
+            # urlopen raises for >=400, so reaching here means the sign accepted the request.
+            with urllib.request.urlopen(req, timeout=self.TIMEOUT_SECONDS):
+                return "ok"
+        except Exception as e:
+            return f"error: {e}"
+
+
 class DockerContainerControlCharacteristic(Characteristic):
     DOCKER_CONTAINER_CONTROL_UUID = "29352a73-3108-4ecc-9440-57b5a8a5c027"
-
     ALLOWED_COMMANDS = {"start", "stop"}
 
     def __init__(self, bus, index, service):

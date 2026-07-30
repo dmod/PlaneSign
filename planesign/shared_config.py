@@ -5,6 +5,9 @@ import os
 shared_mode = Value("i", DisplayMode.WELCOME.value)
 shared_prev_mode = Value("i", DisplayMode.PLANES_ALERT.value)
 
+# Mode to fall back to once the transient IDENTIFY flash finishes.
+shared_identify_return_mode = Value("i", DisplayMode.PLANES_ALERT.value)
+
 shared_pong_player1 = Value("i", 0)
 shared_pong_player2 = Value("i", 0)
 

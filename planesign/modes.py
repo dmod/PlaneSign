@@ -30,3 +30,4 @@ class DisplayMode(Enum):
     CUSTOM_MESSAGE = auto()  # Custom message display
     FREE_SKETCH = auto()  # Browser sketch pad
     HORSE_RACE = auto()  # Arcade horse race
+    IDENTIFY = auto()  # Short "which sign is this?" flash, then reverts to the previous mode

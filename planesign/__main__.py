@@ -43,6 +43,7 @@ import custom_message
 import countdown
 import cca
 import cgol
+import identify
 import lightning
 import firework
 import horse_race

@@ -424,6 +424,17 @@ def get_mode():
     return DisplayMode(shared_config.shared_mode.value).name
 
 
+@app.route("/identify")
+def identify():
+    current_mode = shared_config.shared_mode.value
+    # Re-triggering mid-flash must not make IDENTIFY its own return mode.
+    if current_mode != DisplayMode.IDENTIFY.value:
+        shared_config.shared_identify_return_mode.value = current_mode
+    shared_config.shared_mode.value = DisplayMode.IDENTIFY.value
+    shared_config.shared_forced_sign_update.value = 1
+    return jsonify({"ok": True})
+
+
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_config.shared_current_brightness.value = int(brightness)

@@ -66,6 +66,7 @@ Execute a set of whitelisted system commands remotely.
 | # | Characteristic | UUID | Read | Write | Notify | Description |
 |---|----------------|------|:----:|:-----:|:------:|-------------|
 | 0 | Safe Command | `99945678-1234-5678-1234-56789abcdef2` | ✅ | ✅ | — | Write one of the allowed command keywords to execute it; read to get the result. |
+| 1 | Identify | `e64fcf70-97d7-4f4e-a5b7-8ac6004f0786` | ✅ | ✅ | — | Write `identify` to make the LED matrix flash for a few seconds (via `http://localhost/api/identify`) so a user can tell which sign is which. Read returns `idle`, `ok`, or an error string. |
 
 **Allowed commands:**
 
