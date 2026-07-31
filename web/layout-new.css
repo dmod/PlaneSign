@@ -256,10 +256,13 @@ input::placeholder {
   appearance: none;
   flex: 1 1 auto;
   min-width: 0;
-  height: 18px;
+  height: 28px;
   background: transparent;
   outline: none;
   cursor: pointer;
+  /* Let vertical swipes scroll the page while horizontal drags move the thumb. */
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .ps-range:disabled {
@@ -281,9 +284,9 @@ input::placeholder {
 .ps-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -5px;
+  width: 20px;
+  height: 20px;
+  margin-top: -6px;
   border: 2px solid #fffaf2;
   border-radius: 50%;
   background: var(--cc-green);
@@ -291,12 +294,59 @@ input::placeholder {
 }
 
 .ps-range::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border: 2px solid #fffaf2;
   border-radius: 50%;
   background: var(--cc-green);
   box-shadow: 0 0 0 4px rgba(48, 161, 78, 0.16);
+}
+
+/* Touch devices get a full 44px+ hit strip and a thumb that is easy to grab. */
+@media (pointer: coarse) {
+  .ps-slider-stack {
+    gap: 18px;
+    max-width: none;
+  }
+
+  .ps-slider-row {
+    gap: 14px;
+  }
+
+  .ps-slider-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .ps-slider-value {
+    min-width: 52px;
+    font-size: 15px;
+  }
+
+  .ps-range {
+    height: 48px;
+  }
+
+  .ps-range::-webkit-slider-runnable-track {
+    height: 14px;
+  }
+
+  .ps-range::-moz-range-track {
+    height: 14px;
+  }
+
+  .ps-range::-webkit-slider-thumb {
+    width: 32px;
+    height: 32px;
+    margin-top: -9px;
+    border-width: 3px;
+  }
+
+  .ps-range::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
 }
 
 #mandelbrot_slider,

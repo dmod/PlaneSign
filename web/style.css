@@ -217,10 +217,13 @@ legend {
   appearance: none;
   flex: 1 1 auto;
   min-width: 0;
-  height: 22px;
+  height: 36px;
   background: transparent;
   outline: none;
   cursor: pointer;
+  /* Let vertical swipes scroll the page while horizontal drags move the thumb. */
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .ps-range:disabled {
@@ -228,13 +231,13 @@ legend {
 }
 
 .ps-range::-webkit-slider-runnable-track {
-  height: 8px;
+  height: 10px;
   border-radius: 999px;
   background: linear-gradient(90deg, #4CAF50 var(--fill, 0%), #d3d3d3 var(--fill, 0%));
 }
 
 .ps-range::-moz-range-track {
-  height: 8px;
+  height: 10px;
   border-radius: 999px;
   background: linear-gradient(90deg, #4CAF50 var(--fill, 0%), #d3d3d3 var(--fill, 0%));
 }
@@ -242,9 +245,9 @@ legend {
 .ps-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 22px;
-  height: 22px;
-  margin-top: -7px;
+  width: 26px;
+  height: 26px;
+  margin-top: -8px;
   border: 2px solid #fff;
   border-radius: 50%;
   background: #4CAF50;
@@ -252,8 +255,8 @@ legend {
 }
 
 .ps-range::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border: 2px solid #fff;
   border-radius: 50%;
   background: #4CAF50;
@@ -266,6 +269,56 @@ legend {
 
 .ps-range:focus-visible::-moz-range-thumb {
   box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.35);
+}
+
+/* Touch devices: this page has no responsive viewport, so mobile browsers render
+   it zoomed out. Oversize the sliders so they stay grabbable without pinch-zoom. */
+@media (pointer: coarse) {
+  .ps-slider-stack {
+    width: 96%;
+    max-width: 760px;
+    gap: 26px;
+    margin: 36px auto;
+  }
+
+  .ps-slider-row {
+    gap: 20px;
+  }
+
+  .ps-slider-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .ps-slider-value {
+    min-width: 92px;
+    font-size: 30px;
+  }
+
+  .ps-range {
+    height: 76px;
+  }
+
+  .ps-range::-webkit-slider-runnable-track {
+    height: 26px;
+  }
+
+  .ps-range::-moz-range-track {
+    height: 26px;
+  }
+
+  .ps-range::-webkit-slider-thumb {
+    width: 58px;
+    height: 58px;
+    margin-top: -16px;
+    border-width: 4px;
+  }
+
+  .ps-range::-moz-range-thumb {
+    width: 58px;
+    height: 58px;
+    border-width: 4px;
+  }
 }
 
 #lightning_div {
