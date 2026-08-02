@@ -1597,6 +1597,17 @@ def get_mac_id(interface="wlan0"):
         return "UNKNOWN"
 
 
+# Degrees of hue advanced for each pixel painted with the free sketch rainbow pen.
+# Must stay in sync with FREE_SKETCH_RAINBOW_STEP in web/index.js.
+FREE_SKETCH_RAINBOW_STEP = 9
+
+
+def rainbow_pen_color(angle):
+    """Return the (r, g, b) rainbow pen color for a hue angle in degrees."""
+    _, r, g, b = next_color_rainbow_linear(angle % 360, dangle=0)
+    return r, g, b
+
+
 def get_version():
     try:
         with open("version.txt", "r") as f:

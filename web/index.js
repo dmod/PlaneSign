@@ -8,6 +8,11 @@ var free_sketch_is_eraser = false;
 var free_sketch_is_stamp = false;
 var free_sketch_is_color_picker = false;
 var free_sketch_is_paint_bucket = false;
+var free_sketch_is_rainbow = false;
+var free_sketch_rainbow_angle = 0;
+// Degrees of hue advanced for each pixel painted with the rainbow pen.
+// Must stay in sync with FREE_SKETCH_RAINBOW_STEP in planesign/utilities.py.
+var FREE_SKETCH_RAINBOW_STEP = 9;
 var free_sketch_stamp_category = "snowflake";
 var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
@@ -337,6 +342,7 @@ function setup_free_sketch() {
         color.addEventListener("input", function () {
             set_free_sketch_eraser(false);
             set_free_sketch_stamp(false);
+            set_free_sketch_rainbow(false);
             add_color_to_recent(color.value);
         });
     }
@@ -455,6 +461,7 @@ function set_free_sketch_eraser(is_eraser) {
         set_free_sketch_stamp(false);
         set_free_sketch_color_picker(false);
         set_free_sketch_paint_bucket(false);
+        set_free_sketch_rainbow(false);
     }
 }
 
@@ -472,6 +479,7 @@ function set_free_sketch_stamp(is_stamp) {
         set_free_sketch_eraser(false);
         set_free_sketch_color_picker(false);
         set_free_sketch_paint_bucket(false);
+        set_free_sketch_rainbow(false);
     }
 }
 
@@ -489,6 +497,7 @@ function set_free_sketch_color_picker(is_picker) {
         set_free_sketch_eraser(false);
         set_free_sketch_stamp(false);
         set_free_sketch_paint_bucket(false);
+        set_free_sketch_rainbow(false);
     }
 }
 
@@ -506,7 +515,70 @@ function set_free_sketch_paint_bucket(is_bucket) {
         set_free_sketch_eraser(false);
         set_free_sketch_stamp(false);
         set_free_sketch_color_picker(false);
+        set_free_sketch_rainbow(false);
     }
+}
+
+function toggle_free_sketch_rainbow() {
+    set_free_sketch_rainbow(!free_sketch_is_rainbow);
+}
+
+function set_free_sketch_rainbow(is_rainbow) {
+    free_sketch_is_rainbow = is_rainbow;
+    var btn = document.getElementById("free_sketch_rainbow");
+    if (btn) {
+        btn.classList.toggle("active", is_rainbow);
+        btn.setAttribute("aria-pressed", is_rainbow ? "true" : "false");
+    }
+    if (is_rainbow) {
+        set_free_sketch_eraser(false);
+        set_free_sketch_stamp(false);
+        set_free_sketch_color_picker(false);
+        set_free_sketch_paint_bucket(false);
+    }
+    if (free_sketch_hover_position) {
+        draw_free_sketch_hover(free_sketch_hover_position.x, free_sketch_hover_position.y);
+    }
+}
+
+function round_half_even(value) {
+    // Matches Python's round() so the browser preview matches the sign exactly
+    var floored = Math.floor(value);
+    var remainder = value - floored;
+    if (remainder > 0.5) {
+        return floored + 1;
+    }
+    if (remainder < 0.5) {
+        return floored;
+    }
+    return floored % 2 === 0 ? floored : floored + 1;
+}
+
+function get_rainbow_pen_color(angle) {
+    // Mirrors next_color_rainbow_linear in planesign/utilities.py
+    angle = ((angle % 360) + 360) % 360;
+    var r, g, b;
+    if (angle <= 120) {
+        r = round_half_even(255 * (120 - angle) / 120);
+        g = round_half_even(255 * angle / 120);
+        b = 0;
+    } else if (angle <= 240) {
+        r = 0;
+        g = round_half_even(255 * (240 - angle) / 120);
+        b = round_half_even(255 * (angle - 120) / 120);
+    } else {
+        r = round_half_even(255 * (angle - 240) / 120);
+        g = 0;
+        b = round_half_even(255 * (360 - angle) / 120);
+    }
+    return { r: r, g: g, b: b, hex: rgb_to_hex(r, g, b) };
+}
+
+function rgb_to_hex(r, g, b) {
+    return "#" +
+        ("0" + r.toString(16)).slice(-2) +
+        ("0" + g.toString(16)).slice(-2) +
+        ("0" + b.toString(16)).slice(-2);
 }
 
 function set_free_sketch_brush_size(size) {
@@ -554,6 +626,7 @@ function set_free_sketch_color(colorHex) {
     }
     set_free_sketch_eraser(false);
     set_free_sketch_stamp(false);
+    set_free_sketch_rainbow(false);
     add_color_to_recent(colorHex);
 }
 
@@ -767,6 +840,10 @@ function get_free_sketch_color() {
         return { r: 0, g: 0, b: 0, hex: "#000000" };
     }
 
+    if (free_sketch_is_rainbow) {
+        return get_rainbow_pen_color(free_sketch_rainbow_angle);
+    }
+
     var color = document.getElementById("free_sketch_color").value;
     return {
         r: parseInt(color.substring(1, 3), 16),
@@ -843,7 +920,12 @@ function draw_free_sketch_hover(x, y) {
         context.fillText("\u2744", x, y);
     } else {
         // Show brush preview
-        context.fillStyle = "rgba(190, 190, 190, 0.55)";
+        if (free_sketch_is_rainbow) {
+            var preview = get_rainbow_pen_color(free_sketch_rainbow_angle);
+            context.fillStyle = "rgba(" + preview.r + ", " + preview.g + ", " + preview.b + ", 0.75)";
+        } else {
+            context.fillStyle = "rgba(190, 190, 190, 0.55)";
+        }
         var brushPixels = get_brush_shape_pixels(x, y, free_sketch_brush_size, free_sketch_brush_shape);
         brushPixels.forEach(function (p) {
             if (p.x >= 0 && p.x < hover_canvas.width && p.y >= 0 && p.y < hover_canvas.height) {
@@ -957,14 +1039,22 @@ function paint_free_sketch_pixel(event) {
 
     if (free_sketch_last_pixel && (free_sketch_last_pixel.x !== x || free_sketch_last_pixel.y !== y)) {
         // Interpolate a line from the last position to the current one
+        var stroke_angle = free_sketch_rainbow_angle;
         var points = bresenham_line(free_sketch_last_pixel.x, free_sketch_last_pixel.y, x, y);
         for (var i = 0; i < points.length; i++) {
+            if (free_sketch_is_rainbow) {
+                context.fillStyle = get_rainbow_pen_color(stroke_angle + i * FREE_SKETCH_RAINBOW_STEP).hex;
+            }
             var brushPixels = get_brush_shape_pixels(points[i].x, points[i].y, free_sketch_brush_size, free_sketch_brush_shape);
             brushPixels.forEach(function (p) {
                 if (p.x >= 0 && p.x < canvas.width && p.y >= 0 && p.y < canvas.height) {
                     context.fillRect(p.x, p.y, 1, 1);
                 }
             });
+        }
+
+        if (free_sketch_is_rainbow) {
+            free_sketch_rainbow_angle = (stroke_angle + points.length * FREE_SKETCH_RAINBOW_STEP) % 360;
         }
 
         post_json_endpoint("/free_sketch/line", {
@@ -974,12 +1064,15 @@ function paint_free_sketch_pixel(event) {
             y1: y,
             brush_size: free_sketch_brush_size,
             brush_shape: free_sketch_brush_shape,
+            rainbow: free_sketch_is_rainbow,
+            rainbow_angle: stroke_angle,
             r: selected_color.r,
             g: selected_color.g,
             b: selected_color.b
         });
     } else if (!free_sketch_last_pixel || (free_sketch_last_pixel.x !== x || free_sketch_last_pixel.y !== y)) {
         // First point or same check - just paint a single stamp
+        var point_angle = free_sketch_rainbow_angle;
         var brushPixels = get_brush_shape_pixels(x, y, free_sketch_brush_size, free_sketch_brush_shape);
         brushPixels.forEach(function (p) {
             if (p.x >= 0 && p.x < canvas.width && p.y >= 0 && p.y < canvas.height) {
@@ -987,11 +1080,17 @@ function paint_free_sketch_pixel(event) {
             }
         });
 
+        if (free_sketch_is_rainbow) {
+            free_sketch_rainbow_angle = (point_angle + FREE_SKETCH_RAINBOW_STEP) % 360;
+        }
+
         post_json_endpoint("/free_sketch/pixel", {
             x: x,
             y: y,
             brush_size: free_sketch_brush_size,
             brush_shape: free_sketch_brush_shape,
+            rainbow: free_sketch_is_rainbow,
+            rainbow_angle: point_angle,
             r: selected_color.r,
             g: selected_color.g,
             b: selected_color.b

@@ -148,12 +148,17 @@ def set_free_sketch_pixel():
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "Expected JSON object"}), 400
 
+    rainbow = bool(data.get("rainbow", False))
+
     try:
         x = int(data["x"])
         y = int(data["y"])
-        r = int(data["r"])
-        g = int(data["g"])
-        b = int(data["b"])
+        if rainbow:
+            r, g, b = utilities.rainbow_pen_color(int(data.get("rainbow_angle", 0)))
+        else:
+            r = int(data["r"])
+            g = int(data["g"])
+            b = int(data["b"])
     except (KeyError, TypeError, ValueError):
         return jsonify({"ok": False, "error": "Expected integer x, y, r, g, b"}), 400
 
@@ -187,14 +192,20 @@ def set_free_sketch_line():
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "Expected JSON object"}), 400
 
+    rainbow = bool(data.get("rainbow", False))
+
     try:
         x0 = int(data["x0"])
         y0 = int(data["y0"])
         x1 = int(data["x1"])
         y1 = int(data["y1"])
-        r = int(data["r"])
-        g = int(data["g"])
-        b = int(data["b"])
+        if rainbow:
+            rainbow_angle = int(data.get("rainbow_angle", 0))
+            r, g, b = utilities.rainbow_pen_color(rainbow_angle)
+        else:
+            r = int(data["r"])
+            g = int(data["g"])
+            b = int(data["b"])
     except (KeyError, TypeError, ValueError):
         return jsonify({"ok": False, "error": "Expected integer x0, y0, x1, y1, r, g, b"}), 400
 
@@ -217,7 +228,9 @@ def set_free_sketch_line():
     color = bytes((r, g, b))
     pixel_buffer = shared_config.free_sketch_pixels.get_obj()
     with shared_config.free_sketch_pixels.get_lock():
-        for px, py in utilities.bresenham_line(x0, y0, x1, y1):
+        for offset, (px, py) in enumerate(utilities.bresenham_line(x0, y0, x1, y1)):
+            if rainbow:
+                color = bytes(utilities.rainbow_pen_color(rainbow_angle + offset * utilities.FREE_SKETCH_RAINBOW_STEP))
             utilities.paint_brush(pixel_buffer, px, py, brush_size, color, brush_shape)
 
     return jsonify({"ok": True})
