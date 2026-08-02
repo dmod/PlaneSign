@@ -1140,6 +1140,11 @@ input[type=number] {
   color: #ffffff;
 }
 
+.free_sketch_rainbow_button.active {
+  background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff);
+  color: black;
+}
+
 .free_sketch_stamp_button {
   font-size: 26px;
   line-height: 1;
