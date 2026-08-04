@@ -222,58 +222,6 @@ class Bee(FlyingBug):
         self.y0 = 2
         self.summon()
 
-class Bird_Base(Critter):
-    def __init__(self):
-        super().__init__()
-        self.brighten = True
-        self.lifeTime = random.uniform(45.0, 100.0)
-        self.maxSpeed = 25.0
-        self.minSpeed = 5.0
-        self.accel = 5.0
-        self.speed = 10.0
-        self.frameRate = 0.2
-
-    def move(self):
-        now = time.perf_counter()
-        if self.lastDraw is not None:
-            dt = now - self.lastDraw
-        else:
-            dt = 0
-
-        if self.leaveFlag:
-            # Leaving
-            if math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0 \
-               or self.realx < -10.0 or self.realx > 138.0 or self.realy < -10.0 or self.realy > 41.0:
-                # Set despawn flag
-                self.despawnFlag = True
-        else:
-            if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or \
-            (self.targetX is not None and self.targetY is not None and \
-                math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
-                self.moveInterval = random.uniform(self.minMoveInterval, self.maxMoveInterval)
-                self.lastMove = now
-
-                while True:
-                    self.targetX = random.uniform(3.0, 124.0)
-                    self.targetY = random.uniform(3.0, 28.0)
-
-                    if abs(self.realx - self.targetX) > 15.0:
-                        break
-
-        dist = math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY))
-        direction = math.atan2(self.targetY - self.realy, self.targetX - self.realx)
-
-        dv = self.accel * dt
-        if dist <= 10.0:
-            dv *= -1
-
-        self.speed = max(self.minSpeed, min(self.speed + dv, self.maxSpeed))
-        self.realx += math.cos(direction) * self.speed * dt
-        self.realy += math.sin(direction) * self.speed * dt
-
-        self.x = round(self.realx)
-        self.y = round(self.realy)
-
 def handle_critters(critters):
 
     now = time.perf_counter()
