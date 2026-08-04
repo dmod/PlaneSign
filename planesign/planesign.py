@@ -12,6 +12,10 @@ from modes import DisplayMode
 
 
 class PlaneSign:
+    # How often wait_loop rechecks brightness / forced-update flags. Bounds worst-case
+    # latency of a mode change while keeping the loop off the CPU.
+    WAIT_LOOP_POLL_INTERVAL = 0.005
+
     def __init__(self, defined_mode_handlers):
         options = RGBMatrixOptions()
         options.cols = 64
@@ -38,13 +42,13 @@ class PlaneSign:
         self.fontreallybig.LoadFont(os.path.join(shared_config.font_dir, "9x18B.bdf"))
         self.fontplanesign.LoadFont(os.path.join(shared_config.font_dir, "helvR12.bdf"))
 
-        self.last_brightness = None
-
         shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 
         self.canvas.brightness = shared_config.shared_current_brightness.value
 
         self.matrix.brightness = shared_config.shared_current_brightness.value
+
+        self.last_brightness = shared_config.shared_current_brightness.value
 
     # Call this with a positive value to stay within the loop for that specificed amount of time
     # Call this with -1 to stay in the loop forever or until shared_forced_sign_update is set
@@ -57,12 +61,18 @@ class PlaneSign:
         while stay_in_loop:
             stay_in_loop = time.perf_counter() < exit_loop_time or seconds == -1
 
-            self.matrix.brightness = shared_config.shared_current_brightness.value
+            brightness = shared_config.shared_current_brightness.value
+            if brightness != self.last_brightness:
+                self.matrix.brightness = brightness
+                self.last_brightness = brightness
 
             if shared_config.shared_forced_sign_update.value == 1:
                 logging.debug("Forcing breakout")
                 stay_in_loop = False
                 forced_breakout = True
+
+            if stay_in_loop:
+                time.sleep(self.WAIT_LOOP_POLL_INTERVAL)
 
         shared_config.shared_forced_sign_update.value = 0
         return forced_breakout
