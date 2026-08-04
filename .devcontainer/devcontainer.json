@@ -7,11 +7,7 @@
 			"PLANESIGN_ROOT": "/workspaces/PlaneSign"
 		}
 	},
-	// NOTE: do not add "--network=host" here. On Docker Desktop it makes the container and
-	// host share a loopback, which causes VS Code to auto-forward its own extension-host
-	// agent port and spin in an endless docker-exec relay loop (vscode-remote-release#10254).
-	// Production on the Pi still uses host networking via compose.yaml / the install script.
-	"runArgs": ["--privileged"],
+	"runArgs": ["--privileged", "--network=host"],
 	"features": {
 		"ghcr.io/devcontainers-extra/features/apt-packages:1": {
 			"packages": "python3-dev,python3-pil,build-essential,cmake"

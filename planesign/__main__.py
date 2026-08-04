@@ -78,7 +78,7 @@ shared_config.data_dict["slowest"] = None
 def exit_gracefully(*args):
     logging.info("Shutdown signal received, exiting gracefully...")
     shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     shared_config.shared_shutdown_event.set()
 
 

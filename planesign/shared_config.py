@@ -1,4 +1,4 @@
-from multiprocessing import Array, Value
+from multiprocessing import Array, Event, Value
 from modes import DisplayMode
 import os
 
@@ -13,7 +13,7 @@ shared_pong_player2 = Value("i", 0)
 
 shared_current_brightness = Value("i", 80)
 shared_color_mode = Value("i", 0)
-shared_forced_sign_update = Value("i", 0)
+shared_forced_sign_update = Event()
 
 shared_satellite_mode = Value("i", 1)
 

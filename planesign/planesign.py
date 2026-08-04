@@ -12,9 +12,9 @@ from modes import DisplayMode
 
 
 class PlaneSign:
-    # How often wait_loop rechecks brightness / forced-update flags. Bounds worst-case
-    # latency of a mode change while keeping the loop off the CPU.
-    WAIT_LOOP_POLL_INTERVAL = 0.005
+    # Brightness has no change notification so it still has to be polled; forced updates
+    # interrupt the wait immediately and are unaffected by this cadence.
+    BRIGHTNESS_POLL_INTERVAL = 0.05
 
     def __init__(self, defined_mode_handlers):
         options = RGBMatrixOptions()
@@ -55,26 +55,28 @@ class PlaneSign:
     def wait_loop(self, seconds):
         exit_loop_time = time.perf_counter() + seconds
 
-        stay_in_loop = True
         forced_breakout = False
 
-        while stay_in_loop:
-            stay_in_loop = time.perf_counter() < exit_loop_time or seconds == -1
-
+        while True:
             brightness = shared_config.shared_current_brightness.value
             if brightness != self.last_brightness:
                 self.matrix.brightness = brightness
                 self.last_brightness = brightness
 
-            if shared_config.shared_forced_sign_update.value == 1:
+            timeout = self.BRIGHTNESS_POLL_INTERVAL
+            if seconds != -1:
+                timeout = min(exit_loop_time - time.perf_counter(), timeout)
+
+            # Returns True immediately if already set, so a forced update never waits out the poll interval.
+            if shared_config.shared_forced_sign_update.wait(max(timeout, 0)):
                 logging.debug("Forcing breakout")
-                stay_in_loop = False
                 forced_breakout = True
+                break
 
-            if stay_in_loop:
-                time.sleep(self.WAIT_LOOP_POLL_INTERVAL)
+            if timeout <= 0:
+                break
 
-        shared_config.shared_forced_sign_update.value = 0
+        shared_config.shared_forced_sign_update.clear()
         return forced_breakout
 
     def sign_loop(self):

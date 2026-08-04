@@ -86,7 +86,7 @@ def write_config():
             os.fsync(f.fileno())
 
         utilities.read_config()
-        shared_config.shared_forced_sign_update.value = 1
+        shared_config.shared_forced_sign_update.set()
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception("Failed to write sign.conf")
@@ -101,7 +101,7 @@ def get_status():
 @app.route("/turn_on")
 def turn_on():
     shared_config.shared_mode.value = shared_config.shared_prev_mode.value
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 
@@ -109,14 +109,14 @@ def turn_on():
 def turn_off():
     shared_config.shared_prev_mode.value = shared_config.shared_mode.value
     shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
     shared_config.shared_color_mode.value = int(color)
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 
@@ -124,7 +124,7 @@ def set_color_mode(color):
 def set_countdown(datetimestr, countdownmsg):
     shared_config.data_dict["countdown_datetime"] = datetime.fromisoformat(datetimestr)
     shared_config.data_dict["countdown_message"] = countdownmsg[1:].strip()
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 
@@ -138,7 +138,7 @@ def get_possible_flights(query_string):
 def set_track_a_flight(flight_num):
     shared_config.data_dict["track_a_flight_num"] = flight_num
     shared_config.shared_mode.value = DisplayMode.TRACK_A_FLIGHT.value
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 
@@ -428,7 +428,7 @@ def set_mode(mode):
     shared_config.shared_mode.value = DisplayMode[mode].value
     if request.args:
         shared_config.arg_dict.update(request.args)
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 
@@ -444,14 +444,14 @@ def identify():
     if current_mode != DisplayMode.IDENTIFY.value:
         shared_config.shared_identify_return_mode.value = current_mode
     shared_config.shared_mode.value = DisplayMode.IDENTIFY.value
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return jsonify({"ok": True})
 
 
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
     shared_config.shared_current_brightness.value = int(brightness)
-    # shared_config.shared_forced_sign_update.value = 1
+    # shared_config.shared_forced_sign_update.set()
     return ""
 
 
@@ -496,7 +496,7 @@ def set_volume(volume):
 @app.route("/set_custom_message/<message>")
 def set_custom_message(message):
     shared_config.data_dict["custom_message"] = message
-    shared_config.shared_forced_sign_update.value = 1
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 

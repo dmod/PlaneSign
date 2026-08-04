@@ -29,8 +29,8 @@ def identify(self, duration=IDENTIFY_DURATION_SECONDS):
 
     while True:
         elapsed = time.perf_counter() - start_time
-        if shared_config.shared_forced_sign_update.value == 1:
-            shared_config.shared_forced_sign_update.value = 0
+        if shared_config.shared_forced_sign_update.is_set():
+            shared_config.shared_forced_sign_update.clear()
             interrupted = True
             break
         if elapsed >= duration:
