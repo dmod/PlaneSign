@@ -7,6 +7,7 @@ import time
 import shutil
 import socket
 import subprocess
+import threading
 import urllib.error
 import urllib.request
 from gi.repository import GLib
@@ -61,14 +62,76 @@ class DockerUpdateCheckCharacteristic(Characteristic):
     GHCR_TOKEN_URL = f"https://ghcr.io/token?scope=repository:{DOCKER_IMAGE_REPO}:pull&service=ghcr.io"
     GHCR_MANIFEST_URL = f"https://ghcr.io/v2/{DOCKER_IMAGE_REPO}/manifests/latest"
     TIMEOUT_SECONDS = 8
+    CACHE_TTL_SECONDS = 300
+    FAILURE_CACHE_TTL_SECONDS = 30
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, ["read"], service)
+        Characteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, ["read", "notify"], service)
+        self._cached_result = None
+        self._last_checked_at = 0.0
+        self._check_in_progress = False
+        self._notifying = False
+        self._lock = threading.Lock()
 
     def ReadValue(self, options):
-        result = self._check_for_update()
+        with self._lock:
+            cache_is_fresh = self._cache_is_fresh()
+            check_in_progress = self._check_in_progress
+
+        if not self._notifying and not cache_is_fresh and not check_in_progress:
+            self._finish_update_check(self._check_for_update())
+
+        self._refresh_if_stale()
+        with self._lock:
+            result = self._cached_result or "checking"
         print("DockerUpdateCheckCharacteristic Read: " + result)
         return [dbus.Byte(x.encode()) for x in result]
+
+    def StartNotify(self):
+        if self._notifying:
+            return
+        self._notifying = True
+        with self._lock:
+            cached_result = self._cached_result
+        if cached_result is not None:
+            self._send_notification(cached_result)
+        self._refresh_if_stale()
+
+    def StopNotify(self):
+        self._notifying = False
+
+    def _refresh_if_stale(self):
+        with self._lock:
+            if self._check_in_progress or self._cache_is_fresh():
+                return
+            self._check_in_progress = True
+
+        threading.Thread(target=self._run_update_check, name="planesign-update-check", daemon=True).start()
+
+    def _cache_is_fresh(self):
+        if self._cached_result is None:
+            return False
+        ttl = self.FAILURE_CACHE_TTL_SECONDS if self._cached_result.startswith("check failed:") else self.CACHE_TTL_SECONDS
+        return time.monotonic() - self._last_checked_at < ttl
+
+    def _run_update_check(self):
+        result = self._check_for_update()
+        GLib.idle_add(self._finish_update_check, result)
+
+    def _finish_update_check(self, result):
+        with self._lock:
+            self._cached_result = result
+            self._last_checked_at = time.monotonic()
+            self._check_in_progress = False
+
+        print("DockerUpdateCheckCharacteristic result: " + result)
+        if self._notifying:
+            self._send_notification(result)
+        return False
+
+    def _send_notification(self, result):
+        value = dbus.Array([dbus.Byte(b) for b in result.encode("utf-8")], signature="y")
+        self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": value}, [])
 
     def _check_for_update(self):
         try:

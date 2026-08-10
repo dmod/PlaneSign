@@ -92,7 +92,7 @@ Manage the PlaneSign Docker container lifecycle, check for updates, and perform 
 |---|----------------|------|:----:|:-----:|:------:|-------------|
 | 0 | Container Control | `29352a73-3108-4ecc-9440-57b5a8a5c027` | ✅ | ✅ | — | Read returns the live container status (name, state, running, ID). Write `start` or `stop` to control the `PlaneSignRuntime` container. Stop uses `docker kill` for a forced shutdown. |
 | 1 | Version | `8d1151e7-04b8-49e2-955a-daa50e1285e5` | ✅ | — | — | Fetches the current PlaneSign application version from the local API (`http://localhost/api/version`). |
-| 2 | Update Check | `a9cc9f79-aa76-4955-aeb5-85aa9299028e` | ✅ | — | — | Compares the local Docker image digest against the remote GHCR digest. Returns `up-to-date` or `update-available` with short digest hashes. |
+| 2 | Update Check | `a9cc9f79-aa76-4955-aeb5-85aa9299028e` | ✅ | — | ✅ | Subscribed clients receive cached results immediately while stale data refreshes in the background, followed by an `up-to-date` or `update-available` notification. One-shot reads remain synchronous for compatibility. Successful results are cached for 5 minutes and failures for 30 seconds. |
 | 3 | System Update | `32d1b76b-9532-44da-9a43-3b682b8be90c` | ✅ | ✅ | ✅ | Write `update` to trigger the OTA update script. Read returns current status (`idle`, `updating`, `complete`, or `failed: …`). Subscribe to notifications for real-time status changes. |
 | 4 | Update Log | `f63b67f9-b823-4f8f-a528-94e286cda73e` | ✅ | — | ✅ | Streams stdout/stderr from the update script. Read returns the last 512 bytes of the log buffer (64 KB ring buffer). Subscribe to notifications for live log streaming in ≤480-byte BLE-safe chunks. |
 
