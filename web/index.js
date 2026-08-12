@@ -13,6 +13,23 @@ var free_sketch_rainbow_angle = 0;
 // Degrees of hue advanced for each pixel painted with the rainbow pen.
 // Must stay in sync with FREE_SKETCH_RAINBOW_STEP in planesign/utilities.py.
 var FREE_SKETCH_RAINBOW_STEP = 9;
+// Keep one LED channel fully driven while spending more of the cycle in warm yellows.
+// Must stay in sync with FREE_SKETCH_RAINBOW_STOPS in planesign/utilities.py.
+var FREE_SKETCH_RAINBOW_STOPS = [
+    [0, 255, 0, 0],
+    [30, 255, 72, 0],
+    [60, 255, 160, 0],
+    [90, 255, 220, 0],
+    [120, 255, 255, 0],
+    [150, 180, 255, 0],
+    [180, 0, 255, 0],
+    [220, 0, 255, 255],
+    [255, 0, 96, 255],
+    [280, 0, 0, 255],
+    [315, 160, 0, 255],
+    [340, 255, 0, 255],
+    [360, 255, 0, 0]
+];
 var free_sketch_stamp_category = "snowflake";
 var free_sketch_is_fullscreen = false;
 var free_sketch_last_pixel = null;
@@ -555,23 +572,20 @@ function round_half_even(value) {
 }
 
 function get_rainbow_pen_color(angle) {
-    // Mirrors next_color_rainbow_linear in planesign/utilities.py
+    // Mirrors rainbow_pen_color in planesign/utilities.py
     angle = ((angle % 360) + 360) % 360;
-    var r, g, b;
-    if (angle <= 120) {
-        r = round_half_even(255 * (120 - angle) / 120);
-        g = round_half_even(255 * angle / 120);
-        b = 0;
-    } else if (angle <= 240) {
-        r = 0;
-        g = round_half_even(255 * (240 - angle) / 120);
-        b = round_half_even(255 * (angle - 120) / 120);
-    } else {
-        r = round_half_even(255 * (angle - 240) / 120);
-        g = 0;
-        b = round_half_even(255 * (360 - angle) / 120);
+    for (var i = 0; i < FREE_SKETCH_RAINBOW_STOPS.length - 1; i++) {
+        var start = FREE_SKETCH_RAINBOW_STOPS[i];
+        var end = FREE_SKETCH_RAINBOW_STOPS[i + 1];
+        if (angle <= end[0]) {
+            var mix = (angle - start[0]) / (end[0] - start[0]);
+            var r = round_half_even(start[1] + (end[1] - start[1]) * mix);
+            var g = round_half_even(start[2] + (end[2] - start[2]) * mix);
+            var b = round_half_even(start[3] + (end[3] - start[3]) * mix);
+            return { r: r, g: g, b: b, hex: rgb_to_hex(r, g, b) };
+        }
     }
-    return { r: r, g: g, b: b, hex: rgb_to_hex(r, g, b) };
+    return { r: 255, g: 0, b: 0, hex: "#ff0000" };
 }
 
 function rgb_to_hex(r, g, b) {

@@ -8,6 +8,7 @@ import time
 import traceback
 from datetime import datetime
 from functools import cmp_to_key
+from itertools import pairwise
 from math import cos, pi, sin
 from urllib.parse import urlparse
 
@@ -1601,12 +1602,19 @@ def get_mac_id(interface="wlan0"):
 # Degrees of hue advanced for each pixel painted with the free sketch rainbow pen.
 # Must stay in sync with FREE_SKETCH_RAINBOW_STEP in web/index.js.
 FREE_SKETCH_RAINBOW_STEP = 9
+# Each adjacent pair shares a full-intensity channel so colors stay vivid on LEDs.
+# Must stay in sync with FREE_SKETCH_RAINBOW_STOPS in web/index.js.
+FREE_SKETCH_RAINBOW_STOPS = ((0, 255, 0, 0), (30, 255, 72, 0), (60, 255, 160, 0), (90, 255, 220, 0), (120, 255, 255, 0), (150, 180, 255, 0), (180, 0, 255, 0), (220, 0, 255, 255), (255, 0, 96, 255), (280, 0, 0, 255), (315, 160, 0, 255), (340, 255, 0, 255), (360, 255, 0, 0))
 
 
 def rainbow_pen_color(angle):
-    """Return the (r, g, b) rainbow pen color for a hue angle in degrees."""
-    _, r, g, b = next_color_rainbow_linear(angle % 360, dangle=0)
-    return r, g, b
+    """Return an LED-optimized (r, g, b) rainbow color for an angle in degrees."""
+    angle %= 360
+    for start, end in pairwise(FREE_SKETCH_RAINBOW_STOPS):
+        if angle <= end[0]:
+            mix = (angle - start[0]) / (end[0] - start[0])
+            return tuple(round(start[channel] + (end[channel] - start[channel]) * mix) for channel in range(1, 4))
+    return 255, 0, 0
 
 
 def get_version():
