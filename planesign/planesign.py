@@ -1,14 +1,10 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-import time
 import logging
 import os
-
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
+import time
 
 import shared_config
 from modes import DisplayMode
+from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 
 
 class PlaneSign:

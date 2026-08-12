@@ -1,22 +1,23 @@
-from http.client import OK
-import time
-from datetime import datetime, timedelta
-import random
-import requests
-from utilities import reverse_geocode, fix_black, get_distance, direction_lookup, KM_2_MI
-from PIL import Image
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import shared_config
-from rgbmatrix import graphics
-import country_converter as coco
 import logging
 import math
-from bs4 import BeautifulSoup
-from os.path import exists
 import os
-import __main__
+import random
+import time
+from datetime import datetime
+from os.path import exists
+
+import country_converter as coco
+import requests
+import shared_config
+from bs4 import BeautifulSoup
 from modes import DisplayMode
+from PIL import Image
+from requests.adapters import HTTPAdapter
+from rgbmatrix import graphics
+from urllib3.util.retry import Retry
+from utilities import KM_2_MI, direction_lookup, fix_black, get_distance, reverse_geocode
+
+import __main__
 
 
 class Star:

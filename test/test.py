@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-from rgbmatrix import RGBMatrix, RGBMatrixOptions
 import time
+
+from rgbmatrix import RGBMatrix, RGBMatrixOptions
 
 options = RGBMatrixOptions()
 options.cols = 64

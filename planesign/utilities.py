@@ -1,27 +1,28 @@
-import math
-import random
 import logging
-import traceback
-import time
-import pytz
+import math
 import os
-import __main__
-import shared_config
-import numpy as np
-import subprocess
-import favicon
-import requests
+import random
 import re
-import geopandas as gpd
-from shapely.geometry import Point
-
-from urllib.parse import urlparse
-from PIL import Image, ImageDraw, ImageFont
-from timezonefinder import TimezoneFinder
-from rgbmatrix import graphics
-from math import pi, cos, sin
+import subprocess
+import time
+import traceback
 from datetime import datetime
 from functools import cmp_to_key
+from math import cos, pi, sin
+from urllib.parse import urlparse
+
+import favicon
+import geopandas as gpd
+import numpy as np
+import pytz
+import requests
+import shared_config
+from PIL import Image, ImageDraw, ImageFont
+from rgbmatrix import graphics
+from shapely.geometry import Point
+from timezonefinder import TimezoneFinder
+
+import __main__
 
 NUM_STEPS = 40
 DEG_2_RAD = pi / 180.0
@@ -42,7 +43,7 @@ def read_config():
     logging.info("Reading  config...")
 
     if not os.path.exists("sign.conf"):
-        logging.warn("WARNING! No sign.conf found... using default values from sign.conf.sample")
+        logging.warning("WARNING! No sign.conf found... using default values from sign.conf.sample")
     else:
         with open("sign.conf") as f:
             for line in f.readlines():
@@ -57,7 +58,7 @@ def read_config():
                 continue
             key, val = line.split("=")
             if key not in shared_config.CONF.keys():
-                logging.warn(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val.rstrip()}' from sign.conf.sample")
+                logging.warning(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val.rstrip()}' from sign.conf.sample")
                 shared_config.CONF[key] = val.rstrip()
 
     logging.info("Config loaded: " + str(shared_config.CONF))
@@ -65,7 +66,7 @@ def read_config():
     tf = TimezoneFinder()
     local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
     if local_tz is None:
-        logging.warn("Cannot find given provided lat/lon! Using UTC...")
+        logging.warning("Cannot find given provided lat/lon! Using UTC...")
         shared_config.local_timezone = pytz.utc
     else:
         logging.info(f"Detected timezone to be {local_tz}")

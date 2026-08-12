@@ -1,13 +1,15 @@
+import os
 import random
 from collections import namedtuple
-import shared_config
-from rgbmatrix import graphics
-from PIL import Image
+
 import numpy as np
+import shared_config
 import utilities
-import os
-import __main__
 from modes import DisplayMode
+from PIL import Image
+from rgbmatrix import graphics
+
+import __main__
 
 RGB = namedtuple("RGB", "r g b")
 

@@ -1,13 +1,14 @@
 import logging
-import shared_config
-import requests
-from rgbmatrix import graphics
-from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode
-import __main__
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+import requests
+import shared_config
 from modes import DisplayMode
+from rgbmatrix import graphics
+from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode
+
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)

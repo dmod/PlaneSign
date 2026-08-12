@@ -1,18 +1,19 @@
-import dbus, dbus.mainloop.glib
 import fcntl
 import json
 import os
 import re
-import time
 import shutil
 import socket
 import subprocess
+import time
 import urllib.error
 import urllib.request
+
+import dbus
+import dbus.mainloop.glib
+from gatt import Advertisement, Application, Characteristic, Service, find_adapter_wait, register_ad_cb, register_ad_error_cb, register_app_cb, register_app_error_cb, set_adapter_name
 from gi.repository import GLib
-from gatt import Application, Advertisement, Service, Characteristic
-from gatt import find_adapter_wait, set_adapter_name, register_app_cb, register_app_error_cb, register_ad_cb, register_ad_error_cb
-from wifi import get_current_wifi_status, scan_wifi, configure_wifi
+from wifi import configure_wifi, get_current_wifi_status, scan_wifi
 
 BLUEZ_SERVICE_NAME = "org.bluez"
 DBUS_OM_IFACE = "org.freedesktop.DBus.ObjectManager"

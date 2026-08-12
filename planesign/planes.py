@@ -2,7 +2,6 @@ import logging
 import types
 
 import requests
-
 import shared_config
 import utilities
 from modes import DisplayMode

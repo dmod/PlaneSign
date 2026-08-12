@@ -9,6 +9,7 @@ if "--web" in sys.argv:
     sys.modules["rgbmatrix"] = emulated_matrix
 
 from functools import wraps
+
 from modes import DisplayMode
 
 defined_mode_handlers = {}
@@ -28,40 +29,41 @@ def planesign_mode_handler(mode: DisplayMode):
     return decorator
 
 
-from multiprocessing import Process, Manager, Queue
-
-import utilities
-import fish
-import finance
-import satellite
-import shared_config
-import track_a_flight
-import planes
-import welcome
-import pong
-import custom_message
-import countdown
-import cca
-import cgol
-import identify
-import lightning
-import firework
-import horse_race
-import free_sketch
-import weather
-import moon
-import snow
-import snowfall
-import santa
-import mandelbrot
-import planesign
-import plants
-import api
+import logging
+import os
 import signal
 import sys
-import os
-import logging
+from multiprocessing import Manager, Process, Queue
+
+import api
+import cca
+import cgol
+import countdown
+import custom_message
+import finance
+import firework
+import fish
+import free_sketch
+import horse_race
+import identify
+import lightning
+import mandelbrot
+import moon
+import planes
+import plants
+import pong
+import santa
+import satellite
+import shared_config
+import snow
+import snowfall
+import track_a_flight
+import utilities
+import weather
+import welcome
 from modes import DisplayMode
+
+import planesign
 
 manager = Manager()
 shared_config.data_dict = manager.dict()

@@ -1,16 +1,16 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
+import logging
+import math
 import random
 import time
-import math
-import logging
-from PIL import Image, ImageEnhance, ImageFilter
+
 import shared_config
 import utilities
-import __main__
 from modes import DisplayMode
+from PIL import Image, ImageEnhance, ImageFilter
+from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+
+import __main__
+
 
 class Sprite:
     def __init__(self):
@@ -44,18 +44,19 @@ class Sprite:
         if self.maxFrames > 0:
             self.width = self.frames[0].size[0]
             self.height = self.frames[0].size[1]
-            self.x0 = round(self.width/2)
-            self.y0 = self.height-1
+            self.x0 = round(self.width / 2)
+            self.y0 = self.height - 1
 
     def draw(self, im):
         if self.maxFrames > 0:
             now = time.perf_counter()
             frame = self.frames[self.currFrame].convert("RGBA")
-            im.paste(frame, (self.x-self.x0, self.y-self.y0), frame)
+            im.paste(frame, (self.x - self.x0, self.y - self.y0), frame)
             self.lastDraw = now
             if self.currFrame != self.lastFrame:
                 self.lastFrameChange = now
                 self.lastFrame = self.currFrame
+
 
 class Plant(Sprite):
     def __init__(self):
@@ -71,10 +72,11 @@ class Plant(Sprite):
     def draw(self, im):
         # Change frames if we need to before drawing
         if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.growthInterval):
-            if (self.currFrame < self.maxFrames - 1):
+            if self.currFrame < self.maxFrames - 1:
                 self.currFrame = self.currFrame + 1
 
         super().draw(im)
+
 
 class Critter(Sprite):
     def __init__(self):
@@ -105,14 +107,14 @@ class Critter(Sprite):
         self.summonTime = now
         self.targetX = random.uniform(3.0, 124.0)
         self.targetY = random.uniform(3.0, 28.0)
-        self.realx = (random.uniform(-10.0, 0.0) if random.random()<0.5 else random.uniform(128.0, 138.0))
+        self.realx = random.uniform(-10.0, 0.0) if random.random() < 0.5 else random.uniform(128.0, 138.0)
         self.realy = random.uniform(3.0, 28.0)
         self.x = round(self.realx)
         self.y = round(self.realy)
 
     def leave(self):
         self.leaveFlag = True
-        self.targetX = (random.uniform(-10.0, -5.0) if random.random()<0.5 else random.uniform(133.0, 138.0))
+        self.targetX = random.uniform(-10.0, -5.0) if random.random() < 0.5 else random.uniform(133.0, 138.0)
         self.targetY = random.uniform(3.0, 28.0)
 
     def loadframes(self, name):
@@ -129,16 +131,14 @@ class Critter(Sprite):
     def draw(self, im):
         # Change frames if we need to before drawing
         if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.frameRate):
-
             if self.boomerang:
-                if (self.currFrame >= self.maxFrames - 1):
+                if self.currFrame >= self.maxFrames - 1:
                     self.increment = -1
-                elif (self.currFrame <= 0):
+                elif self.currFrame <= 0:
                     self.increment = 1
 
                 self.currFrame += self.increment
             else:
-            
                 self.currFrame = (self.currFrame + 1) % self.maxFrames
 
         # Move
@@ -149,12 +149,13 @@ class Critter(Sprite):
             facing = -1
         elif self.realx < self.targetX:
             facing = 1
-        
+
         if self.facing[self.currFrame] != facing:
             self.facing[self.currFrame] = facing
             self.frames[self.currFrame] = self.frames[self.currFrame].transpose(Image.FLIP_LEFT_RIGHT)
 
         super().draw(im)
+
 
 class FlyingBug(Critter):
     def __init__(self):
@@ -170,14 +171,11 @@ class FlyingBug(Critter):
 
         if self.leaveFlag:
             # Leaving
-            if math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0 \
-               or self.realx < -10.0 or self.realx > 138.0 or self.realy < -10.0 or self.realy > 41.0:
+            if math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0 or self.realx < -10.0 or self.realx > 138.0 or self.realy < -10.0 or self.realy > 41.0:
                 # Set despawn flag
                 self.despawnFlag = True
         else:
-            if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or \
-            (self.targetX is not None and self.targetY is not None and \
-                math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
+            if self.lastMove is None or (now >= self.lastMove + self.moveInterval) or (self.targetX is not None and self.targetY is not None and math.hypot(abs(self.realx - self.targetX), abs(self.realy - self.targetY)) < 1.0):
                 self.moveInterval = random.uniform(self.minMoveInterval, self.maxMoveInterval)
                 self.lastMove = now
 
@@ -203,6 +201,7 @@ class FlyingBug(Critter):
         self.x = round(self.realx)
         self.y = round(self.realy)
 
+
 class FireFly(FlyingBug):
     def __init__(self):
         super().__init__()
@@ -211,6 +210,7 @@ class FireFly(FlyingBug):
         self.x0 = 2
         self.y0 = 2
         self.summon()
+
 
 class Bee(FlyingBug):
     def __init__(self):
@@ -222,16 +222,17 @@ class Bee(FlyingBug):
         self.y0 = 2
         self.summon()
 
+
 def handle_critters(critters):
 
     now = time.perf_counter()
 
     # Handle despawning
     for critter in critters:
-        if (critter.despawnFlag):
+        if critter.despawnFlag:
             critters.remove(critter)
-        elif (not critter.leaveFlag):
-            if (critter.summonTime is not None and now >= critter.summonTime + critter.lifeTime):
+        elif not critter.leaveFlag:
+            if critter.summonTime is not None and now >= critter.summonTime + critter.lifeTime:
                 critter.leave()
 
     num_critters = len(critters)
@@ -243,11 +244,9 @@ def handle_critters(critters):
     num_fireflies = len(fireflies)
 
     if handle_critters.lastSummonAttempt is None or now >= handle_critters.lastSummonAttempt + handle_critters.summonAttemptInterval:
-        
         handle_critters.lastSummonAttempt = now
 
         if num_critters < handle_critters.maxCritters:
-
             # Determine which type of critter to try summoning
             r = random.random()
 
@@ -258,9 +257,10 @@ def handle_critters(critters):
                     critters.append(critter)
             else:
                 # Firefly
-                if num_fireflies < 5  and random.random() < 0.25:
+                if num_fireflies < 5 and random.random() < 0.25:
                     critter = FireFly()
                     critters.append(critter)
+
 
 @__main__.planesign_mode_handler(DisplayMode.PLANTS)
 def plantmode(sign):
@@ -270,49 +270,51 @@ def plantmode(sign):
     handle_critters.summonAttemptInterval = 30
     handle_critters.maxCritters = 5
 
-    background = Image.open(f"{shared_config.icons_dir}/plants/Background.png").convert('RGB')
+    background = Image.open(f"{shared_config.icons_dir}/plants/Background.png").convert("RGB")
 
     # Format is: (Plant name, x0, y0, growthInterval (mins), 0 <= availability weight <= 1)
-    plantlist = [("Alocasia",        8,   25,    1.5+random.random(),    1.0),
-                ("Amaryllis",        8,   27,    1+random.random(),      1.0),
-                ("Anthurium",        6,   21,    1+random.random(),      1.0),
-                ("Begonia",          10,  22,    1.5+random.random(),    0.9),
-                ("Bonsai",           8,   17,    9+random.random(),      0.1),
-                ("Bromeliad",        11,  22,    2+random.random(),      1.0),
-                ("Cactus",           4,   13,    5+random.random(),      1.0),
-                ("Cattleya",         6,   23,    2+random.random(),      1.0),
-                ("CrownOfThorns",    8,   22,    3+random.random(),      1.0),
-                ("Codiaeum",         9,   27,    1.5+random.random(),    1.0),
-                ("Daisy",            4,   19,    1.5+random.random(),    1.0),
-                ("Dendrobium",       8,   25,    1.5+random.random(),    1.0),
-                ("Dracaena",         8,   23,    2.5+random.random(),    1.0),
-                ("EnglishIvy",       15,  18,    1+random.random(),      1.0),
-                ("Fern",             6,   13,    1+random.random(),      1.0),
-                ("Hibiscus",         10,  26,    1+random.random(),      1.0),
-                ("Kalanchoe",        6,   14,    1+random.random(),      1.0),
-                ("LadySlipper",      6,   25,    2+random.random(),      1.0),
-                ("Lavender",         6,   25,    1+random.random(),      1.0),
-                ("Masdevallia",      8,   29,    1.5+random.random(),    1.0),
-                ("Orchid",           8,   22,    2+random.random(),      1.0),
-                ("PeaceLily",        7,   22,    1+random.random(),      1.0),
-                ("Phalanopsis_Pink", 11,  26,    2+random.random(),      1.0),
-                ("Phalanopsis_Purple", 6, 25,    2+random.random(),      1.0),
-                ("Philodendron",     13,  23,    2+random.random(),      0.9),
-                ("Pitcherplant",     13,  20,    3+random.random(),      0.7),
-                ("PonytailPalm",     8,   24,    2+random.random(),      0.9),
-                ("Pothos",           8,   18,    1+random.random(),      1.0),
-                ("Prayerplant",      13,  23,    2+random.random(),      0.6),
-                ("Rafflesia",        13,  23,    10*(1+random.random()), 0.05),
-                ("Rubberplant",      7,   26,    2+random.random(),      0.8),
-                ("SagoPalm",         11,  24,    1.5+random.random(),    0.9),
-                ("SpiderPlant",      9,   16,    1+random.random(),      1.0),
-                ("Succulent",        4,   9,     3+random.random(),      1.0),
-                ("Vanda",            10,  25,    1.5+random.random(),    1.0),
-                ("Violet",           5,   15,    1+random.random(),      1.0),
-                ("XmasCactus",       12,  14,    1+random.random(),      1.0)]
+    plantlist = [
+        ("Alocasia", 8, 25, 1.5 + random.random(), 1.0),
+        ("Amaryllis", 8, 27, 1 + random.random(), 1.0),
+        ("Anthurium", 6, 21, 1 + random.random(), 1.0),
+        ("Begonia", 10, 22, 1.5 + random.random(), 0.9),
+        ("Bonsai", 8, 17, 9 + random.random(), 0.1),
+        ("Bromeliad", 11, 22, 2 + random.random(), 1.0),
+        ("Cactus", 4, 13, 5 + random.random(), 1.0),
+        ("Cattleya", 6, 23, 2 + random.random(), 1.0),
+        ("CrownOfThorns", 8, 22, 3 + random.random(), 1.0),
+        ("Codiaeum", 9, 27, 1.5 + random.random(), 1.0),
+        ("Daisy", 4, 19, 1.5 + random.random(), 1.0),
+        ("Dendrobium", 8, 25, 1.5 + random.random(), 1.0),
+        ("Dracaena", 8, 23, 2.5 + random.random(), 1.0),
+        ("EnglishIvy", 15, 18, 1 + random.random(), 1.0),
+        ("Fern", 6, 13, 1 + random.random(), 1.0),
+        ("Hibiscus", 10, 26, 1 + random.random(), 1.0),
+        ("Kalanchoe", 6, 14, 1 + random.random(), 1.0),
+        ("LadySlipper", 6, 25, 2 + random.random(), 1.0),
+        ("Lavender", 6, 25, 1 + random.random(), 1.0),
+        ("Masdevallia", 8, 29, 1.5 + random.random(), 1.0),
+        ("Orchid", 8, 22, 2 + random.random(), 1.0),
+        ("PeaceLily", 7, 22, 1 + random.random(), 1.0),
+        ("Phalanopsis_Pink", 11, 26, 2 + random.random(), 1.0),
+        ("Phalanopsis_Purple", 6, 25, 2 + random.random(), 1.0),
+        ("Philodendron", 13, 23, 2 + random.random(), 0.9),
+        ("Pitcherplant", 13, 20, 3 + random.random(), 0.7),
+        ("PonytailPalm", 8, 24, 2 + random.random(), 0.9),
+        ("Pothos", 8, 18, 1 + random.random(), 1.0),
+        ("Prayerplant", 13, 23, 2 + random.random(), 0.6),
+        ("Rafflesia", 13, 23, 10 * (1 + random.random()), 0.05),
+        ("Rubberplant", 7, 26, 2 + random.random(), 0.8),
+        ("SagoPalm", 11, 24, 1.5 + random.random(), 0.9),
+        ("SpiderPlant", 9, 16, 1 + random.random(), 1.0),
+        ("Succulent", 4, 9, 3 + random.random(), 1.0),
+        ("Vanda", 10, 25, 1.5 + random.random(), 1.0),
+        ("Violet", 5, 15, 1 + random.random(), 1.0),
+        ("XmasCactus", 12, 14, 1 + random.random(), 1.0),
+    ]
 
     edge = 2
-    extent = edge-1
+    extent = edge - 1
     miny = 23
     maxy = 28
     attempt = 0
@@ -320,7 +322,6 @@ def plantmode(sign):
     min_plants = 6
 
     while True:
-
         attempt += 1
 
         # Keep plants based on their availability
@@ -330,10 +331,10 @@ def plantmode(sign):
 
         # Select random plants to fill the table
         while True:
-            if (len(curatedlist) == 0):
+            if len(curatedlist) == 0:
                 break
 
-            index = random.randint(0, len(curatedlist)-1)
+            index = random.randint(0, len(curatedlist) - 1)
 
             (name, x0, y0, growthInterval, _) = curatedlist[index]
             del curatedlist[index]
@@ -343,7 +344,7 @@ def plantmode(sign):
             plant.x0 = x0
             plant.y0 = y0
             plant.growthInterval = growthInterval * 60
-            center = round(plant.width/2 + extent - 0.5)
+            center = round(plant.width / 2 + extent - 0.5)
             left = center
             right = center + 1
             plant.x = random.randint(left, right)
@@ -351,14 +352,14 @@ def plantmode(sign):
             bot = maxy
             top = max(miny, bot - ywiggle)
             plant.y = random.randint(top, bot)
-            test_extent = plant.x + round(plant.width/2 - 0.5)
-            
-            if (test_extent <= 127 - edge):
+            test_extent = plant.x + round(plant.width / 2 - 0.5)
+
+            if test_extent <= 127 - edge:
                 # Plant fits on the table
                 plants.append(plant)
                 extent = test_extent
 
-        if (len(plants) >= min_plants or attempt >= max_attempts):
+        if len(plants) >= min_plants or attempt >= max_attempts:
             # Try and get more than 5 plants on the table at once
             break
 
@@ -368,7 +369,6 @@ def plantmode(sign):
     critters = []
 
     while shared_config.shared_mode.value == DisplayMode.PLANTS.value:
-
         bg = background.copy()
 
         for plant in plants:
@@ -379,8 +379,8 @@ def plantmode(sign):
         for critter in critters:
             critter.draw(bg)
 
-        sign.canvas.SetImage(bg.convert('RGB'), 0, 0)
-        
+        sign.canvas.SetImage(bg.convert("RGB"), 0, 0)
+
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
 

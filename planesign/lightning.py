@@ -1,33 +1,33 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-import random
-import websocket
-import json
-import time
-import os
-import base64
-import ssl
-from multiprocessing import Process, Value, Manager
-import threading
-import numpy as np
-import utilities
-from rgbmatrix import graphics
-import requests
-import re
-import PIL.ImageDraw as ImageDraw
-import PIL.Image as Image
 import _thread as thread
-import os.path
-import shared_config
+import base64
+import json
 import logging
-import __main__
+import os
+import os.path
+import random
+import re
+import ssl
+import threading
+import time
+from multiprocessing import Manager, Process, Value
+
+import numpy as np
+import PIL.Image as Image
+import PIL.ImageDraw as ImageDraw
+import requests
+import shared_config
+import utilities
+import websocket
 from modes import DisplayMode
+from rgbmatrix import graphics
+
+import __main__
 
 USAlong = -96
 USAlat = 38
 USAscale = 55
 global_map_ver = "V1"
+
 
 @__main__.planesign_mode_handler(DisplayMode.LIGHTNING)
 def lightning(sign):
@@ -153,13 +153,15 @@ class LightningManager:
         # Draw loading background
         self.sign.canvas.Clear()
         image = Image.open(f"{shared_config.icons_dir}/storm.png")
-        self.sign.canvas.SetImage(image.convert('RGB'), 0, 0)
+        self.sign.canvas.SetImage(image.convert("RGB"), 0, 0)
 
         genmaps = (not os.path.exists(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"usa_{USAlat}_{USAlong}_{USAscale}_{global_map_ver}.png").getcolors()) == 1
 
         if not genmaps:
             for scale in self.zooms:
-                if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png").getcolors()) == 1:
+                if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")) or len(
+                    Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png").getcolors()
+                ) == 1:
                     genmaps = True
                     break
 
@@ -169,14 +171,14 @@ class LightningManager:
                 countydata = json.load(f)
             except:
                 countydata = None
-        
+
         with open(usafile, "r") as f:
             try:
                 usadata = json.load(f)
             except:
                 usadata = None
 
-        if (usadata == None or countydata == None):
+        if usadata == None or countydata == None:
             logging.error("Error loading map data, cannot generate maps")
             raise ValueError("Map data error")
             return
@@ -261,7 +263,9 @@ class LightningManager:
             loadingind += 1
 
         for i, scale in enumerate(self.zooms):
-            if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")) or len(Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png").getcolors()) == 1:
+            if (not os.path.exists(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png")) or len(
+                Image.open(self.floc + f"local_{shared_config.CONF['SENSOR_LAT']}_{shared_config.CONF['SENSOR_LON']}_{scale}_{global_map_ver}.png").getcolors()
+            ) == 1:
                 self.backgrounds[i] = Image.new("RGB", (self.bgwidth, self.bgheight))
                 draw = ImageDraw.Draw(self.backgrounds[i])
 
@@ -770,14 +774,7 @@ class LightningManager:
 
                 self.host = "wss://" + self.ws_server  #'wss://' + self.ws_server + ':3000'
 
-                self.header = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
-                    "Accept": "*/*",
-                    "Accept-Language": "en-US,en;q=0.5",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Pragma": "no-cache",
-                    "Cache-Control": "no-cache"
-                }
+                self.header = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "gzip, deflate, br", "Pragma": "no-cache", "Cache-Control": "no-cache"}
 
                 websocket.enableTrace(False)
 

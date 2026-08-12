@@ -1,24 +1,25 @@
-from datetime import datetime, timedelta
-import time
-import utilities
+import logging
+import os.path
 import random
 import shutil
-import os.path
-from PIL import Image, ImageDraw, ImageChops
-import shared_config
-from rgbmatrix import graphics
-import logging
-import numpy as np
-import __main__
-from skyfield.api import load, wgs84, Loader, PlanetaryConstants
-from skyfield.trigonometry import position_angle_of
-from skyfield.framelib import ecliptic_frame
-from skyfield.constants import ERAD
-from skyfield.functions import angle_between, length_of
-from skyfield import almanac
-from satellite import Star
+import time
+from datetime import datetime, timedelta
 
+import numpy as np
+import shared_config
+import utilities
 from modes import DisplayMode
+from PIL import Image, ImageChops, ImageDraw
+from rgbmatrix import graphics
+from satellite import Star
+from skyfield import almanac
+from skyfield.api import Loader, PlanetaryConstants, wgs84
+from skyfield.constants import ERAD
+from skyfield.framelib import ecliptic_frame
+from skyfield.functions import angle_between, length_of
+from skyfield.trigonometry import position_angle_of
+
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.MOON)
@@ -62,10 +63,7 @@ def moon(sign):
 
     # Move data files from old location if needed
     datfiles = ["de421.bsp", "moon_080317.tf", "pck00008.tpc", "moon_pa_de421_1900-2050.bpc"]
-    datsource = ["https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp",
-                 "https://naif.jpl.nasa.gov/pub/naif/LADEE/kernels/fk/moon_080317.tf",
-                 "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00008.tpc",
-                 "https://ssd.jpl.nasa.gov/ftp/eph/planets/bpc/moon_pa_de421_1900-2050.bpc"]
+    datsource = ["https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp", "https://naif.jpl.nasa.gov/pub/naif/LADEE/kernels/fk/moon_080317.tf", "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00008.tpc", "https://ssd.jpl.nasa.gov/ftp/eph/planets/bpc/moon_pa_de421_1900-2050.bpc"]
     for datfile in datfiles:
         if os.path.isfile(f"./{datfile}"):
             logging.debug(f"Moving {datfile} to datafiles directory")

@@ -1,6 +1,7 @@
-from multiprocessing import Array, Event, Value
-from modes import DisplayMode
 import os
+from multiprocessing import Array, Event, Value
+
+from modes import DisplayMode
 
 shared_mode = Value("i", DisplayMode.WELCOME.value)
 shared_prev_mode = Value("i", DisplayMode.PLANES_ALERT.value)

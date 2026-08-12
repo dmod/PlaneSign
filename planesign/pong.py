@@ -1,8 +1,10 @@
-import shared_config
 import random
-from rgbmatrix import graphics
-import __main__
+
+import shared_config
 from modes import DisplayMode
+from rgbmatrix import graphics
+
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.PONG)

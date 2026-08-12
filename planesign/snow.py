@@ -1,25 +1,23 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
+import json
 import logging.handlers
-import requests
-from urllib.parse import urlparse
-from rgbmatrix import graphics
-from PIL import Image
-from bs4 import BeautifulSoup
+import os
 import random
-import shared_config
-from math import ceil
 import time
 from datetime import datetime, timedelta
-from functools import cmp_to_key
-import os
-import json
 from enum import Enum
-from utilities import CM_2_IN, convert_c_to_f, getFavicon, weather_icon_decode, acquire_lock, release_lock
-import __main__
-from modes import DisplayMode
+from functools import cmp_to_key
+from math import ceil
+from urllib.parse import urlparse
 
+import requests
+import shared_config
+from bs4 import BeautifulSoup
+from modes import DisplayMode
+from PIL import Image
+from rgbmatrix import graphics
+from utilities import CM_2_IN, acquire_lock, convert_c_to_f, getFavicon, release_lock, weather_icon_decode
+
+import __main__
 
 resortinfo_filename = f"{shared_config.datafiles_dir}/resortdata.json"
 userresorts_filename = f"{shared_config.datafiles_dir}/resortlist.txt"

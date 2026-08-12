@@ -1,13 +1,14 @@
-from PIL import Image
-import utilities
 import logging
 import time
-import shared_config
+
 import requests
-import __main__
+import shared_config
+import utilities
+from modes import DisplayMode
+from PIL import Image
 from rgbmatrix import graphics
 
-from modes import DisplayMode
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.WEATHER)
@@ -135,5 +136,3 @@ def draw_daily_forcast(sign, day, xloc):
     graphics.DrawText(sign.canvas, sign.font57, xloc, 22, graphics.Color(210, 20, 20), str(round(day["temp"]["max"])))
     graphics.DrawText(sign.canvas, sign.font57, xloc, 30, graphics.Color(20, 20, 210), str(round(day["temp"]["min"])))
     graphics.DrawText(sign.canvas, sign.font46, xloc + 26 - len(status) * 2, 30, graphics.Color(52, 235, 183), status[:7])
-
-    return

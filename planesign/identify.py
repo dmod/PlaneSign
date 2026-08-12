@@ -1,11 +1,11 @@
 import time
 
 import shared_config
+from modes import DisplayMode
 from rgbmatrix import graphics
 from utilities import get_centered_text_x_offset_value, get_mac_id
-import __main__
 
-from modes import DisplayMode
+import __main__
 
 IDENTIFY_DURATION_SECONDS = 8
 FLASH_HZ = 2.5

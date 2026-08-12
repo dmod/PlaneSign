@@ -1,12 +1,13 @@
-import time
 import math
 import random
+import time
+
 import shared_config
+from modes import DisplayMode
 from rgbmatrix import graphics
 from utilities import get_centered_text_x_offset_value, get_mac_id, get_version
-import __main__
 
-from modes import DisplayMode
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.WELCOME)

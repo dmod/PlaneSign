@@ -1,15 +1,17 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from datetime import datetime
-from collections import namedtuple
-import time
-import random
-import shared_config
 import logging
-import __main__
+import random
+import time
+from collections import namedtuple
+from datetime import datetime
+
+import shared_config
 from modes import DisplayMode
+from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+
+import __main__
 
 RGB = namedtuple("RGB", "r g b")
 

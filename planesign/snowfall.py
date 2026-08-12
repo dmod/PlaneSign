@@ -1,15 +1,13 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
-from datetime import datetime, timedelta, timezone
 import random
+
 import numpy as np
 import PIL.Image as Image
 import shared_config
 import utilities
-import __main__
 from modes import DisplayMode
+from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+
+import __main__
 
 
 class SnowFlake:

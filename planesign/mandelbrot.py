@@ -3,13 +3,15 @@
 # https://en.wikipedia.org/wiki/Mandelbrot_set
 ###
 
-import time
-import numpy as np
-from numba import njit, jit, prange
-import shared_config
-import __main__
 import logging
+import time
+
+import numpy as np
+import shared_config
 from modes import DisplayMode
+from numba import jit, njit, prange
+
+import __main__
 
 
 # Function to calculate whether a point is in the Mandelbrot set
