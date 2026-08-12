@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
 
 ###
 # Generates the chiptune backing tracks for the horse race mode.
