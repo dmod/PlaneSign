@@ -3,12 +3,14 @@
 # https://en.wikipedia.org/wiki/Cyclic_cellular_automaton
 ###
 
-import time
 import random
-import utilities
+import time
+
 import shared_config
-import __main__
+import utilities
 from modes import DisplayMode
+
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.CCA)
@@ -29,8 +31,8 @@ def cca(sign):
 
     tstart = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.CCA.value:
-        for col in range(0, 128):
-            for row in range(0, 32):
+        for col in range(128):
+            for row in range(32):
                 cs = utilities.check_matrix(col, row, current_state)
                 ns = (cs + 1) % numstates
                 curr = 0
@@ -53,8 +55,8 @@ def cca(sign):
 
                 sign.canvas.SetPixel(col, row, r, g, b)
 
-        for col in range(0, 128):
-            for row in range(0, 32):
+        for col in range(128):
+            for row in range(32):
                 current_state[col][row] = next_state[col][row]
 
         tend = time.perf_counter()

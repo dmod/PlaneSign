@@ -1,21 +1,20 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-import time
-import finnhub
-from PIL import Image
-from threading import Thread, Lock
-import websocket
-import re
 import json
-from utilities import convert_unix_to_local_time, getFavicon, improcess
-import requests
-from rgbmatrix import graphics
-from requests import Session
-import shared_config
-import __main__
 import logging
+import re
+import time
+from threading import Lock, Thread
 
+import finnhub
+import requests
+import shared_config
+import websocket
 from modes import DisplayMode
+from PIL import Image
+from requests import Session
+from rgbmatrix import graphics
+from utilities import convert_unix_to_local_time, getFavicon, improcess
+
+import __main__
 
 
 def update_global_lists(client=None):
@@ -134,8 +133,6 @@ def getLogo(headers, website):
 
     headers["Host"] = host
     headers["Referer"] = website
-
-    filetype = website.split(".")[-1].lower()
 
     req = requests.get(website, stream=True, headers=headers, timeout=5)
     if req.status_code == requests.codes.ok:

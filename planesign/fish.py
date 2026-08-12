@@ -1,13 +1,11 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
+import random
 
 import PIL
-import random
-from PIL import Image, ImageDraw
 import shared_config
-import __main__
 from modes import DisplayMode
+from PIL import Image, ImageDraw
 
+import __main__
 
 tankxmin = -100
 tankxmax = 227

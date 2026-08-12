@@ -1,6 +1,3 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
 ###
 # Arcade style horse race. Four horses, a random race every time, no predetermined winner.
 ###
@@ -12,14 +9,13 @@ import random
 import subprocess
 import time
 
+import shared_config
+import utilities
+from modes import DisplayMode
 from PIL import Image, ImageDraw, ImageEnhance
 from rgbmatrix import graphics
 
-import shared_config
-import utilities
 import __main__
-from modes import DisplayMode
-
 
 WIDTH = 128
 HEIGHT = 32

@@ -1,16 +1,14 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-import random
-from rgbmatrix import graphics, RGBMatrix, RGBMatrixOptions
 import math
+import random
 import time
-import utilities
+
 import numpy as np
 import shared_config
-import __main__
+import utilities
 from modes import DisplayMode
+from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 
+import __main__
 
 TRAIL_PARTICLE = 0
 RING_PARTICLE = 1

@@ -3,13 +3,15 @@
 # https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
 ###
 
-import time
+import math
 import random
+import time
+
 import shared_config
 import utilities
-import math
-import __main__
 from modes import DisplayMode
+
+import __main__
 
 
 @__main__.planesign_mode_handler(DisplayMode.CGOL)
@@ -24,13 +26,14 @@ def cgol(sign):
         cgol_cellcolor = True
 
     current_state = [[False for j in range(32)] for i in range(128)]
+    prev_state = [[False for j in range(32)] for i in range(128)]
     next_state = [[False for j in range(32)] for i in range(128)]
     if cgol_cellcolor:
         hmatrix = [[0 for j in range(32)] for i in range(128)]
         next_hmatrix = [[0 for j in range(32)] for i in range(128)]
 
-    for i in range(0, 128):
-        for j in range(0, 32):
+    for i in range(128):
+        for j in range(32):
             if random.random() < 0.3:
                 current_state[i][j] = True
             else:
@@ -59,8 +62,8 @@ def cgol(sign):
 
         next_state = [[False for j in range(32)] for i in range(128)]
 
-        for col in range(0, 128):
-            for row in range(0, 32):
+        for col in range(128):
+            for row in range(32):
                 if cgol_cellcolor:
                     candidate, r, g, b = check_life_color(col, row, current_state, hmatrix, next_hmatrix)
                 else:
@@ -80,8 +83,8 @@ def cgol(sign):
             firstgen = False
 
         if detect2cycle:
-            for i in range(0, 128):
-                for j in range(0, 32):
+            for i in range(128):
+                for j in range(32):
                     if random.random() < 0.3:
                         next_state[i][j] = True
                         if cgol_cellcolor:
@@ -139,10 +142,7 @@ def check_life(x, y, matrix):
     if matrix[x][y] and (num_neighbors_alive == 2 or num_neighbors_alive == 3):
         return True
 
-    if not matrix[x][y] and num_neighbors_alive == 3:
-        return True
-
-    return False
+    return not matrix[x][y] and num_neighbors_alive == 3
 
 
 def check_life_color(x, y, matrix, hm, nhm):

@@ -1,7 +1,7 @@
-import __main__
 import shared_config
 from modes import DisplayMode
 
+import __main__
 
 WIDTH = 128
 HEIGHT = 32

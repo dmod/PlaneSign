@@ -1,29 +1,24 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
+import glob
 import json
 import logging
 import os
-import glob
 import random
-import subprocess
 import re
+import subprocess
 import tempfile
-import requests
 from datetime import datetime
 
 import gevent
 import gevent.pywsgi
-
-from flask import Flask, request, jsonify, send_from_directory
-from PIL import Image
-from flask_cors import CORS
-
-import utilities
+import requests
 import shared_config
-from modes import DisplayMode
+import utilities
 from finance import get_tickers
-from snow import populate_resort_lists, load_user_list, save_current_resort, delete_user_resort, SnowMode
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+from modes import DisplayMode
+from PIL import Image
+from snow import SnowMode, delete_user_resort, load_user_list, populate_resort_lists, save_current_resort
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
 # Avoid 5000/5001/7000: macOS AirPlay Receiver listens on those and Docker Desktop's host
@@ -66,7 +61,7 @@ def get_config():
                         newdict["max"] = comment_parts[i + 1]
                 sample["DATATYPES"].append(newdict)
 
-    for key in sample.keys():
+    for key in sample:
         if key in shared_config.CONF:
             sample[key] = shared_config.CONF[key]
 
