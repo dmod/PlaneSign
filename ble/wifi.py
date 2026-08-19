@@ -134,10 +134,10 @@ def configure_wifi(credentials):
         print(f"Successfully configured WiFi network: {ssid}")
 
     except subprocess.CalledProcessError as e:
-        error_msg = f"NetworkManager error: {str(e)}"
+        error_msg = f"NetworkManager error: {e}"
         print(error_msg)
         raise dbus.exceptions.DBusException(error_msg)
     except Exception as e:
-        error_msg = f"Error configuring WiFi: {str(e)}"
+        error_msg = f"Error configuring WiFi: {e}"
         print(error_msg)
         raise dbus.exceptions.DBusException(error_msg)

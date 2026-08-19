@@ -1,4 +1,3 @@
-import logging
 import random
 import time
 from collections import namedtuple
@@ -6,7 +5,7 @@ from datetime import datetime
 
 import shared_config
 from modes import DisplayMode
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+from rgbmatrix import graphics
 
 import __main__
 

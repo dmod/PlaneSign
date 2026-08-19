@@ -27,7 +27,7 @@ dependencies = [
 line-length = 300
 
 [tool.ruff.lint]
-ignore = ["LOG015"]
+ignore = ["LOG015", "RUF023"]
 
 [tool.ruff.format]
 skip-magic-trailing-comma = true
