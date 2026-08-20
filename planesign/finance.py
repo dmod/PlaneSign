@@ -134,29 +134,29 @@ def getLogo(headers, website):
     headers["Host"] = host
     headers["Referer"] = website
 
-    req = requests.get(website, stream=True, headers=headers, timeout=5)
-    if req.status_code == requests.codes.ok:
-        try:
-            image = Image.open(req.raw)
+    try:
+        req = requests.get(website, stream=True, headers=headers, timeout=5)
+        if req.status_code == requests.codes.ok:
+                image = Image.open(req.raw)
 
-            width, height = image.size
+                width, height = image.size
 
-            desired_size = 300
-            # Pre-shrink if image is too big so imageprocess is faster
-            if height > desired_size or width > desired_size:
-                if width > height:
-                    image = image.resize((desired_size, int(desired_size * height / width)), Image.BICUBIC)
-                elif height > width:
-                    image = image.resize((int(desired_size * width / height), desired_size), Image.BICUBIC)
-                else:
-                    image = image.resize((desired_size, desired_size), Image.BICUBIC)
+                desired_size = 300
+                # Pre-shrink if image is too big so imageprocess is faster
+                if height > desired_size or width > desired_size:
+                    if width > height:
+                        image = image.resize((desired_size, int(desired_size * height / width)), Image.BICUBIC)
+                    elif height > width:
+                        image = image.resize((int(desired_size * width / height), desired_size), Image.BICUBIC)
+                    else:
+                        image = image.resize((desired_size, desired_size), Image.BICUBIC)
 
-            image = improcess(image.convert("RGBA"))
-            image = image.convert("RGB")
-            return image
-        except Exception:
+                image = improcess(image.convert("RGBA"))
+                image = image.convert("RGB")
+                return image
+        else:
             return None
-    else:
+    except Exception:
         return None
 
 
