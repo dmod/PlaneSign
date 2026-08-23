@@ -10,7 +10,7 @@ from datetime import datetime
 
 import gevent
 import gevent.pywsgi
-import requests
+import planes
 import shared_config
 import utilities
 from finance import get_tickers
@@ -125,13 +125,24 @@ def set_countdown(datetimestr, countdownmsg):
 
 @app.route("/get_possible_flights/<query_string>")
 def get_possible_flights(query_string):
-    query_result = requests.get(f"https://www.flightradar24.com/v1/search/web/find?query={query_string}&limit=50", headers={"User-Agent": ""})
-    return query_result.json()
+    try:
+        flights = planes.search_live_flights(query_string)
+    except Exception:
+        logging.exception("Live flight search failed")
+        return jsonify({"results": [], "error": "Flight search is unavailable right now"}), 502
+
+    results = []
+    for flight in flights:
+        number = flight.number if flight.number != "N/A" else flight.callsign
+        label = number if number == flight.callsign else f"{number} ({flight.callsign})"
+        results.append({"id": flight.callsign, "type": "live", "label": label, "detail": {"callsign": flight.callsign, "route": f"{flight.origin_airport_iata} - {flight.destination_airport_iata}", "reg": flight.registration}})
+
+    return jsonify({"results": results})
 
 
 @app.route("/set_track_a_flight/<flight_num>")
 def set_track_a_flight(flight_num):
-    shared_config.data_dict["track_a_flight_num"] = flight_num
+    shared_config.data_dict["track_a_flight_num"] = planes.normalize_callsign(flight_num)
     shared_config.shared_mode.value = DisplayMode.TRACK_A_FLIGHT.value
     shared_config.shared_forced_sign_update.set()
     return ""

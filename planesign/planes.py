@@ -1,4 +1,6 @@
 import logging
+import re
+import time
 import types
 
 import requests
@@ -12,6 +14,13 @@ import __main__
 FR24_FEED_URL = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js"
 FR24_HEADERS = {"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Origin": "https://www.flightradar24.com", "Referer": "https://www.flightradar24.com/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"}
 FR24_PARAMS = {"faa": "1", "satellite": "1", "mlat": "1", "flarm": "1", "adsb": "1", "gnd": "1", "air": "1", "vehicles": "1", "estimated": "1", "maxage": "14400", "gliders": "1", "stats": "1", "limit": "5000"}
+FR24_WORLD_BOUNDS = "85,-85,-180,180"
+FR24_RETRY_DELAY = 2
+FR24_FEED_ATTEMPTS = 3
+
+# The FR24 feed can only be filtered by ICAO callsign, so IATA flight numbers (what people
+# normally type) are translated to their ICAO equivalent with adsbdb first.
+ADSBDB_CALLSIGN_URL = "https://api.adsbdb.com/v0/callsign/"
 
 prev_stats = types.SimpleNamespace()
 prev_stats.distance = 0
@@ -19,8 +28,8 @@ prev_stats.altitude = 0
 prev_stats.ground_speed = 0
 
 
-def get_flights(bounds):
-    params = FR24_PARAMS | {"bounds": bounds}
+def get_flights(bounds, **filters):
+    params = FR24_PARAMS | {"bounds": bounds} | {name: value for name, value in filters.items() if value}
     response = requests.get(FR24_FEED_URL, params=params, headers=FR24_HEADERS, timeout=30)
     response.raise_for_status()
     payload = response.json()
@@ -61,6 +70,69 @@ def get_flights(bounds):
         )
 
     return flights
+
+
+def normalize_callsign(query):
+    return re.sub(r"[^A-Za-z0-9]", "", query or "").upper()
+
+
+def resolve_icao_callsign(query):
+    """Translate an IATA flight number (e.g. DL1837) into its ICAO callsign (e.g. DAL1837)."""
+    try:
+        response = requests.get(f"{ADSBDB_CALLSIGN_URL}{query}", headers={"Accept": "application/json"}, timeout=10)
+        if response.status_code != requests.codes.ok:
+            return None
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        logging.warning(f"Could not look up ICAO callsign for {query}", exc_info=True)
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    flightroute = payload.get("response", {}).get("flightroute") if isinstance(payload.get("response"), dict) else None
+    if not isinstance(flightroute, dict):
+        return None
+    return flightroute.get("callsign_icao")
+
+
+def search_live_flights(query, limit=25):
+    """Return currently airborne flights whose callsign or flight number starts with query."""
+    query = normalize_callsign(query)
+    if len(query) < 3:
+        return []
+
+    matches = [flight for flight in search_feed_by_callsign(query) if flight.callsign.startswith(query) or flight.number.startswith(query)]
+
+    if not matches:
+        icao_callsign = resolve_icao_callsign(query)
+        if icao_callsign:
+            matches = [flight for flight in search_feed_by_callsign(icao_callsign) if flight.callsign == icao_callsign]
+
+    matches.sort(key=lambda flight: (len(flight.callsign), flight.callsign))
+    return matches[:limit]
+
+
+def search_feed_by_callsign(callsign):
+    # FR24 answers throttled requests with an empty (but successful) feed, so back off and retry
+    for attempt in range(FR24_FEED_ATTEMPTS):
+        if attempt:
+            time.sleep(FR24_RETRY_DELAY * attempt)
+        flights = get_flights(FR24_WORLD_BOUNDS, callsign=callsign)
+        if flights:
+            return flights
+    return []
+
+
+def get_live_flight(callsign):
+    """Return the live feed entry for an exact ICAO callsign, or None if it is not airborne."""
+    callsign = normalize_callsign(callsign)
+    if not callsign:
+        return None
+
+    for flight in search_feed_by_callsign(callsign):
+        if flight.callsign == callsign:
+            return flight
+    return None
 
 
 def shorten_airport_name(name, desired_length):

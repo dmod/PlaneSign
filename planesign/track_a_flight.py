@@ -1,14 +1,47 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-import requests
+import planes
 import shared_config
 from modes import DisplayMode
 from rgbmatrix import graphics
+from timezonefinder import TimezoneFinder
 from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode
 
 import __main__
+
+KNOTS_TO_MPH = 1.15078
+REFRESH_EVERY_N_LOOPS = 50
+
+timezone_finder = None
+airport_timezones = {}
+
+
+def get_airport_position(iata_code):
+    airport = shared_config.code_to_airport.get(iata_code)
+    if airport is None:
+        return None
+    return (airport[1], airport[2])
+
+
+def get_airport_timezone(iata_code, position):
+    global timezone_finder
+
+    if iata_code not in airport_timezones:
+        if timezone_finder is None:
+            timezone_finder = TimezoneFinder()
+        airport_timezones[iata_code] = timezone_finder.timezone_at(lat=position[0], lng=position[1])
+
+    tz_name = airport_timezones[iata_code]
+    return ZoneInfo(tz_name) if tz_name else timezone.utc
+
+
+def as_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 @__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
@@ -21,76 +54,67 @@ def track_a_flight(sign):
 
     requests_limiter = 0
     blip_count = 0
+    flight = None
+    formatted_address = None
 
     while shared_config.shared_mode.value == DisplayMode.TRACK_A_FLIGHT.value:
-        flight_num_hex = shared_config.data_dict["track_a_flight_num"]
+        callsign = shared_config.data_dict["track_a_flight_num"]
 
-        if requests_limiter % 50 == 0:
-            flightdatareq = requests.get(f"https://data-live.flightradar24.com/clickhandler/?version=1.5&flight={flight_num_hex}", headers={"User-Agent": ""})
-            if flightdatareq and flightdatareq.status_code == requests.codes.ok:
-                flight_data = flightdatareq.json()
-            else:
-                flight_data = None
+        if requests_limiter % REFRESH_EVERY_N_LOOPS == 0:
+            try:
+                flight = planes.get_live_flight(callsign)
+            except Exception:
+                logging.exception(f"Could not fetch live data for {callsign}")
+                flight = None
 
-            if flight_data and "trail" in flight_data:
-                current_location = flight_data["trail"][0]
-
+            if flight:
                 # Perform reverse geocoding
-                formatted_address, _ = reverse_geocode(current_location["lat"], current_location["lng"])
+                formatted_address, _ = reverse_geocode(flight.latitude, flight.longitude)
 
                 if formatted_address == "Unknown":
                     # Show coordinates instead
-                    formatted_address = f"({current_location['lat']:.1f}, {current_location['lng']:.1f})"
+                    formatted_address = f"({flight.latitude:.1f}, {flight.longitude:.1f})"
 
-                logging.info(current_location)
-                logging.info(formatted_address)
+                logging.info(f"{flight.callsign} at {flight.latitude}, {flight.longitude} over {formatted_address}")
             else:
-                logging.exception("No flight data")
+                formatted_address = None
+                logging.warning(f"No live flight data for {callsign}")
 
         requests_limiter = requests_limiter + 1
 
         sign.canvas.Clear()
 
-        if flight_data:
-            flight_number_header = f"- {flight_data['identification']['callsign']} -"
+        if flight is None:
+            not_tracking_header = f"- {callsign} -"
+            graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, not_tracking_header), 14, graphics.Color(200, 10, 10), not_tracking_header)
+            graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, "NOT IN THE AIR"), 24, graphics.Color(160, 160, 160), "NOT IN THE AIR")
+            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-            graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
+            breakout = sign.wait_loop(0.8)
+            if breakout:
+                return
+            continue
 
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight_data["airport"]["origin"]["code"]["iata"])
-            graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight_data["airport"]["destination"]["code"]["iata"])
+        flight_number_header = f"- {flight.callsign} -"
 
-            scheduled_start_time = flight_data["time"]["scheduled"]["departure"]
-            real_start_time = flight_data["time"]["real"]["departure"]
-            estimated_start_time = flight_data["time"]["estimated"]["departure"]
+        graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, flight_number_header), 6, graphics.Color(200, 10, 10), flight_number_header)
 
-            scheduled_end_time = flight_data["time"]["scheduled"]["arrival"]
-            real_end_time = flight_data["time"]["real"]["arrival"]
-            estimated_end_time = flight_data["time"]["estimated"]["arrival"]
+        graphics.DrawText(sign.canvas, sign.fontreallybig, 1, 14, graphics.Color(20, 200, 20), flight.origin_airport_iata)
+        graphics.DrawText(sign.canvas, sign.fontreallybig, 100, 14, graphics.Color(20, 200, 20), flight.destination_airport_iata)
 
-            if real_start_time is not None:
-                start_time = real_start_time
-            elif estimated_start_time is not None:
-                start_time = estimated_start_time
-            else:
-                start_time = scheduled_start_time
+        origin_position = get_airport_position(flight.origin_airport_iata)
+        destination_position = get_airport_position(flight.destination_airport_iata)
+        current_position = (flight.latitude, flight.longitude)
 
-            if real_end_time is not None:
-                end_time = real_end_time
-            elif estimated_end_time is not None:
-                end_time = estimated_end_time
-            else:
-                end_time = scheduled_end_time
-
-            origin_distance_to_destination = get_distance(
-                (flight_data["airport"]["origin"]["position"]["latitude"], flight_data["airport"]["origin"]["position"]["longitude"]), (flight_data["airport"]["destination"]["position"]["latitude"], flight_data["airport"]["destination"]["position"]["longitude"])
-            )
-            current_position_to_destination = get_distance((current_location["lat"], current_location["lng"]), (flight_data["airport"]["destination"]["position"]["latitude"], flight_data["airport"]["destination"]["position"]["longitude"]))
+        if origin_position and destination_position:
+            origin_distance_to_destination = get_distance(origin_position, destination_position)
+            current_position_to_destination = get_distance(current_position, destination_position)
 
             # Handle case where origin and destination are the same
             if origin_distance_to_destination == 0:
                 percent_complete = 0
             else:
-                percent_complete = round((origin_distance_to_destination - current_position_to_destination) / origin_distance_to_destination, 2)
+                percent_complete = min(max((origin_distance_to_destination - current_position_to_destination) / origin_distance_to_destination, 0), 1)
 
             line_x_start = 30
             line_x_end = 98
@@ -122,31 +146,42 @@ def track_a_flight(sign):
             elif blip_count == 2:
                 sign.canvas.SetPixel(progress_box_start_offset, line_y, 255, 255, 255)
 
-            # Convert Unix timestamp to local time at origin airport
-            origin_timezone = flight_data["airport"]["origin"]["timezone"]["name"]
-            origin_local_time = datetime.fromtimestamp(start_time, tz=timezone.utc).astimezone(ZoneInfo(origin_timezone))
-            destination_timezone = flight_data["airport"]["destination"]["timezone"]["name"]
-            destination_local_time = datetime.fromtimestamp(end_time, tz=timezone.utc).astimezone(ZoneInfo(destination_timezone))
+            # The live feed carries no schedule, so departure/arrival are estimated from ground speed
+            ground_speed_mph = (as_float(flight.ground_speed) or 0) * KNOTS_TO_MPH
 
-            if shared_config.CONF["MILITARY_TIME"].lower() == "true":
-                graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), origin_local_time.strftime("%H:%M"))
-                graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), destination_local_time.strftime("%H:%M"))
-            else:
-                graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), origin_local_time.strftime("%I:%M%p"))
-                graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), destination_local_time.strftime("%I:%M%p"))
+            if ground_speed_mph > 50:
+                now = datetime.now(tz=timezone.utc)
+                distance_travelled = max(origin_distance_to_destination - current_position_to_destination, 0)
+                start_time = now - timedelta(hours=distance_travelled / ground_speed_mph)
+                end_time = now + timedelta(hours=current_position_to_destination / ground_speed_mph)
 
-            if current_location:
-                graphics.DrawText(sign.canvas, sign.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{current_location['alt']}")
-                graphics.DrawText(sign.canvas, sign.font46, 70, 19, graphics.Color(20, 160, 60), f"Vel:{current_location['spd']}")
+                origin_local_time = start_time.astimezone(get_airport_timezone(flight.origin_airport_iata, origin_position))
+                destination_local_time = end_time.astimezone(get_airport_timezone(flight.destination_airport_iata, destination_position))
 
-            if formatted_address:
-                graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
+                if shared_config.CONF["MILITARY_TIME"].lower() == "true":
+                    graphics.DrawText(sign.canvas, sign.font46, 6, 22, graphics.Color(40, 40, 255), origin_local_time.strftime("%H:%M"))
+                    graphics.DrawText(sign.canvas, sign.font46, 103, 22, graphics.Color(40, 40, 255), destination_local_time.strftime("%H:%M"))
+                else:
+                    graphics.DrawText(sign.canvas, sign.font46, 2, 22, graphics.Color(40, 40, 255), origin_local_time.strftime("%I:%M%p"))
+                    graphics.DrawText(sign.canvas, sign.font46, 99, 22, graphics.Color(40, 40, 255), destination_local_time.strftime("%I:%M%p"))
 
-            sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+        altitude = as_float(flight.altitude)
+        ground_speed = as_float(flight.ground_speed)
 
-            blip_count = blip_count + 1
-            if blip_count == 3:
-                blip_count = 0
+        if altitude is not None:
+            graphics.DrawText(sign.canvas, sign.font46, 32, 19, graphics.Color(160, 160, 200), f"Alt:{int(altitude)}")
+
+        if ground_speed is not None:
+            graphics.DrawText(sign.canvas, sign.font46, 70, 19, graphics.Color(20, 160, 60), f"Vel:{int(ground_speed)}")
+
+        if formatted_address:
+            graphics.DrawText(sign.canvas, sign.font57, get_centered_text_x_offset_value(5, formatted_address), 30, graphics.Color(246, 242, 116), formatted_address)
+
+        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+
+        blip_count = blip_count + 1
+        if blip_count == 3:
+            blip_count = 0
 
         breakout = sign.wait_loop(0.8)
         if breakout:

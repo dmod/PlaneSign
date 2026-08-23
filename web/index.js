@@ -1271,9 +1271,26 @@ function close_all_flight_lists() {
     }
 }
 
+var flight_autofill_timer = null;
+
 function get_possible_autofill_flights(query_string) {
-    call_endpoint("/get_possible_flights/" + query_string, function (value) {
-        live_flights = JSON.parse(value)['results'].filter((flight) => { return flight['type'] == 'live' })
+    // The live flight feed rate limits, so wait until typing pauses before querying it
+    clearTimeout(flight_autofill_timer);
+
+    if (query_string.length < 3) {
+        close_all_flight_lists();
+        return;
+    }
+
+    flight_autofill_timer = setTimeout(function () {
+        request_possible_autofill_flights(query_string);
+    }, 400);
+}
+
+function request_possible_autofill_flights(query_string) {
+    call_endpoint("/get_possible_flights/" + encodeURIComponent(query_string), function (value) {
+        var response = JSON.parse(value);
+        live_flights = (response['results'] || []).filter((flight) => { return flight['type'] == 'live' })
 
         close_all_flight_lists();
 
@@ -1284,17 +1301,25 @@ function get_possible_autofill_flights(query_string) {
         live_flights.forEach(flight => {
             b = document.createElement("div");
 
-            let start = flight['label'].toLowerCase().search(query_string.toLowerCase())
+            let label = flight['label'];
+            let start = label.toLowerCase().indexOf(query_string.toLowerCase())
 
-            b.innerHTML += flight['label'].substring(0, start);
-            b.innerHTML += "<strong>" + flight['label'].substr(start, query_string.length) + "</strong>";
-            b.innerHTML += flight['label'].substr(start + query_string.length);
-            b.innerHTML += "<br>" + flight['detail']['route']
+            if (start < 0) {
+                b.appendChild(document.createTextNode(label));
+            } else {
+                b.appendChild(document.createTextNode(label.substring(0, start)));
+                let match = document.createElement("strong");
+                match.textContent = label.substr(start, query_string.length);
+                b.appendChild(match);
+                b.appendChild(document.createTextNode(label.substr(start + query_string.length)));
+            }
+            b.appendChild(document.createElement("br"));
+            b.appendChild(document.createTextNode(flight['detail']['route']));
 
             b.addEventListener("click", function (e) {
                 close_all_flight_lists();
                 document.getElementById("track-a-flight_flight-num-input").value = flight['detail']['callsign']
-                call_endpoint('/set_track_a_flight/' + flight['id'])
+                call_endpoint('/set_track_a_flight/' + encodeURIComponent(flight['id']))
             });
             a.appendChild(b);
         });
