@@ -9,6 +9,18 @@ fi
 
 # to skip any questions from APT
 export DEBIAN_FRONTEND=noninteractive
+export DEBIAN_PRIORITY=critical
+export APT_LISTCHANGES_FRONTEND=none
+export NEEDRESTART_MODE=a
+
+# Keep existing config files and retry transient mirror failures so apt never
+# stops to ask a question.
+APT_OPTS=(
+  -y
+  -o Acquire::Retries=3
+  -o Dpkg::Options::=--force-confdef
+  -o Dpkg::Options::=--force-confold
+)
 
 RUN_USER=pi
 RUN_GROUP=pi
@@ -20,6 +32,83 @@ GITHUB_BASE_URL="${GITHUB_BASE_URL:-https://raw.githubusercontent.com/dmod/Plane
 
 COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
 CONTAINER_NAME=PlaneSignRuntime
+
+# Raspberry Pi OS starts apt-daily/unattended-upgrades a few minutes after boot;
+# they hold the same dpkg locks this installer needs.
+stop_background_apt_jobs() {
+  local unit
+  for unit in \
+      apt-daily.timer \
+      apt-daily-upgrade.timer \
+      apt-daily.service \
+      apt-daily-upgrade.service \
+      unattended-upgrades.service; do
+    systemctl stop "$unit" >/dev/null 2>&1 || true
+  done
+}
+
+apt_locks_held() {
+  local lock
+  for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock \
+              /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+    [ -e "$lock" ] || continue
+    if command -v fuser >/dev/null 2>&1; then
+      fuser "$lock" >/dev/null 2>&1 && return 0
+    fi
+  done
+  pgrep -x 'apt|apt-get|dpkg|unattended-upgrade' >/dev/null 2>&1
+}
+
+wait_for_apt_locks() {
+  local waited=0
+  local max_wait=300
+
+  while apt_locks_held; do
+    if [ "$waited" -ge "$max_wait" ]; then
+      echo "Timed out waiting for apt/dpkg locks; continuing anyway."
+      return 0
+    fi
+    echo "Another package manager is running; waiting for it to finish..."
+    sleep 5
+    waited=$((waited + 5))
+  done
+}
+
+# A previously interrupted apt/dpkg run (power loss, reboot, or killed
+# installer) leaves half-unpacked packages behind, and every later apt-get
+# aborts with exit code 100 until dpkg is reconfigured.
+repair_dpkg() {
+  wait_for_apt_locks
+  echo "Repairing any interrupted dpkg state..."
+  dpkg --configure -a --force-confdef --force-confold || true
+  apt-get "${APT_OPTS[@]}" --fix-broken install || true
+}
+
+# apt-get exits 100 for lock contention, interrupted dpkg state, and transient
+# mirror errors; repair and retry instead of failing the whole install.
+apt_get() {
+  local attempt
+
+  for attempt in 1 2 3; do
+    wait_for_apt_locks
+    if apt-get "${APT_OPTS[@]}" "$@"; then
+      return 0
+    fi
+
+    echo "'apt-get $*' failed (attempt $attempt/3); attempting recovery..." >&2
+    repair_dpkg
+    if [ "$attempt" -eq 2 ]; then
+      # Corrupt/partial package lists also surface as exit code 100.
+      rm -rf /var/lib/apt/lists/*
+      apt-get clean || true
+      apt-get "${APT_OPTS[@]}" update || true
+    fi
+    sleep 5
+  done
+
+  echo "'apt-get $*' failed after 3 attempts" >&2
+  return 1
+}
 
 download_required_file() {
   local url="$1"
@@ -47,6 +136,9 @@ remove_existing_planesign_container() {
 }
 
 echo "PlaneSign install starting..."
+
+stop_background_apt_jobs
+repair_dpkg
 
 if [ -f /boot/firmware/cmdline.txt ]; then
   BOOT_DIR=/boot/firmware
@@ -111,9 +203,9 @@ download_required_file "$GITHUB_BASE_URL/sign.conf.sample" "$INSTALL_DIR/sign.co
 download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 
 # Install bluetooth support
-apt-get update
+apt_get update
 
-apt-get install -y \
+apt_get install \
     bluez \
     python3-dbus
 
@@ -135,7 +227,7 @@ rfkill list bluetooth | grep -E "Soft|Hard" || echo "  Warning: no rfkill Blueto
 bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
 
 # Add Docker's official GPG key:
-apt-get -y install ca-certificates curl gnupg
+apt_get install ca-certificates curl gnupg
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
@@ -145,9 +237,9 @@ echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
-apt-get update
+apt_get update
 
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+apt_get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 groupadd --force docker
 usermod -aG docker "$RUN_USER"
@@ -189,5 +281,8 @@ docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
 chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
 
 echo "Installation and configuration completed! Rebooting..."
+# Rebooting while a package operation is in flight is what corrupts dpkg for
+# the next run, so make sure nothing is mid-install first.
+wait_for_apt_locks
 sync
 reboot
