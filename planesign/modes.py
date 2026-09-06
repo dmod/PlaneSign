@@ -31,3 +31,4 @@ class DisplayMode(Enum):
     FREE_SKETCH = auto()  # Browser sketch pad
     HORSE_RACE = auto()  # Arcade horse race
     IDENTIFY = auto()  # Short "which sign is this?" flash, then reverts to the previous mode
+    TIDES = auto()

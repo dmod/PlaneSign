@@ -33,6 +33,14 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Use `graphics.Color(r, g, b)` for colors.
 - Call `self.matrix.SwapOnVSync(self.canvas)` to display a frame.
 - Call `self.wait_loop(seconds)` to hold a display; returns `True` if a forced update interrupted the wait.
+- Budget the layout in actual matrix pixels using the loaded font widths. Keep text and graphics within the 128x32 bounds, with clear gaps between regions; check the longest labels, not just typical values.
+- Keep graphs proportionate to the key readings. Show units and the displayed time range, and mark the current time on time-series graphs.
+- Display clock times in the timezone of the configured sensor location and honor `MILITARY_TIME`. Keep the layout stable across 12/24-hour formats and date changes.
+
+## New Display Modes
+- Follow a neighboring mode's registration and lifecycle patterns. Append new `DisplayMode` members so existing numeric IDs remain stable, and expose the mode in both `web/index.html` and `web/layout-new.html`.
+- Fetch remote data in a background worker, not in the frame-rendering loop. Use request timeouts, caching, and retry backoff; integrate workers with the existing shutdown handling.
+- Render explicit loading, unavailable, and expired-data states. Identify cached data when it is still usable; do not show missing data as zero or stale data as current.
 
 ## Docker / Deployment
 - Runs with `--network host` (container shares host network stack — no port mapping needed, host interfaces like `wlan0` are directly accessible).
@@ -42,4 +50,24 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 ## Dev Environment
 - Uses VS Code devcontainer (`.devcontainer/devcontainer.json`) built from the project `Dockerfile`.
 - Devcontainer runs with `--privileged` and `--network=host`.
-- Python 3, no virtualenv — system packages installed via apt in the Dockerfile.
+- Development uses the `uv`-managed `.venv`; use its Python interpreter rather than assuming system Python has the project dependencies. Run `uv sync` when dependency setup is needed. Native/system packages are installed via apt in the Dockerfile.
+- The `PlaneSign Debug - Web Display` VS Code launch configuration runs with `--web` and has a pre-launch task for `uv sync` and nginx startup.
+
+## Testing And Visual Verification
+- Do not create unit-test or pytest files, automated test suites, or test-only scaffolding. Do not add testing frameworks or dependencies.
+- Validate runtime and display changes by running the application with `--web` and visually inspecting the rendered matrix. Syntax/diagnostic checks may supplement this, but do not replace visual verification. Documentation-only edits do not require starting the application.
+
+1. Check for an existing emulator or debugger before starting another. The Flask API uses port 5055 and the WebSocket frame server uses port 5056. Reuse a suitable running instance; restart it when needed to load Python changes. Do not launch competing instances or terminate unrelated/user-managed processes without approval.
+2. From the repository root, run the following command, or use the Web Display launch configuration:
+
+	```bash
+	.venv/bin/python planesign/__main__.py --web
+	```
+
+3. With nginx running, open `http://localhost/` for the controls and `http://localhost/display.html` for the matrix preview. Select the affected mode and confirm the preview is connected and receiving frames. Reload the preview if its WebSocket does not reconnect after an emulator restart.
+4. Inspect the actual matrix output, using browser screenshots when available. Check readability, clipping, overlap, spacing, colors, graph labels, and current-time markers. Observe all rotating header/content phases, not just one frame.
+5. Exercise the relevant edge cases through the running application where practical: long names, 12/24-hour clocks, midnight transitions, negative/flat values, loading or failed data, and switching into and out of the mode. Report cases that could not be exercised rather than claiming they passed.
+6. State what was visually checked and provide the preview URL. Emulator verification does not establish physical LED-panel readability; report hardware checks separately. Leave the preview available for user review unless asked to stop it.
+
+- Normal continuous INFO logs and successful HTTP requests are not input prompts. Do not send terminal input or repeatedly poll just because a long-running server is producing output.
+- Do not expose API keys or other secrets from `sign.conf` or configuration dumps. Redact sensitive output when capturing logs or sharing diagnostics.

@@ -57,6 +57,7 @@ import satellite
 import shared_config
 import snow
 import snowfall
+import tides
 import track_a_flight
 import utilities
 import weather
@@ -141,12 +142,14 @@ utilities.detect_usb_audio_device()
 api_server_process = Process(target=api.api_server, name="APIServer")
 plane_data_process = Process(target=planes.get_plane_data_worker, name="PlaneData", args=(shared_config.data_dict,))
 weather_data_process = Process(target=weather.get_weather_data_worker, name="WeatherData", args=(shared_config.data_dict,))
+tides_data_process = Process(target=tides.get_tides_data_worker, name="TidesData", args=(shared_config.data_dict,))
 
 utilities.read_config()
 
 api_server_process.start()
 plane_data_process.start()
 weather_data_process.start()
+tides_data_process.start()
 
 ps = planesign.PlaneSign(defined_mode_handlers)
 defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
@@ -173,6 +176,12 @@ if weather_data_process.is_alive():
     logging.warning("Weather data process did not exit in time, terminating...")
     weather_data_process.terminate()
     weather_data_process.join(timeout=2)
+
+tides_data_process.join(timeout=10)
+if tides_data_process.is_alive():
+    logging.warning("Tides data process did not exit in time, terminating...")
+    tides_data_process.terminate()
+    tides_data_process.join(timeout=2)
 
 logging_queue.put(None)
 listener.join(timeout=5)
