@@ -22,6 +22,22 @@ GRAPH_BOTTOM = 23
 CATALOG_TTL = 24 * 60 * 60
 PREDICTIONS_TTL = 6 * 60 * 60
 MAX_RETRY = 15 * 60
+FRAME_INTERVAL = 0.05
+SWELL_LENGTH = 29.0
+SWELL_SPEED = 0.16
+RIPPLE_LENGTH = 13.0
+RIPPLE_SPEED = 0.27
+WAVE_CONTRAST = 0.30
+FOAM_MIX = 0.40
+PAST_SHADE = 0.60
+OCEAN_SURFACE = (26, 116, 168)
+OCEAN_DEEP = (4, 24, 58)
+OCEAN_FOAM = (150, 226, 240)
+GUIDE_COLOR = (48, 40, 10)
+NOW_COLOR = (255, 215, 40)
+ARROW_COUNT = 3
+ARROW_PERIOD = 3.6
+SLACK_PERIOD = 3.0
 
 
 class NOAAError(ValueError):
@@ -259,6 +275,65 @@ def graph_points(samples, now):
     return [None if height is None else row(height) for height in heights], None if current is None else (GRAPH_WIDTH // 2, row(current))
 
 
+def blend_color(base, target, amount):
+    return [base[index] + (target[index] - base[index]) * amount for index in range(3)]
+
+
+def wave_field(column, depth, elapsed):
+    swell = math.sin(2 * math.pi * (column / SWELL_LENGTH - elapsed * SWELL_SPEED) - depth * 0.30)
+    ripple = math.sin(2 * math.pi * (column / RIPPLE_LENGTH + elapsed * RIPPLE_SPEED) - depth * 0.55)
+    return 0.62 * swell + 0.38 * ripple
+
+
+def draw_ocean(canvas, points, elapsed):
+    middle = GRAPH_WIDTH // 2
+    for column in range(GRAPH_WIDTH):
+        surface = points[column]
+        if surface is None:
+            continue
+        side = PAST_SHADE if column < middle else 1.0
+        for row in range(surface + 1, GRAPH_BOTTOM + 1):
+            depth = row - surface
+            wave = wave_field(column, depth, elapsed)
+            color = blend_color(OCEAN_SURFACE, OCEAN_DEEP, min(1.0, (depth - 1) / 7.0))
+            level = max(0.0, 1.0 + WAVE_CONTRAST * math.exp(-(depth - 1) / 4.5) * wave)
+            color = [value * level for value in color]
+            if depth == 1:
+                color = blend_color(color, OCEAN_FOAM, FOAM_MIX * max(0.0, wave) ** 2)
+            canvas.SetPixel(column, row, *(min(255, int(value * side)) for value in color))
+
+
+def draw_now_line(canvas, direction, elapsed):
+    middle = GRAPH_WIDTH // 2
+    pulse = 0.5 + 0.5 * math.sin(2 * math.pi * elapsed / SLACK_PERIOD)
+    guide = GUIDE_COLOR if direction else blend_color(GUIDE_COLOR, NOW_COLOR, 0.35 * pulse)
+    for row in range(GRAPH_TOP, GRAPH_BOTTOM + 1):
+        canvas.SetPixel(middle, row, *(int(value) for value in guide))
+
+
+def draw_trend_arrows(canvas, direction, elapsed):
+    if not direction:
+        return
+    middle = GRAPH_WIDTH // 2
+    span = GRAPH_BOTTOM - GRAPH_TOP
+    # Sub-pixel weights let the chevrons drift smoothly across only 15 rows.
+    weights = {}
+    for index in range(ARROW_COUNT):
+        progress = (elapsed / ARROW_PERIOD + index / ARROW_COUNT) % 1.0
+        tip = GRAPH_BOTTOM - progress * span if direction > 0 else GRAPH_TOP + progress * span
+        fade = math.sin(math.pi * progress) ** 0.5
+        for offset_x, offset_y in ((0, 0), (0, direction), (-1, direction), (1, direction)):
+            exact = tip + offset_y
+            lower = math.floor(exact)
+            for row, share in ((lower, lower + 1 - exact), (lower + 1, exact - lower)):
+                if GRAPH_TOP <= row <= GRAPH_BOTTOM:
+                    key = (middle + offset_x, row)
+                    weights[key] = max(weights.get(key, 0.0), fade * share)
+    for (column, row), level in weights.items():
+        if level >= 0.1:
+            canvas.SetPixel(column, row, *(int(value) for value in blend_color(GUIDE_COLOR, NOW_COLOR, level)))
+
+
 def tide_trend(payload, now):
     for timestamp, _, kind in payload["events"]:
         if abs(timestamp - now) <= 180:
@@ -281,7 +356,7 @@ def event_label(event, now, timezone_name, military_time):
     return f"{'HIGH' if kind == 'H' else 'LOW'} {clock}"
 
 
-def draw_tides_frame(sign, payload, config, now):
+def draw_tides_frame(sign, payload, config, now, elapsed):
     from rgbmatrix import graphics
 
     sign.canvas.Clear()
@@ -308,16 +383,17 @@ def draw_tides_frame(sign, payload, config, now):
 
     points, marker = graph_points(payload["samples"], now)
     middle = GRAPH_WIDTH // 2
-    graphics.DrawLine(sign.canvas, middle, GRAPH_TOP, middle, GRAPH_BOTTOM, graphics.Color(100, 85, 20))
+    trend = tide_trend(payload, now)
+    direction = {"RISING": 1, "FALLING": -1}.get(trend, 0)
+    draw_ocean(sign.canvas, points, elapsed)
+    draw_now_line(sign.canvas, direction, elapsed)
     for column in range(1, GRAPH_WIDTH):
         if points[column - 1] is not None and points[column] is not None:
             color = graphics.Color(20, 90, 100) if column < middle else graphics.Color(40, 230, 170)
             graphics.DrawLine(sign.canvas, column - 1, points[column - 1], column, points[column], color)
     if marker is not None:
-        column, row = marker
-        for delta_x, delta_y in ((0, -1), (-1, 0), (1, 0), (0, 1)):
-            sign.canvas.SetPixel(column + delta_x, min(GRAPH_BOTTOM, max(GRAPH_TOP, row + delta_y)), 255, 215, 40)
-        sign.canvas.SetPixel(column, row, 255, 255, 255)
+        sign.canvas.SetPixel(marker[0], marker[1], 255, 255, 255)
+    draw_trend_arrows(sign.canvas, direction, elapsed)
     label("-12h", 31, (100, 145, 165))
     label("NOW", 31, (255, 215, 40), middle - 6)
     label("+12h", 31, (100, 145, 165), GRAPH_WIDTH - 16)
@@ -331,7 +407,7 @@ def draw_tides_frame(sign, payload, config, now):
         top = prefix + station_name[: 31 - len(distance) - len(prefix)] + " " + distance
     else:
         height = sample_height(payload["samples"], now)
-        top = f"{'CACHED' if cached else 'NOAA'} PRED 24H {height:.1f}ft {tide_trend(payload, now)}"
+        top = f"{'CACHED' if cached else 'NOAA'} PRED 24H {height:.1f}ft {trend}"
     label(top, 5, (255, 190, 90) if cached else (160, 205, 230))
     military = str(config.get("MILITARY_TIME", "false")).lower() == "true"
     event_column = GRAPH_WIDTH + 4
@@ -346,7 +422,7 @@ def show_tides(sign):
     import shared_config
 
     while shared_config.shared_mode.value == DisplayMode.TIDES.value:
-        draw_tides_frame(sign, shared_config.data_dict.get("tides"), shared_config.CONF.copy(), time.time())
+        draw_tides_frame(sign, shared_config.data_dict.get("tides"), shared_config.CONF.copy(), time.time(), time.monotonic())
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        if sign.wait_loop(1):
+        if sign.wait_loop(FRAME_INTERVAL):
             return
