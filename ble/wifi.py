@@ -22,7 +22,7 @@ class WiFiNetwork:
 def get_current_wifi_status():
     try:
         # Get current WiFi connection info using nmcli
-        connection_info = subprocess.check_output(["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi", "list", "--rescan", "no"], stderr=subprocess.DEVNULL).decode("utf-8").strip()
+        connection_info = subprocess.check_output(["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi", "list", "--rescan", "no"], stderr=subprocess.DEVNULL, timeout=10).decode("utf-8").strip()
 
         # Find the currently connected network (marked as active)
         connected_network = None
@@ -40,6 +40,9 @@ def get_current_wifi_status():
         else:
             return "Disconnected|None|0"
 
+    except subprocess.TimeoutExpired:
+        print("get_current_wifi_status error: nmcli timed out")
+        return "Error|Unable to get WiFi status|0"
     except subprocess.CalledProcessError as e:
         print(f"get_current_wifi_status error: {e}")
         return "Error|Unable to get WiFi status|0"
@@ -48,8 +51,9 @@ def get_current_wifi_status():
 def scan_wifi():
     try:
         print("Scanning WiFi...")
-        # Use iw to scan - it shows all available networks unlike nmcli
-        cmd_output = subprocess.check_output(["sudo", "iw", "dev", "wlan0", "scan"], stderr=subprocess.STDOUT).decode("utf-8")
+        # Use iw to scan - it shows all available networks unlike nmcli.
+        # Bounded: this runs on the BLE GATT main loop thread, which is blocked until it returns.
+        cmd_output = subprocess.check_output(["sudo", "iw", "dev", "wlan0", "scan"], stderr=subprocess.STDOUT, timeout=10).decode("utf-8")
 
         networks = []
         current_network = {}
@@ -103,6 +107,9 @@ def scan_wifi():
         print(f"Found {len(networks)} networks ({len(unique_networks)} unique), returning top {len(top_networks)}")
         return "\n".join(str(network) for network in top_networks) if top_networks else "No networks found"
 
+    except subprocess.TimeoutExpired:
+        print("scan_wifi error: iw scan timed out")
+        return "Error scanning WiFi: scan timed out"
     except subprocess.CalledProcessError as e:
         print(f"scan_wifi error: {e}")
         return f"Error scanning WiFi: {str(e)}"

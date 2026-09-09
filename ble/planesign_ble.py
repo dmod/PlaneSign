@@ -5,6 +5,7 @@ import re
 import shutil
 import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -27,6 +28,88 @@ DOCKER_CONTAINER_NAME = "PlaneSignRuntime"
 DOCKER_IMAGE = "ghcr.io/dmod/planesign:latest"
 DOCKER_IMAGE_REPO = "dmod/planesign"
 mainloop = None
+
+
+def encode_ble_string(text, options=None):
+    """Encode a string as a GATT value.
+
+    Encodes the whole string to UTF-8 first: `dbus.Byte(char.encode())` raises on any
+    character that is not a single byte, which turns a read into an ATT error.
+    Also honors BlueZ's `offset` option, which is set for the blob reads a client issues
+    when a value is longer than the negotiated MTU.
+    """
+    data = text.encode("utf-8", errors="replace")
+    offset = 0
+    if options:
+        try:
+            offset = int(options.get("offset", 0))
+        except (TypeError, ValueError):
+            offset = 0
+    return dbus.Array([dbus.Byte(b) for b in data[offset:]], signature="y")
+
+
+class BackgroundValueCharacteristic(Characteristic):
+    """Read-only characteristic whose value comes from slow subprocess/network I/O.
+
+    BlueZ dispatches ReadValue on the single GLib main loop thread, so doing seconds of
+    work inline stalls every other GATT operation until it returns and the client's read
+    times out first. Instead ReadValue answers from cache immediately, the work runs on a
+    worker thread, and the result is pushed to subscribers as a notification.
+    """
+
+    # Re-run compute_value this often to keep the cache warm; 0 refreshes only on demand.
+    REFRESH_INTERVAL_SECONDS = 0
+
+    def __init__(self, bus, index, uuid, service, initial_value=""):
+        Characteristic.__init__(self, bus, index, uuid, ["read", "notify"], service)
+        self._value = initial_value
+        self._notifying = False
+        self._refreshing = False
+        self.request_refresh()
+        if self.REFRESH_INTERVAL_SECONDS:
+            GLib.timeout_add_seconds(self.REFRESH_INTERVAL_SECONDS, self._on_refresh_timer)
+
+    def compute_value(self):
+        raise NotImplementedError
+
+    def ReadValue(self, options):
+        self.request_refresh()
+        return encode_ble_string(self._value, options)
+
+    def StartNotify(self):
+        self._notifying = True
+        self.request_refresh()
+
+    def StopNotify(self):
+        self._notifying = False
+
+    def _on_refresh_timer(self):
+        self.request_refresh()
+        return True
+
+    def request_refresh(self):
+        if self._refreshing:
+            return
+        self._refreshing = True
+        threading.Thread(target=self._refresh_worker, daemon=True).start()
+
+    def _refresh_worker(self):
+        try:
+            value = self.compute_value()
+        except Exception as e:
+            value = f"error: {e}"
+        # Hop back to the main loop: dbus signals must not be emitted from a worker thread.
+        GLib.idle_add(self._publish_value, value)
+
+    def _publish_value(self, value):
+        self._refreshing = False
+        changed = value != self._value
+        self._value = value
+        if changed:
+            print(f"{type(self).__name__}: {value}")
+            if self._notifying:
+                self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": encode_ble_string(value)}, [])
+        return False
 
 
 class BasicInfoService(Service):
@@ -57,29 +140,28 @@ class ContainerControlService(Service):
         self.add_characteristic(log_char)
 
 
-class DockerUpdateCheckCharacteristic(Characteristic):
+class DockerUpdateCheckCharacteristic(BackgroundValueCharacteristic):
     UPDATE_CHECK_CHRC_UUID = "a9cc9f79-aa76-4955-aeb5-85aa9299028e"
     GHCR_TOKEN_URL = f"https://ghcr.io/token?scope=repository:{DOCKER_IMAGE_REPO}:pull&service=ghcr.io"
     GHCR_MANIFEST_URL = f"https://ghcr.io/v2/{DOCKER_IMAGE_REPO}/manifests/latest"
+    # Index/list types first so GHCR answers with the multi-arch index digest, which is what
+    # `docker pull` records in RepoDigests. An arch-specific manifest digest can never match
+    # it, which would report "update-available" forever.
+    MANIFEST_ACCEPT = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
     TIMEOUT_SECONDS = 8
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, ["read"], service)
+        BackgroundValueCharacteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, service)
 
-    def ReadValue(self, options):
-        result = self._check_for_update()
-        print("DockerUpdateCheckCharacteristic Read: " + result)
-        return [dbus.Byte(x.encode()) for x in result]
-
-    def _check_for_update(self):
+    def compute_value(self):
         try:
-            local_digest = self._get_local_digest()
+            local_digest, local_error = self._get_local_digest()
             if local_digest is None:
-                return "check failed: could not get local digest"
+                return f"check failed: {local_error}"
 
-            remote_digest = self._get_remote_digest()
+            remote_digest, remote_error = self._get_remote_digest()
             if remote_digest is None:
-                return "check failed: could not get remote digest"
+                return f"check failed: {remote_error}"
 
             local_short = local_digest.replace("sha256:", "")[:12]
             remote_short = remote_digest.replace("sha256:", "")[:12]
@@ -92,22 +174,29 @@ class DockerUpdateCheckCharacteristic(Characteristic):
             return f"check failed: {e}"
 
     def _get_local_digest(self):
-        """Get the repo digest of the locally cached image."""
+        """Return (digest, error) for the locally cached image."""
+        if shutil.which("docker") is None:
+            return None, "docker not found"
         try:
-            completed = subprocess.run(["docker", "inspect", "--format", "{{index .RepoDigests 0}}", DOCKER_IMAGE], capture_output=True, text=True, timeout=5, check=False)
+            completed = subprocess.run(["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", DOCKER_IMAGE], capture_output=True, text=True, timeout=5, check=False)
             if completed.returncode != 0:
-                return None
-            # Output like: ghcr.io/dmod/planesign@sha256:abc123...
-            repo_digest = completed.stdout.strip()
-            if "@" in repo_digest:
-                return repo_digest.split("@", 1)[1]
-            return repo_digest
+                stderr = (completed.stderr or "").strip()
+                return None, stderr.splitlines()[-1] if stderr else "image not present locally"
+
+            # Entries look like: ghcr.io/dmod/planesign@sha256:abc123...
+            repo_digests = json.loads(completed.stdout.strip() or "[]") or []
+            for entry in repo_digests:
+                name, _, digest = entry.partition("@")
+                if digest and name.endswith(DOCKER_IMAGE_REPO):
+                    return digest, None
+            # A locally built or `docker load`ed image has no repo digest to compare against.
+            return None, "local image has no registry digest"
         except Exception as e:
             print(f"_get_local_digest error: {e}")
-            return None
+            return None, str(e)
 
     def _get_remote_digest(self):
-        """Fetch the remote manifest digest from GHCR without pulling the image."""
+        """Return (digest, error) from GHCR without pulling the image."""
         try:
             # Step 1: Get anonymous bearer token
             token_req = urllib.request.Request(self.GHCR_TOKEN_URL, method="GET")
@@ -115,18 +204,18 @@ class DockerUpdateCheckCharacteristic(Characteristic):
                 token_data = json.loads(resp.read().decode("utf-8"))
             token = token_data.get("token", "")
             if not token:
-                return None
+                return None, "registry did not return a token"
 
             # Step 2: HEAD request to manifest endpoint
             manifest_req = urllib.request.Request(self.GHCR_MANIFEST_URL, method="HEAD")
             manifest_req.add_header("Authorization", f"Bearer {token}")
-            manifest_req.add_header("Accept", ("application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json"))
+            manifest_req.add_header("Accept", self.MANIFEST_ACCEPT)
             with urllib.request.urlopen(manifest_req, timeout=self.TIMEOUT_SECONDS) as resp:
                 digest = resp.headers.get("Docker-Content-Digest", "")
-            return digest if digest else None
+            return (digest, None) if digest else (None, "registry did not return a digest")
         except Exception as e:
             print(f"_get_remote_digest error: {e}")
-            return None
+            return None, str(e)
 
 
 class SystemUpdateLogCharacteristic(Characteristic):
@@ -142,7 +231,7 @@ class SystemUpdateLogCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         chunk = self._log_buffer[-512:] if self._log_buffer else "no log"
-        return [dbus.Byte(x.encode()) for x in chunk]
+        return encode_ble_string(chunk, options)
 
     def StartNotify(self):
         if self._notifying:
@@ -198,8 +287,7 @@ class SystemUpdateCharacteristic(Characteristic):
         self._status = status
         print("SystemUpdateCharacteristic status: " + status)
         if self._notifying:
-            value = dbus.Array([dbus.Byte(b) for b in status.encode("utf-8")], signature="y")
-            self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": value}, [])
+            self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": encode_ble_string(status)}, [])
 
     def ReadValue(self, options):
         # If a process is running, check if it finished
@@ -214,7 +302,7 @@ class SystemUpdateCharacteristic(Characteristic):
                 self._status = f"failed: exit code {retcode}"
                 self._process = None
         print("SystemUpdateCharacteristic Read: " + self._status)
-        return [dbus.Byte(x.encode()) for x in self._status]
+        return encode_ble_string(self._status, options)
 
     def WriteValue(self, value, options):
         command = bytes(value).decode(errors="replace").strip().lower()
@@ -283,20 +371,20 @@ class SystemUpdateCharacteristic(Characteristic):
         return True  # continue polling
 
 
-class PlaneSignVersionCharacteristic(Characteristic):
+class PlaneSignVersionCharacteristic(BackgroundValueCharacteristic):
     VERSION_CHRC_UUID = "8d1151e7-04b8-49e2-955a-daa50e1285e5"
-    VERSION_URL = "http://localhost/api/version"
-    TIMEOUT_SECONDS = 2
+    # Must be 127.0.0.1, not localhost: localhost also resolves to ::1 and nginx only
+    # listens on IPv4, so half the connection attempts are wasted on a refused socket.
+    VERSION_URL = "http://127.0.0.1/api/version"
+    TIMEOUT_SECONDS = 5
+    # The version changes when the container is updated or restarted, so keep polling
+    # instead of leaving the client stuck on whatever the first read returned.
+    REFRESH_INTERVAL_SECONDS = 30
 
     def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, self.VERSION_CHRC_UUID, ["read"], service)
+        BackgroundValueCharacteristic.__init__(self, bus, index, self.VERSION_CHRC_UUID, service)
 
-    def ReadValue(self, options):
-        version = self._fetch_version()
-        print("PlaneSignVersionCharacteristic Read: " + version)
-        return [dbus.Byte(x.encode()) for x in version]
-
-    def _fetch_version(self):
+    def compute_value(self):
         try:
             req = urllib.request.Request(self.VERSION_URL, method="GET")
             with urllib.request.urlopen(req, timeout=self.TIMEOUT_SECONDS) as resp:
@@ -370,7 +458,7 @@ class PlanesignTempCharacteristic(Characteristic):
             temperature = f"error: {e}"
         print("Temp Read: " + temperature)
 
-        return [dbus.Byte(x.encode()) for x in temperature]
+        return encode_ble_string(temperature, options)
 
 
 class PlanesignHostnameCharacteristic(Characteristic):
@@ -386,7 +474,7 @@ class PlanesignHostnameCharacteristic(Characteristic):
             hostname = f"error: {e}"
         print("Hostname Read: " + hostname)
 
-        return [dbus.Byte(x.encode()) for x in hostname]
+        return encode_ble_string(hostname, options)
 
 
 class PlanesignUptimeCharacteristic(Characteristic):
@@ -402,7 +490,7 @@ class PlanesignUptimeCharacteristic(Characteristic):
             uptime = f"error: {e}"
         print("Uptime Read: " + uptime)
 
-        return [dbus.Byte(x.encode()) for x in uptime]
+        return encode_ble_string(uptime, options)
 
 
 class PlanesignWiFiStatusCharacteristic(Characteristic):
@@ -414,7 +502,7 @@ class PlanesignWiFiStatusCharacteristic(Characteristic):
     def ReadValue(self, options):
         wifi_status = get_current_wifi_status()
         print("WiFi Status Read: " + wifi_status)
-        return [dbus.Byte(x.encode()) for x in wifi_status]
+        return encode_ble_string(wifi_status, options)
 
 
 class PlanesignIPAddressCharacteristic(Characteristic):
@@ -426,7 +514,7 @@ class PlanesignIPAddressCharacteristic(Characteristic):
     def ReadValue(self, options):
         ip_address = self._get_ip_address()
         print("IP Address Read: " + ip_address)
-        return [dbus.Byte(x.encode()) for x in ip_address]
+        return encode_ble_string(ip_address, options)
 
     def _get_ip_address(self):
         """Get the IP address from the first connected network interface."""
@@ -454,7 +542,7 @@ class SafeCommandCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         print("SafeCommandCharacteristic Read: " + self.last_result)
-        return [dbus.Byte(x.encode()) for x in self.last_result]
+        return encode_ble_string(self.last_result, options)
 
     def WriteValue(self, value, options):
         command = bytes(value).decode().strip()
@@ -472,7 +560,9 @@ class SafeCommandCharacteristic(Characteristic):
 
 class PlanesignIdentifyCharacteristic(Characteristic):
     IDENTIFY_CHRC_UUID = "e64fcf70-97d7-4f4e-a5b7-8ac6004f0786"
-    IDENTIFY_URL = "http://localhost/api/identify"
+    # 127.0.0.1 rather than localhost: nginx only listens on IPv4 but localhost also
+    # resolves to ::1.
+    IDENTIFY_URL = "http://127.0.0.1/api/identify"
     TIMEOUT_SECONDS = 3
 
     def __init__(self, bus, index, service):
@@ -482,7 +572,7 @@ class PlanesignIdentifyCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         print("PlanesignIdentifyCharacteristic Read: " + self.last_result)
-        return [dbus.Byte(x.encode()) for x in self.last_result]
+        return encode_ble_string(self.last_result, options)
 
     def WriteValue(self, value, options):
         command = bytes(value).decode().strip()
@@ -522,7 +612,7 @@ class DockerContainerControlCharacteristic(Characteristic):
             self.last_result = f"Error: {e}"
 
         print("DockerContainerControlCharacteristic Read: " + self.last_result)
-        return [dbus.Byte(x.encode()) for x in self.last_result]
+        return encode_ble_string(self.last_result, options)
 
     def WriteValue(self, value, options):
         command = bytes(value).decode(errors="replace").strip().lower()
@@ -615,7 +705,7 @@ class WiFiScanCharacteristic(Characteristic):
         print("WiFiScanCharacteristic Read requested - scanning...")
         scan_result = scan_wifi()
         print(f"Scan result size: {len(scan_result)}")
-        return [dbus.Byte(x.encode()) for x in scan_result]
+        return encode_ble_string(scan_result, options)
 
 
 def main():

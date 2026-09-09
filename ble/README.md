@@ -66,7 +66,7 @@ Execute a set of whitelisted system commands remotely.
 | # | Characteristic | UUID | Read | Write | Notify | Description |
 |---|----------------|------|:----:|:-----:|:------:|-------------|
 | 0 | Safe Command | `99945678-1234-5678-1234-56789abcdef2` | ✅ | ✅ | — | Write one of the allowed command keywords to execute it; read to get the result. |
-| 1 | Identify | `e64fcf70-97d7-4f4e-a5b7-8ac6004f0786` | ✅ | ✅ | — | Write `identify` to make the LED matrix flash for a few seconds (via `http://localhost/api/identify`) so a user can tell which sign is which. Read returns `idle`, `ok`, or an error string. |
+| 1 | Identify | `e64fcf70-97d7-4f4e-a5b7-8ac6004f0786` | ✅ | ✅ | — | Write `identify` to make the LED matrix flash for a few seconds (via `http://127.0.0.1/api/identify`) so a user can tell which sign is which. Read returns `idle`, `ok`, or an error string. |
 
 **Allowed commands:**
 
@@ -91,8 +91,8 @@ Manage the PlaneSign Docker container lifecycle, check for updates, and perform 
 | # | Characteristic | UUID | Read | Write | Notify | Description |
 |---|----------------|------|:----:|:-----:|:------:|-------------|
 | 0 | Container Control | `29352a73-3108-4ecc-9440-57b5a8a5c027` | ✅ | ✅ | — | Read returns the live container status (name, state, running, ID). Write `start` or `stop` to control the `PlaneSignRuntime` container. Stop uses `docker kill` for a forced shutdown. |
-| 1 | Version | `8d1151e7-04b8-49e2-955a-daa50e1285e5` | ✅ | — | — | Fetches the current PlaneSign application version from the local API (`http://localhost/api/version`). |
-| 2 | Update Check | `a9cc9f79-aa76-4955-aeb5-85aa9299028e` | ✅ | — | — | Compares the local Docker image digest against the remote GHCR digest. Returns `up-to-date` or `update-available` with short digest hashes. |
+| 1 | Version | `8d1151e7-04b8-49e2-955a-daa50e1285e5` | ✅ | — | ✅ | Current PlaneSign application version from the local API (`http://127.0.0.1/api/version`). Cached and refreshed in the background every 30 s; read returns the cached value immediately and subscribers are notified whenever it changes. |
+| 2 | Update Check | `a9cc9f79-aa76-4955-aeb5-85aa9299028e` | ✅ | — | ✅ | Compares the local Docker image digest against the remote GHCR digest. Read returns the cached result immediately (empty until the first check finishes) and kicks off a fresh check on a worker thread; the result (`up-to-date` / `update-available` with short digest hashes, or `check failed: …`) arrives as a notification. |
 | 3 | System Update | `32d1b76b-9532-44da-9a43-3b682b8be90c` | ✅ | ✅ | ✅ | Write `update` to trigger the OTA update script. Read returns current status (`idle`, `updating`, `complete`, or `failed: …`). Subscribe to notifications for real-time status changes. |
 | 4 | Update Log | `f63b67f9-b823-4f8f-a528-94e286cda73e` | ✅ | — | ✅ | Streams stdout/stderr from the update script. Read returns the last 512 bytes of the log buffer (64 KB ring buffer). Subscribe to notifications for live log streaming in ≤480-byte BLE-safe chunks. |
 
@@ -103,5 +103,7 @@ Manage the PlaneSign Docker container lifecycle, check for updates, and perform 
 - The BLE device name is derived from the full `wlan0` MAC address with colons stripped (e.g., `PlaneSign-BLE-AABBCCDDEEFF`).
 - The Docker container name used for all operations is `PlaneSignRuntime`.
 - The Docker image is `ghcr.io/dmod/planesign:latest`.
-- All subprocess calls use timeouts (typically 5–8 seconds) to prevent BLE operations from hanging.
+- All subprocess calls use timeouts (typically 5–10 seconds) to prevent BLE operations from hanging.
+- `ReadValue` handlers run on the single GLib main loop thread, so anything slow (registry lookups, HTTP to the local API) is computed on a worker thread and served from cache. Reads honor BlueZ's `offset` option, so values longer than the negotiated MTU are returned correctly.
+- Local HTTP calls use `127.0.0.1`, never `localhost`: `localhost` also resolves to `::1` and nginx only listens on IPv4.
 - The update script is fetched from: `https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh`
