@@ -32,15 +32,51 @@ ADAPTER_IFACE = "org.bluez.Adapter1"
 # dbus-python replies must be sent from that same thread.
 _MAIN_THREAD_ID = threading.get_ident()
 
+_SYSLOG_PRIORITY = {logging.CRITICAL: 2, logging.ERROR: 3, logging.WARNING: 4, logging.INFO: 6, logging.DEBUG: 7}
+
+
+class _JournalFormatter(logging.Formatter):
+    """Prefixes every line with a syslog priority so journald records the real log level.
+
+    Plain text on stdout is filed as "info" whatever it says, which makes
+    `journalctl -p warning` useless. systemd strips these `<N>` prefixes and applies them
+    as the record's priority (SyslogLevelPrefix defaults to true).
+    """
+
+    def format(self, record):
+        priority = _SYSLOG_PRIORITY.get(record.levelno, 6)
+        return "\n".join(f"<{priority}>{line}" for line in super().format(record).splitlines())
+
 
 def configure_logging(level=None):
-    """Log to stdout with timestamps so `journalctl -u planesign-ble` is readable."""
+    """Log to stdout, which systemd captures into the journal.
+
+    Under systemd the timestamp is left to journald and the level is carried by a syslog
+    prefix; run outside systemd and you get a conventional timestamped line instead.
+    """
     level = (level or os.environ.get("PLANESIGN_BLE_LOG_LEVEL", "INFO")).upper()
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
+    if os.environ.get("JOURNAL_STREAM"):
+        handler.setFormatter(_JournalFormatter("%(name)s: %(message)s"))
+    else:
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
+
     root = logging.getLogger()
     root.handlers[:] = [handler]
-    root.setLevel(getattr(logging, level, logging.INFO))
+    # Only our own tree follows PLANESIGN_BLE_LOG_LEVEL; DEBUG on the root logger would
+    # also switch on dbus-python's very chatty internal logging.
+    root.setLevel(logging.INFO)
+    logging.getLogger("planesign").setLevel(getattr(logging, level, logging.INFO))
+    logging.captureWarnings(True)
+
+    def log_uncaught(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        logger.critical("Unhandled exception; the service is exiting", exc_info=(exc_type, exc_value, exc_tb))
+
+    # Otherwise a fatal traceback reaches the journal as untagged stderr text.
+    sys.excepthook = log_uncaught
     return logger
 
 
@@ -62,7 +98,11 @@ def run_on_main_loop(func, *args):
         return
 
     def invoke():
-        func(*args)
+        # PyGObject would otherwise dump a bare traceback to stderr and swallow the error.
+        try:
+            func(*args)
+        except Exception:
+            logger.exception("Main loop callback %s failed", getattr(func, "__qualname__", func))
         return False
 
     GLib.idle_add(invoke)

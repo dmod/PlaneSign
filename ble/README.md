@@ -131,10 +131,22 @@ The server is built around that constraint:
 
 Logs go to stdout, which systemd captures: `journalctl -u planesign-ble -f`. Set
 `PLANESIGN_BLE_LOG_LEVEL=DEBUG` in the unit file to also log every subprocess timing and
-cache refresh. At `INFO` the service records central connect/disconnect events, every read
-and write with its size and duration, every value change, and warnings whenever a handler
-holds the main loop for more than 150 ms, a read takes over a second, or a subprocess fails
-or times out.
+cache refresh; only the `planesign` loggers follow that variable, so dbus-python's own
+debug output stays out of the way.
+
+Under systemd each line carries a syslog priority prefix that journald converts into a real
+record priority, so severity filtering works:
+
+```bash
+journalctl -u planesign-ble -p warning   # slow handlers, failed commands
+journalctl -u planesign-ble -p err       # handler exceptions and crashes
+```
+
+At `INFO` the service records central connect/disconnect events, every read and write with
+its size and duration, and every value change. It warns whenever a handler holds the main
+loop for more than 150 ms, a read takes over a second, or a subprocess fails or times out.
+Exceptions — including ones escaping a worker thread, a GLib callback, or the process
+itself — are logged with a full traceback at `err` or `crit` rather than being swallowed.
 
 ## Notes
 

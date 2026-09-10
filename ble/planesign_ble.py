@@ -42,6 +42,22 @@ def summarize(value, limit=120):
     return text if len(text) <= limit else f"{text[:limit]}… ({len(text)} chars)"
 
 
+def submit_worker(label, func, *args):
+    """Run func on the worker pool.
+
+    ThreadPoolExecutor parks an escaped exception in a Future nobody reads, so without this
+    guard a crashing worker would disappear without a single log line.
+    """
+
+    def guarded():
+        try:
+            func(*args)
+        except Exception:
+            LOG.exception("%s worker crashed", label)
+
+    WORKERS.submit(guarded)
+
+
 def run_in_background(label, func, on_done=None):
     """Run func on a worker thread; deliver its result back on the main loop thread."""
 
@@ -56,7 +72,7 @@ def run_in_background(label, func, on_done=None):
         if on_done is not None:
             run_on_main_loop(on_done, result)
 
-    WORKERS.submit(worker)
+    submit_worker(label, worker)
 
 
 class CachedValueCharacteristic(Characteristic):
@@ -73,6 +89,8 @@ class CachedValueCharacteristic(Characteristic):
     # A read older than this triggers a background refresh after the cached value is sent.
     CACHE_TTL_SECONDS = 15.0
     # How long the first read may wait for a value before falling back to PENDING_VALUE.
+    # Must stay clear of the client's own read timeout (15 s in flutter_blue_plus), so a
+    # slow source degrades to a placeholder plus a notification rather than an app error.
     FIRST_READ_WAIT_SECONDS = 10
     # Empty reads render as "Unknown" in the mobile app, which beats an invented status.
     PENDING_VALUE = ""
@@ -123,7 +141,7 @@ class CachedValueCharacteristic(Characteristic):
             return
         self._refreshing = True
         LOG.debug("%s: refreshing (%s)", self.name, reason)
-        WORKERS.submit(self._refresh_worker)
+        submit_worker(f"{self.name} refresh", self._refresh_worker)
 
     def _on_refresh_timer(self):
         self.request_refresh("periodic refresh")
@@ -217,7 +235,6 @@ class DockerUpdateCheckCharacteristic(CachedValueCharacteristic):
     # Two registry round trips; keep it warm so the app's check button answers instantly.
     REFRESH_INTERVAL_SECONDS = 900
     CACHE_TTL_SECONDS = 120.0
-    FIRST_READ_WAIT_SECONDS = 15
 
     def __init__(self, bus, index, service):
         CachedValueCharacteristic.__init__(self, bus, index, self.UPDATE_CHECK_CHRC_UUID, service)
@@ -780,7 +797,6 @@ def wait_for_adapter_powered(bus, adapter, timeout_seconds=15):
 class WiFiScanCharacteristic(CachedValueCharacteristic):
     WIFI_SCAN_CHRC_UUID = "99945678-1234-5678-1234-56789abcdef3"
     CACHE_TTL_SECONDS = 60.0
-    FIRST_READ_WAIT_SECONDS = 15
     PENDING_VALUE = "No networks found"
     # Deliberately not refreshed on connect: the app reads every readable characteristic as
     # soon as it attaches, and a scan on the Pi's shared WiFi/Bluetooth radio degrades the
