@@ -198,8 +198,8 @@ def smooth_ranges(ranges, window=SMOOTH_WINDOW):
 
 
 def local_extrema(values, window=EXTREMA_WINDOW):
-    # Cycles with fewer than `window` neighbours are skipped; the remaining edge samples keep an
-    # asymmetric window, which is harmless because the medians below absorb the odd extra extreme.
+    # Samples whose window holds no more than `window` values are skipped; the remaining edge samples
+    # keep an asymmetric window, which is harmless because the medians below absorb an odd extra extreme.
     maxima, minima = [], []
     for index, value in enumerate(values):
         neighborhood = values[max(0, index - window):index + window + 1]
@@ -287,7 +287,7 @@ class TideCache:
     def cycles(self, now):
         station_id = self.station["id"]
         cached = self.cycle_data if self.cycle_station == station_id else {"ranges": [], "spring_neap": None}
-        if (cached["ranges"] and now - self.cycle_at < CYCLE_TTL) or now < self.cycle_next_attempt:
+        if (self.cycle_at and self.cycle_station == station_id and now - self.cycle_at < CYCLE_TTL) or now < self.cycle_next_attempt:
             return cached
         try:
             self.cycle_data = fetch_cycles(self.session, station_id, now)
