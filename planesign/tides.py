@@ -25,9 +25,10 @@ METER_COLUMN = 2
 METER_TOP = 14
 METER_BOTTOM = 25
 METER_PERIOD = 2.4
+METER_LABEL_LEVEL = 0.55
+METER_UNKNOWN_LEVEL = 0.4
 CYCLE_DAYS = 45
 CYCLE_TTL = 24 * 60 * 60
-CYCLE_RETRY = 15 * 60
 CYCLE_MIN_SECONDS = 2 * 60 * 60
 CYCLE_MAX_SECONDS = 18 * 60 * 60
 SMOOTH_WINDOW = 2
@@ -298,8 +299,8 @@ class TideCache:
             self.cycle_at = now
             self.cycle_next_attempt = 0
         except Exception as error:
-            self.cycle_next_attempt = now + CYCLE_RETRY
-            logging.warning("NOAA spring/neap history unavailable; retry in %ss: %s", CYCLE_RETRY, error)
+            self.cycle_next_attempt = now + MAX_RETRY
+            logging.warning("NOAA spring/neap history unavailable; retry in %ss: %s", MAX_RETRY, error)
         return self.cycle_data
 
     def poll(self, config, now, active=True):
@@ -477,14 +478,14 @@ def draw_spring_neap_meter(sign, payload, now, elapsed):
         return graphics.Color(*(int(value * level) for value in color))
 
     factor = spring_neap_factor(payload, now)
-    known = 1.0 if factor is not None else 0.4
-    graphics.DrawText(sign.canvas, sign.font46, 0, 12, dim(SPRING_COLOR, 0.55 * known), "S")
-    graphics.DrawText(sign.canvas, sign.font46, 0, 31, dim(NEAP_COLOR, 0.55 * known), "N")
+    brightness = 1.0 if factor is not None else METER_UNKNOWN_LEVEL
+    graphics.DrawText(sign.canvas, sign.font46, 0, METER_TOP - 2, dim(SPRING_COLOR, METER_LABEL_LEVEL * brightness), "S")
+    graphics.DrawText(sign.canvas, sign.font46, 0, METER_BOTTOM + 6, dim(NEAP_COLOR, METER_LABEL_LEVEL * brightness), "N")
     for row in range(METER_TOP, METER_BOTTOM + 1):
-        sign.canvas.SetPixel(METER_COLUMN, row, *(int(value * known) for value in METER_SCALE_COLOR))
+        sign.canvas.SetPixel(METER_COLUMN, row, *(int(value * brightness) for value in METER_SCALE_COLOR))
     for row in (METER_TOP, METER_BOTTOM):
         for column in (METER_COLUMN - 1, METER_COLUMN + 1):
-            sign.canvas.SetPixel(column, row, *(int(value * known) for value in METER_LABEL_COLOR))
+            sign.canvas.SetPixel(column, row, *(int(value * brightness) for value in METER_LABEL_COLOR))
     if factor is None:
         return
     row = round(METER_BOTTOM - factor * (METER_BOTTOM - METER_TOP))
