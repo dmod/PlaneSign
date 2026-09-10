@@ -286,19 +286,21 @@ class TideCache:
 
     def cycles(self, now):
         station_id = self.station["id"]
-        cached = self.cycle_data if self.cycle_station == station_id else {"ranges": [], "spring_neap": None}
-        if (self.cycle_at and self.cycle_station == station_id and now - self.cycle_at < CYCLE_TTL) or now < self.cycle_next_attempt:
-            return cached
+        if station_id != self.cycle_station:
+            self.cycle_station = station_id
+            self.cycle_data = {"ranges": [], "spring_neap": None}
+            self.cycle_at = 0
+            self.cycle_next_attempt = 0
+        if (self.cycle_at and now - self.cycle_at < CYCLE_TTL) or now < self.cycle_next_attempt:
+            return self.cycle_data
         try:
             self.cycle_data = fetch_cycles(self.session, station_id, now)
-            self.cycle_station = station_id
             self.cycle_at = now
             self.cycle_next_attempt = 0
-            return self.cycle_data
         except Exception as error:
             self.cycle_next_attempt = now + CYCLE_RETRY
             logging.warning("NOAA spring/neap history unavailable; retry in %ss: %s", CYCLE_RETRY, error)
-            return cached
+        return self.cycle_data
 
     def poll(self, config, now, active=True):
         if not active:
