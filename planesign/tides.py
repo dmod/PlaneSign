@@ -5,6 +5,7 @@ from bisect import bisect_left
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
+from statistics import median
 from zoneinfo import ZoneInfo
 
 from modes import DisplayMode
@@ -26,6 +27,7 @@ METER_BOTTOM = 25
 METER_PERIOD = 2.4
 CYCLE_DAYS = 45
 CYCLE_TTL = 24 * 60 * 60
+CYCLE_RETRY = 15 * 60
 CYCLE_MIN_SECONDS = 2 * 60 * 60
 CYCLE_MAX_SECONDS = 18 * 60 * 60
 SMOOTH_WINDOW = 2
@@ -196,6 +198,8 @@ def smooth_ranges(ranges, window=SMOOTH_WINDOW):
 
 
 def local_extrema(values, window=EXTREMA_WINDOW):
+    # Cycles with fewer than `window` neighbours are skipped; the remaining edge samples keep an
+    # asymmetric window, which is harmless because the medians below absorb the odd extra extreme.
     maxima, minima = [], []
     for index, value in enumerate(values):
         neighborhood = values[max(0, index - window):index + window + 1]
@@ -209,8 +213,6 @@ def local_extrema(values, window=EXTREMA_WINDOW):
 
 
 def spring_neap_reference(ranges):
-    from statistics import median
-
     maxima, minima = local_extrema([value for _, value in ranges])
     if not maxima or not minima:
         return None
@@ -239,7 +241,7 @@ def spring_neap_factor(payload, now):
     if not reference or current is None:
         return None
     neap, spring = reference
-    if spring - neap < MIN_SPRING_NEAP_SPREAD:
+    if spring <= neap:
         return None
     return min(1.0, max(0.0, (current - neap) / (spring - neap)))
 
@@ -280,19 +282,22 @@ class TideCache:
         self.cycle_station = None
         self.cycle_data = {"ranges": [], "spring_neap": None}
         self.cycle_at = 0
+        self.cycle_next_attempt = 0
 
     def cycles(self, now):
         station_id = self.station["id"]
         cached = self.cycle_data if self.cycle_station == station_id else {"ranges": [], "spring_neap": None}
-        if cached["ranges"] and now - self.cycle_at < CYCLE_TTL:
+        if (cached["ranges"] and now - self.cycle_at < CYCLE_TTL) or now < self.cycle_next_attempt:
             return cached
         try:
             self.cycle_data = fetch_cycles(self.session, station_id, now)
             self.cycle_station = station_id
             self.cycle_at = now
+            self.cycle_next_attempt = 0
             return self.cycle_data
         except Exception as error:
-            logging.warning("NOAA spring/neap history unavailable: %s", error)
+            self.cycle_next_attempt = now + CYCLE_RETRY
+            logging.warning("NOAA spring/neap history unavailable; retry in %ss: %s", CYCLE_RETRY, error)
             return cached
 
     def poll(self, config, now, active=True):
