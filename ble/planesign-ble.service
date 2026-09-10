@@ -1,6 +1,6 @@
 [Unit]
 Description=Start the BLE server
-After=dbus.service bluetooth.service
+After=dbus.service bluetooth.service NetworkManager.service docker.service
 Wants=dbus.service bluetooth.service
 Requires=dbus.service bluetooth.service
 
@@ -8,6 +8,9 @@ Requires=dbus.service bluetooth.service
 User=root
 Group=root
 Type=simple
+SyslogIdentifier=planesign-ble
+# Set to DEBUG to log every subprocess timing and cache refresh.
+Environment=PLANESIGN_BLE_LOG_LEVEL=INFO
 ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do bluetoothctl show | grep -q "Powered: yes" && break; sleep 1; done'
 ExecStart=/usr/bin/python3 -u /home/pi/PlaneSign/ble/planesign_ble.py
 Restart=always
