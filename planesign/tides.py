@@ -5,6 +5,7 @@ from bisect import bisect_left
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
+from statistics import median
 from zoneinfo import ZoneInfo
 
 from modes import DisplayMode
@@ -16,9 +17,27 @@ STATIONS_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations
 PREDICTIONS_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
 SAMPLE_SECONDS = 360
 HALF_WINDOW = 12 * 60 * 60
-GRAPH_WIDTH = 80
+GRAPH_LEFT = 6
+GRAPH_WIDTH = 74
 GRAPH_TOP = 9
 GRAPH_BOTTOM = 23
+METER_COLUMN = 2
+METER_TOP = 14
+METER_BOTTOM = 25
+METER_PERIOD = 2.4
+METER_LABEL_LEVEL = 0.55
+METER_UNKNOWN_LEVEL = 0.4
+CYCLE_DAYS = 45
+CYCLE_TTL = 24 * 60 * 60
+CYCLE_MIN_SECONDS = 2 * 60 * 60
+CYCLE_MAX_SECONDS = 18 * 60 * 60
+SMOOTH_WINDOW = 2
+EXTREMA_WINDOW = 4
+MIN_SPRING_NEAP_SPREAD = 0.05
+METER_SCALE_COLOR = (70, 90, 110)
+METER_LABEL_COLOR = (120, 165, 195)
+SPRING_COLOR = (255, 120, 90)
+NEAP_COLOR = (90, 170, 255)
 CATALOG_TTL = 24 * 60 * 60
 PREDICTIONS_TTL = 6 * 60 * 60
 MAX_RETRY = 15 * 60
@@ -161,6 +180,80 @@ def noaa_json(session, url, params, now):
     return payload
 
 
+def tide_ranges(events):
+    ranges = []
+    for (start, first, kind), (end, second, next_kind) in zip(events, events[1:]):
+        if kind == next_kind or not CYCLE_MIN_SECONDS <= end - start <= CYCLE_MAX_SECONDS:
+            continue
+        ranges.append(((start + end) / 2, abs(second - first)))
+    return ranges
+
+
+def smooth_ranges(ranges, window=SMOOTH_WINDOW):
+    # Averaging neighbouring cycles removes diurnal inequality so only the spring/neap swing remains.
+    smoothed = []
+    for index, (timestamp, _) in enumerate(ranges):
+        neighborhood = [value for _, value in ranges[max(0, index - window):index + window + 1]]
+        smoothed.append([timestamp, sum(neighborhood) / len(neighborhood)])
+    return smoothed
+
+
+def local_extrema(values, window=EXTREMA_WINDOW):
+    # Samples whose window holds no more than `window` values are skipped; the remaining edge samples
+    # keep an asymmetric window, which is harmless because the medians below absorb an odd extra extreme.
+    maxima, minima = [], []
+    for index, value in enumerate(values):
+        neighborhood = values[max(0, index - window):index + window + 1]
+        if len(neighborhood) <= window:
+            continue
+        if value == max(neighborhood):
+            maxima.append(value)
+        elif value == min(neighborhood):
+            minima.append(value)
+    return maxima, minima
+
+
+def spring_neap_reference(ranges):
+    maxima, minima = local_extrema([value for _, value in ranges])
+    if not maxima or not minima:
+        return None
+    neap, spring = median(minima), median(maxima)
+    if spring - neap < MIN_SPRING_NEAP_SPREAD:
+        return None
+    return [neap, spring]
+
+
+def cycle_range(ranges, now):
+    if not ranges or not ranges[0][0] - CYCLE_MAX_SECONDS <= now <= ranges[-1][0] + CYCLE_MAX_SECONDS:
+        return None
+    index = bisect_left(ranges, now, key=lambda entry: entry[0])
+    if index == 0:
+        return ranges[0][1]
+    if index == len(ranges):
+        return ranges[-1][1]
+    before, after = ranges[index - 1], ranges[index]
+    fraction = (now - before[0]) / (after[0] - before[0])
+    return before[1] + fraction * (after[1] - before[1])
+
+
+def spring_neap_factor(payload, now):
+    reference = payload.get("spring_neap")
+    current = cycle_range(payload.get("ranges") or [], now)
+    if not reference or current is None:
+        return None
+    neap, spring = reference
+    if spring <= neap:
+        return None
+    return min(1.0, max(0.0, (current - neap) / (spring - neap)))
+
+
+def fetch_cycles(session, station_id, now):
+    today = datetime.fromtimestamp(now, timezone.utc)
+    params = {"product": "predictions", "application": "PlaneSign", "station": station_id, "datum": "MLLW", "time_zone": "gmt", "units": "english", "format": "json", "interval": "hilo", "begin_date": (today - timedelta(days=CYCLE_DAYS)).strftime("%Y%m%d"), "end_date": (today + timedelta(days=2)).strftime("%Y%m%d")}
+    ranges = smooth_ranges(tide_ranges(parse_predictions(noaa_json(session, PREDICTIONS_URL, params, now), events=True)))
+    return {"ranges": ranges, "spring_neap": spring_neap_reference(ranges)}
+
+
 def fetch_predictions(session, station_id, now):
     today = datetime.fromtimestamp(now, timezone.utc)
     params = {"product": "predictions", "application": "PlaneSign", "station": station_id, "datum": "MLLW", "time_zone": "gmt", "units": "english", "format": "json", "begin_date": (today - timedelta(days=1)).strftime("%Y%m%d"), "end_date": (today + timedelta(days=2)).strftime("%Y%m%d")}
@@ -187,6 +280,28 @@ class TideCache:
         self.snapshot = None
         self.next_attempt = 0
         self.failures = 0
+        self.cycle_station = None
+        self.cycle_data = {"ranges": [], "spring_neap": None}
+        self.cycle_at = 0
+        self.cycle_next_attempt = 0
+
+    def cycles(self, now):
+        station_id = self.station["id"]
+        if station_id != self.cycle_station:
+            self.cycle_station = station_id
+            self.cycle_data = {"ranges": [], "spring_neap": None}
+            self.cycle_at = 0
+            self.cycle_next_attempt = 0
+        if (self.cycle_at and now - self.cycle_at < CYCLE_TTL) or now < self.cycle_next_attempt:
+            return self.cycle_data
+        try:
+            self.cycle_data = fetch_cycles(self.session, station_id, now)
+            self.cycle_at = now
+            self.cycle_next_attempt = 0
+        except Exception as error:
+            self.cycle_next_attempt = now + MAX_RETRY
+            logging.warning("NOAA spring/neap history unavailable; retry in %ss: %s", MAX_RETRY, error)
+        return self.cycle_data
 
     def poll(self, config, now, active=True):
         if not active:
@@ -218,7 +333,7 @@ class TideCache:
             predictions = fetch_predictions(self.session, self.station["id"], now)
             if not covers_display(predictions, now):
                 raise NOAAError("NOAA predictions do not cover the display interval")
-            snapshot = {**predictions, "location": location, "station": self.station, "timezone": sensor_timezone(location), "units": "ft", "datum": "MLLW", "fetched_at": now, "status": "ready"}
+            snapshot = {**predictions, **self.cycles(now), "location": location, "station": self.station, "timezone": sensor_timezone(location), "units": "ft", "datum": "MLLW", "fetched_at": now, "status": "ready"}
             self.snapshot = snapshot
             self.failures = 0
             self.next_attempt = 0
@@ -272,7 +387,7 @@ def graph_points(samples, now):
     def row(height):
         return round(GRAPH_BOTTOM - (height - minimum) / (maximum - minimum) * (GRAPH_BOTTOM - GRAPH_TOP))
 
-    return [None if height is None else row(height) for height in heights], None if current is None else (GRAPH_WIDTH // 2, row(current))
+    return [None if height is None else row(height) for height in heights], None if current is None else (GRAPH_LEFT + GRAPH_WIDTH // 2, row(current))
 
 
 def blend_color(base, target, amount):
@@ -300,11 +415,11 @@ def draw_ocean(canvas, points, elapsed):
             color = [value * level for value in color]
             if depth == 1:
                 color = blend_color(color, OCEAN_FOAM, FOAM_MIX * max(0.0, wave) ** 2)
-            canvas.SetPixel(column, row, *(min(255, int(value * side)) for value in color))
+            canvas.SetPixel(GRAPH_LEFT + column, row, *(min(255, int(value * side)) for value in color))
 
 
 def draw_now_line(canvas, direction, elapsed):
-    middle = GRAPH_WIDTH // 2
+    middle = GRAPH_LEFT + GRAPH_WIDTH // 2
     pulse = 0.5 + 0.5 * math.sin(2 * math.pi * elapsed / SLACK_PERIOD)
     guide = GUIDE_COLOR if direction else blend_color(GUIDE_COLOR, NOW_COLOR, 0.35 * pulse)
     for row in range(GRAPH_TOP, GRAPH_BOTTOM + 1):
@@ -314,7 +429,7 @@ def draw_now_line(canvas, direction, elapsed):
 def draw_trend_arrows(canvas, direction, elapsed):
     if not direction:
         return
-    middle = GRAPH_WIDTH // 2
+    middle = GRAPH_LEFT + GRAPH_WIDTH // 2
     span = GRAPH_BOTTOM - GRAPH_TOP
     # Sub-pixel weights let the chevrons drift smoothly across only 15 rows.
     weights = {}
@@ -356,6 +471,30 @@ def event_label(event, now, timezone_name, military_time):
     return f"{'HIGH' if kind == 'H' else 'LOW'} {clock}"
 
 
+def draw_spring_neap_meter(sign, payload, now, elapsed):
+    from rgbmatrix import graphics
+
+    def dim(color, level):
+        return graphics.Color(*(int(value * level) for value in color))
+
+    factor = spring_neap_factor(payload, now)
+    brightness = 1.0 if factor is not None else METER_UNKNOWN_LEVEL
+    graphics.DrawText(sign.canvas, sign.font46, 0, METER_TOP - 2, dim(SPRING_COLOR, METER_LABEL_LEVEL * brightness), "S")
+    graphics.DrawText(sign.canvas, sign.font46, 0, METER_BOTTOM + 6, dim(NEAP_COLOR, METER_LABEL_LEVEL * brightness), "N")
+    for row in range(METER_TOP, METER_BOTTOM + 1):
+        sign.canvas.SetPixel(METER_COLUMN, row, *(int(value * brightness) for value in METER_SCALE_COLOR))
+    for row in (METER_TOP, METER_BOTTOM):
+        for column in (METER_COLUMN - 1, METER_COLUMN + 1):
+            sign.canvas.SetPixel(column, row, *(int(value * brightness) for value in METER_LABEL_COLOR))
+    if factor is None:
+        return
+    row = round(METER_BOTTOM - factor * (METER_BOTTOM - METER_TOP))
+    pulse = 0.5 + 0.5 * math.sin(2 * math.pi * elapsed / METER_PERIOD)
+    color = blend_color(NEAP_COLOR, SPRING_COLOR, factor)
+    for column, level in ((METER_COLUMN - 2, 1.0), (METER_COLUMN, 1.0), (METER_COLUMN + 2, 1.0), (METER_COLUMN - 1, 0.4), (METER_COLUMN + 1, 0.4)):
+        sign.canvas.SetPixel(column, row, *(min(255, int(value * level * (0.35 + 0.65 * pulse))) for value in color))
+
+
 def draw_tides_frame(sign, payload, config, now, elapsed):
     from rgbmatrix import graphics
 
@@ -390,13 +529,14 @@ def draw_tides_frame(sign, payload, config, now, elapsed):
     for column in range(1, GRAPH_WIDTH):
         if points[column - 1] is not None and points[column] is not None:
             color = graphics.Color(20, 90, 100) if column < middle else graphics.Color(40, 230, 170)
-            graphics.DrawLine(sign.canvas, column - 1, points[column - 1], column, points[column], color)
+            graphics.DrawLine(sign.canvas, GRAPH_LEFT + column - 1, points[column - 1], GRAPH_LEFT + column, points[column], color)
     if marker is not None:
         sign.canvas.SetPixel(marker[0], marker[1], 255, 255, 255)
     draw_trend_arrows(sign.canvas, direction, elapsed)
-    label("-12h", 31, (100, 145, 165))
-    label("NOW", 31, (255, 215, 40), middle - 6)
-    label("+12h", 31, (100, 145, 165), GRAPH_WIDTH - 16)
+    draw_spring_neap_meter(sign, payload, now, elapsed)
+    label("-12h", 31, (100, 145, 165), GRAPH_LEFT)
+    label("NOW", 31, (255, 215, 40), GRAPH_LEFT + middle - 6)
+    label("+12h", 31, (100, 145, 165), GRAPH_LEFT + GRAPH_WIDTH - 16)
 
     phase = int(now // 5) % 2
     cached = payload["status"] == "cached" or now - payload["fetched_at"] >= PREDICTIONS_TTL
@@ -410,7 +550,7 @@ def draw_tides_frame(sign, payload, config, now, elapsed):
         top = f"{'CACHED' if cached else 'NOAA'} PRED 24H {height:.1f}ft {trend}"
     label(top, 5, (255, 190, 90) if cached else (160, 205, 230))
     military = str(config.get("MILITARY_TIME", "false")).lower() == "true"
-    event_column = GRAPH_WIDTH + 4
+    event_column = GRAPH_LEFT + GRAPH_WIDTH + 4
     for kind, baseline, color in (("H", 12, (230, 200, 110)), ("L", 25, (130, 200, 245))):
         event = next_event(payload["events"], now, kind)
         label(event_label(event, now, payload["timezone"], military), baseline, color, event_column)
