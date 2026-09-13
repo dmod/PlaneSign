@@ -156,7 +156,11 @@ def covers_display(payload, now):
 
 
 def noaa_json(session, url, params, now):
+    summary = ", ".join(f"{key}={params[key]}" for key in ("product", "type", "station", "interval", "begin_date", "end_date") if key in params)
+    logging.info("NOAA request: %s (%s)", url, summary or "no parameters")
+    started = time.monotonic()
     response = session.get(url, params=params, timeout=(5, 20))
+    logging.debug("NOAA response: HTTP %s in %.2fs, %s bytes (%s)", response.status_code, time.monotonic() - started, len(response.content), summary or "no parameters")
     retry_after = response.headers.get("Retry-After", "0")
     try:
         retry_after = max(0, float(retry_after))
@@ -193,7 +197,7 @@ def smooth_ranges(ranges, window=SMOOTH_WINDOW):
     # Averaging neighbouring cycles removes diurnal inequality so only the spring/neap swing remains.
     smoothed = []
     for index, (timestamp, _) in enumerate(ranges):
-        neighborhood = [value for _, value in ranges[max(0, index - window):index + window + 1]]
+        neighborhood = [value for _, value in ranges[max(0, index - window) : index + window + 1]]
         smoothed.append([timestamp, sum(neighborhood) / len(neighborhood)])
     return smoothed
 
@@ -203,7 +207,7 @@ def local_extrema(values, window=EXTREMA_WINDOW):
     # keep an asymmetric window, which is harmless because the medians below absorb an odd extra extreme.
     maxima, minima = [], []
     for index, value in enumerate(values):
-        neighborhood = values[max(0, index - window):index + window + 1]
+        neighborhood = values[max(0, index - window) : index + window + 1]
         if len(neighborhood) <= window:
             continue
         if value == max(neighborhood):
@@ -216,10 +220,13 @@ def local_extrema(values, window=EXTREMA_WINDOW):
 def spring_neap_reference(ranges):
     maxima, minima = local_extrema([value for _, value in ranges])
     if not maxima or not minima:
+        logging.warning("Spring/neap reference unavailable: %s cycle ranges yielded %s maxima and %s minima", len(ranges), len(maxima), len(minima))
         return None
     neap, spring = median(minima), median(maxima)
     if spring - neap < MIN_SPRING_NEAP_SPREAD:
+        logging.warning("Spring/neap reference rejected: spread %.3fft (neap %.2fft, spring %.2fft) below %.2fft minimum", spring - neap, neap, spring, MIN_SPRING_NEAP_SPREAD)
         return None
+    logging.info("Spring/neap reference: neap %.2fft, spring %.2fft (spread %.2fft) from %s maxima and %s minima", neap, spring, spring - neap, len(maxima), len(minima))
     return [neap, spring]
 
 
@@ -249,8 +256,22 @@ def spring_neap_factor(payload, now):
 
 def fetch_cycles(session, station_id, now):
     today = datetime.fromtimestamp(now, timezone.utc)
-    params = {"product": "predictions", "application": "PlaneSign", "station": station_id, "datum": "MLLW", "time_zone": "gmt", "units": "english", "format": "json", "interval": "hilo", "begin_date": (today - timedelta(days=CYCLE_DAYS)).strftime("%Y%m%d"), "end_date": (today + timedelta(days=2)).strftime("%Y%m%d")}
-    ranges = smooth_ranges(tide_ranges(parse_predictions(noaa_json(session, PREDICTIONS_URL, params, now), events=True)))
+    params = {
+        "product": "predictions",
+        "application": "PlaneSign",
+        "station": station_id,
+        "datum": "MLLW",
+        "time_zone": "gmt",
+        "units": "english",
+        "format": "json",
+        "interval": "hilo",
+        "begin_date": (today - timedelta(days=CYCLE_DAYS)).strftime("%Y%m%d"),
+        "end_date": (today + timedelta(days=2)).strftime("%Y%m%d"),
+    }
+    events = parse_predictions(noaa_json(session, PREDICTIONS_URL, params, now), events=True)
+    raw_ranges = tide_ranges(events)
+    ranges = smooth_ranges(raw_ranges)
+    logging.debug("Spring/neap history for station %s: %s high/low events, %s usable cycles over %s days", station_id, len(events), len(raw_ranges), CYCLE_DAYS)
     return {"ranges": ranges, "spring_neap": spring_neap_reference(ranges)}
 
 
@@ -259,6 +280,7 @@ def fetch_predictions(session, station_id, now):
     params = {"product": "predictions", "application": "PlaneSign", "station": station_id, "datum": "MLLW", "time_zone": "gmt", "units": "english", "format": "json", "begin_date": (today - timedelta(days=1)).strftime("%Y%m%d"), "end_date": (today + timedelta(days=2)).strftime("%Y%m%d")}
     samples = parse_predictions(noaa_json(session, PREDICTIONS_URL, {**params, "interval": "6"}, now))
     events = parse_predictions(noaa_json(session, PREDICTIONS_URL, {**params, "interval": "hilo"}, now), events=True)
+    logging.debug("NOAA predictions for station %s: %s samples, %s high/low events", station_id, len(samples), len(events))
     return {"samples": samples, "events": events}
 
 
@@ -288,6 +310,7 @@ class TideCache:
     def cycles(self, now):
         station_id = self.station["id"]
         if station_id != self.cycle_station:
+            logging.debug("Spring/neap history reset for new station %s (was %s)", station_id, self.cycle_station)
             self.cycle_station = station_id
             self.cycle_data = {"ranges": [], "spring_neap": None}
             self.cycle_at = 0
@@ -298,6 +321,9 @@ class TideCache:
             self.cycle_data = fetch_cycles(self.session, station_id, now)
             self.cycle_at = now
             self.cycle_next_attempt = 0
+            factor = spring_neap_factor(self.cycle_data, now)
+            current = cycle_range(self.cycle_data["ranges"], now)
+            logging.info("Spring/neap state for station %s: current range %s, factor %s (0=neap, 1=spring)", station_id, "unknown" if current is None else f"{current:.2f}ft", "unknown" if factor is None else f"{factor:.2f}")
         except Exception as error:
             self.cycle_next_attempt = now + MAX_RETRY
             logging.warning("NOAA spring/neap history unavailable; retry in %ss: %s", MAX_RETRY, error)
@@ -328,8 +354,10 @@ class TideCache:
                 self.catalog_at = now
                 self.excluded.clear()
                 self.station = None
+                logging.info("NOAA station catalog refreshed: %s stations", len(catalog))
             if self.station is None:
                 self.station = nearest_station(self.catalog, location, self.excluded)
+                logging.debug("Selected NOAA station %s (%s) for sensor %.4f,%.4f with %s excluded", self.station["name"], self.station["id"], location[0], location[1], len(self.excluded))
             predictions = fetch_predictions(self.session, self.station["id"], now)
             if not covers_display(predictions, now):
                 raise NOAAError("NOAA predictions do not cover the display interval")
@@ -337,7 +365,8 @@ class TideCache:
             self.snapshot = snapshot
             self.failures = 0
             self.next_attempt = 0
-            logging.info("NOAA tides: %s (%s), %.1f miles from sensor", self.station["name"], self.station["id"], self.station["distance"])
+            factor = spring_neap_factor(snapshot, now)
+            logging.info("NOAA tides: %s (%s), %.1f miles from sensor, %s samples, spring/neap factor %s", self.station["name"], self.station["id"], self.station["distance"], len(snapshot["samples"]), "unknown" if factor is None else f"{factor:.2f}")
             return snapshot
         except Exception as error:
             self.failures += 1
@@ -345,6 +374,7 @@ class TideCache:
             if isinstance(error, NOAAError):
                 delay = max(delay, error.retry_after)
                 if error.unsupported and self.station:
+                    logging.info("Excluding NOAA station %s (%s); it does not provide detailed predictions", self.station["name"], self.station["id"])
                     self.excluded.add(self.station["id"])
                     self.station = None
                     self.snapshot = None
