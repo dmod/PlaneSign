@@ -41,6 +41,14 @@ PLAY_RIGHT = 120
 YARD_PIXELS = (PLAY_RIGHT - PLAY_LEFT) / 100
 ENDZONE_LEVEL = 0.85
 
+NEXT_HEADER_BASELINE = 5
+NEXT_BLOCK_TOP = 8
+NEXT_BLOCK_BOTTOM = 23
+NEXT_BLOCK_WIDTH = 50
+NEXT_ABBR_BASELINE = 20
+NEXT_DETAIL_BASELINE = 31
+NEXT_DETAIL_SECONDS = 3.0
+
 TURF_DARK = (10, 58, 26)
 TURF_LIGHT = (14, 78, 36)
 YARD_LINE_COLOR = (78, 130, 92)
@@ -52,6 +60,7 @@ CLOCK_COLOR = (200, 225, 250)
 STALE_COLOR = (255, 190, 90)
 INFO_COLOR = (150, 200, 235)
 WARN_COLOR = (240, 180, 90)
+MATCHUP_COLOR = (205, 215, 230)
 RED_ZONE_COLOR = (235, 60, 45)
 RED_ZONE_PERIOD = 1.6
 
@@ -130,6 +139,15 @@ def parse_kickoff(value):
         return None
 
 
+def team_record(competitor):
+    for record in competitor.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("type") or "").lower() in ("total", "overall"):
+            return str(record.get("summary") or "").strip()
+    return ""
+
+
 def team_snapshot(competitor):
     team = competitor.get("team") or {}
     return {
@@ -140,7 +158,76 @@ def team_snapshot(competitor):
         "color": str(team.get("color") or ""),
         "alt_color": str(team.get("alternateColor") or ""),
         "winner": bool(competitor.get("winner")),
+        "record": team_record(competitor),
     }
+
+
+def venue_snapshot(competition):
+    venue = competition.get("venue") or {}
+    address = venue.get("address") or {}
+    city = str(address.get("city") or "").strip()
+    region = str(address.get("state") or address.get("country") or "").strip()
+    return {"name": str(venue.get("fullName") or "").strip(), "location": ", ".join(part for part in (city, region) if part), "indoor": bool(venue.get("indoor"))}
+
+
+def broadcast_label(competition):
+    names = []
+    for broadcast in competition.get("broadcasts") or []:
+        if not isinstance(broadcast, dict):
+            continue
+        for name in broadcast.get("names") or []:
+            name = str(name).strip()
+            if name and name not in names:
+                names.append(name)
+    if not names:
+        single = str(competition.get("broadcast") or "").strip()
+        if single:
+            names.append(single)
+    return "/".join(names[:3]).upper()
+
+
+def odds_label(competition):
+    for odds in competition.get("odds") or []:
+        if not isinstance(odds, dict):
+            continue
+        parts = []
+        details = str(odds.get("details") or "").strip().upper()
+        if details:
+            parts.append(details)
+        over_under = odds.get("overUnder")
+        if isinstance(over_under, (int, float)):
+            parts.append(f"O/U {over_under:g}")
+        if parts:
+            return "  ".join(parts)
+    return ""
+
+
+def weather_label(event):
+    weather = event.get("weather")
+    if not isinstance(weather, dict):
+        return ""
+    condition = str(weather.get("displayValue") or "").strip().upper()
+    temperature = weather.get("temperature")
+    if not isinstance(temperature, (int, float)):
+        temperature = weather.get("highTemperature")
+    if isinstance(temperature, (int, float)):
+        return f"{condition} {round(temperature)}F".strip()
+    return condition
+
+
+def series_label(event, competition):
+    for note in competition.get("notes") or []:
+        if isinstance(note, dict) and str(note.get("headline") or "").strip():
+            return str(note["headline"]).strip().upper()
+    week = (event.get("week") or {}).get("number")
+    if not isinstance(week, (int, float)):
+        return ""
+    season_type = (event.get("season") or {}).get("type")
+    if season_type == 1:
+        return f"PRESEASON WK {int(week)}"
+    if season_type == 3:
+        return f"PLAYOFFS WK {int(week)}"
+    return f"WEEK {int(week)}"
 
 
 def period_text(period, status_name):
@@ -200,6 +287,12 @@ def parse_game(event):
         "home": teams["home"],
         "away": teams["away"],
         "situation": situation_snapshot(competition),
+        "venue": venue_snapshot(competition),
+        "broadcast": broadcast_label(competition),
+        "odds": odds_label(competition),
+        "weather": weather_label(event),
+        "series": series_label(event, competition),
+        "neutral_site": bool(competition.get("neutralSite")),
     }
 
 
@@ -382,6 +475,62 @@ def find_game(snapshot, game_id):
     return None
 
 
+def next_upcoming_game(snapshot, now):
+    scheduled = [game for game in (snapshot or {}).get("games") or [] if game["state"] == "pre"]
+    if not scheduled:
+        return None
+    future = [game for game in scheduled if game["kickoff"] and game["kickoff"] >= now]
+    return min(future or scheduled, key=lambda game: game["kickoff"] or float("inf"))
+
+
+def countdown_label(kickoff, now):
+    if not kickoff:
+        return "KICKOFF TBD"
+    remaining = int(kickoff - now)
+    if remaining <= 0:
+        return "KICKOFF ANY MINUTE"
+    days, remainder = divmod(remaining, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if days:
+        return f"KICKOFF IN {days}D {hours}H"
+    if hours:
+        return f"KICKOFF IN {hours}H {minutes}M"
+    if minutes:
+        return f"KICKOFF IN {minutes}M {seconds}S"
+    return f"KICKOFF IN {seconds}S"
+
+
+def upcoming_kickoff_label(game, now, military):
+    if not game["kickoff"]:
+        return "TIME TBD"
+    if is_today(game["kickoff"], now):
+        return f"TODAY {clock_label(game['kickoff'], military)}"
+    return kickoff_label(game["kickoff"], military).upper()
+
+
+def upcoming_details(game, now):
+    away, home, venue = game["away"], game["home"], game["venue"]
+    details = [countdown_label(game["kickoff"], now)]
+    if venue["name"]:
+        details.append(venue["name"].upper())
+    place = venue["location"].upper()
+    if place:
+        details.append(f"{place} (DOME)" if venue["indoor"] else place)
+    if game["neutral_site"]:
+        details.append("NEUTRAL SITE")
+    billing = " ON ".join(part for part in (game["series"], game["broadcast"]) if part)
+    if billing:
+        details.append(billing)
+    if away["record"] and home["record"]:
+        details.append(f"{away['abbr']} {away['record']}  {home['abbr']} {home['record']}")
+    if game["odds"]:
+        details.append(game["odds"])
+    if game["weather"]:
+        details.append(game["weather"])
+    return details
+
+
 def fill_rect(canvas, x0, y0, x1, y1, color):
     pen = graphics.Color(*color)
     for row in range(y0, y1 + 1):
@@ -501,6 +650,10 @@ def info_lines(game, config, now):
     return clock or "IN PROGRESS", spot.upper()
 
 
+def is_stale(snapshot, now):
+    return snapshot.get("status") == "cached" or now - snapshot.get("fetched_at", 0) >= STALE_AFTER
+
+
 def draw_game(sign, game, snapshot, config, now, elapsed):
     situation = game["situation"] if game["state"] == "in" else None
     offense = None
@@ -519,11 +672,30 @@ def draw_game(sign, game, snapshot, config, now, elapsed):
     if offense is not None:
         draw_ball(sign, situation, offense, colors, heading)
 
-    stale = snapshot.get("status") == "cached" or now - snapshot.get("fetched_at", 0) >= STALE_AFTER
+    stale = is_stale(snapshot, now)
     clock, detail = info_lines(game, config, now)
     draw_centered(sign.canvas, sign.font46, 4, CLOCK_BASELINE, STALE_COLOR if stale else CLOCK_COLOR, clock)
     if detail:
         draw_centered(sign.canvas, sign.font46, 4, INFO_BASELINE, INFO_COLOR, detail)
+
+
+def draw_upcoming(sign, game, snapshot, config, now, elapsed):
+    colors = resolve_team_colors(game["away"], game["home"])
+    sign.canvas.Clear()
+    graphics.DrawText(sign.canvas, sign.font46, 1, NEXT_HEADER_BASELINE, graphics.Color(*TITLE_COLOR), "NEXT UP")
+    kickoff = upcoming_kickoff_label(game, now, military_time(config))[:16]
+    kickoff_color = STALE_COLOR if is_stale(snapshot, now) else CLOCK_COLOR
+    graphics.DrawText(sign.canvas, sign.font46, 128 - len(kickoff) * 4, NEXT_HEADER_BASELINE, graphics.Color(*kickoff_color), kickoff)
+
+    for team, color, left in ((game["away"], colors[0], 0), (game["home"], colors[1], 128 - NEXT_BLOCK_WIDTH)):
+        right = left + NEXT_BLOCK_WIDTH - 1
+        fill_rect(sign.canvas, left, NEXT_BLOCK_TOP, right, NEXT_BLOCK_BOTTOM, color)
+        draw_centered(sign.canvas, sign.fontbig, 6, NEXT_ABBR_BASELINE, text_color_for(color), team["abbr"], left, right)
+    draw_centered(sign.canvas, sign.fontbig, 6, NEXT_ABBR_BASELINE, MATCHUP_COLOR, "@", NEXT_BLOCK_WIDTH, 127 - NEXT_BLOCK_WIDTH)
+
+    details = upcoming_details(game, now)
+    detail = details[int(elapsed / NEXT_DETAIL_SECONDS) % len(details)]
+    draw_centered(sign.canvas, sign.font46, 4, NEXT_DETAIL_BASELINE, INFO_COLOR, detail, 0, 127)
 
 
 def draw_nfl_frame(sign, snapshot, game_id, config, now, elapsed):
@@ -534,9 +706,15 @@ def draw_nfl_frame(sign, snapshot, game_id, config, now, elapsed):
         draw_message(sign, [("No data", WARN_COLOR), ("Check network", INFO_COLOR)])
         return
     game = find_game(snapshot, game_id)
+    live = sum(1 for entry in snapshot.get("games") or [] if entry["state"] == "in")
+    if not live and (game is None or game["state"] == "pre"):
+        # With nothing being played, an empty field says less than the matchup that is coming.
+        preview = game or next_upcoming_game(snapshot, now)
+        if preview is not None:
+            draw_upcoming(sign, preview, snapshot, config, now, elapsed)
+            return
     if game is None:
-        live = sum(1 for entry in snapshot.get("games") or [] if entry["state"] == "in")
-        draw_message(sign, [("Pick a game", INFO_COLOR), (f"{live} live now" if live else "No games live", WARN_COLOR if not live else INFO_COLOR)])
+        draw_message(sign, [("Pick a game", INFO_COLOR), (f"{live} live now" if live else "No games live", INFO_COLOR if live else WARN_COLOR)])
         return
     draw_game(sign, game, snapshot, config, now, elapsed)
 
