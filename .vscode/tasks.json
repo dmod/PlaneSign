@@ -2,6 +2,19 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "prepare PlaneSign Web Display",
+            "type": "shell",
+            // The [s] bracket stops the pattern from matching this task's own shell.
+            "command": "pkill -f 'plane[s]ign(/__main__\\.py)? --web' && sleep 3 && pkill -KILL -f 'plane[s]ign(/__main__\\.py)? --web'; exit 0",
+            "dependsOn": [
+                "uv sync and start nginx"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
             "label": "uv sync and start nginx",
             "dependsOn": [
                 "uv sync",
