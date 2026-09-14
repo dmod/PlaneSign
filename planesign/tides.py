@@ -5,7 +5,6 @@ from bisect import bisect_left
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
-from statistics import median
 from zoneinfo import ZoneInfo
 
 from modes import DisplayMode
@@ -31,8 +30,10 @@ CYCLE_DAYS = 45
 CYCLE_TTL = 24 * 60 * 60
 CYCLE_MIN_SECONDS = 2 * 60 * 60
 CYCLE_MAX_SECONDS = 18 * 60 * 60
-SMOOTH_WINDOW = 2
-EXTREMA_WINDOW = 4
+LUNAR_DAY = 24.8412 * 60 * 60
+SPRING_NEAP_PERIOD = 14.7653 * 24 * 60 * 60
+SMOOTH_SAMPLES = 12
+REFERENCE_TRIM = 0.02
 MIN_SPRING_NEAP_SPREAD = 0.05
 METER_SCALE_COLOR = (70, 90, 110)
 METER_LABEL_COLOR = (120, 165, 195)
@@ -193,40 +194,36 @@ def tide_ranges(events):
     return ranges
 
 
-def smooth_ranges(ranges, window=SMOOTH_WINDOW):
-    # Averaging neighbouring cycles removes diurnal inequality so only the spring/neap swing remains.
+def smooth_ranges(ranges, span=LUNAR_DAY):
+    # The diurnal inequality repeats once per lunar day, so averaging evenly across exactly one
+    # cancels it and leaves the spring/neap swing. Midpoints without a full window are dropped so
+    # half-averaged ends cannot compress the reference below.
+    half = span / 2
+    if len(ranges) < 2 or ranges[-1][0] - ranges[0][0] < span:
+        return []
     smoothed = []
-    for index, (timestamp, _) in enumerate(ranges):
-        neighborhood = [value for _, value in ranges[max(0, index - window) : index + window + 1]]
-        smoothed.append([timestamp, sum(neighborhood) / len(neighborhood)])
+    for timestamp, _ in ranges:
+        if timestamp - ranges[0][0] < half or ranges[-1][0] - timestamp < half:
+            continue
+        offsets = (timestamp - half + span * index / SMOOTH_SAMPLES for index in range(SMOOTH_SAMPLES))
+        smoothed.append([timestamp, sum(cycle_range(ranges, offset) for offset in offsets) / SMOOTH_SAMPLES])
     return smoothed
 
 
-def local_extrema(values, window=EXTREMA_WINDOW):
-    # Samples whose window holds no more than `window` values are skipped; the remaining edge samples
-    # keep an asymmetric window, which is harmless because the medians below absorb an odd extra extreme.
-    maxima, minima = [], []
-    for index, value in enumerate(values):
-        neighborhood = values[max(0, index - window) : index + window + 1]
-        if len(neighborhood) <= window:
-            continue
-        if value == max(neighborhood):
-            maxima.append(value)
-        elif value == min(neighborhood):
-            minima.append(value)
-    return maxima, minima
-
-
 def spring_neap_reference(ranges):
-    maxima, minima = local_extrema([value for _, value in ranges])
-    if not maxima or not minima:
-        logging.warning("Spring/neap reference unavailable: %s cycle ranges yielded %s maxima and %s minima", len(ranges), len(maxima), len(minima))
+    # The lunar-day averages sweep the spring/neap envelope directly, so trimmed percentiles span it
+    # without the clamping that medians of local extrema caused. The trim stops one freak cycle from
+    # setting the scale; picking peaks instead loses the shoulders the meter needs to show motion.
+    if len(ranges) < 2 or ranges[-1][0] - ranges[0][0] < 2 * SPRING_NEAP_PERIOD:
+        logging.warning("Spring/neap reference unavailable: %s cycle ranges span %.1f days, under the %.1f days needed", len(ranges), 0 if len(ranges) < 2 else (ranges[-1][0] - ranges[0][0]) / 86400, 2 * SPRING_NEAP_PERIOD / 86400)
         return None
-    neap, spring = median(minima), median(maxima)
+    values = sorted(value for _, value in ranges)
+    trim = int(len(values) * REFERENCE_TRIM)
+    neap, spring = values[trim], values[-1 - trim]
     if spring - neap < MIN_SPRING_NEAP_SPREAD:
         logging.warning("Spring/neap reference rejected: spread %.3fft (neap %.2fft, spring %.2fft) below %.2fft minimum", spring - neap, neap, spring, MIN_SPRING_NEAP_SPREAD)
         return None
-    logging.info("Spring/neap reference: neap %.2fft, spring %.2fft (spread %.2fft) from %s maxima and %s minima", neap, spring, spring - neap, len(maxima), len(minima))
+    logging.info("Spring/neap reference: neap %.2fft, spring %.2fft (spread %.2fft) from %s lunar-day averages over %.1f days spanning %.2f-%.2fft", neap, spring, spring - neap, len(values), (ranges[-1][0] - ranges[0][0]) / 86400, values[0], values[-1])
     return [neap, spring]
 
 
@@ -271,7 +268,7 @@ def fetch_cycles(session, station_id, now):
     events = parse_predictions(noaa_json(session, PREDICTIONS_URL, params, now), events=True)
     raw_ranges = tide_ranges(events)
     ranges = smooth_ranges(raw_ranges)
-    logging.debug("Spring/neap history for station %s: %s high/low events, %s usable cycles over %s days", station_id, len(events), len(raw_ranges), CYCLE_DAYS)
+    logging.debug("Spring/neap history for station %s: %s high/low events, %s usable cycles over %s days, %s lunar-day averages", station_id, len(events), len(raw_ranges), CYCLE_DAYS, len(ranges))
     return {"ranges": ranges, "spring_neap": spring_neap_reference(ranges)}
 
 
