@@ -20,15 +20,29 @@ MAX_RETRY = 15 * 60
 STALE_AFTER = 5 * 60
 FRAME_INTERVAL = 0.05
 
-PANEL_RIGHT = 55
+PANEL_RIGHT = 41
 ROW_SPLIT = 16
-ABBR_COLUMN = 3
-ABBR_WIDTH = 5
-ABBR_BASELINE = 11
+ABBR_COLUMN = 2
+ABBR_BASELINE = 7
+RECORD_COLUMN = 2
+RECORD_WIDTH = 4
+RECORD_BASELINE = 14
+RECORD_MAX_CHARS = 5
 SCORE_WIDTH = 9
-SCORE_RIGHT = 54
+SCORE_RIGHT = 40
 SCORE_BASELINE = 13
+
+STATUS_LEFT = 43
+STATUS_RIGHT = 55
+STATUS_WIDTH = STATUS_RIGHT - STATUS_LEFT + 1
+STATUS_LEVEL = 0.22
+TIMEOUT_ROW = 5
+TIMEOUT_PIP_WIDTH = 3
+TIMEOUT_PIP_GAP = 2
+TIMEOUTS_PER_TEAM = 3
+MARKER_ROW = 11
 MARKER_WIDTH = 5
+WINNER_MARKER_WIDTH = 3
 
 # The field is drawn to scale: two yards per pixel between the goal lines, one yard per pixel through the end zones.
 AWAY_GOAL_COLUMN = 67
@@ -76,6 +90,9 @@ STALE_COLOR = (255, 190, 90)
 INFO_COLOR = (150, 200, 235)
 WARN_COLOR = (240, 180, 90)
 MATCHUP_COLOR = (205, 215, 230)
+TIMEOUT_COLOR = (245, 245, 245)
+TIMEOUT_USED_COLOR = (72, 72, 72)
+WINNER_COLOR = (120, 225, 150)
 RED_ZONE_COLOR = (235, 60, 45)
 RED_ZONE_PERIOD = 1.6
 
@@ -153,6 +170,12 @@ def parse_kickoff(value):
         return datetime.fromisoformat(str(value)).timestamp()
     except (TypeError, ValueError):
         return None
+
+
+def timeout_count(value):
+    if isinstance(value, (int, float)) and 0 <= value <= TIMEOUTS_PER_TEAM:
+        return int(value)
+    return None
 
 
 def team_record(competitor):
@@ -274,6 +297,8 @@ def situation_snapshot(competition):
         "down_distance_text": str(situation.get("downDistanceText") or ""),
         "short_down_distance_text": str(situation.get("shortDownDistanceText") or ""),
         "is_red_zone": bool(situation.get("isRedZone")),
+        "away_timeouts": timeout_count(situation.get("awayTimeouts")),
+        "home_timeouts": timeout_count(situation.get("homeTimeouts")),
     }
 
 
@@ -579,25 +604,35 @@ def draw_winner_marker(canvas, column, row, color):
         graphics.DrawLine(canvas, column + offset, row - 2 + offset, column + offset, row + 2 - offset, pen)
 
 
-def draw_scoreboard(sign, game, colors, offense_id):
-    for team, color, top in ((game["away"], colors[0], 0), (game["home"], colors[1], ROW_SPLIT)):
-        ink = text_color_for(color)
-        pen = graphics.Color(*ink)
+def draw_timeouts(canvas, row, remaining):
+    span = TIMEOUTS_PER_TEAM * TIMEOUT_PIP_WIDTH + (TIMEOUTS_PER_TEAM - 1) * TIMEOUT_PIP_GAP
+    left = STATUS_LEFT + (STATUS_WIDTH - span) // 2
+    for index in range(TIMEOUTS_PER_TEAM):
+        start = left + index * (TIMEOUT_PIP_WIDTH + TIMEOUT_PIP_GAP)
+        fill_rect(canvas, start, row, start + TIMEOUT_PIP_WIDTH - 1, row + 1, TIMEOUT_COLOR if index < remaining else TIMEOUT_USED_COLOR)
+
+
+def draw_team_status(sign, game, team, color, top, timeouts, offense_id):
+    fill_rect(sign.canvas, STATUS_LEFT, top, STATUS_RIGHT, top + ROW_SPLIT - 1, scale(color, STATUS_LEVEL))
+    if timeouts is not None:
+        draw_timeouts(sign.canvas, top + TIMEOUT_ROW, timeouts)
+    if offense_id and team["id"] == offense_id:
+        draw_possession_marker(sign.canvas, STATUS_LEFT + (STATUS_WIDTH - MARKER_WIDTH) // 2, top + MARKER_ROW, BALL_COLOR)
+    elif game["state"] == "post" and team["winner"]:
+        draw_winner_marker(sign.canvas, STATUS_LEFT + (STATUS_WIDTH - WINNER_MARKER_WIDTH) // 2, top + MARKER_ROW, WINNER_COLOR)
+
+
+def draw_scoreboard(sign, game, colors, situation, offense_id):
+    timeouts = situation or {}
+    for team, color, top, remaining in ((game["away"], colors[0], 0, timeouts.get("away_timeouts")), (game["home"], colors[1], ROW_SPLIT, timeouts.get("home_timeouts"))):
+        pen = graphics.Color(*text_color_for(color))
         fill_rect(sign.canvas, 0, top, PANEL_RIGHT, top + ROW_SPLIT - 1, color)
         graphics.DrawText(sign.canvas, sign.font57, ABBR_COLUMN, top + ABBR_BASELINE, pen, team["abbr"])
+        if team["record"] and len(team["record"]) <= RECORD_MAX_CHARS:
+            graphics.DrawText(sign.canvas, sign.font46, RECORD_COLUMN, top + RECORD_BASELINE, pen, team["record"])
         score = score_text(team)
-        score_column = SCORE_RIGHT - len(score) * SCORE_WIDTH + 1
-        graphics.DrawText(sign.canvas, sign.fontreallybig, score_column, top + SCORE_BASELINE, pen, score)
-
-        gap = score_column - (ABBR_COLUMN + len(team["abbr"]) * ABBR_WIDTH)
-        if gap < MARKER_WIDTH + 2:
-            continue
-        column = score_column - gap + (gap - MARKER_WIDTH) // 2
-        row = top + ROW_SPLIT // 2 - 1
-        if offense_id and team["id"] == offense_id:
-            draw_possession_marker(sign.canvas, column, row, ink)
-        elif game["state"] == "post" and team["winner"]:
-            draw_winner_marker(sign.canvas, column, row, ink)
+        graphics.DrawText(sign.canvas, sign.fontreallybig, SCORE_RIGHT - len(score) * SCORE_WIDTH + 1, top + SCORE_BASELINE, pen, score)
+        draw_team_status(sign, game, team, color, top, remaining, offense_id)
 
 
 def yard_column(yards_from_away_goal):
@@ -712,7 +747,7 @@ def draw_game(sign, game, snapshot, config, now, elapsed):
         red_zone_side = "home" if heading > 0 else "away"
 
     sign.canvas.Clear()
-    draw_scoreboard(sign, game, colors, offense["id"] if offense else None)
+    draw_scoreboard(sign, game, colors, situation, offense["id"] if offense else None)
     draw_field(sign, game, colors, red_zone_side, elapsed)
     if offense is not None:
         draw_ball(sign, situation, offense, heading)
