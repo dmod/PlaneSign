@@ -2037,6 +2037,50 @@ function populate_sound_dropdown() {
     });
 }
 
+var nfl_refresh_timer = null;
+
+function get_nfl_games() {
+    call_endpoint("/get_nfl_games", function (response) {
+        var data = JSON.parse(response);
+        var games = data["games"] || [];
+        var select = document.getElementById("nfl_game_select");
+
+        if (select) {
+            var previous = select.value;
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            games.forEach(function (game) {
+                var option = document.createElement("option");
+                option.value = game["id"];
+                option.text = game["label"];
+                select.add(option);
+            });
+            select.value = previous;
+            if (select.value !== previous) {
+                select.selectedIndex = 0;
+            }
+        }
+
+        schedule_nfl_refresh(games.length === 0);
+    });
+}
+
+function schedule_nfl_refresh(retry_soon) {
+    clearTimeout(nfl_refresh_timer);
+    var nfl_div = document.getElementById("nfl_div");
+    if (!nfl_div || nfl_div.hidden) {
+        return;
+    }
+    nfl_refresh_timer = setTimeout(get_nfl_games, retry_soon ? 2000 : 30000);
+}
+
+function set_nfl_game(game_id) {
+    if (game_id) {
+        call_endpoint("/set_nfl_game/" + encodeURIComponent(game_id));
+    }
+}
+
 function set_mode(mode) {
     set_current_mode_button(mode);
 
@@ -2072,6 +2116,10 @@ function set_mode(mode) {
     }
     if (mode !== 'TRACK_A_FLIGHT') {
         document.getElementById('track-a-flight_div').hidden = true;
+    }
+    if (mode !== 'NFL') {
+        document.getElementById('nfl_div').hidden = true;
+        clearTimeout(nfl_refresh_timer);
     }
     if (mode !== 'FREE_SKETCH') {
         close_free_sketch_modal();

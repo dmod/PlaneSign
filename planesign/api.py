@@ -6,10 +6,12 @@ import random
 import re
 import subprocess
 import tempfile
+import time
 from datetime import datetime
 
 import gevent
 import gevent.pywsgi
+import nfl
 import planes
 import shared_config
 import utilities
@@ -561,6 +563,25 @@ def get_ticker_opts():
 @app.route("/submit_ticker/<ticker>")
 def submit_ticker(ticker):
     shared_config.data_dict["ticker"] = ticker
+    return ""
+
+
+@app.route("/get_nfl_games")
+def get_nfl_games():
+    snapshot = shared_config.data_dict.get("nfl")
+    if not snapshot:
+        return jsonify({"games": [], "status": "loading"})
+    military = str(shared_config.CONF.get("MILITARY_TIME", "false")).lower() == "true"
+    return jsonify({"games": nfl.game_options(snapshot, time.time(), military), "status": snapshot.get("status", "ready")})
+
+
+@app.route("/set_nfl_game/", defaults={"game_id": ""})
+@app.route("/set_nfl_game/<game_id>")
+def set_nfl_game(game_id):
+    if nfl.find_game(shared_config.data_dict.get("nfl"), game_id) is None:
+        return jsonify({"ok": False, "error": "Unknown game"}), 404
+    shared_config.data_dict["nfl_game_id"] = game_id
+    shared_config.shared_forced_sign_update.set()
     return ""
 
 

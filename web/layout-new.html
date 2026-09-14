@@ -126,6 +126,14 @@
               <button id="TIDES" class="mode_button" onclick="set_mode(this.id)">Tides</button>
             </div>
             <div class="command-mode-item">
+              <button id="NFL" class="mode_button" onclick="set_mode(this.id); document.getElementById('nfl_div').hidden = false; get_nfl_games()">NFL 🏈</button>
+              <div id="nfl_div" hidden>
+                <select name="nfl_game" id="nfl_game_select" onchange="set_nfl_game(this.value)">
+                  <option value="">Select a game...</option>
+                </select>
+              </div>
+            </div>
+            <div class="command-mode-item">
               <button id="TIME_ONLY" class="mode_button" onclick="set_mode(this.id)">Clock Only 🕓</button>
             </div>
             <div class="command-mode-item">
