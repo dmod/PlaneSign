@@ -26,6 +26,7 @@ RUN apt update && apt -y install --no-install-recommends \
   nginx \
   openssl \
   ca-certificates \
+  curl \
   python3 \
   libpython3.12t64 \
   ffmpeg \

@@ -70,4 +70,25 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 6. State what was visually checked and provide the preview URL. Emulator verification does not establish physical LED-panel readability; report hardware checks separately. Leave the preview available for user review unless asked to stop it.
 
 - Normal continuous INFO logs and successful HTTP requests are not input prompts. Do not send terminal input or repeatedly poll just because a long-running server is producing output.
+- A `websockets ... InvalidMessage: did not receive a valid HTTP request` traceback right after the frame server starts comes from a port probe closing the connection; the preview still works, so do not treat it as a failure.
+
+### Screenshotting The Preview
+- `display.html` sizes `canvas#matrix` at a fixed 1024x256 CSS pixels, which is wider than the integrated browser viewport (~892x332), so a plain screenshot silently crops both edges of the matrix. Before capturing, shrink it so all 128 columns are in view:
+
+	```js
+	page.evaluate(() => {
+		const c = document.getElementById('matrix');
+		c.style.width = '768px';
+		c.style.height = '192px';
+	});
+	```
+
+- Capture with the screenshot tool scoped to the `canvas` selector. Confirm the capture shows x=0 through x=127 (both outer edges of the layout) before trusting it; a cropped frame looks like text that is missing its first or last characters.
+- Re-apply the resize after any page reload, and reload the page after restarting the emulator.
+- Playwright's `locator.screenshot({ path })` writes to the browser host, not into the devcontainer, so those files are not readable from the workspace. Use the screenshot tool for images you need to inspect.
+- Rotating content advances on wall-clock time, so consecutive screenshot calls naturally land on different phases; repeat the call until every phase has been seen.
+
+### Driving The Sign From The Terminal
+- Hit the Flask API directly at `http://127.0.0.1:5055` (for example `/set_mode/<DISPLAYMODE_NAME>`, `/status`, and mode-specific endpoints in `planesign/api.py`). `curl` is in the image; in a container built before it was added, use `.venv/bin/python -c "import urllib.request; ..."` instead.
+- Do not call `/write_config` to toggle settings for a test: it rewrites `sign.conf` from only the query parameters it receives and drops every key that is not passed. Verify config-dependent formatting (such as `MILITARY_TIME`) another way and report how it was checked.
 - Do not expose API keys or other secrets from `sign.conf` or configuration dumps. Redact sensitive output when capturing logs or sharing diagnostics.
