@@ -20,25 +20,35 @@ MAX_RETRY = 15 * 60
 STALE_AFTER = 5 * 60
 FRAME_INTERVAL = 0.05
 
-SCORE_RIGHT = 40
+PANEL_RIGHT = 55
 ROW_SPLIT = 16
-ABBR_COLUMN = 2
+ABBR_COLUMN = 3
 ABBR_WIDTH = 5
-SCORE_WIDTH = 6
 ABBR_BASELINE = 11
-SCORE_BASELINE = 12
+SCORE_WIDTH = 9
+SCORE_RIGHT = 54
+SCORE_BASELINE = 13
 MARKER_WIDTH = 5
 
-PANEL_LEFT = 42
-PANEL_RIGHT = 127
+# The field is drawn to scale: two yards per pixel between the goal lines, one yard per pixel through the end zones.
+AWAY_GOAL_COLUMN = 67
+HOME_GOAL_COLUMN = AWAY_GOAL_COLUMN + 50
+END_ZONE_DEPTH = 10
+FIELD_LEFT = AWAY_GOAL_COLUMN - END_ZONE_DEPTH
+FIELD_RIGHT = HOME_GOAL_COLUMN + END_ZONE_DEPTH
+FIELD_TOP = 6
+FIELD_BOTTOM = 25
+TURF_TOP = FIELD_TOP + 1
+TURF_BOTTOM = FIELD_BOTTOM - 1
+TURF_HEIGHT = TURF_BOTTOM - TURF_TOP + 1
+HASH_ROWS = (TURF_TOP + 7, TURF_BOTTOM - 7)
+CENTER_ROWS = (TURF_TOP + 8, TURF_TOP + 9)
+ARROW_ROW = TURF_TOP + 3
+LETTER_HEIGHT = 6
+LETTER_INK = 3
 CLOCK_BASELINE = 5
-INFO_BASELINE = 31
-FIELD_TOP = 7
-FIELD_BOTTOM = 24
-ARROW_ROW = FIELD_TOP + 3
-PLAY_LEFT = 49
-PLAY_RIGHT = 120
-YARD_PIXELS = (PLAY_RIGHT - PLAY_LEFT) / 100
+# Capitals sit five rows above the baseline, so 32 bottom-aligns the line without clipping.
+INFO_BASELINE = 32
 ENDZONE_LEVEL = 0.85
 
 NEXT_HEADER_BASELINE = 5
@@ -51,9 +61,14 @@ NEXT_DETAIL_SECONDS = 3.0
 
 TURF_DARK = (10, 58, 26)
 TURF_LIGHT = (14, 78, 36)
-YARD_LINE_COLOR = (78, 130, 92)
+YARD_LINE_COLOR = (86, 140, 100)
+HASH_COLOR = (64, 112, 78)
 MIDFIELD_COLOR = (150, 205, 165)
+GOAL_LINE_COLOR = (230, 236, 230)
+SIDELINE_COLOR = (170, 180, 172)
+GOAL_POST_COLOR = (238, 208, 60)
 FIRST_DOWN_COLOR = (235, 205, 45)
+SCRIMMAGE_COLOR = (60, 130, 245)
 BALL_COLOR = (250, 246, 235)
 TITLE_COLOR = (90, 170, 245)
 CLOCK_COLOR = (200, 225, 250)
@@ -66,6 +81,7 @@ RED_ZONE_PERIOD = 1.6
 
 MIN_BLOCK_LUMINANCE = 0.09
 MIN_TEAM_COLOR_DISTANCE = 60
+MIN_TURF_CONTRAST = 55
 PERIOD_NAMES = ("1ST", "2ND", "3RD", "4TH")
 FIELD_SPOT = re.compile(r"^(?:([A-Z]{2,4})\s+)?(\d{1,2})$")
 
@@ -92,14 +108,14 @@ def text_color_for(color):
     return (16, 16, 16) if luminance(color) > 0.45 else (245, 245, 245)
 
 
-def emphasize(color, floor=0.45):
-    # Team colors have to stay legible against turf, so lift dark ones without shifting hue.
-    level = luminance(color)
-    if level >= floor:
-        return color
-    if level <= 0.01:
-        return (205, 205, 205)
-    return scale(color, floor / level)
+def end_zone_color(color):
+    # A dark green team would otherwise vanish into the turf, so lift it until the end zone reads as its own block.
+    zone = scale(color, ENDZONE_LEVEL)
+    for step in range(1, 16):
+        if min(math.dist(zone, TURF_DARK), math.dist(zone, TURF_LIGHT)) >= MIN_TURF_CONTRAST:
+            break
+        zone = scale(color, ENDZONE_LEVEL + 0.1 * step)
+    return zone
 
 
 def readable_team_color(team):
@@ -537,7 +553,7 @@ def fill_rect(canvas, x0, y0, x1, y1, color):
         graphics.DrawLine(canvas, x0, row, x1, row, pen)
 
 
-def draw_centered(canvas, font, width, baseline, color, text, left=PANEL_LEFT, right=PANEL_RIGHT):
+def draw_centered(canvas, font, width, baseline, color, text, left=FIELD_LEFT, right=FIELD_RIGHT):
     text = text.encode("ascii", "replace").decode("ascii")[: (right - left + 1) // width]
     column = left + (right - left + 1 - len(text) * width) // 2
     graphics.DrawText(canvas, font, column, baseline, graphics.Color(*color), text)
@@ -567,11 +583,11 @@ def draw_scoreboard(sign, game, colors, offense_id):
     for team, color, top in ((game["away"], colors[0], 0), (game["home"], colors[1], ROW_SPLIT)):
         ink = text_color_for(color)
         pen = graphics.Color(*ink)
-        fill_rect(sign.canvas, 0, top, SCORE_RIGHT, top + ROW_SPLIT - 1, color)
+        fill_rect(sign.canvas, 0, top, PANEL_RIGHT, top + ROW_SPLIT - 1, color)
         graphics.DrawText(sign.canvas, sign.font57, ABBR_COLUMN, top + ABBR_BASELINE, pen, team["abbr"])
         score = score_text(team)
         score_column = SCORE_RIGHT - len(score) * SCORE_WIDTH + 1
-        graphics.DrawText(sign.canvas, sign.fontbig, score_column, top + SCORE_BASELINE, pen, score)
+        graphics.DrawText(sign.canvas, sign.fontreallybig, score_column, top + SCORE_BASELINE, pen, score)
 
         gap = score_column - (ABBR_COLUMN + len(team["abbr"]) * ABBR_WIDTH)
         if gap < MARKER_WIDTH + 2:
@@ -585,52 +601,81 @@ def draw_scoreboard(sign, game, colors, offense_id):
 
 
 def yard_column(yards_from_away_goal):
-    return round(PLAY_LEFT + yards_from_away_goal * YARD_PIXELS)
+    """Column for a spot measured in yards from the away team's goal line."""
+    yards = min(100, max(0, yards_from_away_goal))
+    return AWAY_GOAL_COLUMN + int(yards / 2 + 0.5)
 
 
-def draw_field(sign, colors, red_zone_side, elapsed):
-    for band in range(10):
-        start = yard_column(band * 10)
-        end = PLAY_RIGHT if band == 9 else yard_column((band + 1) * 10) - 1
-        fill_rect(sign.canvas, start, FIELD_TOP, end, FIELD_BOTTOM, TURF_LIGHT if band % 2 else TURF_DARK)
+def draw_end_zone_label(canvas, font, left, abbr, color):
+    letters = abbr[:3]
+    if not letters:
+        return
+    pen = graphics.Color(*color)
+    baseline = TURF_TOP + 5 + (TURF_HEIGHT - len(letters) * LETTER_HEIGHT) // 2
+    column = left + (END_ZONE_DEPTH - 1 - LETTER_INK) // 2
+    for index, letter in enumerate(letters):
+        graphics.DrawText(canvas, font, column, baseline + index * LETTER_HEIGHT, pen, letter)
+
+
+def draw_field(sign, game, colors, red_zone_side, elapsed):
+    canvas = sign.canvas
+    fill_rect(canvas, AWAY_GOAL_COLUMN, TURF_TOP, HOME_GOAL_COLUMN, TURF_BOTTOM, TURF_DARK)
+    for band in range(1, 10, 2):
+        # Mow bands run ten yards, so every other one is five pixels of lighter turf.
+        fill_rect(canvas, yard_column(band * 10) + 1, TURF_TOP, yard_column((band + 1) * 10), TURF_BOTTOM, TURF_LIGHT)
+    for yards in range(5, 100, 10):
+        # Real hash marks sit at every yard; at this scale they read as a dotted inbound line.
+        for row in HASH_ROWS:
+            canvas.SetPixel(yard_column(yards), row, *HASH_COLOR)
+
+    pulse = 0.55 + 0.45 * math.sin(2 * math.pi * elapsed / RED_ZONE_PERIOD)
+    for side, team, color, left in (("away", game["away"], colors[0], FIELD_LEFT + 1), ("home", game["home"], colors[1], HOME_GOAL_COLUMN + 1)):
+        zone = scale(RED_ZONE_COLOR, 0.35 + 0.65 * pulse) if side == red_zone_side else end_zone_color(color)
+        fill_rect(canvas, left, TURF_TOP, left + END_ZONE_DEPTH - 2, TURF_BOTTOM, zone)
+        draw_end_zone_label(canvas, sign.font46, left, team["abbr"], text_color_for(zone))
+
     for yards in range(10, 100, 10):
         column = yard_column(yards)
-        graphics.DrawLine(sign.canvas, column, FIELD_TOP, column, FIELD_BOTTOM, graphics.Color(*(MIDFIELD_COLOR if yards == 50 else YARD_LINE_COLOR)))
-    pulse = 0.55 + 0.45 * math.sin(2 * math.pi * elapsed / RED_ZONE_PERIOD)
-    for side, color, x0, x1 in (("away", colors[0], PANEL_LEFT, PLAY_LEFT - 1), ("home", colors[1], PLAY_RIGHT + 1, PANEL_RIGHT)):
-        zone = scale(color, ENDZONE_LEVEL)
-        if side == red_zone_side:
-            zone = scale(RED_ZONE_COLOR, 0.35 + 0.65 * pulse)
-        fill_rect(sign.canvas, x0, FIELD_TOP, x1, FIELD_BOTTOM, zone)
+        graphics.DrawLine(canvas, column, TURF_TOP, column, TURF_BOTTOM, graphics.Color(*(MIDFIELD_COLOR if yards == 50 else YARD_LINE_COLOR)))
+    goal_pen = graphics.Color(*GOAL_LINE_COLOR)
+    for column in (AWAY_GOAL_COLUMN, HOME_GOAL_COLUMN):
+        graphics.DrawLine(canvas, column, TURF_TOP, column, TURF_BOTTOM, goal_pen)
+
+    side_pen = graphics.Color(*SIDELINE_COLOR)
+    graphics.DrawLine(canvas, FIELD_LEFT, FIELD_TOP, FIELD_RIGHT, FIELD_TOP, side_pen)
+    graphics.DrawLine(canvas, FIELD_LEFT, FIELD_BOTTOM, FIELD_RIGHT, FIELD_BOTTOM, side_pen)
+    post_pen = graphics.Color(*GOAL_POST_COLOR)
+    for column in (FIELD_LEFT, FIELD_RIGHT):
+        graphics.DrawLine(canvas, column, FIELD_TOP, column, FIELD_BOTTOM, side_pen)
+        graphics.DrawLine(canvas, column, CENTER_ROWS[0], column, CENTER_ROWS[1], post_pen)
 
 
 def draw_direction_arrow(canvas, column, row, heading, color):
     pen = graphics.Color(*color)
     tail = column + heading * 2
-    tip = column + heading * 6
+    tip = column + heading * 5
     graphics.DrawLine(canvas, tail, row, tip, row, pen)
     graphics.DrawLine(canvas, tip - heading * 2, row - 2, tip, row, pen)
     graphics.DrawLine(canvas, tip - heading * 2, row + 2, tip, row, pen)
 
 
-def draw_ball(sign, situation, offense, colors, heading):
+def draw_ball(sign, situation, offense, heading):
     remaining = yards_to_goal(situation, offense["abbr"])
     if remaining is None:
         return
-    yards_from_away_goal = remaining if heading < 0 else 100 - remaining
-    column = min(PLAY_RIGHT, max(PLAY_LEFT, yard_column(yards_from_away_goal)))
+    spot = remaining if heading < 0 else 100 - remaining
+    column = yard_column(spot)
 
     distance = situation.get("distance")
     if isinstance(distance, (int, float)) and 0 < distance <= remaining:
-        marker = yard_column(yards_from_away_goal + heading * distance)
-        if PLAY_LEFT < marker < PLAY_RIGHT:
-            graphics.DrawLine(sign.canvas, marker, FIELD_TOP, marker, FIELD_BOTTOM, graphics.Color(*FIRST_DOWN_COLOR))
+        # Short yardage rounds onto the line of scrimmage at two yards per pixel, so nudge it clear.
+        marker = max(column + 1, yard_column(spot + distance)) if heading > 0 else min(column - 1, yard_column(spot - distance))
+        if AWAY_GOAL_COLUMN < marker < HOME_GOAL_COLUMN:
+            graphics.DrawLine(sign.canvas, marker, TURF_TOP, marker, TURF_BOTTOM, graphics.Color(*FIRST_DOWN_COLOR))
 
-    scrimmage = emphasize(colors[0] if heading > 0 else colors[1])
-    graphics.DrawLine(sign.canvas, column, FIELD_TOP, column, FIELD_BOTTOM, graphics.Color(*scrimmage))
-    draw_direction_arrow(sign.canvas, column, ARROW_ROW, heading, scrimmage)
-    middle = (FIELD_TOP + FIELD_BOTTOM) // 2
-    fill_rect(sign.canvas, max(PLAY_LEFT, column - 1), middle - 1, min(PLAY_RIGHT, column + 1), middle, BALL_COLOR)
+    graphics.DrawLine(sign.canvas, column, TURF_TOP, column, TURF_BOTTOM, graphics.Color(*SCRIMMAGE_COLOR))
+    draw_direction_arrow(sign.canvas, column, ARROW_ROW, heading, SCRIMMAGE_COLOR)
+    fill_rect(sign.canvas, max(AWAY_GOAL_COLUMN, column - 1), CENTER_ROWS[0], min(HOME_GOAL_COLUMN, column + 1), CENTER_ROWS[1], BALL_COLOR)
 
 
 def info_lines(game, config, now):
@@ -668,9 +713,9 @@ def draw_game(sign, game, snapshot, config, now, elapsed):
 
     sign.canvas.Clear()
     draw_scoreboard(sign, game, colors, offense["id"] if offense else None)
-    draw_field(sign, colors, red_zone_side, elapsed)
+    draw_field(sign, game, colors, red_zone_side, elapsed)
     if offense is not None:
-        draw_ball(sign, situation, offense, colors, heading)
+        draw_ball(sign, situation, offense, heading)
 
     stale = is_stale(snapshot, now)
     clock, detail = info_lines(game, config, now)
