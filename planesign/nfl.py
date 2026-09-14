@@ -265,18 +265,26 @@ class NFLCache:
         self.snapshot = None
         self.next_attempt = 0
         self.failures = 0
+        self.pooled = False
 
     def interval(self):
         games = (self.snapshot or {}).get("games") or []
         return LIVE_TTL if any(game["state"] == "in" for game in games) else IDLE_TTL
 
     def poll(self, now, active):
-        if not active or now < self.next_attempt:
+        if not active:
+            # Keep-alive would otherwise hold a socket open to ESPN for as long as the sign runs.
+            if self.pooled:
+                self.session.close()
+                self.pooled = False
+            return None
+        if now < self.next_attempt:
             return None
         if self.snapshot and now - self.snapshot["fetched_at"] < self.interval():
             return None
         try:
             started = time.monotonic()
+            self.pooled = True
             response = self.session.get(SCOREBOARD_URL, timeout=REQUEST_TIMEOUT)
             if response.status_code != 200:
                 raise ValueError(f"ESPN HTTP {response.status_code}")

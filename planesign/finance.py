@@ -106,22 +106,23 @@ def finance(self):
 
     update_global_lists(client)
 
-    while shared_config.shared_mode.value == DisplayMode.FINANCE.value:
-        ticker = shared_config.data_dict["ticker"]
+    try:
+        while shared_config.shared_mode.value == DisplayMode.FINANCE.value:
+            ticker = shared_config.data_dict["ticker"]
 
-        if ticker is not None:
-            if s is None:
-                s = Stock(self, client, ticker)
-            elif s.ticker != ticker:
-                s.setticker(ticker)
+            if ticker is not None:
+                if s is None:
+                    s = Stock(self, client, ticker)
+                elif s.ticker != ticker:
+                    s.setticker(ticker)
 
-            s.drawfullpage()
+                s.drawfullpage()
 
-        breakout = self.wait_loop(0.5)
-        if breakout:
-            if s:
-                s.kill_ws()
-            return
+            if self.wait_loop(0.5):
+                return
+    finally:
+        if s:
+            s.kill_ws()
 
 
 def getLogo(headers, website):
@@ -137,23 +138,23 @@ def getLogo(headers, website):
     try:
         req = requests.get(website, stream=True, headers=headers, timeout=5)
         if req.status_code == requests.codes.ok:
-                image = Image.open(req.raw)
+            image = Image.open(req.raw)
 
-                width, height = image.size
+            width, height = image.size
 
-                desired_size = 300
-                # Pre-shrink if image is too big so imageprocess is faster
-                if height > desired_size or width > desired_size:
-                    if width > height:
-                        image = image.resize((desired_size, int(desired_size * height / width)), Image.BICUBIC)
-                    elif height > width:
-                        image = image.resize((int(desired_size * width / height), desired_size), Image.BICUBIC)
-                    else:
-                        image = image.resize((desired_size, desired_size), Image.BICUBIC)
+            desired_size = 300
+            # Pre-shrink if image is too big so imageprocess is faster
+            if height > desired_size or width > desired_size:
+                if width > height:
+                    image = image.resize((desired_size, int(desired_size * height / width)), Image.BICUBIC)
+                elif height > width:
+                    image = image.resize((int(desired_size * width / height), desired_size), Image.BICUBIC)
+                else:
+                    image = image.resize((desired_size, desired_size), Image.BICUBIC)
 
-                image = improcess(image.convert("RGBA"))
-                image = image.convert("RGB")
-                return image
+            image = improcess(image.convert("RGBA"))
+            image = image.convert("RGB")
+            return image
         else:
             return None
     except Exception:
@@ -205,6 +206,7 @@ class Stock:
         self.ws_server = "wss://ws.finnhub.io"
         self.ws = None
         self.thread = None
+        self.closed = False
         self.lock = Lock()
         self.errLock = Lock()
         self.errCode = None
@@ -343,6 +345,7 @@ Open Price={self.open_price}"
 
     def kill_ws(self):
         # Close existing websocket if we have one
+        self.closed = True
         if self.ws:
             self.ws.close()
             self.ws = None
@@ -353,6 +356,7 @@ Open Price={self.open_price}"
     def connect(self):
 
         self.kill_ws()
+        self.closed = False
 
         # Set to true for debugging
         websocket.enableTrace(False)
@@ -403,10 +407,19 @@ Open Price={self.open_price}"
         with self.errLock:
             err = self.errCode
         logging.debug(f"Got error code {err}")
-        if err == 1:
-            logging.debug("Attempting to reconnect to websocket.")
-            time.sleep(10)
-            self.connect()
+        if err != 1:
+            return
+        # This runs on a daemon thread that outlives the mode, so the backoff has to be
+        # interruptible and the mode re-checked; otherwise it reconnects to Finnhub forever.
+        for _ in range(40):
+            if self.closed or shared_config.shutdown_requested.value:
+                return
+            time.sleep(0.25)
+        if self.closed or shared_config.shared_mode.value != DisplayMode.FINANCE.value:
+            logging.debug("Finance mode no longer active, not reconnecting websocket.")
+            return
+        logging.debug("Attempting to reconnect to websocket.")
+        self.connect()
 
     def onOpen(self, ws):
         logging.debug(f"Opening Websocket connection to the server {self.ws_server} subscribed to ticker {self.ticker}...")

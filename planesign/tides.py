@@ -303,6 +303,7 @@ class TideCache:
         self.cycle_data = {"ranges": [], "spring_neap": None}
         self.cycle_at = 0
         self.cycle_next_attempt = 0
+        self.pooled = False
 
     def cycles(self, now):
         station_id = self.station["id"]
@@ -328,6 +329,10 @@ class TideCache:
 
     def poll(self, config, now, active=True):
         if not active:
+            # Keep-alive would otherwise hold a socket open to NOAA for as long as the sign runs.
+            if self.pooled:
+                self.session.close()
+                self.pooled = False
             return None
         location = sensor_location(config)
         if location != self.location:
@@ -342,6 +347,7 @@ class TideCache:
             return None
         if self.snapshot and now - self.snapshot["fetched_at"] < PREDICTIONS_TTL and covers_display(self.snapshot, now):
             return None
+        self.pooled = True
         try:
             if not self.catalog or now - self.catalog_at >= CATALOG_TTL:
                 catalog = noaa_json(self.session, STATIONS_URL, {"type": "tidepredictions"}, now).get("stations")
