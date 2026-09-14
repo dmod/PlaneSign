@@ -80,10 +80,8 @@ shared_config.data_dict["slowest"] = None
 
 
 def exit_gracefully(*args):
-    logging.info("Shutdown signal received, exiting gracefully...")
-    shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
-    shared_config.shared_forced_sign_update.set()
-    shared_config.shared_shutdown_event.set()
+    # Only lock-free shared memory is safe here; see shared_config.shutdown_requested.
+    shared_config.shutdown_requested.value = 1
 
 
 signal.signal(signal.SIGINT, exit_gracefully)
@@ -122,7 +120,25 @@ logging_queue = Queue(-1)
 listener = Process(target=log_listener_process, args=(logging_queue,))
 listener.start()
 
-queue_handler = logging.handlers.QueueHandler(logging_queue)
+_STANDARD_LOG_RECORD_KEYS = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
+
+
+class SanitizingQueueHandler(logging.handlers.QueueHandler):
+    # Libraries attach live objects to records via `extra` (websockets adds the connection), which
+    # the queue feeder thread cannot pickle, so the record is silently dropped from the log file.
+    def prepare(self, record):
+        record = super().prepare(record)
+        for key, value in list(record.__dict__.items()):
+            if key in _STANDARD_LOG_RECORD_KEYS or value is None or isinstance(value, (str, int, float, bool)):
+                continue
+            try:
+                record.__dict__[key] = repr(value)
+            except Exception:  # noqa: BLE001 - a broken __repr__ must never break logging
+                record.__dict__[key] = object.__repr__(value)
+        return record
+
+
+queue_handler = SanitizingQueueHandler(logging_queue)
 
 console_handler = logging.StreamHandler(sys.stdout)
 console_formatter = logging.Formatter("%(asctime)s [%(levelname)s] - %(message)s")
@@ -160,7 +176,9 @@ shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
 ps.sign_loop()
 
 logging.info("Sign loop exited, shutting down child processes...")
+shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
 shared_config.shared_shutdown_event.set()
+shared_config.shared_forced_sign_update.set()
 
 api_server_process.join(timeout=5)
 if api_server_process.is_alive():

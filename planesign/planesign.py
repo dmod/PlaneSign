@@ -54,6 +54,13 @@ class PlaneSign:
         forced_breakout = False
 
         while True:
+            if shared_config.shutdown_requested.value:
+                # Some handlers only watch shared_mode and ignore the breakout return, so flip the
+                # mode here; the signal handler itself cannot, because Value.value takes a lock.
+                shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
+                forced_breakout = True
+                break
+
             brightness = shared_config.shared_current_brightness.value
             if brightness != self.last_brightness:
                 self.matrix.brightness = brightness
@@ -77,7 +84,7 @@ class PlaneSign:
 
     def sign_loop(self):
 
-        while not shared_config.shared_shutdown_event.is_set():
+        while not shared_config.shutdown_in_progress():
             try:
                 display_mode = DisplayMode(shared_config.shared_mode.value)  # Convert int to enum
                 if display_mode in self.defined_mode_handlers:
@@ -89,11 +96,13 @@ class PlaneSign:
 
             except KeyboardInterrupt:
                 logging.info("KeyboardInterrupt received, shutting down sign loop...")
-                shared_config.shared_shutdown_event.set()
+                shared_config.shutdown_requested.value = 1
                 break
             except Exception:
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
                 shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value  # Reset to default mode
 
+        self.canvas.Clear()
+        self.canvas = self.matrix.SwapOnVSync(self.canvas)
         logging.info("--- END OF SIGN LOOP ---")

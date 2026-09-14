@@ -28,6 +28,12 @@ shared_snow_mode = Value("i", 1)
 
 free_sketch_pixels = Array("B", 128 * 32 * 3)
 
+# Signal handlers run on the main thread between bytecodes, so they may only touch lock-free
+# shared memory. Anything holding a lock (logging, Event.set(), manager proxies) deadlocks when
+# the handler interrupts the same lock, which is why shutdown is requested through this flag and
+# acted on by the main loop instead.
+shutdown_requested = Value("b", 0, lock=False)
+
 local_timezone = None
 
 # True when running with --web (emulated matrix streamed to a browser). In that case there is
@@ -55,3 +61,7 @@ CONF = None
 
 code_to_airport = {}
 airport_codes_to_ignore = set()
+
+
+def shutdown_in_progress():
+    return bool(shutdown_requested.value) or (shared_shutdown_event is not None and shared_shutdown_event.is_set())
