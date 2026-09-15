@@ -524,6 +524,14 @@ def next_upcoming_game(snapshot, now):
     return min(future or scheduled, key=lambda game: game["kickoff"] or float("inf"))
 
 
+def followed_game(snapshot, now):
+    """Game to show when no game is pinned: the one that kicked off first, otherwise the next matchup."""
+    live = [game for game in (snapshot or {}).get("games") or [] if game["state"] == "in"]
+    if live:
+        return min(live, key=lambda game: game["kickoff"] or 0)
+    return next_upcoming_game(snapshot, now)
+
+
 def countdown_label(kickoff, now):
     if not kickoff:
         return "KICKOFF TBD"
@@ -785,16 +793,13 @@ def draw_nfl_frame(sign, snapshot, game_id, config, now, elapsed):
     if snapshot.get("status") == "unavailable":
         draw_message(sign, [("No data", WARN_COLOR), ("Check network", INFO_COLOR)])
         return
-    game = find_game(snapshot, game_id)
-    live = sum(1 for entry in snapshot.get("games") or [] if entry["state"] == "in")
-    if not live and (game is None or game["state"] == "pre"):
-        # With nothing being played, an empty field says less than the matchup that is coming.
-        preview = game or next_upcoming_game(snapshot, now)
-        if preview is not None:
-            draw_upcoming(sign, preview, snapshot, config, now, elapsed)
-            return
+    game = find_game(snapshot, game_id) or followed_game(snapshot, now)
     if game is None:
-        draw_message(sign, [("Pick a game", INFO_COLOR), (f"{live} live now" if live else "No games live", INFO_COLOR if live else WARN_COLOR)])
+        draw_message(sign, [("Pick a game", INFO_COLOR), ("No games live", WARN_COLOR)])
+        return
+    if game["state"] == "pre":
+        # An empty field says less than the matchup that is coming.
+        draw_upcoming(sign, game, snapshot, config, now, elapsed)
         return
     draw_game(sign, game, snapshot, config, now, elapsed)
 

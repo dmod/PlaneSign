@@ -578,7 +578,8 @@ def get_nfl_games():
 @app.route("/set_nfl_game/", defaults={"game_id": ""})
 @app.route("/set_nfl_game/<game_id>")
 def set_nfl_game(game_id):
-    if nfl.find_game(shared_config.data_dict.get("nfl"), game_id) is None:
+    # An empty id unpins the selection so the sign follows the next or live game on its own.
+    if game_id and nfl.find_game(shared_config.data_dict.get("nfl"), game_id) is None:
         return jsonify({"ok": False, "error": "Unknown game"}), 404
     shared_config.data_dict["nfl_game_id"] = game_id
     shared_config.shared_forced_sign_update.set()

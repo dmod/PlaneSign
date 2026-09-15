@@ -2076,9 +2076,7 @@ function schedule_nfl_refresh(retry_soon) {
 }
 
 function set_nfl_game(game_id) {
-    if (game_id) {
-        call_endpoint("/set_nfl_game/" + encodeURIComponent(game_id));
-    }
+    call_endpoint("/set_nfl_game/" + encodeURIComponent(game_id));
 }
 
 function set_mode(mode) {
