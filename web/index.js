@@ -2373,6 +2373,10 @@ function update_sign_status() {
                 sync_lightning_controls();
             }
 
+            if (global_current_mode == "NFL") {
+                get_nfl_games();
+            }
+
             if (global_current_mode == "FREE_SKETCH") {
                 open_free_sketch_modal();
             }
