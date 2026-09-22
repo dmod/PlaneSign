@@ -48,6 +48,7 @@ import horse_race
 import identify
 import lightning
 import mandelbrot
+import mlb
 import moon
 import nfl
 import planes
@@ -161,6 +162,7 @@ plane_data_process = Process(target=planes.get_plane_data_worker, name="PlaneDat
 weather_data_process = Process(target=weather.get_weather_data_worker, name="WeatherData", args=(shared_config.data_dict,))
 tides_data_process = Process(target=tides.get_tides_data_worker, name="TidesData", args=(shared_config.data_dict,))
 nfl_data_process = Process(target=nfl.get_nfl_data_worker, name="NFLData", args=(shared_config.data_dict,))
+mlb_data_process = Process(target=mlb.get_mlb_data_worker, name="MLBData", args=(shared_config.data_dict,))
 
 utilities.read_config()
 
@@ -169,6 +171,7 @@ plane_data_process.start()
 weather_data_process.start()
 tides_data_process.start()
 nfl_data_process.start()
+mlb_data_process.start()
 
 ps = planesign.PlaneSign(defined_mode_handlers)
 defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
@@ -209,6 +212,12 @@ if nfl_data_process.is_alive():
     logging.warning("NFL data process did not exit in time, terminating...")
     nfl_data_process.terminate()
     nfl_data_process.join(timeout=2)
+
+mlb_data_process.join(timeout=10)
+if mlb_data_process.is_alive():
+    logging.warning("MLB data process did not exit in time, terminating...")
+    mlb_data_process.terminate()
+    mlb_data_process.join(timeout=2)
 
 logging_queue.put(None)
 listener.join(timeout=5)

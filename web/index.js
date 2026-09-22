@@ -2079,6 +2079,48 @@ function set_nfl_game(game_id) {
     call_endpoint("/set_nfl_game/" + encodeURIComponent(game_id));
 }
 
+var mlb_refresh_timer = null;
+
+function get_mlb_games() {
+    call_endpoint("/get_mlb_games", function (response) {
+        var data = JSON.parse(response);
+        var games = data["games"] || [];
+        var select = document.getElementById("mlb_game_select");
+
+        if (select) {
+            var previous = select.value;
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            games.forEach(function (game) {
+                var option = document.createElement("option");
+                option.value = game["id"];
+                option.text = game["label"];
+                select.add(option);
+            });
+            select.value = previous;
+            if (select.value !== previous) {
+                select.selectedIndex = 0;
+            }
+        }
+
+        schedule_mlb_refresh(data["status"] === "loading");
+    });
+}
+
+function schedule_mlb_refresh(retry_soon) {
+    clearTimeout(mlb_refresh_timer);
+    var mlb_div = document.getElementById("mlb_div");
+    if (!mlb_div || mlb_div.hidden) {
+        return;
+    }
+    mlb_refresh_timer = setTimeout(get_mlb_games, retry_soon ? 2000 : 30000);
+}
+
+function set_mlb_game(game_id) {
+    call_endpoint("/set_mlb_game/" + encodeURIComponent(game_id));
+}
+
 function set_mode(mode) {
     set_current_mode_button(mode);
 
@@ -2118,6 +2160,10 @@ function set_mode(mode) {
     if (mode !== 'NFL') {
         document.getElementById('nfl_div').hidden = true;
         clearTimeout(nfl_refresh_timer);
+    }
+    if (mode !== 'MLB') {
+        document.getElementById('mlb_div').hidden = true;
+        clearTimeout(mlb_refresh_timer);
     }
     if (mode !== 'FREE_SKETCH') {
         close_free_sketch_modal();
@@ -2375,6 +2421,10 @@ function update_sign_status() {
 
             if (global_current_mode == "NFL") {
                 get_nfl_games();
+            }
+
+            if (global_current_mode == "MLB") {
+                get_mlb_games();
             }
 
             if (global_current_mode == "FREE_SKETCH") {

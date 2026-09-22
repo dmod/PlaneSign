@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=nfl-game-list-1"></script>
+  <script src="index.js?v=mlb-game-list-1"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -129,6 +129,14 @@
               <button id="NFL" class="mode_button" onclick="set_mode(this.id); document.getElementById('nfl_div').hidden = false; get_nfl_games()">NFL 🏈</button>
               <div id="nfl_div" hidden>
                 <select name="nfl_game" id="nfl_game_select" onchange="set_nfl_game(this.value)">
+                  <option value="">Auto (next / live game)</option>
+                </select>
+              </div>
+            </div>
+            <div class="command-mode-item">
+              <button id="MLB" class="mode_button" onclick="set_mode(this.id); document.getElementById('mlb_div').hidden = false; get_mlb_games()">MLB ⚾</button>
+              <div id="mlb_div" hidden>
+                <select name="mlb_game" id="mlb_game_select" onchange="set_mlb_game(this.value)">
                   <option value="">Auto (next / live game)</option>
                 </select>
               </div>
