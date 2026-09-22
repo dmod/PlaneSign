@@ -21,71 +21,79 @@ MAX_RETRY = 15 * 60
 STALE_AFTER = 5 * 60
 FRAME_INTERVAL = 0.05
 
-PANEL_RIGHT = 46
+PANEL_RIGHT = 38
 ROW_SPLIT = 16
-ABBR_COLUMN = 2
+ABBR_COLUMN = 1
 ABBR_BASELINE = 7
-MARKER_COLUMN = 19
+MARKER_COLUMN = 17
 MARKER_ROW = 4
-RECORD_COLUMN = 2
-RECORD_BASELINE = 15
-RECORD_MAX_CHARS = 6
+HITS_COLUMN = 1
+HITS_BASELINE = 15
 SCORE_WIDTH = 9
-SCORE_RIGHT = 45
+SCORE_RIGHT = 38
 SCORE_BASELINE = 13
 
-STATUS_LEFT = 48
-STATUS_RIGHT = 60
-STATUS_LEVEL = 0.22
-HITS_BASELINE = 7
-ERRORS_BASELINE = 15
-STAT_WIDTH = 4
-
-RIGHT_LEFT = 62
-RIGHT_RIGHT = 127
-STATE_BASELINE = 5
-INFO_BASELINE = 32
-DETAIL_LEFT = 62
-DETAIL_RIGHT = 101
-DETAIL_WIDTH = DETAIL_RIGHT - DETAIL_LEFT + 1
-DETAIL_BASELINES = (11, 19, 27)
+# Everything between the score cards and the field: game state, count, rotating detail.
+MIDDLE_LEFT = 40
+MIDDLE_RIGHT = 94
+MIDDLE_WIDTH = MIDDLE_RIGHT - MIDDLE_LEFT + 1
+COUNT_COLUMN = 40
+COUNT_BASELINE = 23
+OUTS_RIGHT = 94
+OUTS_BASELINE = 21
+DECISION_BASELINES = (17, 24)
+INFO_LEFT = 40
+# The field narrows to a wedge down by home plate, so the detail line can run in under it.
+INFO_RIGHT = 103
+INFO_BASELINE = 31
 DETAIL_SECONDS = 3.5
 
-# Balls, strikes and outs read as ballpark count lights; each row is five pixels tall.
-COUNT_ROWS = (6, 14, 22)
-PIP_SIZE = 5
-PIP_GAP = 2
-COUNT_LABELS = ("B", "S", "O")
-COUNT_CAPACITY = (3, 2, 3)
-COUNT_GROUP_WIDTH = STAT_WIDTH + 3 + max(COUNT_CAPACITY) * PIP_SIZE + (max(COUNT_CAPACITY) - 1) * PIP_GAP
-COUNT_LABEL_COLUMN = DETAIL_LEFT + (DETAIL_WIDTH - COUNT_GROUP_WIDTH) // 2
-COUNT_PIP_COLUMN = COUNT_LABEL_COLUMN + STAT_WIDTH + 3
+BALL_CAPACITY = 3
+STRIKE_CAPACITY = 2
+OUT_CAPACITY = 3
 
-# The infield is drawn as a 45 degree diamond, so the half diagonal sets both its width and height.
-DIAMOND_CX = 115
-DIAMOND_CY = 16
-DIAMOND_R = 9
+# The infield is drawn as a real ballpark seen from above: a dirt skin bounded by the foul
+# lines and the outfield arc, with the grass diamond, mound and home plate circle cut into it.
+FIELD_LEFT = 96
+FIELD_RIGHT = 126
+FIELD_TOP = 0
+FIELD_BOTTOM = 30
+FIELD_CX = 111
+HOME_ROW = 29
+BASE_R = 12
+MOUND_ROW = HOME_ROW - BASE_R
+ARC_R = 15
+GRASS_R = 9
+HOME_DIRT_R = 4
+MOUND_DIRT_R = 2
 BASE_HALF = 1
 
-TURF_DARK = (10, 58, 26)
-TURF_LIGHT = (15, 80, 37)
-DIRT_COLOR = (124, 78, 44)
-BASE_EMPTY_COLOR = (88, 88, 88)
+SHIMMER_PERIOD = 7.0
+SHIMMER_SWEEP = 0.38
+SHIMMER_GAIN = 0.45
+SHIMMER_WIDTH = 7.0
+
+GRASS_DARK = (10, 58, 26)
+GRASS_LIGHT = (15, 80, 37)
+OUTFIELD_DARK = (8, 48, 22)
+OUTFIELD_LIGHT = (12, 66, 30)
+DIRT_COLOR = (132, 84, 48)
+DIRT_LIGHT = (156, 104, 62)
+DIRT_DARK = (108, 66, 38)
+BASE_EMPTY_COLOR = (120, 120, 120)
 BASE_RUNNER_COLOR = (255, 215, 60)
 HOME_PLATE_COLOR = (238, 238, 238)
-MOUND_COLOR = (132, 84, 48)
-BALL_PIP_COLOR = (60, 205, 95)
-STRIKE_PIP_COLOR = (245, 195, 60)
-OUT_PIP_COLOR = (238, 72, 56)
-PIP_OFF_COLOR = (46, 46, 46)
-PIP_LABEL_COLOR = (185, 195, 205)
+BALL_COUNT_COLOR = (60, 205, 95)
+STRIKE_COUNT_COLOR = (245, 195, 60)
+OUT_COUNT_COLOR = (238, 72, 56)
+COUNT_DASH_COLOR = (120, 130, 140)
+HITS_COLOR_LEVEL = 0.78
 TITLE_COLOR = (225, 80, 80)
 STATE_COLOR = (215, 230, 245)
 STALE_COLOR = (255, 190, 90)
 INFO_COLOR = (150, 200, 235)
 WARN_COLOR = (240, 180, 90)
 MATCHUP_COLOR = (205, 215, 230)
-STAT_LABEL_LEVEL = 0.65
 BATTING_COLOR = (250, 246, 235)
 BATTING_SEAM_COLOR = (215, 60, 50)
 WINNER_COLOR = (120, 225, 150)
@@ -357,9 +365,9 @@ def situation_snapshot(competition):
             if name:
                 due_up.append(name)
     return {
-        "balls": count_value(situation.get("balls"), COUNT_CAPACITY[0]),
-        "strikes": count_value(situation.get("strikes"), COUNT_CAPACITY[1]),
-        "outs": count_value(situation.get("outs"), COUNT_CAPACITY[2]),
+        "balls": count_value(situation.get("balls"), BALL_CAPACITY),
+        "strikes": count_value(situation.get("strikes"), STRIKE_CAPACITY),
+        "outs": count_value(situation.get("outs"), OUT_CAPACITY),
         "on_first": bool(situation.get("onFirst")),
         "on_second": bool(situation.get("onSecond")),
         "on_third": bool(situation.get("onThird")),
@@ -631,6 +639,13 @@ def upcoming_details(game, now):
     return details
 
 
+def error_label(game):
+    away, home = game["away"]["errors"], game["home"]["errors"]
+    if away is None or home is None or not (away or home):
+        return ""
+    return f"ERRORS {away}-{home}"
+
+
 def live_details(game):
     situation = game["situation"] or {}
     details = []
@@ -640,14 +655,19 @@ def live_details(game):
         details.append(f"P {situation['pitcher']}")
     for name in situation.get("due_up") or []:
         details.append(f"DUE {name}")
+    if error_label(game):
+        details.append(error_label(game))
+    for team in (game["away"], game["home"]):
+        if team["record"]:
+            details.append(f"{team['abbr']} {team['record']}")
     if game["series_status"]:
         details.append(game["series_status"])
     return details
 
 
 def decision_lines(game):
-    """Winning and losing pitchers in box score shorthand, trimmed to the narrow column beside the diamond."""
-    room = DETAIL_WIDTH // STAT_WIDTH
+    """Winning and losing pitchers in box score shorthand, trimmed to the column beside the field."""
+    room = MIDDLE_WIDTH // 4
     return [f"{label[0]} {surname(name)}"[:room] for label, name in game["decisions"][:MIDDLE_DECISIONS]]
 
 
@@ -656,9 +676,11 @@ def final_details(game, config):
     if game["first_pitch"]:
         played = utilities.convert_unix_to_local_time(game["first_pitch"])
         details.append(f"{played.strftime('%a %-m/%-d').upper()} {clock_label(game['first_pitch'], military_time(config), compact=True)}")
-    # The first decisions already have their own lines beside the diamond.
+    # The first decisions already have their own lines beside the field.
     for label, name in game["decisions"][MIDDLE_DECISIONS:]:
         details.append(f"{label} {name}")
+    if error_label(game):
+        details.append(error_label(game))
     if game["series_status"]:
         details.append(game["series_status"])
     if game["venue"]["name"]:
@@ -672,7 +694,7 @@ def fill_rect(canvas, x0, y0, x1, y1, color):
         graphics.DrawLine(canvas, x0, row, x1, row, pen)
 
 
-def draw_centered(canvas, font, width, baseline, color, text, left=RIGHT_LEFT, right=RIGHT_RIGHT):
+def draw_centered(canvas, font, width, baseline, color, text, left=MIDDLE_LEFT, right=MIDDLE_RIGHT):
     text = text.encode("ascii", "replace").decode("ascii")[: (right - left + 1) // width]
     column = left + (right - left + 1 - len(text) * width) // 2
     graphics.DrawText(canvas, font, column, baseline, graphics.Color(*color), text)
@@ -705,8 +727,9 @@ def draw_team_panel(sign, team, color, top, marker):
     pen = graphics.Color(*text_color_for(color))
     fill_rect(sign.canvas, 0, top, PANEL_RIGHT, top + ROW_SPLIT - 1, color)
     graphics.DrawText(sign.canvas, sign.font57, ABBR_COLUMN, top + ABBR_BASELINE, pen, team["abbr"])
-    if team["record"] and len(team["record"]) <= RECORD_MAX_CHARS:
-        graphics.DrawText(sign.canvas, sign.font46, RECORD_COLUMN, top + RECORD_BASELINE, pen, team["record"])
+    if team["hits"] is not None:
+        hits_pen = graphics.Color(*scale(text_color_for(color), HITS_COLOR_LEVEL))
+        graphics.DrawText(sign.canvas, sign.font46, HITS_COLUMN, top + HITS_BASELINE, hits_pen, f"{team['hits']}H")
     score = score_text(team)
     graphics.DrawText(sign.canvas, sign.fontreallybig, SCORE_RIGHT - len(score) * SCORE_WIDTH + 1, top + SCORE_BASELINE, pen, score)
     if marker == "batting":
@@ -717,83 +740,110 @@ def draw_team_panel(sign, team, color, top, marker):
         draw_winner_marker(sign.canvas, MARKER_COLUMN, top + MARKER_ROW, WINNER_COLOR)
 
 
-def draw_team_stats(sign, team, color, top):
-    """Hits and errors, the rest of the classic R H E line, beside each team block."""
-    fill_rect(sign.canvas, STATUS_LEFT, top, STATUS_RIGHT, top + ROW_SPLIT - 1, scale(color, STATUS_LEVEL))
-    label_pen = graphics.Color(*scale(PIP_LABEL_COLOR, STAT_LABEL_LEVEL))
-    value_pen = graphics.Color(*PIP_LABEL_COLOR)
-    for label, value, baseline in (("H", team["hits"], HITS_BASELINE), ("E", team["errors"], ERRORS_BASELINE)):
-        graphics.DrawText(sign.canvas, sign.font46, STATUS_LEFT, top + baseline, label_pen, label)
-        text = "-" if value is None else str(value)[:2]
-        graphics.DrawText(sign.canvas, sign.font46, STATUS_RIGHT + 1 - len(text) * STAT_WIDTH, top + baseline, value_pen, text)
-
-
 def draw_scoreboard(sign, game, colors, markers):
     for team, color, top, marker in ((game["away"], colors[0], 0, markers[0]), (game["home"], colors[1], ROW_SPLIT, markers[1])):
         draw_team_panel(sign, team, color, top, marker)
-        draw_team_stats(sign, team, color, top)
 
 
-def draw_pip(canvas, left, top, color):
-    """A five pixel count light with clipped corners so it reads as a lamp, not a block."""
-    pen = graphics.Color(*color)
-    graphics.DrawLine(canvas, left + 1, top, left + PIP_SIZE - 2, top, pen)
-    for row in range(top + 1, top + PIP_SIZE - 1):
-        graphics.DrawLine(canvas, left, row, left + PIP_SIZE - 1, row, pen)
-    graphics.DrawLine(canvas, left + 1, top + PIP_SIZE - 1, left + PIP_SIZE - 2, top + PIP_SIZE - 1, pen)
+def draw_state(sign, text, color):
+    """Game state in the largest font that fits, so RAIN DELAY never has to be clipped."""
+    for font, width, baseline in ((sign.fontbig, 6, 10), (sign.font57, 5, 9), (sign.font46, 4, 8)):
+        if len(text) * width <= MIDDLE_WIDTH:
+            draw_centered(sign.canvas, font, width, baseline, color, text)
+            return
+    draw_centered(sign.canvas, sign.font46, 4, 8, color, text)
 
 
 def draw_count(sign, situation):
-    values = (situation["balls"], situation["strikes"], situation["outs"])
-    colors = (BALL_PIP_COLOR, STRIKE_PIP_COLOR, OUT_PIP_COLOR)
-    label_pen = graphics.Color(*PIP_LABEL_COLOR)
-    for top, label, value, capacity, color in zip(COUNT_ROWS, COUNT_LABELS, values, COUNT_CAPACITY, colors):
-        graphics.DrawText(sign.canvas, sign.font46, COUNT_LABEL_COLUMN, top + PIP_SIZE, label_pen, label)
-        for index in range(capacity):
-            left = COUNT_PIP_COLUMN + index * (PIP_SIZE + PIP_GAP)
-            draw_pip(sign.canvas, left, top, color if index < value else PIP_OFF_COLOR)
+    """Balls and strikes as a large count, with the outs called out beside it."""
+    column = COUNT_COLUMN
+    for text, color in ((str(situation["balls"]), BALL_COUNT_COLOR), ("-", COUNT_DASH_COLOR), (str(situation["strikes"]), STRIKE_COUNT_COLOR)):
+        graphics.DrawText(sign.canvas, sign.fontreallybig, column, COUNT_BASELINE, graphics.Color(*color), text)
+        column += SCORE_WIDTH
+    outs = f"{situation['outs']} OUT"
+    graphics.DrawText(sign.canvas, sign.font57, OUTS_RIGHT + 1 - len(outs) * 5, OUTS_BASELINE, graphics.Color(*OUT_COUNT_COLOR), outs)
 
 
-def draw_detail_lines(sign, lines):
-    for baseline, text in zip(DETAIL_BASELINES, lines):
-        draw_centered(sign.canvas, sign.font46, 4, baseline, INFO_COLOR, text, DETAIL_LEFT, DETAIL_RIGHT)
+def draw_decisions(sign, lines):
+    for baseline, text in zip(DECISION_BASELINES, lines):
+        draw_centered(sign.canvas, sign.font46, 4, baseline, INFO_COLOR, text)
 
 
 def draw_base(canvas, cx, cy, color):
     fill_rect(canvas, cx - BASE_HALF, cy - BASE_HALF, cx + BASE_HALF, cy + BASE_HALF, color)
 
 
-def draw_diamond(sign, situation):
+def grit(x, y):
+    """Deterministic speckle so the skin reads as raked dirt instead of flat paint."""
+    return (x * 7 + y * 13 + (x * y) % 5) % 7
+
+
+def build_field():
+    """Static ballpark pixels: (x, y, color, sheen axis), built once and reused every frame."""
+    pixels = []
+    for y in range(FIELD_TOP, FIELD_BOTTOM + 1):
+        for x in range(FIELD_LEFT, FIELD_RIGHT + 1):
+            offset, height = x - FIELD_CX, HOME_ROW - y
+            fair = abs(offset) <= height
+            from_mound = math.hypot(offset, y - MOUND_ROW)
+            from_home = math.hypot(offset, y - HOME_ROW)
+            if fair and from_mound <= ARC_R:
+                # Inside the infield skin: the grass diamond is cut back out of the dirt.
+                on_grass = abs(offset) + abs(y - MOUND_ROW) <= GRASS_R and from_mound > MOUND_DIRT_R and from_home > HOME_DIRT_R
+                if on_grass:
+                    color = GRASS_LIGHT if (y // 3) % 2 else GRASS_DARK
+                else:
+                    speckle = grit(x, y)
+                    color = DIRT_LIGHT if speckle == 0 else DIRT_DARK if speckle == 1 else DIRT_COLOR
+            elif from_home <= HOME_DIRT_R:
+                color = DIRT_LIGHT if grit(x, y) == 0 else DIRT_COLOR
+            elif fair:
+                color = OUTFIELD_LIGHT if (y // 3) % 2 else OUTFIELD_DARK
+            else:
+                continue
+            pixels.append((x, y, color, (x - FIELD_LEFT) + (FIELD_BOTTOM - y)))
+    return tuple(pixels)
+
+
+FIELD_PIXELS = None
+FIELD_SPAN = (FIELD_RIGHT - FIELD_LEFT) + (FIELD_BOTTOM - FIELD_TOP)
+
+
+def sheen(color, gain):
+    return tuple(min(255, round(channel * (1 + gain))) for channel in color)
+
+
+def shimmer_position(elapsed):
+    """Where the light sweep sits, or None while it rests between passes."""
+    phase = (elapsed % SHIMMER_PERIOD) / SHIMMER_PERIOD
+    if phase > SHIMMER_SWEEP:
+        return None
+    return -SHIMMER_WIDTH + (phase / SHIMMER_SWEEP) * (FIELD_SPAN + 2 * SHIMMER_WIDTH)
+
+
+def draw_field(sign, situation, elapsed):
+    global FIELD_PIXELS
+    if FIELD_PIXELS is None:
+        FIELD_PIXELS = build_field()
     canvas = sign.canvas
-    for offset in range(-DIAMOND_R, DIAMOND_R + 1):
-        half = DIAMOND_R - abs(offset)
-        row = DIAMOND_CY + offset
-        # Alternating mow bands give the infield some depth at this scale.
-        turf = TURF_LIGHT if (offset + DIAMOND_R) // 3 % 2 else TURF_DARK
-        graphics.DrawLine(canvas, DIAMOND_CX - half, row, DIAMOND_CX + half, row, graphics.Color(*turf))
+    position = shimmer_position(elapsed)
+    for x, y, color, axis in FIELD_PIXELS:
+        if position is not None:
+            distance = abs(axis - position)
+            if distance < SHIMMER_WIDTH:
+                canvas.SetPixel(x, y, *sheen(color, SHIMMER_GAIN * (1 - (distance / SHIMMER_WIDTH) ** 2)))
+                continue
+        canvas.SetPixel(x, y, *color)
 
-    home = (DIAMOND_CX, DIAMOND_CY + DIAMOND_R)
-    first = (DIAMOND_CX + DIAMOND_R, DIAMOND_CY)
-    second = (DIAMOND_CX, DIAMOND_CY - DIAMOND_R)
-    third = (DIAMOND_CX - DIAMOND_R, DIAMOND_CY)
-    dirt_pen = graphics.Color(*DIRT_COLOR)
-    for start, end in ((home, first), (first, second), (second, third), (third, home)):
-        graphics.DrawLine(canvas, start[0], start[1], end[0], end[1], dirt_pen)
-
-    mound_pen = graphics.Color(*MOUND_COLOR)
-    graphics.DrawLine(canvas, DIAMOND_CX - 1, DIAMOND_CY, DIAMOND_CX + 1, DIAMOND_CY, mound_pen)
-    canvas.SetPixel(DIAMOND_CX, DIAMOND_CY - 1, *MOUND_COLOR)
-    canvas.SetPixel(DIAMOND_CX, DIAMOND_CY + 1, *MOUND_COLOR)
-
-    runners = ((first, "on_first"), (second, "on_second"), (third, "on_third"))
-    for (cx, cy), key in runners:
+    bases = ((FIELD_CX + BASE_R, MOUND_ROW, "on_first"), (FIELD_CX, MOUND_ROW - BASE_R, "on_second"), (FIELD_CX - BASE_R, MOUND_ROW, "on_third"))
+    for cx, cy, key in bases:
         occupied = bool((situation or {}).get(key))
         draw_base(canvas, cx, cy, BASE_RUNNER_COLOR if occupied else BASE_EMPTY_COLOR)
 
     plate_pen = graphics.Color(*HOME_PLATE_COLOR)
-    graphics.DrawLine(canvas, home[0] - 1, home[1] - 1, home[0] + 1, home[1] - 1, plate_pen)
-    graphics.DrawLine(canvas, home[0] - 1, home[1], home[0] + 1, home[1], plate_pen)
-    canvas.SetPixel(home[0], home[1] + 1, *HOME_PLATE_COLOR)
+    graphics.DrawLine(canvas, FIELD_CX - 1, HOME_ROW - 1, FIELD_CX + 1, HOME_ROW - 1, plate_pen)
+    graphics.DrawLine(canvas, FIELD_CX - 1, HOME_ROW, FIELD_CX + 1, HOME_ROW, plate_pen)
+    canvas.SetPixel(FIELD_CX, HOME_ROW + 1, *HOME_PLATE_COLOR)
 
 
 def is_stale(snapshot, now):
@@ -816,17 +866,16 @@ def draw_game(sign, game, snapshot, config, now, elapsed):
 
     sign.canvas.Clear()
     draw_scoreboard(sign, game, colors, markers)
-    draw_diamond(sign, game["situation"])
+    draw_field(sign, game["situation"], elapsed)
     if game["state"] == "in" and game["situation"]:
         draw_count(sign, game["situation"])
     elif game["state"] == "post":
-        draw_detail_lines(sign, decision_lines(game))
+        draw_decisions(sign, decision_lines(game))
 
-    state_color = STALE_COLOR if is_stale(snapshot, now) else STATE_COLOR
-    draw_centered(sign.canvas, sign.font46, 4, STATE_BASELINE, state_color, game["state_text"])
+    draw_state(sign, game["state_text"], STALE_COLOR if is_stale(snapshot, now) else STATE_COLOR)
     details = final_details(game, config) if game["state"] == "post" else live_details(game)
     if details:
-        draw_centered(sign.canvas, sign.font46, 4, INFO_BASELINE, INFO_COLOR, details[int(elapsed / DETAIL_SECONDS) % len(details)])
+        draw_centered(sign.canvas, sign.font46, 4, INFO_BASELINE, INFO_COLOR, details[int(elapsed / DETAIL_SECONDS) % len(details)], INFO_LEFT, INFO_RIGHT)
 
 
 def draw_upcoming(sign, game, snapshot, config, now, elapsed):
