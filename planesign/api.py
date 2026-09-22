@@ -567,13 +567,28 @@ def submit_ticker(ticker):
     return ""
 
 
+def pinned_game_id(league, module, snapshot):
+    """Report the pinned game, unpinning it once it drops out of a scoreboard we can trust."""
+    key = f"{league}_game_id"
+    game_id = shared_config.data_dict.get(key) or ""
+    if not game_id:
+        return ""
+    # "unavailable" means the fetch itself failed, so its empty game list is no evidence that
+    # the pinned game is gone and the selection survives until real data comes back.
+    if snapshot.get("status") != "unavailable" and module.find_game(snapshot, game_id) is None:
+        shared_config.data_dict[key] = ""
+        shared_config.shared_forced_sign_update.set()
+        return ""
+    return game_id
+
+
 @app.route("/get_nfl_games")
 def get_nfl_games():
     snapshot = shared_config.data_dict.get("nfl")
     if not snapshot:
-        return jsonify({"games": [], "status": "loading"})
+        return jsonify({"games": [], "selected": shared_config.data_dict.get("nfl_game_id") or "", "status": "loading"})
     military = str(shared_config.CONF.get("MILITARY_TIME", "false")).lower() == "true"
-    return jsonify({"games": nfl.game_options(snapshot, time.time(), military), "status": snapshot.get("status", "ready")})
+    return jsonify({"games": nfl.game_options(snapshot, time.time(), military), "selected": pinned_game_id("nfl", nfl, snapshot), "status": snapshot.get("status", "ready")})
 
 
 @app.route("/set_nfl_game/", defaults={"game_id": ""})
@@ -591,9 +606,9 @@ def set_nfl_game(game_id):
 def get_mlb_games():
     snapshot = shared_config.data_dict.get("mlb")
     if not snapshot:
-        return jsonify({"games": [], "status": "loading"})
+        return jsonify({"games": [], "selected": shared_config.data_dict.get("mlb_game_id") or "", "status": "loading"})
     military = str(shared_config.CONF.get("MILITARY_TIME", "false")).lower() == "true"
-    return jsonify({"games": mlb.game_options(snapshot, time.time(), military), "status": snapshot.get("status", "ready")})
+    return jsonify({"games": mlb.game_options(snapshot, time.time(), military), "selected": pinned_game_id("mlb", mlb, snapshot), "status": snapshot.get("status", "ready")})
 
 
 @app.route("/set_mlb_game/", defaults={"game_id": ""})

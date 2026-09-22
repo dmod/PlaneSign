@@ -277,11 +277,17 @@ function submit_ticker() {
     document.getElementById("ticker").value = "";
 }
 
-function call_endpoint(endpoint, callback) {
+function call_endpoint(endpoint, callback, on_complete) {
     var request = new XMLHttpRequest();
     request.onreadystatechange = function () {
-        if (this.readyState === 4 && request.status == 200 && callback) {
-            callback(request.responseText);
+        if (this.readyState === 4) {
+            if (request.status == 200 && callback) {
+                callback(request.responseText);
+            }
+            // Runs for failures too, so callers tracking in-flight requests always settle.
+            if (on_complete) {
+                on_complete(request.status);
+            }
         }
     }
     request.open('GET', "api" + endpoint, true);
@@ -2037,16 +2043,37 @@ function populate_sound_dropdown() {
     });
 }
 
-var nfl_refresh_timer = null;
+// The pinned game belongs to the sign, not to this page, so the dropdown is restored from the
+// server on every load rather than from whatever this browser session happened to select.
+var game_pickers = {
+    nfl: {
+        league: "nfl",
+        refresh_timer: null,
+        selection: "",
+        selection_epoch: 0,
+        selections_pending: 0,
+        retry_soon: function (data) { return (data["games"] || []).length === 0; }
+    },
+    mlb: {
+        league: "mlb",
+        refresh_timer: null,
+        selection: "",
+        selection_epoch: 0,
+        selections_pending: 0,
+        retry_soon: function (data) { return data["status"] === "loading"; }
+    }
+};
 
-function get_nfl_games() {
-    call_endpoint("/get_nfl_games", function (response) {
+function get_league_games(picker) {
+    var epoch_at_request = picker.selection_epoch;
+    var settled_at_request = picker.selections_pending === 0;
+
+    call_endpoint("/get_" + picker.league + "_games", function (response) {
         var data = JSON.parse(response);
         var games = data["games"] || [];
-        var select = document.getElementById("nfl_game_select");
+        var select = document.getElementById(picker.league + "_game_select");
 
         if (select) {
-            var previous = select.value;
             while (select.options.length > 1) {
                 select.remove(1);
             }
@@ -2056,69 +2083,57 @@ function get_nfl_games() {
                 option.text = game["label"];
                 select.add(option);
             });
-            select.value = previous;
-            if (select.value !== previous) {
+
+            // This response only reflects the pinned game when no pick was in flight as it was
+            // sent and none was made while waiting; otherwise the local choice is the newer one.
+            var settled = settled_at_request && picker.selections_pending === 0 && picker.selection_epoch === epoch_at_request;
+            var wanted = settled ? (data["selected"] || "") : picker.selection;
+            select.value = wanted;
+            if (select.value !== wanted) {
+                // The pinned game is gone from the schedule, so fall back to the auto option.
                 select.selectedIndex = 0;
             }
+            picker.selection = select.value;
         }
 
-        schedule_nfl_refresh(games.length === 0);
+        schedule_league_refresh(picker, picker.retry_soon(data));
     });
 }
 
-function schedule_nfl_refresh(retry_soon) {
-    clearTimeout(nfl_refresh_timer);
-    var nfl_div = document.getElementById("nfl_div");
-    if (!nfl_div || nfl_div.hidden) {
+function schedule_league_refresh(picker, retry_soon) {
+    clearTimeout(picker.refresh_timer);
+    var container = document.getElementById(picker.league + "_div");
+    if (!container || container.hidden) {
         return;
     }
-    nfl_refresh_timer = setTimeout(get_nfl_games, retry_soon ? 2000 : 30000);
+    picker.refresh_timer = setTimeout(function () {
+        get_league_games(picker);
+    }, retry_soon ? 2000 : 30000);
+}
+
+function set_league_game(picker, game_id) {
+    picker.selection = game_id;
+    picker.selection_epoch += 1;
+    picker.selections_pending += 1;
+    call_endpoint("/set_" + picker.league + "_game/" + encodeURIComponent(game_id), null, function () {
+        picker.selections_pending -= 1;
+    });
+}
+
+function get_nfl_games() {
+    get_league_games(game_pickers.nfl);
 }
 
 function set_nfl_game(game_id) {
-    call_endpoint("/set_nfl_game/" + encodeURIComponent(game_id));
+    set_league_game(game_pickers.nfl, game_id);
 }
-
-var mlb_refresh_timer = null;
 
 function get_mlb_games() {
-    call_endpoint("/get_mlb_games", function (response) {
-        var data = JSON.parse(response);
-        var games = data["games"] || [];
-        var select = document.getElementById("mlb_game_select");
-
-        if (select) {
-            var previous = select.value;
-            while (select.options.length > 1) {
-                select.remove(1);
-            }
-            games.forEach(function (game) {
-                var option = document.createElement("option");
-                option.value = game["id"];
-                option.text = game["label"];
-                select.add(option);
-            });
-            select.value = previous;
-            if (select.value !== previous) {
-                select.selectedIndex = 0;
-            }
-        }
-
-        schedule_mlb_refresh(data["status"] === "loading");
-    });
-}
-
-function schedule_mlb_refresh(retry_soon) {
-    clearTimeout(mlb_refresh_timer);
-    var mlb_div = document.getElementById("mlb_div");
-    if (!mlb_div || mlb_div.hidden) {
-        return;
-    }
-    mlb_refresh_timer = setTimeout(get_mlb_games, retry_soon ? 2000 : 30000);
+    get_league_games(game_pickers.mlb);
 }
 
 function set_mlb_game(game_id) {
-    call_endpoint("/set_mlb_game/" + encodeURIComponent(game_id));
+    set_league_game(game_pickers.mlb, game_id);
 }
 
 function set_mode(mode) {
@@ -2159,11 +2174,11 @@ function set_mode(mode) {
     }
     if (mode !== 'NFL') {
         document.getElementById('nfl_div').hidden = true;
-        clearTimeout(nfl_refresh_timer);
+        clearTimeout(game_pickers.nfl.refresh_timer);
     }
     if (mode !== 'MLB') {
         document.getElementById('mlb_div').hidden = true;
-        clearTimeout(mlb_refresh_timer);
+        clearTimeout(game_pickers.mlb.refresh_timer);
     }
     if (mode !== 'FREE_SKETCH') {
         close_free_sketch_modal();
