@@ -23,7 +23,10 @@ RUN_GROUP=pi
 HOME_DIR="/home/$RUN_USER"
 INSTALL_DIR="$HOME_DIR/PlaneSign"
 
-GITHUB_BASE_URL="${GITHUB_BASE_URL:-https://raw.githubusercontent.com/dmod/PlaneSign/main}"
+# The install is built from a single shallow clone so every file comes from the
+# same commit. Override either value to install from a fork or a test branch.
+PLANESIGN_REPO_URL="${PLANESIGN_REPO_URL:-https://github.com/dmod/PlaneSign.git}"
+PLANESIGN_BRANCH="${PLANESIGN_BRANCH:-main}"
 
 COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
 CONTAINER_NAME=PlaneSignRuntime
@@ -105,22 +108,23 @@ apt_get() {
   return 1
 }
 
-download_required_file() {
-  local url="$1"
+# Copies one file out of the clone into the install tree. The mode is forced
+# rather than inherited because sign.conf.sample is tracked executable.
+install_from_clone() {
+  local relative_path="$1"
   local destination="$2"
-  local temporary
 
-  echo "Downloading $url"
-  temporary="$(mktemp "${destination}.tmp.XXXXXX")"
-  if wget -q --show-progress -O "$temporary" "$url"; then
-    mv "$temporary" "$destination"
-    chmod 644 "$destination"
-    chown "$RUN_USER:$RUN_GROUP" "$destination"
-  else
-    rm -f "$temporary"
-    echo "Failed to download $url" >&2
+  if [ ! -f "$TEMP_CLONE/$relative_path" ]; then
+    echo "Required file '$relative_path' is missing from $PLANESIGN_REPO_URL ($PLANESIGN_BRANCH)" >&2
     exit 1
   fi
+
+  install \
+      -o "$RUN_USER" \
+      -g "$RUN_GROUP" \
+      -m 644 \
+      "$TEMP_CLONE/$relative_path" \
+      "$destination"
 }
 
 remove_existing_planesign_container() {
@@ -166,8 +170,7 @@ main() {
     # On an update run the sign container is still playing audio, which keeps the
     # module busy. The blacklist below takes care of it after the reboot, so a
     # failure here must not abort the install.
-    rmmod snd_bcm2835 || \
-        echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies on reboot"
+    rmmod snd_bcm2835 || echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies on reboot"
   fi
   if [ -f "$CONFIG_FILE" ]; then
     sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
@@ -187,12 +190,27 @@ main() {
   # restart-loop. Disabling alone only takes effect on the next boot.
   if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-files nginx.service | grep -q nginx; then
     echo "Legacy nginx service found, stopping and disabling..."
-    systemctl disable --now nginx || \
-        echo "Warning: unable to stop legacy nginx; it may keep ports 80/443 from the container"
+    systemctl disable --now nginx || echo "Warning: unable to stop legacy nginx; it may keep ports 80/443 from the container"
   fi
 
-  # Download required files from GitHub
+  apt_get update
+
+  apt_get install \
+      bluez \
+      ca-certificates \
+      curl \
+      git \
+      gnupg \
+      python3-dbus
+
+  # A single shallow clone supplies both the runtime files and the seed data
+  # directories. Cloning once replaces a round trip per file and guarantees they
+  # all come from the same commit.
   BLE_DIR="$INSTALL_DIR/ble"
+  TEMP_CLONE="$(mktemp -d)"
+  echo "Fetching PlaneSign files from $PLANESIGN_REPO_URL ($PLANESIGN_BRANCH)"
+  git clone --depth 1 --branch "$PLANESIGN_BRANCH" "$PLANESIGN_REPO_URL" "$TEMP_CLONE"
+
   install -d \
       -o "$RUN_USER" \
       -g "$RUN_GROUP" \
@@ -204,29 +222,34 @@ main() {
       -g "$RUN_GROUP" \
       -m 755 \
       "$BLE_DIR"
+
   for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
-    download_required_file "$GITHUB_BASE_URL/ble/$file" "$BLE_DIR/$file"
+    install_from_clone "ble/$file" "$BLE_DIR/$file"
   done
 
-  download_required_file "$GITHUB_BASE_URL/sign.conf.sample" "$INSTALL_DIR/sign.conf.sample"
-  download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
+  install_from_clone sign.conf.sample "$INSTALL_DIR/sign.conf.sample"
+  install_from_clone compose.yaml "$COMPOSE_FILE"
 
-  # Bluetooth support, plus the tools needed further down to add Docker's apt
-  # repository. Installed in one transaction because apt is the slowest step here.
-  apt_get update
+  # Persistent host directories, seeded from the same checkout. sketches is not
+  # tracked in the repository, so it is left empty for the runtime to populate.
+  for dir in datafiles sketches icons; do
+      install -d \
+          -o "$RUN_USER" \
+          -g "$RUN_GROUP" \
+          -m 755 \
+          "$INSTALL_DIR/$dir"
 
-  apt_get install \
-      bluez \
-      ca-certificates \
-      curl \
-      gnupg \
-      python3-dbus
+      if [ -d "$TEMP_CLONE/$dir" ]; then
+          cp -a "$TEMP_CLONE/$dir/." "$INSTALL_DIR/$dir/"
+          chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/$dir"
+      fi
+  done
+
+  rm -rf "$TEMP_CLONE"
 
   systemctl enable bluetooth.service >/dev/null 2>&1 || true
-  systemctl is-active --quiet bluetooth.service || \
-      systemctl start bluetooth.service
-  rfkill unblock bluetooth || \
-      echo "Warning: unable to unblock Bluetooth"
+  systemctl is-active --quiet bluetooth.service || systemctl start bluetooth.service
+  rfkill unblock bluetooth || echo "Warning: unable to unblock Bluetooth"
   (echo "power on"; echo "quit") | bluetoothctl >/dev/null 2>&1 || true
 
   ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
@@ -255,8 +278,8 @@ main() {
   groupadd --force docker
   usermod -aG docker "$RUN_USER"
 
-  systemctl enable docker.service
-  systemctl enable containerd.service
+  systemctl enable --now docker.service
+  systemctl enable --now containerd.service
 
   if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
     install \
@@ -267,30 +290,11 @@ main() {
       "$INSTALL_DIR/sign.conf"
   fi
 
-  # Create persistent host directories and seed them from the PlaneSign git source.
-  temp_clone="$(mktemp -d)"
-  git clone --depth 1 https://github.com/dmod/PlaneSign.git "$temp_clone"
-  for dir in datafiles sketches icons; do
-      install -d \
-          -o "$RUN_USER" \
-          -g "$RUN_GROUP" \
-          -m 755 \
-          "$INSTALL_DIR/$dir"
-
-      if [ -d "$temp_clone/$dir" ]; then
-          cp -a "$temp_clone/$dir/." "$INSTALL_DIR/$dir/"
-          chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/$dir"
-      fi
-  done
-  rm -rf "$temp_clone"
-
   docker compose -f "$COMPOSE_FILE" config >/dev/null
   docker compose -f "$COMPOSE_FILE" pull
   remove_existing_planesign_container
   docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
 
-  # Every update pulls a new :latest and leaves the previous image untagged, which
-  # would slowly fill the SD card. Only dangling images are removed here.
   echo "Removing unused Docker images..."
   docker image prune --force || echo "Warning: unable to prune unused Docker images"
 
