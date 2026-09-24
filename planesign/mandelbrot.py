@@ -3,65 +3,60 @@
 # https://en.wikipedia.org/wiki/Mandelbrot_set
 ###
 
-import logging
+import math
 import time
 
 import numpy as np
 import shared_config
 from modes import DisplayMode
-from numba import jit, njit, prange
 
 import __main__
 
+_SCALAR_TAIL_SIZE = 32
+_LOG_2 = np.log(2)
+
 
 # Function to calculate whether a point is in the Mandelbrot set
-@njit
 def mandelbrot(x0, y0, max_iter):
-    power = lam = 1
-    x = 0
-    y = 0
-    tortoise = hare = (x, y)
-    iteration = 0
-    condition = 1
-    while x * x + y * y <= 4 and iteration < max_iter:
-        if iteration > 0:
-            condition = (tortoise[0] - hare[0]) * (tortoise[0] - hare[0]) + (tortoise[1] - hare[1]) * (tortoise[1] - hare[1])
+    return _continue_mandelbrot(x0, y0, max_iter)
 
-        if condition < 1e-32:  # cycle detected - inside of set
-            return max_iter, np.float32(0)
-        else:  # advance tortoise for cycle detection
-            if power == lam:
-                tortoise = hare
-                power *= 2
-                lam = 0
 
-        xtemp = x * x - y * y + x0
+def _continue_mandelbrot(x0, y0, max_iter, x=0.0, y=0.0, tx=0.0, ty=0.0, iteration=0, power=1, lam=1):
+    x0, y0, x, y, tx, ty = map(float, (x0, y0, x, y, tx, ty))
+    x2, y2 = x * x, y * y
+    while x2 + y2 <= 4 and iteration < max_iter:
+        if iteration:
+            dx, dy = tx - x, ty - y
+            if dx * dx + dy * dy < 1e-32:
+                return max_iter, 0.0
+
+        if power == lam:
+            tx, ty = x, y
+            power *= 2
+            lam = 0
+
+        xtemp = x2 - y2 + x0
         y = 2 * x * y + y0
         x = xtemp
-
-        hare = (x, y)
+        x2, y2 = x * x, y * y
         lam += 1
-
         iteration += 1
 
-    return iteration, np.sqrt(x * x + y * y)
+    return iteration, math.sqrt(x2 + y2)
 
 
 # Main cardioid checking (exact)
-@njit
 def is_inside_main_cardioid(x, y):
     q = (x - 0.25) ** 2 + y**2
     return q * (q + (x - 0.25)) < 0.25 * y**2
 
 
 # Period-2 bulb checking (exact)
-@njit
 def is_inside_period_2_bulb(x, y):
     return (x + 1) ** 2 + y**2 < 0.0625
 
 
 # Period-3 bulb checking (approximate)
-@njit
 def is_inside_period_3_bulb(x, y):
     if (x + 0.12256) ** 2 + (y + 0.74486) ** 2 < 0.00925926 or (x + 0.12256) ** 2 + (y - 0.74486) ** 2 < 0.00925926:
         return 1
@@ -70,79 +65,148 @@ def is_inside_period_3_bulb(x, y):
 
 
 # Calculate the adaptive MAX_ITER value based on zoom level
-@njit
 def calculate_max_iter(zoom_factor):
-    return int(1000 / np.sqrt(zoom_factor))
+    return int(1000 / math.sqrt(zoom_factor))
+
+
+_PALETTES = {
+    mode: (np.asarray(colors, dtype=np.float64), np.asarray(keypts, dtype=np.float64))
+    for mode, (colors, keypts) in enumerate((
+        # Saturated Rainbow
+        (
+            [(255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255), (255, 0, 255), (255, 0, 0)],
+            [0, 0.2, 0.33, 0.45, 0.6, 0.83, 1],
+        ),
+        # Sunrise
+        (
+            [(0, 0, 0), (14, 81, 181), (18, 218, 222), (255, 255, 248), (242, 210, 82), (207, 88, 29), (0, 0, 0)],
+            [0, 0.16144, 0.351671, 0.501285, 0.620051, 0.8, 1],
+        ),
+        # Nova
+        (
+            [(0, 0, 0), (15, 50, 190), (255, 255, 255), (255, 200, 30), (111, 0, 255), (0, 0, 0)],
+            [0, 0.2, 0.4, 0.6, 0.8, 1],
+        ),
+        # Vaporwave
+        (
+            [(48, 3, 80), (148, 22, 127), (246, 46, 151), (249, 172, 83), (5, 195, 221), (21, 60, 180), (48, 3, 80)],
+            [0, 0.15, 0.3, 0.44, 0.73, 0.9, 1],
+        ),
+        # 70s
+        (
+            [(0, 18, 25), (0, 95, 115), (10, 147, 150), (148, 210, 189), (233, 216, 166), (238, 155, 0), (202, 103, 2), (174, 32, 18), (0, 18, 25)],
+            [0, 0.1, 0.2, 0.35, 0.5, 0.6, 0.7, 0.8, 1],
+        ),
+        # Pastel Rainbow
+        (
+            [(255, 89, 94), (255, 202, 58), (138, 201, 38), (25, 130, 196), (106, 76, 147), (255, 89, 94)],
+            [0, 0.2, 0.4, 0.6, 0.8, 1],
+        ),
+        # Neon
+        (
+            [(128, 0, 128), (255, 20, 147), (0, 0, 128), (0, 255, 255), (128, 0, 128)],
+            [0, 0.2, 0.4, 0.7, 1],
+        ),
+        # Elemental
+        (
+            [(255, 69, 0), (255, 255, 0), (255, 255, 153), (173, 216, 230), (0, 0, 128), (25, 25, 112), (255, 69, 0)],
+            [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1],
+        ),
+        # Fire
+        (
+            [(255, 69, 0), (255, 128, 0), (255, 191, 0), (255, 215, 0), (255, 239, 204), (255, 204, 0), (255, 153, 0), (255, 102, 0), (255, 51, 0), (204, 0, 0), (153, 0, 0), (102, 0, 0), (51, 0, 0), (0, 0, 0), (255, 69, 0)],
+            [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1],
+        ),
+        # Greyscale
+        (
+            [(0, 0, 0), (200, 200, 200), (0, 0, 0)],
+            [0, 0.5, 1],
+        ),
+    ))
+}
+
+
+def _palette_colors(indices, mode):
+    colors, keypts = _PALETTES.get(mode, _PALETTES[9])
+    indices = indices % 1
+    upper = np.searchsorted(keypts, indices, side="right")
+    fraction = ((indices - keypts[upper - 1]) / (keypts[upper] - keypts[upper - 1]))[:, None]
+    return (fraction * colors[upper] + (1 - fraction) * colors[upper - 1]).astype(np.uint8)
 
 
 def setcolor(index, mode):
-
-    if mode == 0:
-        # Saturated Rainbow
-        colors = [(255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255), (255, 0, 255), (255, 0, 0)]
-        keypts = [0, 0.2, 0.33, 0.45, 0.6, 0.83, 1]
-
-    elif mode == 1:
-        # Sunrise
-        colors = [(0, 0, 0), (14, 81, 181), (18, 218, 222), (255, 255, 248), (242, 210, 82), (207, 88, 29), (0, 0, 0)]
-        keypts = [0, 0.16144, 0.351671, 0.501285, 0.620051, 0.8, 1]
-
-    elif mode == 2:
-        # Nova
-        colors = [(0, 0, 0), (15, 50, 190), (255, 255, 255), (255, 200, 30), (111, 0, 255), (0, 0, 0)]
-        keypts = [0, 0.2, 0.4, 0.6, 0.8, 1]
-
-    elif mode == 3:
-        # Vaporwave
-        colors = [(48, 3, 80), (148, 22, 127), (246, 46, 151), (249, 172, 83), (5, 195, 221), (21, 60, 180), (48, 3, 80)]
-        keypts = [0, 0.15, 0.3, 0.44, 0.73, 0.9, 1]
-
-    elif mode == 4:
-        # 70s
-        colors = [(0, 18, 25), (0, 95, 115), (10, 147, 150), (148, 210, 189), (233, 216, 166), (238, 155, 0), (202, 103, 2), (174, 32, 18), (0, 18, 25)]
-        keypts = [0, 0.1, 0.2, 0.35, 0.5, 0.6, 0.7, 0.8, 1]
-
-    elif mode == 5:
-        # Pastel Rainbow
-        colors = [(255, 89, 94), (255, 202, 58), (138, 201, 38), (25, 130, 196), (106, 76, 147), (255, 89, 94)]
-        keypts = [0, 0.2, 0.4, 0.6, 0.8, 1]
-
-    elif mode == 6:
-        # Neon
-        colors = [(128, 0, 128), (255, 20, 147), (0, 0, 128), (0, 255, 255), (128, 0, 128)]
-        keypts = [0, 0.2, 0.4, 0.7, 1]
-
-    elif mode == 7:
-        # Elemental
-        colors = [(255, 69, 0), (255, 255, 0), (255, 255, 153), (173, 216, 230), (0, 0, 128), (25, 25, 112), (255, 69, 0)]
-        keypts = [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1]
-
-    elif mode == 8:
-        # Fire
-        colors = [(255, 69, 0), (255, 128, 0), (255, 191, 0), (255, 215, 0), (255, 239, 204), (255, 204, 0), (255, 153, 0), (255, 102, 0), (255, 51, 0), (204, 0, 0), (153, 0, 0), (102, 0, 0), (51, 0, 0), (0, 0, 0), (255, 69, 0)]
-        keypts = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1]
-
-    else:
-        # Greyscale
-        colors = [(0, 0, 0), (200, 200, 200), (0, 0, 0)]
-        keypts = [0, 0.5, 1]
-
-    index = index % 1
-
-    for i in range(len(keypts)):
-        if keypts[i] > index:
-            break
-
-    frac = (index - keypts[i - 1]) / (keypts[i] - keypts[i - 1])
-
-    r = int(frac * colors[i][0] + (1 - frac) * colors[i - 1][0])
-    g = int(frac * colors[i][1] + (1 - frac) * colors[i - 1][1])
-    b = int(frac * colors[i][2] + (1 - frac) * colors[i - 1][2])
-
-    return r, g, b
+    r, g, b = _palette_colors(np.asarray([index]), mode)[0]
+    return int(r), int(g), int(b)
 
 
-@njit
+def _mandelbrot_pixels(cx, cy, max_iter):
+    counts = np.full(cx.size, max_iter, dtype=np.int64)
+    modulus = np.zeros(cx.size, dtype=np.float64)
+    inside = is_inside_main_cardioid(cx, cy) | is_inside_period_2_bulb(cx, cy)
+    active = np.flatnonzero(~inside)
+    cr, ci = cx[active], cy[active]
+    x, y = np.zeros(active.size), np.zeros(active.size)
+    tx, ty = np.zeros(active.size), np.zeros(active.size)
+    # All active pixels advance together, so their cycle-checkpoint counters are shared.
+    power = lam = 1
+    iteration = 0
+
+    while active.size and iteration < max_iter:
+        if active.size <= _SCALAR_TAIL_SIZE:
+            # Resume each orbit and checkpoint; restarting would repeat the expensive work.
+            for offset, index in enumerate(active):
+                counts[index], modulus[index] = _continue_mandelbrot(cr[offset], ci[offset], max_iter, x[offset], y[offset], tx[offset], ty[offset], iteration, power, lam)
+            return counts, modulus
+
+        if iteration:
+            dx, dy = tx - x, ty - y
+            cycling = dx * dx + dy * dy < 1e-32
+            if cycling.any():
+                keep = ~cycling
+                active, cr, ci = active[keep], cr[keep], ci[keep]
+                x, y, tx, ty = x[keep], y[keep], tx[keep], ty[keep]
+
+        if power == lam:
+            tx, ty = x.copy(), y.copy()
+            power *= 2
+            lam = 0
+
+        old_x = x
+        x = x * x - y * y + cr
+        y = 2 * old_x * y + ci
+        lam += 1
+        iteration += 1
+        squared = x * x + y * y
+        escaped = squared > 4
+        if escaped.any():
+            done = active[escaped]
+            counts[done] = iteration
+            modulus[done] = np.sqrt(squared[escaped])
+            keep = ~escaped
+            active, cr, ci = active[keep], cr[keep], ci[keep]
+            x, y, tx, ty = x[keep], y[keep], tx[keep], ty[keep]
+
+    modulus[active] = np.sqrt(x * x + y * y)
+    return counts, modulus
+
+
+def draw_mandelbrot_frame(sign, xb, yb, frame, color_mode, color_scale):
+    sign.canvas.Clear()
+    zoom_factor = 2 ** (-0.05 * frame)
+    half_width, half_height = 10.5, 2.625
+    x = np.linspace(xb - half_width * zoom_factor, xb + half_width * zoom_factor, 128)
+    y = np.linspace(yb - half_height * zoom_factor, yb + half_height * zoom_factor, 32)
+    cx, cy = np.broadcast_arrays(x[None, :], y[:, None])
+    max_iter = calculate_max_iter(zoom_factor)
+    counts, modulus = _mandelbrot_pixels(cx.ravel(), cy.ravel(), max_iter)
+    visible = (counts != max_iter) & (counts > 1)
+    indices = np.log2(counts[visible] - np.log(np.log(modulus[visible])) / _LOG_2) / color_scale
+    colors = _palette_colors(indices, color_mode)
+    for index, color in zip(np.flatnonzero(visible).tolist(), colors.tolist()):
+        sign.canvas.SetPixel(index % 128, index // 128, *color)
+    return np.where(visible, counts, max_iter).reshape(32, 128), max_iter
+
+
 def find_border_point(precision, max_iterations=100000):
 
     while True:
@@ -158,8 +222,8 @@ def find_border_point(precision, max_iterations=100000):
     angle = 2 * np.pi * np.random.rand()
 
     delta = 0.1
-    dx = delta * np.cos(angle)
-    dy = delta * np.sin(angle)
+    dx = delta * math.cos(angle)
+    dy = delta * math.sin(angle)
 
     while True:
         m, _ = mandelbrot(x + dx, y + dy, max_iterations)
@@ -187,9 +251,6 @@ def find_border_point(precision, max_iterations=100000):
 def mandelbrot_zoom(sign):
     sign.canvas.Clear()
 
-    numba_logger = logging.getLogger("numba")
-    numba_logger.setLevel(logging.WARNING)
-
     # Initialize an empty list to store tuples
     pois = []
 
@@ -203,9 +264,6 @@ def mandelbrot_zoom(sign):
 
     lp = len(pois)
 
-    # Parameters for the Mandelbrot set and animation
-    INIT_WIDTH, INIT_HEIGHT = 7 * 3, 7 * 3 * 32 / 128
-
     while shared_config.shared_mode.value == DisplayMode.MANDELBROT.value:
         if np.random.rand() < 0.1:
             xb, yb = find_border_point(1e-3)
@@ -217,41 +275,9 @@ def mandelbrot_zoom(sign):
         while frame < 900:
             tstart = time.perf_counter()
 
-            # Calculate the bounds of the visible area based on the zoomed frame
-            zoom_factor = 2 ** (-0.05 * frame)
-            half_width = INIT_WIDTH / 2
-            half_height = INIT_HEIGHT / 2
-            real_min = xb - half_width * zoom_factor
-            real_max = xb + half_width * zoom_factor
-            imag_min = yb - half_height * zoom_factor
-            imag_max = yb + half_height * zoom_factor
-
-            MAX_ITER = calculate_max_iter(zoom_factor)
-
-            # Generate the Mandelbrot image for the visible area
-            x, y = np.linspace(real_min, real_max, 128), np.linspace(imag_min, imag_max, 32)
-            mandelbrot_iters = np.zeros((32, 128), dtype=int)
-            mandelbrot_modulus = np.zeros((32, 128), dtype=int)
-
             cmode = shared_config.shared_mandelbrot_color.value
             cscale = shared_config.shared_mandelbrot_colorscale.value
-
-            iters = np.empty((32, 128))
-
-            for i in prange(32):
-                for j in prange(128):
-                    if is_inside_main_cardioid(x[j], y[i]) or is_inside_period_2_bulb(x[j], y[i]):
-                        iters[i][j] = MAX_ITER
-                    else:
-                        mandelbrot_iters, mandelbrot_modulus = mandelbrot(x[j], y[i], MAX_ITER)
-
-                        if mandelbrot_iters == MAX_ITER or mandelbrot_iters <= 1:
-                            iters[i][j] = MAX_ITER
-                        else:
-                            index = np.log2(mandelbrot_iters - np.log(np.log(mandelbrot_modulus)) / np.log(2)) / cscale
-                            r, g, b = setcolor(index, cmode)
-                            sign.canvas.SetPixel(j, i, r, g, b)
-                            iters[i][j] = mandelbrot_iters
+            iters, MAX_ITER = draw_mandelbrot_frame(sign, xb, yb, frame, cmode, cscale)
 
             sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
             sign.canvas.Clear()

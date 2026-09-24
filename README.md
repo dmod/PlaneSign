@@ -58,6 +58,7 @@ cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/instal
 
 ## Technical Notes
 
+- Mandelbrot calculations use NumPy for groups of pixels and scalar Python for the remaining small groups, without Numba or LLVM. Deep zooms and the occasional random search for a new zoom target can be CPU-intensive, especially on a Raspberry Pi.
 - Update the static cache: `./update_static_cache.py`
 - Text positioning:
   - X, Y coordinates represent the bottom-left corner of characters.
