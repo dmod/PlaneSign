@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import os
@@ -13,14 +14,15 @@ from math import cos, pi, sin
 from urllib.parse import urlparse
 
 import favicon
-import geopandas as gpd
 import numpy as np
 import pytz
 import requests
+import shapely
 import shared_config
 from PIL import Image, ImageDraw, ImageFont
 from rgbmatrix import graphics
-from shapely.geometry import Point
+from shapely.geometry import Point, shape
+from shapely.strtree import STRtree
 from timezonefinder import TimezoneFinder
 
 import __main__
@@ -30,9 +32,9 @@ DEG_2_RAD = pi / 180.0
 KM_2_MI = 0.6214
 CM_2_IN = 0.3937008
 
-country_polys = []
-state_polys = []
-water_polys = []
+country_polys = None
+state_polys = None
+water_polys = None
 geojsons_loaded = False
 
 from modes import DisplayMode
@@ -213,6 +215,29 @@ def read_static_airport_data():
     logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
 
 
+class GeoJsonPolygons:
+    """Polygons from a static lon/lat GeoJSON file with CODE/NAME properties, indexed for point lookups."""
+
+    def __init__(self, path):
+        with open(path, encoding="utf-8") as f:
+            features = json.load(f)["features"]
+
+        self.geometries = [shape(feature["geometry"]) for feature in features]
+        shapely.prepare(self.geometries)
+        self.areas = [geometry.area for geometry in self.geometries]
+        self.properties = [(feature["properties"]["CODE"], feature["properties"]["NAME"]) for feature in features]
+        self.tree = STRtree(self.geometries)
+
+    def lookup(self, point, smallest=True):
+        """Returns (CODE, NAME) of the polygon containing point, or None. Overlaps resolve to the smallest polygon, or the first in file order."""
+        matches = sorted(self.tree.query(point, predicate="within"))
+        if not matches:
+            return None
+
+        index = min(matches, key=lambda i: self.areas[i]) if smallest else matches[0]
+        return self.properties[index]
+
+
 def read_geojsons():
     global country_polys
     global state_polys
@@ -223,9 +248,9 @@ def read_geojsons():
         return
 
     # Load static geojson files for use in local reverse geocoding
-    country_polys = gpd.read_file(f"{shared_config.datafiles_dir}/countries.geojson")
-    state_polys = gpd.read_file(f"{shared_config.datafiles_dir}/states.geojson")
-    water_polys = gpd.read_file(f"{shared_config.datafiles_dir}/water.geojson")
+    country_polys = GeoJsonPolygons(f"{shared_config.datafiles_dir}/countries.geojson")
+    state_polys = GeoJsonPolygons(f"{shared_config.datafiles_dir}/states.geojson")
+    water_polys = GeoJsonPolygons(f"{shared_config.datafiles_dir}/water.geojson")
     geojsons_loaded = True
 
 
@@ -237,10 +262,6 @@ def reverse_geocode(lat, lon):
     f'{shared_config.icons_dir}/flags/{code}.png'
     """
 
-    global country_polys
-    global state_polys
-    global water_polys
-
     read_geojsons()
 
     formatted_address = None
@@ -249,51 +270,30 @@ def reverse_geocode(lat, lon):
     point = Point(lon, lat)
 
     # First check for point in countries (water is more probable but you'll miss small islands)
-    result = country_polys[country_polys.contains(point)]
+    country = country_polys.lookup(point)
 
-    if result.shape[0]:
-        index = 0
-        if result.shape[0] > 1:
-            smallest_area = None
-            for j in range(result.shape[0]):
-                new_area = result["geometry"].iloc[j].area
-                if smallest_area is None or (new_area < smallest_area):
-                    smallest_area = new_area
-                    index = j
-
-        code = result["CODE"].iloc[index]
-        formatted_address = result["NAME"].iloc[index]
+    if country:
+        code, formatted_address = country
 
         if code == "USA":
             # Check for specific state
-            result = state_polys[state_polys.contains(point)]
+            state = state_polys.lookup(point, smallest=False)
 
-            if result.shape[0]:
-                code = "states/" + result["CODE"].iloc[0]
-                formatted_address = result["NAME"].iloc[0]
+            if state:
+                code = "states/" + state[0]
+                formatted_address = state[1]
 
     else:
         # We're in the water
+        water = water_polys.lookup(point)
 
-        result = water_polys[water_polys.contains(point)]
-
-        if result.shape[0]:
+        if water:
+            water_code, formatted_address = water
             code = "OCEAN"
 
-            index = 0
-            if result.shape[0] > 1:
-                smallest_area = None
-                for j in range(result.shape[0]):
-                    new_area = result["geometry"].iloc[j].area
-                    if smallest_area is None or (new_area < smallest_area):
-                        smallest_area = new_area
-                        index = j
-
             # Special case codes
-            if result["CODE"].iloc[index] in ["IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "NEMO", "SHIP"]:
-                code = result["CODE"].iloc[index]
-
-            formatted_address = result["NAME"].iloc[index]
+            if water_code in ["IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "NEMO", "SHIP"]:
+                code = water_code
 
     if formatted_address is None:
         formatted_address = "Unknown"
