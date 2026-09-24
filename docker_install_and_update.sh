@@ -161,8 +161,12 @@ fi
 
 # Turn off onboard audio
 if lsmod | grep -wq "snd_bcm2835"; then
-  echo "snd_bcm2835 is loaded!"
-  rmmod snd_bcm2835
+  echo "snd_bcm2835 is loaded, unloading..."
+  # On an update run the sign container is still playing audio, which keeps the
+  # module busy. The blacklist below takes care of it after the reboot, so a
+  # failure here must not abort the install.
+  rmmod snd_bcm2835 || \
+      echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies on reboot"
 fi
 if [ -f "$CONFIG_FILE" ]; then
   sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
@@ -176,10 +180,14 @@ else
   echo "snd_bcm2835 already blacklisted"
 fi
 
-# Stop existing versions of nginx (from legacy non-Docker installs)
+# Stop existing versions of nginx (from legacy non-Docker installs). The container
+# runs its own nginx on the host network, and its start command is chained with
+# `&&`, so a host nginx still holding ports 80/443 makes the container exit and
+# restart-loop. Disabling alone only takes effect on the next boot.
 if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-files nginx.service | grep -q nginx; then
-  echo "Legacy nginx service found, disabling..."
-  systemctl disable nginx
+  echo "Legacy nginx service found, stopping and disabling..."
+  systemctl disable --now nginx || \
+      echo "Warning: unable to stop legacy nginx; it may keep ports 80/443 from the container"
 fi
 
 # Download required files from GitHub
@@ -202,14 +210,17 @@ done
 download_required_file "$GITHUB_BASE_URL/sign.conf.sample" "$INSTALL_DIR/sign.conf.sample"
 download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 
-# Install bluetooth support
+# Bluetooth support, plus the tools needed further down to add Docker's apt
+# repository. Installed in one transaction because apt is the slowest step here.
 apt_get update
 
 apt_get install \
     bluez \
+    ca-certificates \
+    curl \
+    gnupg \
     python3-dbus
 
-systemctl daemon-reload
 systemctl enable bluetooth.service >/dev/null 2>&1 || true
 systemctl is-active --quiet bluetooth.service || \
     systemctl start bluetooth.service
@@ -227,7 +238,6 @@ rfkill list bluetooth | grep -E "Soft|Hard" || echo "  Warning: no rfkill Blueto
 bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
 
 # Add Docker's official GPG key:
-apt_get install ca-certificates curl gnupg
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
@@ -277,6 +287,11 @@ docker compose -f "$COMPOSE_FILE" config >/dev/null
 docker compose -f "$COMPOSE_FILE" pull
 remove_existing_planesign_container
 docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
+
+# Every update pulls a new :latest and leaves the previous image untagged, which
+# would slowly fill the SD card. Only dangling images are removed here.
+echo "Removing unused Docker images..."
+docker image prune --force || echo "Warning: unable to prune unused Docker images"
 
 chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
 
