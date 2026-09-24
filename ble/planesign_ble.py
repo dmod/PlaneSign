@@ -379,7 +379,9 @@ class SystemUpdateCharacteristic(Characteristic):
             if self._log_char:
                 self._log_char.clear_log()
             LOG.info("Starting system update")
-            self._process = subprocess.Popen(self.UPDATE_CMD, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            # Run under bash with pipefail rather than shell=True: /bin/sh is dash here, and
+            # without pipefail a failed download still exits 0 and reports a successful update.
+            self._process = subprocess.Popen(["bash", "-o", "pipefail", "-c", self.UPDATE_CMD], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             # Make stdout non-blocking for GLib polling
             fd = self._process.stdout.fileno()
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)

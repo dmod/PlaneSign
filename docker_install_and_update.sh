@@ -2,11 +2,6 @@
 
 set -euo pipefail
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "This installer must be run as root."
-    exit 1
-fi
-
 # to skip any questions from APT
 export DEBIAN_FRONTEND=noninteractive
 export DEBIAN_PRIORITY=critical
@@ -135,169 +130,178 @@ remove_existing_planesign_container() {
   fi
 }
 
-echo "PlaneSign install starting..."
+main() {
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "This installer must be run as root."
+    exit 1
+  fi
 
-stop_background_apt_jobs
-repair_dpkg
+  echo "PlaneSign install starting..."
 
-if [ -f /boot/firmware/cmdline.txt ]; then
-  BOOT_DIR=/boot/firmware
-else
-  BOOT_DIR=/boot
-fi
+  stop_background_apt_jobs
+  repair_dpkg
 
-CMDLINE_FILE="$BOOT_DIR/cmdline.txt"
-CONFIG_FILE="$BOOT_DIR/config.txt"
+  if [ -f /boot/firmware/cmdline.txt ]; then
+    BOOT_DIR=/boot/firmware
+  else
+    BOOT_DIR=/boot
+  fi
 
-# Performance upgrade for isolcpus
-if [ -f "$CMDLINE_FILE" ] && ! grep -qw "isolcpus" "$CMDLINE_FILE"; then
-  echo "Adding isolcpus config to $CMDLINE_FILE"
-  sed -i '$ s/$/ isolcpus=3/' "$CMDLINE_FILE"
-elif [ -f "$CMDLINE_FILE" ]; then
-  echo "isolcpus config found in $CMDLINE_FILE"
-else
-  echo "Warning: $CMDLINE_FILE not found; skipping isolcpus config"
-fi
+  CMDLINE_FILE="$BOOT_DIR/cmdline.txt"
+  CONFIG_FILE="$BOOT_DIR/config.txt"
 
-# Turn off onboard audio
-if lsmod | grep -wq "snd_bcm2835"; then
-  echo "snd_bcm2835 is loaded, unloading..."
-  # On an update run the sign container is still playing audio, which keeps the
-  # module busy. The blacklist below takes care of it after the reboot, so a
-  # failure here must not abort the install.
-  rmmod snd_bcm2835 || \
-      echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies on reboot"
-fi
-if [ -f "$CONFIG_FILE" ]; then
-  sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
-else
-  echo "Warning: $CONFIG_FILE not found; skipping onboard audio config"
-fi
-if [ ! -f /etc/modprobe.d/alsa-blacklist.conf ] || ! grep -q "blacklist snd_bcm2835" /etc/modprobe.d/alsa-blacklist.conf; then
-  echo "Blacklisting snd_bcm2835 module..."
-  echo "blacklist snd_bcm2835" | tee -a /etc/modprobe.d/alsa-blacklist.conf
-else
-  echo "snd_bcm2835 already blacklisted"
-fi
+  # Performance upgrade for isolcpus
+  if [ -f "$CMDLINE_FILE" ] && ! grep -qw "isolcpus" "$CMDLINE_FILE"; then
+    echo "Adding isolcpus config to $CMDLINE_FILE"
+    sed -i '$ s/$/ isolcpus=3/' "$CMDLINE_FILE"
+  elif [ -f "$CMDLINE_FILE" ]; then
+    echo "isolcpus config found in $CMDLINE_FILE"
+  else
+    echo "Warning: $CMDLINE_FILE not found; skipping isolcpus config"
+  fi
 
-# Stop existing versions of nginx (from legacy non-Docker installs). The container
-# runs its own nginx on the host network, and its start command is chained with
-# `&&`, so a host nginx still holding ports 80/443 makes the container exit and
-# restart-loop. Disabling alone only takes effect on the next boot.
-if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-files nginx.service | grep -q nginx; then
-  echo "Legacy nginx service found, stopping and disabling..."
-  systemctl disable --now nginx || \
-      echo "Warning: unable to stop legacy nginx; it may keep ports 80/443 from the container"
-fi
+  # Turn off onboard audio
+  if lsmod | grep -wq "snd_bcm2835"; then
+    echo "snd_bcm2835 is loaded, unloading..."
+    # On an update run the sign container is still playing audio, which keeps the
+    # module busy. The blacklist below takes care of it after the reboot, so a
+    # failure here must not abort the install.
+    rmmod snd_bcm2835 || \
+        echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies on reboot"
+  fi
+  if [ -f "$CONFIG_FILE" ]; then
+    sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
+  else
+    echo "Warning: $CONFIG_FILE not found; skipping onboard audio config"
+  fi
+  if [ ! -f /etc/modprobe.d/alsa-blacklist.conf ] || ! grep -q "blacklist snd_bcm2835" /etc/modprobe.d/alsa-blacklist.conf; then
+    echo "Blacklisting snd_bcm2835 module..."
+    echo "blacklist snd_bcm2835" | tee -a /etc/modprobe.d/alsa-blacklist.conf
+  else
+    echo "snd_bcm2835 already blacklisted"
+  fi
 
-# Download required files from GitHub
-BLE_DIR="$INSTALL_DIR/ble"
-install -d \
-    -o "$RUN_USER" \
-    -g "$RUN_GROUP" \
-    -m 755 \
-    "$INSTALL_DIR"
+  # Stop existing versions of nginx (from legacy non-Docker installs). The container
+  # runs its own nginx on the host network, and its start command is chained with
+  # `&&`, so a host nginx still holding ports 80/443 makes the container exit and
+  # restart-loop. Disabling alone only takes effect on the next boot.
+  if systemctl list-unit-files nginx.service &>/dev/null && systemctl list-unit-files nginx.service | grep -q nginx; then
+    echo "Legacy nginx service found, stopping and disabling..."
+    systemctl disable --now nginx || \
+        echo "Warning: unable to stop legacy nginx; it may keep ports 80/443 from the container"
+  fi
 
-install -d \
-    -o "$RUN_USER" \
-    -g "$RUN_GROUP" \
-    -m 755 \
-    "$BLE_DIR"
-for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
-  download_required_file "$GITHUB_BASE_URL/ble/$file" "$BLE_DIR/$file"
-done
+  # Download required files from GitHub
+  BLE_DIR="$INSTALL_DIR/ble"
+  install -d \
+      -o "$RUN_USER" \
+      -g "$RUN_GROUP" \
+      -m 755 \
+      "$INSTALL_DIR"
 
-download_required_file "$GITHUB_BASE_URL/sign.conf.sample" "$INSTALL_DIR/sign.conf.sample"
-download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
+  install -d \
+      -o "$RUN_USER" \
+      -g "$RUN_GROUP" \
+      -m 755 \
+      "$BLE_DIR"
+  for file in __init__.py gatt.py planesign_ble.py planesign-ble.service wifi.py; do
+    download_required_file "$GITHUB_BASE_URL/ble/$file" "$BLE_DIR/$file"
+  done
 
-# Bluetooth support, plus the tools needed further down to add Docker's apt
-# repository. Installed in one transaction because apt is the slowest step here.
-apt_get update
+  download_required_file "$GITHUB_BASE_URL/sign.conf.sample" "$INSTALL_DIR/sign.conf.sample"
+  download_required_file "$GITHUB_BASE_URL/compose.yaml" "$COMPOSE_FILE"
 
-apt_get install \
-    bluez \
-    ca-certificates \
-    curl \
-    gnupg \
-    python3-dbus
+  # Bluetooth support, plus the tools needed further down to add Docker's apt
+  # repository. Installed in one transaction because apt is the slowest step here.
+  apt_get update
 
-systemctl enable bluetooth.service >/dev/null 2>&1 || true
-systemctl is-active --quiet bluetooth.service || \
-    systemctl start bluetooth.service
-rfkill unblock bluetooth || \
-    echo "Warning: unable to unblock Bluetooth"
-(echo "power on"; echo "quit") | bluetoothctl >/dev/null 2>&1 || true
+  apt_get install \
+      bluez \
+      ca-certificates \
+      curl \
+      gnupg \
+      python3-dbus
 
-ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable planesign-ble.service
+  systemctl enable bluetooth.service >/dev/null 2>&1 || true
+  systemctl is-active --quiet bluetooth.service || \
+      systemctl start bluetooth.service
+  rfkill unblock bluetooth || \
+      echo "Warning: unable to unblock Bluetooth"
+  (echo "power on"; echo "quit") | bluetoothctl >/dev/null 2>&1 || true
 
-# Verify bluetooth adapter status
-echo "Bluetooth status:"
-rfkill list bluetooth | grep -E "Soft|Hard" || echo "  Warning: no rfkill Bluetooth status found"
-bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
+  ln --force --symbolic "$INSTALL_DIR/ble/planesign-ble.service" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable planesign-ble.service
 
-# Add Docker's official GPG key:
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
+  # Verify bluetooth adapter status
+  echo "Bluetooth status:"
+  rfkill list bluetooth | grep -E "Soft|Hard" || echo "  Warning: no rfkill Bluetooth status found"
+  bluetoothctl show 2>/dev/null | grep -E "Name|Powered|Address" || echo "  Warning: no adapter found"
 
-# Add the repository to Apt sources:
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  tee /etc/apt/sources.list.d/docker.list > /dev/null
-apt_get update
+  # Add Docker's official GPG key:
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
 
-apt_get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  # Add the repository to Apt sources:
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+    tee /etc/apt/sources.list.d/docker.list > /dev/null
+  apt_get update
 
-groupadd --force docker
-usermod -aG docker "$RUN_USER"
+  apt_get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-systemctl enable docker.service
-systemctl enable containerd.service
+  groupadd --force docker
+  usermod -aG docker "$RUN_USER"
 
-if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
-  install \
-    -o "$RUN_USER" \
-    -g "$RUN_GROUP" \
-    -m 644 \
-    "$INSTALL_DIR/sign.conf.sample" \
-    "$INSTALL_DIR/sign.conf"
-fi
+  systemctl enable docker.service
+  systemctl enable containerd.service
 
-# Create persistent host directories and seed them from the PlaneSign git source.
-temp_clone="$(mktemp -d)"
-git clone --depth 1 https://github.com/dmod/PlaneSign.git "$temp_clone"
-for dir in datafiles sketches icons; do
-    install -d \
-        -o "$RUN_USER" \
-        -g "$RUN_GROUP" \
-        -m 755 \
-        "$INSTALL_DIR/$dir"
+  if [ ! -f "$INSTALL_DIR/sign.conf" ]; then
+    install \
+      -o "$RUN_USER" \
+      -g "$RUN_GROUP" \
+      -m 644 \
+      "$INSTALL_DIR/sign.conf.sample" \
+      "$INSTALL_DIR/sign.conf"
+  fi
 
-    if [ -d "$temp_clone/$dir" ]; then
-        cp -a "$temp_clone/$dir/." "$INSTALL_DIR/$dir/"
-        chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/$dir"
-    fi
-done
-rm -rf "$temp_clone"
+  # Create persistent host directories and seed them from the PlaneSign git source.
+  temp_clone="$(mktemp -d)"
+  git clone --depth 1 https://github.com/dmod/PlaneSign.git "$temp_clone"
+  for dir in datafiles sketches icons; do
+      install -d \
+          -o "$RUN_USER" \
+          -g "$RUN_GROUP" \
+          -m 755 \
+          "$INSTALL_DIR/$dir"
 
-docker compose -f "$COMPOSE_FILE" config >/dev/null
-docker compose -f "$COMPOSE_FILE" pull
-remove_existing_planesign_container
-docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
+      if [ -d "$temp_clone/$dir" ]; then
+          cp -a "$temp_clone/$dir/." "$INSTALL_DIR/$dir/"
+          chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/$dir"
+      fi
+  done
+  rm -rf "$temp_clone"
 
-# Every update pulls a new :latest and leaves the previous image untagged, which
-# would slowly fill the SD card. Only dangling images are removed here.
-echo "Removing unused Docker images..."
-docker image prune --force || echo "Warning: unable to prune unused Docker images"
+  docker compose -f "$COMPOSE_FILE" config >/dev/null
+  docker compose -f "$COMPOSE_FILE" pull
+  remove_existing_planesign_container
+  docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
 
-chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
+  # Every update pulls a new :latest and leaves the previous image untagged, which
+  # would slowly fill the SD card. Only dangling images are removed here.
+  echo "Removing unused Docker images..."
+  docker image prune --force || echo "Warning: unable to prune unused Docker images"
 
-echo "Installation and configuration completed! Rebooting..."
-# Rebooting while a package operation is in flight is what corrupts dpkg for
-# the next run, so make sure nothing is mid-install first.
-wait_for_apt_locks
-sync
-reboot
+  chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
+
+  echo "Installation and configuration completed! Rebooting..."
+  # Rebooting while a package operation is in flight is what corrupts dpkg for
+  # the next run, so make sure nothing is mid-install first.
+  wait_for_apt_locks
+  sync
+  reboot
+}
+
+main "$@"
