@@ -14,7 +14,8 @@
 		},
 		"ghcr.io/devcontainers-extra/features/uv:1.0.2": {},
 		"ghcr.io/devcontainers/features/git:1": {},
-		"ghcr.io/devcontainers/features/node:2": {}
+		"ghcr.io/devcontainers/features/node:2": {},
+		"ghcr.io/devcontainers/features/github-cli:1": {}
 	},
 	"containerEnv": {
 		"CFLAGS": "-I/usr/include/python3.12"
