@@ -82,6 +82,7 @@ cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/instal
 - onthesnow.com
 - googleapis.com
 - ourairports.com
+- [datasets/country-codes](https://github.com/datasets/country-codes) (country names)
 - quickmaptools.com (state and county polygons)
 - [Natural Earth Vector](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson) (countries and water bodies)
 - open-elevation.com

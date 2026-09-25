@@ -155,6 +155,7 @@ logging.getLogger("fiona.ogrext").setLevel(logging.WARNING)
 logging.getLogger("websockets").setLevel(logging.WARNING)
 
 utilities.read_static_airport_data()
+utilities.read_static_country_data()
 utilities.detect_usb_audio_device()
 
 api_server_process = Process(target=api.api_server, name="APIServer")

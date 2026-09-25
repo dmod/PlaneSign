@@ -7,6 +7,7 @@ import re
 import subprocess
 import time
 import traceback
+import unicodedata
 from datetime import datetime
 from functools import cmp_to_key
 from itertools import pairwise
@@ -213,6 +214,35 @@ def read_static_airport_data():
             shared_config.code_to_airport[code] = (name, lat, lon)
 
     logging.info(f"{len(shared_config.code_to_airport)} static airport configs added")
+
+
+def normalize_country_name(name):
+    name = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c)).upper()
+    name = re.sub(r"['’]", "", name)
+    name = re.sub(r"[^A-Z0-9]+", " ", name).strip()
+    return name.removeprefix("THE ")
+
+
+def read_static_country_data():
+    with open(f"{shared_config.datafiles_dir}/country_names.csv", encoding="utf-8") as f:
+        for line in f:
+            code, name = line.rstrip("\n").split(",", 1)
+            shared_config.country_name_to_code[normalize_country_name(name)] = code
+
+    # Codes are accepted too, since previously resolved codes are cached in satsup.txt and looked up again
+    for code in set(shared_config.country_name_to_code.values()):
+        shared_config.country_name_to_code.setdefault(code, code)
+
+    logging.info(f"{len(shared_config.country_name_to_code)} static country names added")
+
+
+def lookup_country_code(name):
+    """Return the ISO 3166-1 alpha-3 code for a country name or code, e.g. "United States (US)" -> "USA", or None."""
+    for candidate in (name, re.sub(r"\([^)]*\)", " ", name)):
+        code = shared_config.country_name_to_code.get(normalize_country_name(candidate))
+        if code:
+            return code
+    return None
 
 
 class GeoJsonPolygons:

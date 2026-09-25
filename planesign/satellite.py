@@ -6,7 +6,6 @@ import time
 from datetime import datetime
 from os.path import exists
 
-import country_converter as coco
 import requests
 import shared_config
 from bs4 import BeautifulSoup
@@ -15,7 +14,7 @@ from PIL import Image
 from requests.adapters import HTTPAdapter
 from rgbmatrix import graphics
 from urllib3.util.retry import Retry
-from utilities import KM_2_MI, direction_lookup, fix_black, get_distance, reverse_geocode
+from utilities import KM_2_MI, direction_lookup, fix_black, get_distance, lookup_country_code, reverse_geocode
 
 import __main__
 
@@ -78,10 +77,10 @@ def get_country_code(rawname, date):
             code = "TUR"
         elif country.find("(ASIASAT)") != -1:
             code = "HKG"
+        elif country.find("(ISRO)") != -1:
+            code = "IND"
         else:
-            code = coco.convert(names=country.replace("(", "").replace(")", "").rstrip(), to="ISO3", not_found="UNKNOWN")
-            if isinstance(code, list):
-                code = code[0]
+            code = lookup_country_code(country) or "UNKNOWN"
 
         if code != "UNKNOWN":
             fullcode += f"{code}/"
