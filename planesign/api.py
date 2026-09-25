@@ -6,11 +6,10 @@ import random
 import re
 import subprocess
 import tempfile
+import threading
 import time
 from datetime import datetime
 
-import gevent
-import gevent.pywsgi
 import mlb
 import nfl
 import planes
@@ -18,10 +17,10 @@ import shared_config
 import utilities
 from finance import get_tickers
 from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
 from modes import DisplayMode
 from PIL import Image
 from snow import SnowMode, delete_user_resort, load_user_list, populate_resort_lists, save_current_resort
+from werkzeug.serving import make_server
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
 # Avoid 5000/5001/7000: macOS AirPlay Receiver listens on those and Docker Desktop's host
@@ -31,13 +30,16 @@ FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4, 5}
 FREE_SKETCH_BRUSH_SHAPES = {"square", "plus", "x", "circle"}
 
 app = Flask(__name__)
-CORS(app)
+
+# Requests are served on separate threads; serialize the handlers that rewrite and re-read sign.conf
+config_lock = threading.Lock()
 
 
 @app.route("/get_config")
 def get_config():
-    shared_config.CONF.clear()
-    utilities.read_config()
+    with config_lock:
+        utilities.read_config()
+        conf = shared_config.CONF.copy()
     sample = {}
     sample["DATATYPES"] = []
 
@@ -65,8 +67,8 @@ def get_config():
                 sample["DATATYPES"].append(newdict)
 
     for key in sample:
-        if key in shared_config.CONF:
-            sample[key] = shared_config.CONF[key]
+        if key in conf:
+            sample[key] = conf[key]
 
     return json.dumps(sample)
 
@@ -77,13 +79,14 @@ def write_config():
         keys = list(request.args.keys())
         vals = list(request.args.values())
 
-        with open("sign.conf", "w", encoding="utf-8") as f:
-            for i in range(len(keys)):
-                f.write(keys[i] + "=" + vals[i] + "\n")
-            f.flush()
-            os.fsync(f.fileno())
+        with config_lock:
+            with open("sign.conf", "w", encoding="utf-8") as f:
+                for i in range(len(keys)):
+                    f.write(keys[i] + "=" + vals[i] + "\n")
+                f.flush()
+                os.fsync(f.fileno())
 
-        utilities.read_config()
+            utilities.read_config()
         shared_config.shared_forced_sign_update.set()
         return jsonify({"ok": True})
     except Exception as e:
@@ -809,11 +812,12 @@ def api_server():
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    app_server = gevent.pywsgi.WSGIServer(("0.0.0.0", API_PORT), app)
-    app_server.start()
+    app_server = make_server("0.0.0.0", API_PORT, app, threaded=True)
+    server_thread = threading.Thread(target=app_server.serve_forever, name="APIServerHTTP", daemon=True)
+    server_thread.start()
 
-    while not shared_config.shared_shutdown_event.is_set():
-        gevent.sleep(1)
+    shared_config.shared_shutdown_event.wait()
 
     logging.info("API server shutting down...")
-    app_server.stop(timeout=3)
+    app_server.shutdown()
+    app_server.server_close()

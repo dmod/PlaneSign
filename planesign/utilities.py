@@ -8,15 +8,15 @@ import subprocess
 import time
 import traceback
 import unicodedata
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import cmp_to_key
 from itertools import pairwise
 from math import cos, pi, sin
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import favicon
 import numpy as np
-import pytz
 import requests
 import shapely
 import shared_config
@@ -42,9 +42,10 @@ from modes import DisplayMode
 
 
 def read_config():
-    shared_config.CONF.clear()
-
     logging.info("Reading  config...")
+
+    # Build the new config locally and then apply it, so other processes and API threads never see a half-loaded CONF
+    conf = {}
 
     if not os.path.exists("sign.conf"):
         logging.warning("WARNING! No sign.conf found... using default values from sign.conf.sample")
@@ -54,16 +55,20 @@ def read_config():
                 if line.isspace() or line[0] == "#":
                     continue
                 key, val = line.split("=")
-                shared_config.CONF[key] = val.rstrip()
+                conf[key] = val.rstrip()
 
     with open("sign.conf.sample") as f:
         for line in f.readlines():
             if line.isspace() or line[0] == "#":
                 continue
             key, val = line.split("=")
-            if key not in shared_config.CONF.keys():
+            if key not in conf:
                 logging.warning(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val.rstrip()}' from sign.conf.sample")
-                shared_config.CONF[key] = val.rstrip()
+                conf[key] = val.rstrip()
+
+    shared_config.CONF.update(conf)
+    for key in set(shared_config.CONF.keys()) - conf.keys():
+        shared_config.CONF.pop(key, None)
 
     logging.info("Config loaded: " + str(shared_config.CONF))
 
@@ -71,10 +76,10 @@ def read_config():
     local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
     if local_tz is None:
         logging.warning("Cannot find given provided lat/lon! Using UTC...")
-        shared_config.local_timezone = pytz.utc
+        shared_config.local_timezone = UTC
     else:
         logging.info(f"Detected timezone to be {local_tz}")
-        shared_config.local_timezone = pytz.timezone(local_tz)
+        shared_config.local_timezone = ZoneInfo(local_tz)
 
     shared_config.airport_codes_to_ignore = set(shared_config.CONF["IGNORE_AIRPORT_CODES"].split(","))
 
@@ -1309,7 +1314,7 @@ def direction_lookup(destination, origin=None):
 
 
 def convert_unix_to_local_time(unix_timestamp):
-    utc_time = datetime.fromtimestamp(unix_timestamp, tz=pytz.utc)
+    utc_time = datetime.fromtimestamp(unix_timestamp, tz=UTC)
     local_time = utc_time.astimezone(shared_config.local_timezone)
     return local_time
 

@@ -451,17 +451,10 @@ def moon(sign):
 
             moon_image = bg.resize((36, 36), Image.BICUBIC)
 
-            # Find next full moon date
-            keytimes, y = almanac.find_discrete(t, t + timedelta(days=30), almanac.moon_phases(eph))
-
-            found = 0
-            for i in range(len(y)):
-                if y[i] == 2:
-                    found = found + 1
-                if (not fullflag and found == 1) or (fullflag and found == 2):
-                    break
-
-            nextnewdate = keytimes[i].astimezone(shared_config.local_timezone).strftime("%m/%d")
+            # Find the next full moon date. While the moon is shown as full, skip half a lunation ahead to the following one
+            search_start = t + timedelta(days=15) if fullflag else t
+            keytimes, y = almanac.find_discrete(search_start, search_start + timedelta(days=30), almanac.moon_phases(eph))
+            nextfulldate = keytimes[y == 2][0].astimezone(shared_config.local_timezone).strftime("%m/%d")
 
             phaseangle = "({0:.0f}°)".format(phase)
 
@@ -487,7 +480,7 @@ def moon(sign):
         graphics.DrawText(sign.canvas, sign.font46, 89 - 2 * len(phaseangle), 6, graphics.Color(110, 110, 150), phaseangle)
 
         graphics.DrawText(sign.canvas, sign.font57, 1, 17, graphics.Color(60, 60, 160), "Full:")
-        graphics.DrawText(sign.canvas, sign.font57, 27, 17, graphics.Color(60, 60, 160), f"{nextnewdate}")
+        graphics.DrawText(sign.canvas, sign.font57, 27, 17, graphics.Color(60, 60, 160), f"{nextfulldate}")
 
         graphics.DrawText(sign.canvas, sign.font57, 57, 14, graphics.Color(20, 160, 60), "Dir:")
         graphics.DrawText(sign.canvas, sign.font57, 77, 14, graphics.Color(20, 160, 60), moondir)

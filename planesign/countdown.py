@@ -1,7 +1,7 @@
 import random
 import time
 from collections import namedtuple
-from datetime import datetime
+from datetime import UTC, datetime
 
 import shared_config
 from modes import DisplayMode
@@ -85,8 +85,9 @@ def countdown(sign):
                     color_index = 0
 
         else:
-            now = datetime.now(shared_config.local_timezone)
-            countdown_dt = shared_config.local_timezone.localize(shared_config.data_dict["countdown_datetime"])
+            # Aware datetimes sharing a ZoneInfo subtract as wall-clock times, so compare against UTC to stay exact across DST changes
+            now = datetime.now(UTC)
+            countdown_dt = shared_config.data_dict["countdown_datetime"].replace(tzinfo=shared_config.local_timezone)
             countdown_delta = countdown_dt - now
 
             dts = round(countdown_delta.total_seconds())

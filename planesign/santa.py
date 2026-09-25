@@ -2,10 +2,9 @@ import logging
 import math
 import random
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import PIL.Image as Image
-import pytz
 import requests
 import shared_config
 import utilities
@@ -139,7 +138,7 @@ def santa(sign):
     roles = ["Sleeping", "Napping", "Snacking", "Frolicking", "Prancing", "Galloping", "Playing"]
     deernames = ["Dasher", "Dancer", "Prancer", "Vixen", "Comet", "Cupid", "Donner", "Blitzen", "Rudolph"]
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for i in range(len(reindeer_status)):
         reindeer_status[i] = assign_role(i, now)
 
@@ -324,10 +323,10 @@ def santa(sign):
     gift = None
     frame = -1
 
-    # now = datetime(2023, 12, 24, 18, 0, tzinfo=pytz.utc)+timedelta(seconds=-60)
-    # now = datetime(2023, 12, 25, 9, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
-    # now = datetime(2023, 12, 26, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
-    # now = datetime(2024, 1, 1, 0, 0, tzinfo=pytz.utc)+timedelta(seconds=-10)
+    # now = datetime(2023, 12, 24, 18, 0, tzinfo=UTC)+timedelta(seconds=-60)
+    # now = datetime(2023, 12, 25, 9, 0, tzinfo=UTC)+timedelta(seconds=-10)
+    # now = datetime(2023, 12, 26, 0, 0, tzinfo=UTC)+timedelta(seconds=-10)
+    # now = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)+timedelta(seconds=-10)
     while shared_config.shared_mode.value == DisplayMode.SANTA.value:
         now = datetime.now(shared_config.local_timezone)
         # now = now+timedelta(seconds=0.1)
@@ -341,16 +340,17 @@ def santa(sign):
         numnice = numkids - numnaughty
         maxpresents = int(numnice * (1 + (hash(str(now.year)) % 10000000) / 10000000))
 
-        santastart = datetime(now.year, 12, 24, 18, tzinfo=pytz.utc)
+        santastart = datetime(now.year, 12, 24, 18, tzinfo=UTC)
         santaend = santastart + timedelta(seconds=santapath_times[-1])
         tts = santastart - now
 
         if now < santastart:
-            xmas = shared_config.local_timezone.localize(datetime(now.year, 12, 25, 0))
+            xmas = datetime(now.year, 12, 25, 0, tzinfo=shared_config.local_timezone)
         else:
-            xmas = shared_config.local_timezone.localize(datetime(now.year + 1, 12, 25, 0))
+            xmas = datetime(now.year + 1, 12, 25, 0, tzinfo=shared_config.local_timezone)
 
-        ttc = xmas - now
+        # Aware datetimes sharing a ZoneInfo subtract as wall-clock times, so convert one side to UTC to stay exact across DST changes
+        ttc = xmas.astimezone(UTC) - now
 
         days = ttc.days
         hours = ttc.seconds // 3600
@@ -402,9 +402,9 @@ def santa(sign):
             elif int(seconds / 15) % 5 == 1:
                 sign.canvas.SetImage(list_img, 7, 17)
 
-                if now > datetime(now.year, 12, 16, 4, tzinfo=pytz.utc) and not (now.month == 12 and now.day > 25):
+                if now > datetime(now.year, 12, 16, 4, tzinfo=UTC) and not (now.month == 12 and now.day > 25):
                     graphics.DrawText(sign.canvas, sign.font46, 21, 24, graphics.Color(160, 160, 20), "List Checked: Twice")
-                elif now > datetime(now.year, 12, 5, 4, tzinfo=pytz.utc) and not (now.month == 12 and now.day > 25):
+                elif now > datetime(now.year, 12, 5, 4, tzinfo=UTC) and not (now.month == 12 and now.day > 25):
                     graphics.DrawText(sign.canvas, sign.font46, 21, 24, graphics.Color(160, 160, 20), "List Checked: Once")
                 else:
                     graphics.DrawText(sign.canvas, sign.font46, 21, 24, graphics.Color(160, 160, 20), "He's Making A List!")
