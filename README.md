@@ -56,11 +56,53 @@ The updater is intentionally self-contained so older checkouts on the device do 
 cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```
 
+## Testing Locally Without a Matrix
+
+Run the sign against an emulated matrix instead of the LED panels:
+
+```sh
+uv sync
+.venv/bin/python planesign/__main__.py --web
+```
+
+![Moon mode in the web emulator](.data/emulator_moon.png)
+
+- **Web emulator:** with nginx running, watch the matrix at `http://localhost/display.html` and use the controls at `http://localhost/`. The API is at `http://127.0.0.1:5055`, for example `/set_mode/MOON`.
+- **Frame capture:** `http://127.0.0.1:5056/frame.png?scale=8` returns the current frame as a PNG, and `/frame.txt` returns it as a character map. Add `?fresh=1` to wait for the next frame.
+- **Options** (`--help` lists them all):
+
+| Option | Purpose |
+|---|---|
+| `--mode MOON` | Show a mode after the welcome screen |
+| `--fake-time 2026-12-24T18:00` | Start the clock at a given time; without an offset it's local to the sign |
+| `--time-speed 60` | Run the clock faster than real time |
+| `--set MILITARY_TIME=true` | Override a setting for this run only; repeatable |
+| `--config PATH` | Read and save settings in another file instead of `sign.conf` |
+| `--api-port 5065 --ws-port 5066` | Run a second instance alongside the first; preview it at `display.html?ws_port=5066` |
+
+The clock can also be changed while running with `/api/debug/clock?at=2026-12-31T23:59:50&speed=10`, and `?reset=1` restores real time.
+
+`/frame.txt` maps every pixel to a character, with a column ruler, row numbers and a colour legend. This excerpt is the "Full:10/26" line from the frame above:
+
+```text
+frame 3534 | mode MOON | clock 2026-09-24 23:33:32 EDT | captured 0.02 s ago | 128x32
+             1111111111222222222233333333334444444444555555
+   01234567890123456789012345678901234567890123456789012345
+11 .BBBB.......BB...BB..........B....B........BB...BB.....:
+12 .B...........B....B...BB....BB...B.B....B.B..B.B........
+13 .BBB..B..B...B....B...BB.....B...B.B...B.....B.BBB......
+14 .B....B..B...B....B..........B...B.B..B.....B..B..B.....
+15 .B....B..B...B....B...BB.....B...B.B.B.....B...B..B.....
+16 .B.....BBB..BBB..BBB..BB....BBB...B.......BBBB..BB......
+legend: . black
+  : #25251f average, 139 px
+  B #3c3ca0 average, 92 px
+```
+
 ## Technical Notes
 
 - Mandelbrot calculations use NumPy for groups of pixels and scalar Python for the remaining small groups, without Numba or LLVM. Deep zooms and the occasional random search for a new zoom target can be CPU-intensive, especially on a Raspberry Pi.
 - Update the static cache: `./update_static_cache.py`
-- Run without hardware: `.venv/bin/python planesign/__main__.py --web`, then preview at `http://localhost/display.html` or capture the current frame from `http://127.0.0.1:5056/frame.png` (or `/frame.txt` for a character map). `--help` lists the testing flags, including `--mode`, `--fake-time`/`--time-speed` for a fake clock (also settable at `/api/debug/clock`), `--set KEY=VALUE` config overrides, `--config` and alternate ports for a second instance.
 - Text positioning:
   - X, Y coordinates represent the bottom-left corner of characters.
   - (0, 0) is the top-left of the RGB matrix.
