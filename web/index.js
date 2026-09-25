@@ -1,5 +1,6 @@
 var global_current_mode;
 var recordButton, recorder;
+var MAX_MIC_AUDIO_BYTES = 32 * 1024 * 1024;
 var volume_send_timer = null;
 var valid_tickers = null;
 var valid_resorts = null;
@@ -228,48 +229,155 @@ function update_device_info() {
     });
 }
 
-function start_recording() {
-    console.log("Starting recording...")
+function report_audio_error(err) {
+    console.error("Audio failed:", err);
+    alert("Audio failed: " + err.message);
+}
 
-    var mic = document.getElementById("mic-icon");
-    mic.style.fill = "red"
+async function create_microphone_recorder(stream) {
+    var context;
+    try {
+        context = new AudioContext();
+        await context.audioWorklet.addModule("pcm-recorder.js");
+        var node = new AudioWorkletNode(context, "planesign-pcm-recorder");
+        var source = context.createMediaStreamSource(stream);
+        source.connect(node);
+        // The processor leaves its output silent; connecting it keeps capture running.
+        node.connect(context.destination);
+        var chunks = [];
+        var recording = {
+            state: "inactive",
+            start: function () {
+                chunks = [];
+                recording.state = "recording";
+                node.port.postMessage({ type: "start", maxBytes: MAX_MIC_AUDIO_BYTES });
+                context.resume().catch(fail);
+            },
+            stop: function () {
+                recording.state = "stopping";
+                node.port.postMessage({ type: "stop" });
+            }
+        };
+        function fail(err) {
+            node.port.postMessage({ type: "cancel" });
+            chunks = [];
+            recording.state = "inactive";
+            document.getElementById("mic-icon").style.fill = "#1E2D70";
+            report_audio_error(err);
+        }
+        node.onprocessorerror = function () {
+            fail(new Error("Microphone processing failed. Reload the page to try again."));
+            recording.state = "unavailable";
+        };
+        stream.getAudioTracks().forEach(function (track) {
+            track.addEventListener("ended", function () {
+                fail(new Error("The microphone was disconnected. Reload the page to reconnect."));
+                recording.state = "unavailable";
+            });
+        });
+        node.port.onmessage = function (event) {
+            var data = event.data;
+            if (data.type === "data") {
+                chunks.push(data.buffer);
+            } else if (data.type === "stop") {
+                recording.state = "inactive";
+                try {
+                    var wav = encode_recording_wav(chunks, data.sampleRate, data.channels);
+                    chunks = [];
+                    on_recording_ready(wav);
+                } catch (err) {
+                    fail(err);
+                }
+            } else if (data.type === "error") {
+                fail(new Error(data.message));
+            }
+        };
+        return recording;
+    } catch (err) {
+        stream.getTracks().forEach(function (track) { track.stop(); });
+        if (context) {
+            await context.close();
+        }
+        throw err;
+    }
+}
 
-    recorder.start();
+function start_recording(event) {
+    if (!recorder || recorder.state !== "inactive" || event.button !== 0) {
+        return;
+    }
+    try {
+        recordButton.setPointerCapture(event.pointerId);
+        recorder.start();
+        document.getElementById("mic-icon").style.fill = "red";
+    } catch (err) {
+        report_audio_error(err);
+    }
 }
 
 function stop_recording() {
-    console.log("Stopping recording...")
-
-    var mic = document.getElementById("mic-icon");
-    mic.style.fill = "#1E2D70"
-
-    // Stopping the recorder will eventually trigger the `dataavailable` event and we can complete the recording process
-    recorder.stop();
+    if (recorder && recorder.state === "recording") {
+        recorder.stop();
+    }
+    document.getElementById("mic-icon").style.fill = "#1E2D70";
 }
 
-function on_recording_ready(e) {
-    if (!e.data || e.data.size === 0) {
-        return;
+function encode_recording_wav(chunks, sampleRate, channels) {
+    var dataSize = chunks.reduce(function (size, chunk) { return size + chunk.byteLength; }, 0);
+    if (dataSize + 44 > MAX_MIC_AUDIO_BYTES) {
+        throw new Error("Microphone recordings must not exceed 32 MiB. Please record a shorter message.");
     }
-    fetch('api/play_mic_audio', {
-        method: "POST",
-        body: e.data
-    })
-        .then(function (resp) {
-            return resp.json().catch(function () { return null; });
-        })
-        .then(function (body) {
-            // Emulated sign (--web): nothing to play it on, so play the recording back here.
-            if (body && body.playback === "browser") {
-                var url = URL.createObjectURL(e.data);
-                var audio = new Audio(url);
-                audio.onended = function () { URL.revokeObjectURL(url); };
-                audio.play().catch(function (err) { console.error("Browser mic playback failed:", err); });
-            } else {
-                console.log('Audio blob uploaded');
+    if (!dataSize || channels < 1 || channels > 2 || sampleRate < 8000 || sampleRate > 192000 || dataSize % (channels * 2) !== 0) {
+        throw new Error("Recording must contain mono or stereo audio at 8-192 kHz.");
+    }
+    var header = new ArrayBuffer(44);
+    var view = new DataView(header);
+    function writeString(offset, text) {
+        for (var i = 0; i < text.length; i++) {
+            view.setUint8(offset + i, text.charCodeAt(i));
+        }
+    }
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * channels * 2, true);
+    view.setUint16(32, channels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, "data");
+    view.setUint32(40, dataSize, true);
+    return new Blob([header].concat(chunks), { type: "audio/wav" });
+}
+
+async function on_recording_ready(wav) {
+    try {
+        var resp = await fetch("api/play_mic_audio", { method: "POST", body: wav });
+        var body = await resp.json().catch(function () { return null; });
+        if (!resp.ok || !body || body.ok !== true) {
+            throw new Error((body && body.error) || (resp.status === 413 ? "Microphone recordings must not exceed 32 MiB." : "Microphone upload failed (HTTP " + resp.status + ")."));
+        }
+        if (body.playback === "browser") {
+            var url = URL.createObjectURL(wav);
+            var audio = new Audio(url);
+            audio.onended = function () { URL.revokeObjectURL(url); };
+            audio.onerror = function () {
+                URL.revokeObjectURL(url);
+                report_audio_error(new Error("Browser microphone playback failed."));
+            };
+            try {
+                await audio.play();
+            } catch (err) {
+                URL.revokeObjectURL(url);
+                throw err;
             }
-        })
-        .catch(err => console.error(err));
+        }
+    } catch (err) {
+        report_audio_error(err);
+    }
 }
 
 function submit_ticker() {
@@ -1854,28 +1962,27 @@ function play_selected_sound() {
     }
 }
 
-function play_a_sound(sound_id) {
-    console.log("Sending request to play: " + sound_id)
-    call_endpoint("/play_a_sound/" + encodeURIComponent(sound_id), function (value) {
-        var resp;
-        try {
-            resp = JSON.parse(value);
-        } catch (err) {
-            return;
+async function play_a_sound(sound_id) {
+    try {
+        var response = await fetch("api/play_a_sound/" + encodeURIComponent(sound_id));
+        var resp = await response.json().catch(function () { return null; });
+        if (!response.ok || !resp || resp.ok !== true) {
+            throw new Error((resp && resp.error) || ("Sound playback failed (HTTP " + response.status + ")."));
         }
         // When the sign is emulated (--web) there is no speaker attached to it,
         // so the server asks this browser to play the sound locally instead.
         if (resp && resp.playback === "browser" && resp.sound_id) {
             var audio = new Audio("api/sound_file/" + encodeURIComponent(resp.sound_id));
-            audio.play().catch(function (err) {
-                console.error("Browser sound playback failed:", err);
-            });
+            await audio.play();
         }
-    });
+    } catch (err) {
+        report_audio_error(err);
+    }
 }
 
 function get_audio_support() {
     call_endpoint("/is_audio_supported", function (value) {
+        value = JSON.parse(value);
         console.log("Is audio supported? " + value);
         audio_supported = value;
         document.getElementById("mic_button").hidden = !value;
@@ -1918,20 +2025,18 @@ function get_audio_support() {
                 navigator.mediaDevices.getUserMedia({
                     audio: true
                 })
-                    .then(function (stream) {
-                        recordButton.disabled = false;
-                        recordButton.addEventListener('mousedown', start_recording);
-                        recordButton.addEventListener('mouseup', stop_recording);
-                        recordButton.addEventListener('touchstart', start_recording);
-                        recordButton.addEventListener('touchend', stop_recording);
-                        recorder = new MediaRecorder(stream);
-
-                        // listen to dataavailable, which gets triggered whenever we have
-                        // an audio blob available
-                        recorder.addEventListener('dataavailable', on_recording_ready);
-                    });
+                    .then(async function (stream) {
+                        recorder = await create_microphone_recorder(stream);
+                        recordButton.style.touchAction = "none";
+                        recordButton.addEventListener("pointerdown", start_recording);
+                        recordButton.addEventListener("pointerup", stop_recording);
+                        recordButton.addEventListener("pointercancel", stop_recording);
+                        recordButton.addEventListener("lostpointercapture", stop_recording);
+                        window.addEventListener("blur", stop_recording);
+                    })
+                    .catch(report_audio_error);
             } catch (e) {
-                console.error(e)
+                report_audio_error(e);
             }
         }
     });

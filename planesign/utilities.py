@@ -145,6 +145,21 @@ def detect_usb_audio_device():
             return
 
 
+def get_audio_playback_device() -> str:
+    device = shared_config.audio_device
+    if device is None:
+        raise RuntimeError("No audio output device detected")
+    # ALSA's plug layer adapts sample rates and channels to the USB speaker.
+    return f"plug{device}" if device.startswith("hw:") else device
+
+
+def mp3_playback_command(path: str, loop: bool = False) -> list[str]:
+    command = ["/usr/bin/mpg123", "--quiet", "--no-control", "-o", "alsa", "-a", get_audio_playback_device()]
+    if loop:
+        command += ["--loop", "-1"]
+    return command + [path]
+
+
 def find_usb_volume_control(card_num):
     """Return the name of the best available playback volume control on a card, or None."""
     try:

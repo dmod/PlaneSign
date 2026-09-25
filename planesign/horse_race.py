@@ -76,7 +76,6 @@ COAT_STYLES = [
 CONFETTI_COLORS = [(255, 70, 70), (255, 200, 40), (70, 220, 120), (80, 160, 255), (240, 100, 230), (255, 255, 255)]
 
 # Chiptune backing, see sounds/horse_race/generate_music.py
-FFPLAY = "/usr/bin/ffplay"
 MUSIC_DIR = os.path.join(shared_config.sounds_dir, "horse_race")
 POST_CALL = "post_call.mp3"  # bugle over the countdown
 RACE_LOOP = "race_gallop.mp3"  # gallop groove, looped for as long as they are running
@@ -243,7 +242,7 @@ class Music:
 
     def __init__(self):
         self.process = None
-        self.enabled = shared_config.audio_device is not None and not shared_config.emulated_display and os.path.exists(FFPLAY)
+        self.enabled = shared_config.audio_device is not None and not shared_config.emulated_display
 
     def play(self, filename, loop=False):
         self.stop()
@@ -253,22 +252,29 @@ class Music:
         if not os.path.exists(path):
             logging.warning(f"Horse race music missing: {path}")
             return
-        command = [FFPLAY, path, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"]
-        if loop:
-            command += ["-loop", "0"]
         try:
-            self.process = subprocess.Popen(command, env={"SDL_AUDIODRIVER": "alsa", "AUDIODEV": shared_config.audio_device})
+            self.process = subprocess.Popen(utilities.mp3_playback_command(path, loop=loop))
         except OSError:
             logging.exception("Could not start the horse race music")
             self.enabled = False
 
     def stop(self):
         try:
-            if self.process is not None and self.process.poll() is None:
-                self.process.terminate()
+            if self.process is not None:
+                returncode = self.process.poll()
+                if returncode is None:
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                        self.process.wait()
+                elif returncode != 0:
+                    logging.error("Horse race music exited with code %s", returncode)
         except OSError:
             logging.exception("Could not stop the horse race music")
-        self.process = None
+        finally:
+            self.process = None
 
 
 class Dust:

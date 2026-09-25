@@ -29,7 +29,7 @@ RUN apt update && apt -y install --no-install-recommends \
   curl \
   python3 \
   libpython3.12t64 \
-  ffmpeg \
+  mpg123 \
   alsa-utils \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*

@@ -1,4 +1,5 @@
 import glob
+import io
 import json
 import logging
 import os
@@ -7,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import wave
 from datetime import datetime
 
 import mlb
@@ -20,6 +22,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from modes import DisplayMode
 from PIL import Image
 from snow import SnowMode, delete_user_resort, load_user_list, populate_resort_lists, save_current_resort
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.serving import make_server
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
@@ -678,6 +681,8 @@ def set_satellite_mode(mode):
 
 
 SOUND_FILENAME_RE = re.compile(r"^[A-Za-z0-9 _.()\-]+\.mp3$")
+# Keep in sync with the browser recorder and the nginx microphone route.
+MAX_MIC_AUDIO_BYTES = 32 * 1024 * 1024
 
 
 def _validate_sound_filename(filename):
@@ -686,8 +691,10 @@ def _validate_sound_filename(filename):
     return bool(SOUND_FILENAME_RE.match(filename))
 
 
-def _ffplay_env():
-    return {"SDL_AUDIODRIVER": "alsa", "AUDIODEV": shared_config.audio_device}
+def _wait_for_sound(process, sound_id):
+    returncode = process.wait()
+    if returncode != 0:
+        logging.error("Sound playback failed for %s (exit code %s)", sound_id, returncode)
 
 
 @app.route("/is_audio_supported")
@@ -700,7 +707,23 @@ def is_audio_supported():
 @app.route("/play_mic_audio", methods=["POST"])
 def play_mic_audio():
     logging.info(f"Mic audio content length: {request.content_length}")
-    request_data = request.get_data()
+    request.max_content_length = MAX_MIC_AUDIO_BYTES
+    try:
+        request_data = request.get_data()
+        with wave.open(io.BytesIO(request_data), "rb") as recording:
+            channels = recording.getnchannels()
+            rate = recording.getframerate()
+            frames = recording.getnframes()
+            if recording.getsampwidth() != 2 or channels not in (1, 2) or not 8000 <= rate <= 192000 or frames == 0:
+                raise ValueError("Unsupported WAV format")
+            if len(recording.readframes(frames)) != frames * channels * 2:
+                raise ValueError("Truncated WAV recording")
+            duration = frames / rate
+    except RequestEntityTooLarge:
+        return jsonify({"ok": False, "error": "Microphone recordings must not exceed 32 MiB"}), 413
+    except (wave.Error, EOFError, ValueError) as exc:
+        logging.warning("Invalid microphone recording: %s", exc)
+        return jsonify({"ok": False, "error": "Send a complete 16-bit PCM WAV recording (mono or stereo, 8-192 kHz)"}), 400
 
     if shared_config.emulated_display:
         # Emulated sign (--web): no speaker attached, so the browser plays back its own recording.
@@ -709,14 +732,17 @@ def play_mic_audio():
     if shared_config.audio_device is None:
         return jsonify({"ok": False, "error": "No audio output device detected"}), 503
 
-    with tempfile.NamedTemporaryFile(prefix="planesign-mic-", delete=False) as f:
-        f.write(request_data)
-        temp_audio_file = f.name
-
     try:
-        subprocess.run(["/usr/bin/ffplay", temp_audio_file, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=_ffplay_env(), check=False)
-    finally:
-        os.unlink(temp_audio_file)
+        with tempfile.NamedTemporaryFile(prefix="planesign-mic-", suffix=".wav") as f:
+            f.write(request_data)
+            f.flush()
+            subprocess.run(["/usr/bin/aplay", "--quiet", "-D", utilities.get_audio_playback_device(), f.name], capture_output=True, text=True, check=True, timeout=duration + 10)
+    except subprocess.CalledProcessError as exc:
+        logging.error("Microphone playback failed: %s", exc.stderr)
+        return jsonify({"ok": False, "error": "Could not play microphone audio on the sign"}), 500
+    except (OSError, subprocess.TimeoutExpired):
+        logging.exception("Could not run microphone playback")
+        return jsonify({"ok": False, "error": "Microphone playback is unavailable or timed out"}), 503
 
     return jsonify({"ok": True, "playback": "sign"})
 
@@ -725,6 +751,10 @@ def play_mic_audio():
 def play_a_sound(sound_id):
     if not _validate_sound_filename(sound_id):
         return jsonify({"ok": False, "error": "Invalid sound"}), 400
+
+    path = os.path.join(shared_config.sounds_dir, sound_id)
+    if not os.path.isfile(path):
+        return jsonify({"ok": False, "error": "Sound not found"}), 404
 
     if shared_config.emulated_display:
         # Emulated sign (--web): no audio hardware here, so the browser plays the file instead.
@@ -736,7 +766,12 @@ def play_a_sound(sound_id):
 
     logging.info(f"Playing sound: {sound_id}")
 
-    subprocess.Popen(["/usr/bin/ffplay", f"{shared_config.sounds_dir}/{sound_id}", "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error"], env=_ffplay_env())
+    try:
+        process = subprocess.Popen(utilities.mp3_playback_command(path))
+    except OSError:
+        logging.exception("Could not start sound playback")
+        return jsonify({"ok": False, "error": "Sound playback is unavailable"}), 503
+    threading.Thread(target=_wait_for_sound, args=(process, sound_id), daemon=True).start()
     return jsonify({"ok": True, "playback": "sign"})
 
 

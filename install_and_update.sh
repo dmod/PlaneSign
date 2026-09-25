@@ -42,7 +42,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable planesign-ble.service
 
 # apt install system packages
-sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev ffmpeg libffi-dev
+sudo apt install -y git nginx python3-venv python3-pip python3-dev python3-pil libatlas-base-dev mpg123 alsa-utils libffi-dev
 
 # Install rpi-rgb-led-matrix
 LED_MATRIX_DIR="${INSTALL_DIR}/rpi-rgb-led-matrix"

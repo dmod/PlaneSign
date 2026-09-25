@@ -101,6 +101,18 @@ legend: . black
 
 ## Technical Notes
 
+### Audio
+
+- Runtime audio uses `mpg123` for MP3 soundboard clips and horse-race music, and `alsa-utils` (`aplay` and `amixer`) for microphone playback, USB speaker detection, and volume control. FFmpeg is not needed in the runtime image.
+- Microphone recording requires HTTPS, microphone permission, and a browser with Web Audio/AudioWorklet support (current Chrome, Firefox, Edge, and Safari). The browser captures 16-bit PCM WAV directly, with mono/stereo support; neither browser recording codecs nor server-side transcoding are needed. ALSA adapts playback to the USB speaker.
+- Microphone uploads are limited to **32 MiB** in the browser, API, and both nginx configurations. At 48 kHz this allows about 5.8 minutes of mono or 2.9 minutes of stereo audio. Oversized or invalid recordings report an error instead of playing.
+- The microphone nginx route allows up to one hour for the response because the API waits for playback to finish; other routes retain their normal body-size and timeout limits. Classic installations need to deploy the updated nginx configuration and reload nginx.
+- With `--web`, soundboard clips and microphone recordings play in the controlling browser; horse-race music remains silent.
+- Regenerating the bundled horse-race MP3s with `sounds/horse_race/generate_music.py` still requires FFmpeg on the authoring machine only. The generated tracks are already included; no runtime generation is needed.
+- Rebuild/pull the new Docker image to remove the old FFmpeg dependency tree. Updating a classic installation installs the new players but does not automatically remove existing system packages that other applications might use.
+
+### Display and data
+
 - Mandelbrot calculations use NumPy for groups of pixels and scalar Python for the remaining small groups, without Numba or LLVM. Deep zooms and the occasional random search for a new zoom target can be CPU-intensive, especially on a Raspberry Pi.
 - Update the static cache: `./update_static_cache.py`
 - Text positioning:
