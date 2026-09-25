@@ -28,6 +28,10 @@ shared_snow_mode = Value("i", 1)
 
 free_sketch_pixels = Array("B", 128 * 32 * 3)
 
+# Wall clock as [fake_base, real_base, speed]: now = fake_base + (time.time() - real_base) * speed.
+# The default [0, 0, 1] is the real clock. Read and set it through psclock.py.
+clock_state = Array("d", [0.0, 0.0, 1.0])
+
 # Signal handlers run on the main thread between bytecodes, so they may only touch lock-free
 # shared memory. Anything holding a lock (logging, Event.set(), manager proxies) deadlocks when
 # the handler interrupts the same lock, which is why shutdown is requested through this flag and
@@ -53,6 +57,14 @@ font_dir = "./fonts"
 
 sounds_dir = "sounds"
 datafiles_dir = "./datafiles"
+
+# Overridable from the command line (see __main__.parse_args) so a second instance can run alongside the first.
+# Avoid 5000/5001/7000: macOS AirPlay Receiver listens on those and Docker Desktop's host
+# networking leaks them into the container's loopback, which silently hijacks the ports.
+api_port = 5055
+ws_port = 5056
+config_path = "sign.conf"
+config_overrides = {}
 
 shared_shutdown_event = None
 data_dict = None

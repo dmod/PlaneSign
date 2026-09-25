@@ -5,6 +5,7 @@ import time
 from threading import Lock, Thread
 
 import finnhub
+import psclock
 import requests
 import shared_config
 import websocket
@@ -435,9 +436,9 @@ Open Price={self.open_price}"
     def drawtime(self):
 
         if shared_config.CONF["MILITARY_TIME"].lower() == "true":
-            print_time = convert_unix_to_local_time(time.time()).strftime("%H:%M")
+            print_time = convert_unix_to_local_time(psclock.time()).strftime("%H:%M")
         else:
-            print_time = convert_unix_to_local_time(time.time()).strftime("%-I:%M%p")
+            print_time = convert_unix_to_local_time(psclock.time()).strftime("%-I:%M%p")
         graphics.DrawText(self.sign.canvas, self.sign.font57, 93, 8, graphics.Color(255, 158, 31), print_time)
 
     def drawticker(self):

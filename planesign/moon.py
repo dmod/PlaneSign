@@ -3,9 +3,10 @@ import os.path
 import random
 import shutil
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, timedelta
 
 import numpy as np
+import psclock
 import shared_config
 import utilities
 from modes import DisplayMode
@@ -175,7 +176,7 @@ def moon(sign):
             # Current Barycentric Positions
             # ---------------------------------------------------------
 
-            now = datetime.utcnow()
+            now = psclock.now(UTC)
             t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second)
 
             e_bary = earth.at(t)

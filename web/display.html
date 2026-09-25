@@ -169,7 +169,8 @@
         }
 
         function connect() {
-            const wsUrl = `ws://${window.location.hostname}:5056`;
+            const wsPort = new URLSearchParams(window.location.search).get('ws_port') || 5056;
+            const wsUrl = `ws://${window.location.hostname}:${wsPort}`;
             setStatus('connecting', `Connecting to ${wsUrl}...`);
 
             ws = new WebSocket(wsUrl);

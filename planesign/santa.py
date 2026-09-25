@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import PIL.Image as Image
+import psclock
 import requests
 import shared_config
 import utilities
@@ -138,7 +139,7 @@ def santa(sign):
     roles = ["Sleeping", "Napping", "Snacking", "Frolicking", "Prancing", "Galloping", "Playing"]
     deernames = ["Dasher", "Dancer", "Prancer", "Vixen", "Comet", "Cupid", "Donner", "Blitzen", "Rudolph"]
 
-    now = datetime.now(UTC)
+    now = psclock.now(UTC)
     for i in range(len(reindeer_status)):
         reindeer_status[i] = assign_role(i, now)
 
@@ -328,7 +329,7 @@ def santa(sign):
     # now = datetime(2023, 12, 26, 0, 0, tzinfo=UTC)+timedelta(seconds=-10)
     # now = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)+timedelta(seconds=-10)
     while shared_config.shared_mode.value == DisplayMode.SANTA.value:
-        now = datetime.now(shared_config.local_timezone)
+        now = psclock.now(shared_config.local_timezone)
         # now = now+timedelta(seconds=0.1)
 
         numkids = int(536785866 * (1 + 0.01 * (now.year - 2019)))

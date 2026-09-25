@@ -9,7 +9,7 @@ import logging
 
 from PIL import Image
 
-from emulated_matrix.server import LISTEN_PORT, FrameServer
+from emulated_matrix.server import FrameServer
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +101,10 @@ class RGBMatrix:
         self._height = options.rows if hasattr(options, "rows") else 32
         self._brightness = getattr(options, "brightness", 100)
 
-        self._frame_server = FrameServer()
+        self._frame_server = FrameServer(self._width, self._height)
         self._frame_server.start()
 
-        logger.info("Emulated RGB matrix initialized: %dx%d, streaming on ws://0.0.0.0:%d", self._width, self._height, LISTEN_PORT)
+        logger.info("Emulated RGB matrix initialized: %dx%d, streaming on ws://0.0.0.0:%d", self._width, self._height, self._frame_server.port)
 
     @property
     def width(self) -> int:

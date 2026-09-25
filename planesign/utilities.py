@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 import favicon
 import numpy as np
+import psclock
 import requests
 import shapely
 import shared_config
@@ -47,10 +48,10 @@ def read_config():
     # Build the new config locally and then apply it, so other processes and API threads never see a half-loaded CONF
     conf = {}
 
-    if not os.path.exists("sign.conf"):
-        logging.warning("WARNING! No sign.conf found... using default values from sign.conf.sample")
+    if not os.path.exists(shared_config.config_path):
+        logging.warning(f"WARNING! No {shared_config.config_path} found... using default values from sign.conf.sample")
     else:
-        with open("sign.conf") as f:
+        with open(shared_config.config_path) as f:
             for line in f.readlines():
                 if line.isspace() or line[0] == "#":
                     continue
@@ -63,8 +64,12 @@ def read_config():
                 continue
             key, val = line.split("=")
             if key not in conf:
-                logging.warning(f"WARNING! No setting for '{key}' found in sign.conf, using value '{val.rstrip()}' from sign.conf.sample")
+                logging.warning(f"WARNING! No setting for '{key}' found in {shared_config.config_path}, using value '{val.rstrip()}' from sign.conf.sample")
                 conf[key] = val.rstrip()
+
+    if shared_config.config_overrides:
+        logging.info(f"Overriding config from the command line: {', '.join(shared_config.config_overrides)}")
+        conf.update(shared_config.config_overrides)
 
     shared_config.CONF.update(conf)
     for key in set(shared_config.CONF.keys()) - conf.keys():
@@ -1395,9 +1400,9 @@ def only_show_time(sign):
 
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == "true":
-        print_time = convert_unix_to_local_time(time.time()).strftime("%H:%M")
+        print_time = convert_unix_to_local_time(psclock.time()).strftime("%H:%M")
     else:
-        print_time = convert_unix_to_local_time(time.time()).strftime("%-I:%M%p")
+        print_time = convert_unix_to_local_time(psclock.time()).strftime("%-I:%M%p")
 
     xloc = 86
     weather = shared_config.data_dict.get("weather")

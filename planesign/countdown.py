@@ -1,8 +1,9 @@
 import random
 import time
 from collections import namedtuple
-from datetime import UTC, datetime
+from datetime import UTC
 
+import psclock
 import shared_config
 from modes import DisplayMode
 from rgbmatrix import graphics
@@ -86,7 +87,7 @@ def countdown(sign):
 
         else:
             # Aware datetimes sharing a ZoneInfo subtract as wall-clock times, so compare against UTC to stay exact across DST changes
-            now = datetime.now(UTC)
+            now = psclock.now(UTC)
             countdown_dt = shared_config.data_dict["countdown_datetime"].replace(tzinfo=shared_config.local_timezone)
             countdown_delta = countdown_dt - now
 

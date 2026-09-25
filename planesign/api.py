@@ -7,12 +7,12 @@ import re
 import subprocess
 import tempfile
 import threading
-import time
 from datetime import datetime
 
 import mlb
 import nfl
 import planes
+import psclock
 import shared_config
 import utilities
 from finance import get_tickers
@@ -23,9 +23,6 @@ from snow import SnowMode, delete_user_resort, load_user_list, populate_resort_l
 from werkzeug.serving import make_server
 
 SKETCHES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sketches")
-# Avoid 5000/5001/7000: macOS AirPlay Receiver listens on those and Docker Desktop's host
-# networking leaks them into the container's loopback, which silently hijacks the API.
-API_PORT = 5055
 FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4, 5}
 FREE_SKETCH_BRUSH_SHAPES = {"square", "plus", "x", "circle"}
 
@@ -80,7 +77,7 @@ def write_config():
         vals = list(request.args.values())
 
         with config_lock:
-            with open("sign.conf", "w", encoding="utf-8") as f:
+            with open(shared_config.config_path, "w", encoding="utf-8") as f:
                 for i in range(len(keys)):
                     f.write(keys[i] + "=" + vals[i] + "\n")
                 f.flush()
@@ -90,13 +87,38 @@ def write_config():
         shared_config.shared_forced_sign_update.set()
         return jsonify({"ok": True})
     except Exception as e:
-        logging.exception("Failed to write sign.conf")
+        logging.exception(f"Failed to write {shared_config.config_path}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/status")
 def get_status():
     return str(shared_config.shared_mode.value)
+
+
+def clock_status():
+    return {"now": psclock.now(shared_config.local_timezone).isoformat(), "fake": psclock.is_fake(), "speed": psclock.speed(), "description": psclock.describe()}
+
+
+@app.route("/debug/clock")
+def debug_clock():
+    """Read the clock; ?at=ISO_TIME[&speed=FACTOR] sets it (speed defaults to 1), ?speed=FACTOR alone changes the pace, ?reset=1 restores real time."""
+    if not shared_config.emulated_display:
+        return jsonify({"error": "The debug clock is only available with --web"}), 404
+    try:
+        if request.args.get("reset"):
+            psclock.reset_clock()
+        elif "at" in request.args or "speed" in request.args:
+            at = psclock.parse_time(request.args["at"]) if "at" in request.args else psclock.time()
+            psclock.set_clock(at, float(request.args.get("speed", 1)))
+        else:
+            return jsonify(clock_status())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    logging.info(f"Clock set to {psclock.describe()}")
+    shared_config.shared_forced_sign_update.set()
+    return jsonify(clock_status())
 
 
 @app.route("/turn_on")
@@ -591,7 +613,7 @@ def get_nfl_games():
     if not snapshot:
         return jsonify({"games": [], "selected": shared_config.data_dict.get("nfl_game_id") or "", "status": "loading"})
     military = str(shared_config.CONF.get("MILITARY_TIME", "false")).lower() == "true"
-    return jsonify({"games": nfl.game_options(snapshot, time.time(), military), "selected": pinned_game_id("nfl", nfl, snapshot), "status": snapshot.get("status", "ready")})
+    return jsonify({"games": nfl.game_options(snapshot, psclock.time(), military), "selected": pinned_game_id("nfl", nfl, snapshot), "status": snapshot.get("status", "ready")})
 
 
 @app.route("/set_nfl_game/", defaults={"game_id": ""})
@@ -611,7 +633,7 @@ def get_mlb_games():
     if not snapshot:
         return jsonify({"games": [], "selected": shared_config.data_dict.get("mlb_game_id") or "", "status": "loading"})
     military = str(shared_config.CONF.get("MILITARY_TIME", "false")).lower() == "true"
-    return jsonify({"games": mlb.game_options(snapshot, time.time(), military), "selected": pinned_game_id("mlb", mlb, snapshot), "status": snapshot.get("status", "ready")})
+    return jsonify({"games": mlb.game_options(snapshot, psclock.time(), military), "selected": pinned_game_id("mlb", mlb, snapshot), "status": snapshot.get("status", "ready")})
 
 
 @app.route("/set_mlb_game/", defaults={"game_id": ""})
@@ -812,7 +834,7 @@ def api_server():
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    app_server = make_server("0.0.0.0", API_PORT, app, threaded=True)
+    app_server = make_server("0.0.0.0", shared_config.api_port, app, threaded=True)
     server_thread = threading.Thread(target=app_server.serve_forever, name="APIServerHTTP", daemon=True)
     server_thread.start()
 

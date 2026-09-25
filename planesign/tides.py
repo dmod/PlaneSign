@@ -592,10 +592,11 @@ def draw_tides_frame(sign, payload, config, now, elapsed):
 
 @__main__.planesign_mode_handler(DisplayMode.TIDES)
 def show_tides(sign):
+    import psclock
     import shared_config
 
     while shared_config.shared_mode.value == DisplayMode.TIDES.value:
-        draw_tides_frame(sign, shared_config.data_dict.get("tides"), shared_config.CONF.copy(), time.time(), time.monotonic())
+        draw_tides_frame(sign, shared_config.data_dict.get("tides"), shared_config.CONF.copy(), psclock.time(), time.monotonic())
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         if sign.wait_loop(FRAME_INTERVAL):
             return

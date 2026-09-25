@@ -1,6 +1,7 @@
 import logging
 import time
 
+import psclock
 import requests
 import shared_config
 import utilities
@@ -26,7 +27,7 @@ def show_weather(sign):
         start_index_day = 0
 
         # After 6PM today? Get the next days forecast
-        if utilities.convert_unix_to_local_time(time.time()).hour >= 18:
+        if utilities.convert_unix_to_local_time(psclock.time()).hour >= 18:
             start_index_day = 1
 
         if polltime is None or time.perf_counter() - polltime > 30:

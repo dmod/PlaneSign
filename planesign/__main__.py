@@ -1,8 +1,48 @@
+import argparse
 import os
 import sys
+from datetime import datetime
 
-if "--web" in sys.argv:
-    sys.argv.remove("--web")
+
+def parse_args():
+    parser = argparse.ArgumentParser(prog="planesign", description="Drive the PlaneSign RGB LED matrix.")
+    parser.add_argument("--web", action="store_true", help="emulate the matrix and stream frames to web/display.html instead of driving hardware")
+    parser.add_argument("--mode", type=str.upper, metavar="MODE", help="mode to show after the welcome screen, e.g. MOON (default PLANES_ALERT)")
+    parser.add_argument("--fake-time", metavar="ISO_TIME", help="start the clock at this time, e.g. 2026-12-24T18:00; without an offset it is local to the sign's location")
+    parser.add_argument("--time-speed", type=float, default=1.0, metavar="FACTOR", help="run the clock this many times faster than real time (default 1)")
+    parser.add_argument("--config", default="sign.conf", metavar="PATH", help="config file to read and to save settings to (default sign.conf)")
+    parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="override a config value for this run without changing the config file; repeatable")
+    parser.add_argument("--api-port", type=int, metavar="PORT", help="port for the Flask API (default 5055)")
+    parser.add_argument("--ws-port", type=int, metavar="PORT", help="port for the --web frame stream and frame capture (default 5056)")
+    args = parser.parse_args()
+
+    from modes import DisplayMode
+
+    if args.mode and args.mode not in DisplayMode.__members__:
+        parser.error(f"unknown mode {args.mode}; choose from {', '.join(DisplayMode.__members__)}")
+    if not 0 < args.time_speed < float("inf"):
+        parser.error("--time-speed must be a positive number")
+    if args.fake_time:
+        try:
+            datetime.fromisoformat(args.fake_time)
+        except ValueError:
+            parser.error(f"--fake-time {args.fake_time!r} is not an ISO 8601 time")
+
+    with open("sign.conf.sample") as f:
+        known_keys = {line.split("=")[0] for line in f if "=" in line and not line.startswith("#")}
+    args.overrides = {}
+    for item in args.set:
+        key, sep, value = item.partition("=")
+        if not sep or key not in known_keys:
+            parser.error(f"--set {item!r} must be KEY=VALUE with a key from sign.conf.sample")
+        args.overrides[key] = value
+
+    return args
+
+
+cli_args = parse_args()
+
+if cli_args.web:
     os.environ["PLANESIGN_EMULATED_DISPLAY"] = "1"
     import emulated_matrix
 
@@ -54,6 +94,7 @@ import nfl
 import planes
 import plants
 import pong
+import psclock
 import santa
 import satellite
 import shared_config
@@ -67,6 +108,14 @@ import welcome
 from modes import DisplayMode
 
 import planesign
+
+# Applied before any config is read or child process is forked, so every process sees them
+shared_config.config_path = cli_args.config
+shared_config.config_overrides = cli_args.overrides
+if cli_args.api_port:
+    shared_config.api_port = cli_args.api_port
+if cli_args.ws_port:
+    shared_config.ws_port = cli_args.ws_port
 
 manager = Manager()
 shared_config.data_dict = manager.dict()
@@ -167,6 +216,11 @@ mlb_data_process = Process(target=mlb.get_mlb_data_worker, name="MLBData", args=
 
 utilities.read_config()
 
+# After read_config, which sets the local timezone that --fake-time values without an offset are read in
+if cli_args.fake_time or cli_args.time_speed != 1:
+    psclock.set_clock(psclock.parse_time(cli_args.fake_time) if cli_args.fake_time else psclock.time(), cli_args.time_speed)
+    logging.info(f"Clock set to {psclock.describe()}")
+
 api_server_process.start()
 plane_data_process.start()
 weather_data_process.start()
@@ -176,7 +230,7 @@ mlb_data_process.start()
 
 ps = planesign.PlaneSign(defined_mode_handlers)
 defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
-shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
+shared_config.shared_mode.value = DisplayMode[cli_args.mode or "PLANES_ALERT"].value
 ps.sign_loop()
 
 logging.info("Sign loop exited, shutting down child processes...")

@@ -60,6 +60,7 @@ cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/instal
 
 - Mandelbrot calculations use NumPy for groups of pixels and scalar Python for the remaining small groups, without Numba or LLVM. Deep zooms and the occasional random search for a new zoom target can be CPU-intensive, especially on a Raspberry Pi.
 - Update the static cache: `./update_static_cache.py`
+- Run without hardware: `.venv/bin/python planesign/__main__.py --web`, then preview at `http://localhost/display.html` or capture the current frame from `http://127.0.0.1:5056/frame.png` (or `/frame.txt` for a character map). `--help` lists the testing flags, including `--mode`, `--fake-time`/`--time-speed` for a fake clock (also settable at `/api/debug/clock`), `--set KEY=VALUE` config overrides, `--config` and alternate ports for a second instance.
 - Text positioning:
   - X, Y coordinates represent the bottom-left corner of characters.
   - (0, 0) is the top-left of the RGB matrix.

@@ -5,6 +5,7 @@ import time
 import unicodedata
 from datetime import datetime
 
+import psclock
 import requests
 import shared_config
 import utilities
@@ -918,7 +919,7 @@ def draw_mlb_frame(sign, snapshot, game_id, config, now, elapsed):
 @__main__.planesign_mode_handler(DisplayMode.MLB)
 def show_mlb(sign):
     while shared_config.shared_mode.value == DisplayMode.MLB.value:
-        draw_mlb_frame(sign, shared_config.data_dict.get("mlb"), shared_config.data_dict.get("mlb_game_id"), shared_config.CONF.copy(), time.time(), time.monotonic())
+        draw_mlb_frame(sign, shared_config.data_dict.get("mlb"), shared_config.data_dict.get("mlb_game_id"), shared_config.CONF.copy(), psclock.time(), time.monotonic())
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         if sign.wait_loop(FRAME_INTERVAL):
             return
