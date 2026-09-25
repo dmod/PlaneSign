@@ -17,7 +17,7 @@ dependencies = [
     "rgbmatrix",
     "shapely>=2.1.2",
     "skyfield>=1.54",
-    "timezonefinder>=8.2.4",
+    "timezonefinder>=9.0.0",
     "websocket-client>=1.9.0",
     "websockets>=15.0",
 ]
