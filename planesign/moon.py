@@ -282,14 +282,46 @@ def moon(sign):
             # Phase Name
             # ---------------------------------------------------------
 
-            _, ymonth = almanac.find_discrete(ts.utc(t.utc.year, t.utc.month, 1, 0), ts.utc(t.utc.year + 1 if t.utc.month == 12 else t.utc.year, (t.utc.month % 12) + 1, 1, 0), almanac.moon_phases(eph))
-            tseason, _ = almanac.find_discrete(t - timedelta(days=92), t + timedelta(days=92), almanac.seasons(eph))
-            tseason_events, yseason = almanac.find_discrete(tseason[0], tseason[1], almanac.moon_phases(eph))
+            moon_phases = almanac.moon_phases(eph)
+
+            def same_event(a, b):
+                return abs(a - b) < 1e-3  # days
+
+            def nearest_phase_event(kind):
+                # The New/Full name windows span at most ~4 days either side of the event
+                times, kinds = almanac.find_discrete(t - timedelta(days=5), t + timedelta(days=5), moon_phases)
+                times = times[kinds == kind]
+                return times[np.argmin(abs(times - t))]
+
+            def is_second_in_local_month(event, kind):
+                month_start = event.astimezone(shared_config.local_timezone).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                next_month_start = (month_start + timedelta(days=32)).replace(day=1)
+                times, kinds = almanac.find_discrete(ts.from_datetime(month_start), ts.from_datetime(next_month_start), moon_phases)
+                times = times[kinds == kind]
+                return len(times) > 1 and same_event(times[1], event)
+
+            def is_third_of_four_in_season(event, kind):
+                # Seasons last at most ~94 days, so +/-100 days always brackets the event
+                tseason, _ = almanac.find_discrete(event - timedelta(days=100), event + timedelta(days=100), almanac.seasons(eph))
+                i = np.searchsorted(tseason.tt, event.tt)
+                times, kinds = almanac.find_discrete(tseason[i - 1], tseason[i], moon_phases)
+                times = times[kinds == kind]
+                return len(times) == 4 and same_event(times[2], event)
+
+            def is_harvest(event):
+                # The Harvest Moon is the full moon closest to the September equinox
+                tseason, yseason = almanac.find_discrete(event - timedelta(days=16), event + timedelta(days=16), almanac.seasons(eph))
+                equinoxes = tseason[yseason == 2]
+                if len(equinoxes) == 0:
+                    return False
+                times, kinds = almanac.find_discrete(equinoxes[0] - timedelta(days=16), equinoxes[0] + timedelta(days=16), moon_phases)
+                fulls = times[kinds == 2]
+                return same_event(fulls[np.argmin(abs(fulls - equinoxes[0]))], event)
 
             phasename = ""
-            fullflag = False
             if phase <= 19.948 or phase > 340.052:
-                if ((ymonth == 0).sum() > 1 and t.utc.day > 15) or ((yseason == 0).sum() > 3 and np.argmin(abs(tseason_events[yseason == 0] - t)) == 2):
+                new_event = nearest_phase_event(0)
+                if is_second_in_local_month(new_event, 0) or is_third_of_four_in_season(new_event, 0):
                     if centermoondist.km < perigee_dist:
                         phasename = "Sup. "
                     elif centermoondist.km > apogee_dist:
@@ -308,9 +340,9 @@ def moon(sign):
             elif phase <= 160.052:
                 phasename = "Waxing Gibbous"
             elif phase <= 199.948:
-                fullflag = True
-                _, ys = almanac.find_discrete(t - timedelta(days=14, hours=18, minutes=22, seconds=1.5), t + timedelta(days=14, hours=18, minutes=22, seconds=1.5), almanac.seasons(eph))
-                if 2 in ys and not (((ymonth == 2).sum() > 1 and t.utc.day > 15) or ((yseason == 2).sum() > 3 and np.argmin(abs(tseason_events[yseason == 2] - t)) == 2)):
+                full_event = nearest_phase_event(2)
+                blue = is_second_in_local_month(full_event, 2) or is_third_of_four_in_season(full_event, 2)
+                if is_harvest(full_event) and not blue:
                     if centermoondist.km < perigee_dist:
                         phasename = "S. "
                     elif centermoondist.km > apogee_dist:
@@ -321,7 +353,7 @@ def moon(sign):
                         phasename = "Super "
                     elif centermoondist.km > apogee_dist:
                         phasename = "Micro "
-                    if ((ymonth == 2).sum() > 1 and t.utc.day > 15) or ((yseason == 2).sum() > 3 and np.argmin(abs(tseason_events[yseason == 2] - t)) == 2):
+                    if blue:
                         phasename += "Blue Moon"
                     else:
                         phasename += "Full Moon"
@@ -442,19 +474,19 @@ def moon(sign):
 
             bg = bg.rotate(moonorient, resample=Image.BICUBIC)
 
-            if (now.month == 10 and now.day == 31) or (now.month == 11 and now.day == 1 and now.hour < 6):
+            local_now = now.astimezone(shared_config.local_timezone)
+            if (local_now.month == 10 and local_now.day == 31) or (local_now.month == 11 and local_now.day == 1 and local_now.hour < 6):
                 if percent >= 70:
                     pumpkin = Image.open(f"{shared_config.icons_dir}/moon/witch.png").convert("RGBA")
                     bg.paste(pumpkin, (0, 0), pumpkin)
                 else:
                     pumpkin = Image.open(f"{shared_config.icons_dir}/moon/pumpkin.png").convert("RGBA")
-                    bg.paste(pumpkin, (int(cx), 0), pumpkin)
+                    bg.paste(pumpkin, (0, 0), pumpkin)
 
             moon_image = bg.resize((36, 36), Image.BICUBIC)
 
-            # Find the next full moon date. While the moon is shown as full, skip half a lunation ahead to the following one
-            search_start = t + timedelta(days=15) if fullflag else t
-            keytimes, y = almanac.find_discrete(search_start, search_start + timedelta(days=30), almanac.moon_phases(eph))
+            # Find the next full moon date (find_discrete only returns events after t)
+            keytimes, y = almanac.find_discrete(t, t + timedelta(days=30), almanac.moon_phases(eph))
             nextfulldate = keytimes[y == 2][0].astimezone(shared_config.local_timezone).strftime("%m/%d")
 
             phaseangle = "({0:.0f}°)".format(phase)
