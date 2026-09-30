@@ -1,6 +1,6 @@
 # PlaneSign
 
-[![CI to Docker Hub](https://github.com/dmod/PlaneSign/actions/workflows/pipeline.yml/badge.svg)](https://github.com/dmod/PlaneSign/actions/workflows/pipeline.yml)
+[![CI to GitHub Packages](https://github.com/dmod/PlaneSign/actions/workflows/pipeline.yml/badge.svg)](https://github.com/dmod/PlaneSign/actions/workflows/pipeline.yml)
 
 ![Image](.data/planesign.jpeg)
 
@@ -55,6 +55,16 @@ The updater is intentionally self-contained so older checkouts on the device do 
 ```sh
 cd /home/pi && git clone https://github.com/dmod/PlaneSign && ./PlaneSign/install_and_update.sh
 ```
+
+### Container Publishing
+
+The [publishing workflow](.github/workflows/pipeline.yml) runs on pushes to `main` or manual dispatch and publishes `ghcr.io/dmod/planesign` with `latest` and `YYYYMMDD.<run_number>` tags.
+
+- Use a self-hosted runner with native ARM64 support, Docker access, and Actions Runner **2.327.1 or newer** for the actions' Node 24 runtime.
+- Publishing runs are serialized without canceling an active run. GitHub retains only the newest pending run in the concurrency group. Each job has a 120-minute timeout.
+- A repository-specific `docker-container` Buildx builder keeps its cache between runs without changing the runner's selected builder. The setup action removes the builder at job end while preserving its state.
+- Cleanup prunes only that builder's cache entries unused for seven days. It does not prune the runner's other builders or Docker images.
+- Images target `linux/arm64/v8` and retain build provenance. GitHub's `unknown/unknown` entry is the provenance attestation, not another runnable architecture.
 
 ## Testing Locally Without a Matrix
 
