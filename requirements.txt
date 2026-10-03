@@ -1,5 +1,5 @@
 numpy==1.22.0
-timezonefinder==6.5.8
+tzfpy==2.1.0
 beautifulsoup4==4.15.0
 favicon==0.7.0
 Flask==3.1.0

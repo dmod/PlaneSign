@@ -7,15 +7,13 @@ import psclock
 import shared_config
 from modes import DisplayMode
 from rgbmatrix import graphics
-from timezonefinder import TimezoneFinder
-from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode
+from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode, timezone_at
 
 import __main__
 
 KNOTS_TO_MPH = 1.15078
 REFRESH_EVERY_N_LOOPS = 50
 
-timezone_finder = None
 airport_timezones = {}
 
 
@@ -27,12 +25,8 @@ def get_airport_position(iata_code):
 
 
 def get_airport_timezone(iata_code, position):
-    global timezone_finder
-
     if iata_code not in airport_timezones:
-        if timezone_finder is None:
-            timezone_finder = TimezoneFinder()
-        airport_timezones[iata_code] = timezone_finder.timezone_at(lat=position[0], lng=position[1])
+        airport_timezones[iata_code] = timezone_at(lat=position[0], lng=position[1])
 
     tz_name = airport_timezones[iata_code]
     return ZoneInfo(tz_name) if tz_name else timezone.utc

@@ -283,9 +283,9 @@ def fetch_predictions(session, station_id, now):
 
 @lru_cache(maxsize=8)
 def sensor_timezone(location):
-    from timezonefinder import TimezoneFinder
+    from utilities import timezone_at
 
-    return TimezoneFinder().timezone_at(lat=location[0], lng=location[1]) or "UTC"
+    return timezone_at(lat=location[0], lng=location[1]) or "UTC"
 
 
 class TideCache:

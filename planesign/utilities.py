@@ -25,7 +25,7 @@ from PIL import Image, ImageDraw, ImageFont
 from rgbmatrix import graphics
 from shapely.geometry import Point, shape
 from shapely.strtree import STRtree
-from timezonefinder import TimezoneFinder
+from tzfpy import get_tz, get_tzs
 
 import __main__
 
@@ -40,6 +40,25 @@ water_polys = None
 geojsons_loaded = False
 
 from modes import DisplayMode
+
+
+def timezone_at(lat: float, lng: float) -> str | None:
+    """Resolve a timezone using exact tests against tzfpy's simplified polygons."""
+    if not -90 <= lat <= 90 or not -180 <= lng <= 180:
+        raise ValueError("Latitude must be finite and within [-90, 90]; longitude must be finite and within [-180, 180]")
+
+    longitude = 180 if lng == -180 else lng
+    matches = get_tzs(lng=longitude, lat=lat)
+    if not matches:
+        logging.warning("No timezone found for coordinates (%s, %s); using UTC", lat, lng)
+        return None
+    if len(matches) == 1:
+        return matches[0]
+
+    preferred = get_tz(lng=longitude, lat=lat)
+    name = preferred if preferred in matches else matches[0]
+    logging.warning("Overlapping timezones at (%s, %s); selected %s from %s", lat, lng, name, matches)
+    return name
 
 
 def read_config():
@@ -77,10 +96,8 @@ def read_config():
 
     logging.info("Config loaded: " + str(shared_config.CONF))
 
-    tf = TimezoneFinder()
-    local_tz = tf.timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
+    local_tz = timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
     if local_tz is None:
-        logging.warning("Cannot find given provided lat/lon! Using UTC...")
         shared_config.local_timezone = UTC
     else:
         logging.info(f"Detected timezone to be {local_tz}")

@@ -124,6 +124,7 @@ legend: . black
 ### Display and data
 
 - Mandelbrot calculations use NumPy for groups of pixels and scalar Python for the remaining small groups, without Numba or LLVM. Deep zooms and the occasional random search for a new zoom target can be CPU-intensive, especially on a Raspberry Pi.
+- Sensor, airport, and tide-sensor timezones are resolved entirely offline with [tzfpy](https://github.com/ringsaturn/tzfpy), using exact point-in-polygon lookups against its small bundled dataset rather than the fast pre-index. Python's `zoneinfo` and the system timezone database supply UTC offsets and DST rules. The simplified boundaries can differ from the full-resolution source within approximately 111 metres of a timezone border. Overlapping regions use tzfpy's preferred zone when it is an exact match, otherwise the first alphabetically sorted exact match; ambiguous results are logged. In Xinjiang this selects `Asia/Shanghai` (UTC+8), rather than the previous `Asia/Urumqi` (UTC+6). Missing lookups are logged and fall back to UTC. Rebuild/pull the Docker image to remove the previous `timezonefinder` dependency and its data.
 - Update the static cache: `./update_static_cache.py`
 - Text positioning:
   - X, Y coordinates represent the bottom-left corner of characters.
@@ -150,6 +151,7 @@ legend: . black
 - [datasets/country-codes](https://github.com/datasets/country-codes) (country names)
 - quickmaptools.com (state and county polygons)
 - [Natural Earth Vector](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson) (countries and water bodies)
+- [Timezone Boundary Builder](https://github.com/evansiroky/timezone-boundary-builder) (timezone boundaries bundled by tzfpy, ODbL licensed)
 - open-elevation.com
 
 ### Sound Resources
