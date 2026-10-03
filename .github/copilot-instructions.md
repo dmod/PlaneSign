@@ -3,6 +3,11 @@
 ## Project Overview
 PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-time information across multiple display modes (planes, weather, satellites, finance, moon phases, etc.). It runs as a Docker container with `--network host` and `--privileged` flags.
 
+## Documentation Policy
+- Update `README.md` only when the change concerns something an end-user needs to know, such as installation, hardware requirements, configuration, usage, or upgrade actions. Do not add routine bug-fix notes or an implementation changelog.
+- Keep technical information, implementation details, developer workflows, and agent guidance in `.github/copilot-instructions.md`, not in `README.md`.
+- Record concise, verified, reusable findings here. Do not include session-specific process IDs, temporary paths, credentials, or speculative explanations.
+
 ## Hardware
 - **Display:** Two chained 64x32 RGB LED matrix panels = **128 pixels wide × 32 pixels tall**
 - **Platform:** Raspberry Pi 4, uses the [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) library (`rgbmatrix` Python bindings)
@@ -66,6 +71,15 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Runs with `--network host` (container shares host network stack — no port mapping needed, host interfaces like `wlan0` are directly accessible).
 - Production install script: `docker_install_and_update.sh`. Nginx config: `docker_nginx_planesign.conf`.
 - Flask API listens on port 5055; nginx proxies `/api/` to it and serves `web/` static files on ports 80/443.
+
+## Web Interface and Free Sketch
+- The original interface uses `web/index.html` and `web/style.css`; the new interface uses `web/layout-new.html` and `web/layout-new.css`. Both share `web/index.js`. Apply shared UI behavior fixes to both layouts and update the affected stylesheet/script query-string versions in the HTML to invalidate browser caches.
+- The Free Sketch backdrop is fixed to the viewport. Keep the inner `.free_sketch_modal` bounded with `max-height: 100%`, `overflow-y: auto`, and `overscroll-behavior-y: contain`; otherwise a tall centered dialog can hide both its header and its lower controls without providing a way to scroll.
+- Fullscreen uses the same scrollable dialog, sized to `width: 100%` and `height: 100%` of the backdrop. Verify both native browser fullscreen and the CSS fullscreen fallback used when `requestFullscreen` is unavailable or rejected.
+- Preserve `touch-action: none` on `#free_sketch_canvas`: canvas gestures draw, while gestures over controls or dialog padding scroll. Do not disable touch scrolling on the entire modal.
+- Check portrait and short landscape viewports (for example 390x480 and 844x390), reach the top and bottom by touch, and inspect the controls and saved-sketch gallery. Verify that scrolling does not move the background page or change canvas pixels, and that touch/mouse strokes still reach the live matrix. Undo verification strokes without saving or deleting sketches.
+- For browser gesture checks, derive coordinates from the actual dialog bounds, padding, and scrollbar width rather than `innerWidth` or a hard-coded right-edge offset. Start outside the drawing canvas and scrollbar track; the fixed layout toggle can also intercept gestures near the top of the page in normal or fallback fullscreen mode.
+- Loading the controls while the sign is already in `FREE_SKETCH` can open the modal automatically. Check its visibility before clicking the underlying mode button, which is otherwise covered by the dialog.
 
 ## Dev Environment
 - Uses VS Code devcontainer (`.devcontainer/devcontainer.json`) built from the project `Dockerfile`.
