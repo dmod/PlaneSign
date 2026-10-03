@@ -4,10 +4,8 @@ import numpy as np
 import PIL.Image as Image
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-
-import __main__
 
 
 class SnowFlake:
@@ -61,7 +59,7 @@ class SnowFlake:
             self.load()
 
 
-@__main__.planesign_mode_handler(DisplayMode.SNOWFALL)
+@planesign_mode_handler(DisplayMode.SNOWFALL)
 def snowfall(sign):
 
     sign.canvas.Clear()

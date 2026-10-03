@@ -8,10 +8,8 @@ import psclock
 import requests
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
-
-import __main__
 
 SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 REQUEST_TIMEOUT = (5, 15)
@@ -805,7 +803,7 @@ def draw_nfl_frame(sign, snapshot, game_id, config, now, elapsed):
     draw_game(sign, game, snapshot, config, now, elapsed)
 
 
-@__main__.planesign_mode_handler(DisplayMode.NFL)
+@planesign_mode_handler(DisplayMode.NFL)
 def show_nfl(sign):
     while shared_config.shared_mode.value == DisplayMode.NFL.value:
         draw_nfl_frame(sign, shared_config.data_dict.get("nfl"), shared_config.data_dict.get("nfl_game_id"), shared_config.CONF.copy(), psclock.time(), time.monotonic())

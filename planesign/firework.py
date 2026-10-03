@@ -5,10 +5,8 @@ import time
 import numpy as np
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-
-import __main__
 
 TRAIL_PARTICLE = 0
 RING_PARTICLE = 1
@@ -23,7 +21,7 @@ TRACER_FW = 2
 CRACKLER_FW = 3
 
 
-@__main__.planesign_mode_handler(DisplayMode.FIREWORKS)
+@planesign_mode_handler(DisplayMode.FIREWORKS)
 def fireworks(sign):
     sign.canvas.Clear()
 

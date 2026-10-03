@@ -5,14 +5,12 @@ import psclock
 import requests
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from rgbmatrix import graphics
 
-import __main__
 
-
-@__main__.planesign_mode_handler(DisplayMode.WEATHER)
+@planesign_mode_handler(DisplayMode.WEATHER)
 def show_weather(sign):
     polltime = None
 

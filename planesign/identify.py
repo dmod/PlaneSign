@@ -1,11 +1,9 @@
 import time
 
 import shared_config
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
 from utilities import get_centered_text_x_offset_value, get_mac_id
-
-import __main__
 
 IDENTIFY_DURATION_SECONDS = 8
 FLASH_HZ = 2.5
@@ -14,7 +12,7 @@ FLASH_HZ = 2.5
 FLASH_COLORS = [(0, 200, 255), (255, 40, 200), (60, 255, 90), (255, 170, 0)]
 
 
-@__main__.planesign_mode_handler(DisplayMode.IDENTIFY)
+@planesign_mode_handler(DisplayMode.IDENTIFY)
 def identify(self, duration=IDENTIFY_DURATION_SECONDS):
     """Transient mode: flash the whole matrix so a user can tell which sign they're talking to."""
 

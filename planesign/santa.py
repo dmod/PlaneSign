@@ -9,10 +9,8 @@ import psclock
 import requests
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-
-import __main__
 
 
 class SleighParticle:
@@ -131,7 +129,7 @@ def assign_role(i, now):
     return r
 
 
-@__main__.planesign_mode_handler(DisplayMode.SANTA)
+@planesign_mode_handler(DisplayMode.SANTA)
 def santa(sign):
     sign.canvas.Clear()
 

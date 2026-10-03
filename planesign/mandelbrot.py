@@ -8,9 +8,7 @@ import time
 
 import numpy as np
 import shared_config
-from modes import DisplayMode
-
-import __main__
+from modes import DisplayMode, planesign_mode_handler
 
 _SCALAR_TAIL_SIZE = 32
 _LOG_2 = np.log(2)
@@ -247,7 +245,7 @@ def find_border_point(precision, max_iterations=100000):
     return tx, ty
 
 
-@__main__.planesign_mode_handler(DisplayMode.MANDELBROT)
+@planesign_mode_handler(DisplayMode.MANDELBROT)
 def mandelbrot_zoom(sign):
     sign.canvas.Clear()
 

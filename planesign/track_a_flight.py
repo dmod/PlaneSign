@@ -5,11 +5,9 @@ from zoneinfo import ZoneInfo
 import planes
 import psclock
 import shared_config
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
 from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode, timezone_at
-
-import __main__
 
 KNOTS_TO_MPH = 1.15078
 REFRESH_EVERY_N_LOOPS = 50
@@ -39,7 +37,7 @@ def as_float(value):
         return None
 
 
-@__main__.planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
+@planesign_mode_handler(DisplayMode.TRACK_A_FLIGHT)
 def track_a_flight(sign):
 
     if "track_a_flight_num" not in shared_config.data_dict:

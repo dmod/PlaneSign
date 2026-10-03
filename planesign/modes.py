@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from functools import wraps
 
 
 class DisplayMode(Enum):
@@ -34,3 +35,20 @@ class DisplayMode(Enum):
     TIDES = auto()
     NFL = auto()  # Live NFL scoreboard and field position
     MLB = auto()  # Live MLB scoreboard and base runners
+
+
+defined_mode_handlers = {}
+
+
+def planesign_mode_handler(mode: DisplayMode):
+    """Decorator to register mode handlers"""
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        defined_mode_handlers[mode] = wrapper
+        return wrapper
+
+    return decorator

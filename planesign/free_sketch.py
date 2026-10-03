@@ -1,14 +1,12 @@
 import shared_config
-from modes import DisplayMode
-
-import __main__
+from modes import DisplayMode, planesign_mode_handler
 
 WIDTH = 128
 HEIGHT = 32
 CHANNELS = 3
 
 
-@__main__.planesign_mode_handler(DisplayMode.FREE_SKETCH)
+@planesign_mode_handler(DisplayMode.FREE_SKETCH)
 def free_sketch(sign):
     while shared_config.shared_mode.value == DisplayMode.FREE_SKETCH.value:
         pixel_buffer = shared_config.free_sketch_pixels.get_obj()

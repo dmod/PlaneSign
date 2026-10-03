@@ -9,14 +9,12 @@ from os.path import exists
 import requests
 import shared_config
 from bs4 import BeautifulSoup
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from requests.adapters import HTTPAdapter
 from rgbmatrix import graphics
 from urllib3.util.retry import Retry
 from utilities import KM_2_MI, direction_lookup, fix_black, get_distance, lookup_country_code, reverse_geocode
-
-import __main__
 
 
 class Star:
@@ -315,7 +313,7 @@ def get_flag(selected, satellite_data):
     return image
 
 
-@__main__.planesign_mode_handler(DisplayMode.SATELLITE)
+@planesign_mode_handler(DisplayMode.SATELLITE)
 def satellites(sign):
 
     sign.canvas.Clear()

@@ -5,10 +5,8 @@ from datetime import UTC
 
 import psclock
 import shared_config
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
-
-import __main__
 
 RGB = namedtuple("RGB", "r g b")
 
@@ -20,7 +18,7 @@ COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_O
 COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
 
-@__main__.planesign_mode_handler(DisplayMode.COUNTDOWN)
+@planesign_mode_handler(DisplayMode.COUNTDOWN)
 def countdown(sign):
 
     sign.canvas.Clear()

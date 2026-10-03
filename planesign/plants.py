@@ -5,11 +5,9 @@ import time
 
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageEnhance, ImageFilter
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-
-import __main__
 
 
 class Sprite:
@@ -262,7 +260,7 @@ def handle_critters(critters):
                     critters.append(critter)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANTS)
+@planesign_mode_handler(DisplayMode.PLANTS)
 def plantmode(sign):
     sign.canvas.Clear()
 

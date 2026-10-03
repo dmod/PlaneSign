@@ -8,12 +8,10 @@ import time
 
 import shared_config
 import utilities
-from modes import DisplayMode
-
-import __main__
+from modes import DisplayMode, planesign_mode_handler
 
 
-@__main__.planesign_mode_handler(DisplayMode.CCA)
+@planesign_mode_handler(DisplayMode.CCA)
 def cca(sign):
     sign.canvas.Clear()
 

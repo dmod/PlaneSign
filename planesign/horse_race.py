@@ -11,11 +11,9 @@ import time
 
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageDraw, ImageEnhance
 from rgbmatrix import graphics
-
-import __main__
 
 WIDTH = 128
 HEIGHT = 32
@@ -840,7 +838,7 @@ class Race:
         return False
 
 
-@__main__.planesign_mode_handler(DisplayMode.HORSE_RACE)
+@planesign_mode_handler(DisplayMode.HORSE_RACE)
 def horse_race(sign):
     sign.canvas.Clear()
     music = Music()

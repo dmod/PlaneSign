@@ -2,10 +2,8 @@ import random
 
 import PIL
 import shared_config
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageDraw
-
-import __main__
 
 tankxmin = -100
 tankxmax = 227
@@ -27,7 +25,7 @@ def randomloc():
     return (random.randint(tankxmin, tankxmax), random.randint(tankymin, tankymax), random.randint(tankzmin, tankzmax))
 
 
-@__main__.planesign_mode_handler(DisplayMode.AQUARIUM)
+@planesign_mode_handler(DisplayMode.AQUARIUM)
 def aquarium(sign):
     sign.canvas.Clear()
 

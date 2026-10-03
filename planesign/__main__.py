@@ -48,27 +48,6 @@ if cli_args.web:
 
     sys.modules["rgbmatrix"] = emulated_matrix
 
-from functools import wraps
-
-from modes import DisplayMode
-
-defined_mode_handlers = {}
-
-
-def planesign_mode_handler(mode: DisplayMode):
-    """Decorator to register mode handlers"""
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        defined_mode_handlers[mode] = wrapper
-        return wrapper
-
-    return decorator
-
-
 import logging
 import os
 import signal
@@ -105,7 +84,7 @@ import track_a_flight
 import utilities
 import weather
 import welcome
-from modes import DisplayMode
+from modes import DisplayMode, defined_mode_handlers
 
 import planesign
 

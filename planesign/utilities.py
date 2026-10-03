@@ -27,8 +27,6 @@ from shapely.geometry import Point, shape
 from shapely.strtree import STRtree
 from tzfpy import get_tz, get_tzs
 
-import __main__
-
 NUM_STEPS = 40
 DEG_2_RAD = pi / 180.0
 KM_2_MI = 0.6214
@@ -39,7 +37,7 @@ state_polys = None
 water_polys = None
 geojsons_loaded = False
 
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 
 
 def timezone_at(lat: float, lng: float) -> str | None:
@@ -1421,7 +1419,7 @@ def set_matrix(x, y, matrix, val):
     matrix[x][y] = val
 
 
-@__main__.planesign_mode_handler(DisplayMode.TIME_ONLY)
+@planesign_mode_handler(DisplayMode.TIME_ONLY)
 def only_show_time(sign):
     while shared_config.shared_mode.value == DisplayMode.TIME_ONLY.value:
         show_time(sign)
@@ -1791,7 +1789,7 @@ def validate_sketch_filename(filename):
     return True
 
 
-@__main__.planesign_mode_handler(DisplayMode.SIGN_OFF)
+@planesign_mode_handler(DisplayMode.SIGN_OFF)
 def clear_matrix(sign):
     sign.canvas.Clear()
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)

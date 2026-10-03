@@ -3,14 +3,12 @@ import random
 import time
 
 import shared_config
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
 from utilities import get_centered_text_x_offset_value, get_mac_id, get_version
 
-import __main__
 
-
-@__main__.planesign_mode_handler(DisplayMode.WELCOME)
+@planesign_mode_handler(DisplayMode.WELCOME)
 def welcome(self, duration=None):
 
     device_name = f"PlaneSign-BLE-{get_mac_id()}"

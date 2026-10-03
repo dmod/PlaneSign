@@ -12,12 +12,10 @@ from urllib.parse import urlparse
 import requests
 import shared_config
 from bs4 import BeautifulSoup
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from rgbmatrix import graphics
 from utilities import CM_2_IN, acquire_lock, convert_c_to_f, getFavicon, release_lock, weather_icon_decode
-
-import __main__
 
 resortinfo_filename = f"{shared_config.datafiles_dir}/resortdata.json"
 userresorts_filename = f"{shared_config.datafiles_dir}/resortlist.txt"
@@ -980,7 +978,7 @@ class SnowReport:
         return resort
 
 
-@__main__.planesign_mode_handler(DisplayMode.SNOW)
+@planesign_mode_handler(DisplayMode.SNOW)
 def snow_forecast(sign):
     release_lock(userresorts_filename)
     sign.canvas.Clear()

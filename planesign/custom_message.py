@@ -5,11 +5,9 @@ from collections import namedtuple
 import numpy as np
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from rgbmatrix import graphics
-
-import __main__
 
 RGB = namedtuple("RGB", "r g b")
 
@@ -21,7 +19,7 @@ COLORS[3] = [RGB(173, 0, 30), RGB(178, 178, 178), RGB(37, 120, 178)]  # FOURTH_O
 COLORS[4] = [RGB(20, 20, 20), RGB(247, 95, 28)]  # HALLOWEEN
 
 
-@__main__.planesign_mode_handler(DisplayMode.CUSTOM_MESSAGE)
+@planesign_mode_handler(DisplayMode.CUSTOM_MESSAGE)
 def show_custom_message(sign):
     starting_color_index = 0
 

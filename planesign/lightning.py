@@ -18,10 +18,8 @@ import requests
 import shared_config
 import utilities
 import websocket
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
-
-import __main__
 
 USAlong = -96
 USAlat = 38
@@ -29,7 +27,7 @@ USAscale = 55
 global_map_ver = "V1"
 
 
-@__main__.planesign_mode_handler(DisplayMode.LIGHTNING)
+@planesign_mode_handler(DisplayMode.LIGHTNING)
 def lightning(sign):
     sign.canvas.Clear()
 

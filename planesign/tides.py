@@ -7,9 +7,7 @@ from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
-from modes import DisplayMode
-
-import __main__
+from modes import DisplayMode, planesign_mode_handler
 
 
 STATIONS_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json"
@@ -590,7 +588,7 @@ def draw_tides_frame(sign, payload, config, now, elapsed):
         label(f"{event[1]:.1f}ft", baseline + 6, color, event_column)
 
 
-@__main__.planesign_mode_handler(DisplayMode.TIDES)
+@planesign_mode_handler(DisplayMode.TIDES)
 def show_tides(sign):
     import psclock
     import shared_config

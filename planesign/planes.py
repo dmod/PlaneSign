@@ -6,10 +6,8 @@ import types
 import requests
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
-
-import __main__
 
 FR24_FEED_URL = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js"
 FR24_HEADERS = {"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Origin": "https://www.flightradar24.com", "Referer": "https://www.flightradar24.com/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"}
@@ -174,7 +172,7 @@ def shorten_airport_name(name, desired_length):
     return name
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANES_ALERT)
+@planesign_mode_handler(DisplayMode.PLANES_ALERT)
 def show_closest_plane_if_in_alert_radius(sign):
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_ALERT.value:
@@ -187,7 +185,7 @@ def show_closest_plane_if_in_alert_radius(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANES_CLOSEST)
+@planesign_mode_handler(DisplayMode.PLANES_CLOSEST)
 def always_show_closest_plane(sign):
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_CLOSEST.value:
@@ -195,7 +193,7 @@ def always_show_closest_plane(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANES_HIGHEST)
+@planesign_mode_handler(DisplayMode.PLANES_HIGHEST)
 def always_show_highest_plane(sign):
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_HIGHEST.value:
@@ -203,7 +201,7 @@ def always_show_highest_plane(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANES_FASTEST)
+@planesign_mode_handler(DisplayMode.PLANES_FASTEST)
 def always_show_fastest_plane(sign):
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_FASTEST.value:
@@ -211,7 +209,7 @@ def always_show_fastest_plane(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
-@__main__.planesign_mode_handler(DisplayMode.PLANES_SLOWEST)
+@planesign_mode_handler(DisplayMode.PLANES_SLOWEST)
 def always_show_slowest_plane(sign):
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_SLOWEST.value:

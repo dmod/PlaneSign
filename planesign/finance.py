@@ -9,13 +9,11 @@ import psclock
 import requests
 import shared_config
 import websocket
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from requests import Session
 from rgbmatrix import graphics
 from utilities import convert_unix_to_local_time, getFavicon, improcess
-
-import __main__
 
 
 def update_global_lists(client=None):
@@ -77,7 +75,7 @@ def get_tickers():
     return {"bn": bn_symbols, "cb": cb_symbols, "us": us_symbols}
 
 
-@__main__.planesign_mode_handler(DisplayMode.FINANCE)
+@planesign_mode_handler(DisplayMode.FINANCE)
 def finance(self):
     self.canvas.Clear()
     shared_config.data_dict["ticker"] = None

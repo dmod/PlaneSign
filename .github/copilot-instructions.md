@@ -8,10 +8,10 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **Platform:** Raspberry Pi 4, uses the [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) library (`rgbmatrix` Python bindings)
 
 ## Architecture
-- **`planesign/`** — Main application. Each display mode is a separate module (e.g., `planes.py`, `weather.py`, `moon.py`) registered via the `@planesign_mode_handler(DisplayMode.X)` decorator in `__main__.py`.
+- **`planesign/`** — Main application. Each display mode is a separate module (e.g., `planes.py`, `weather.py`, `moon.py`) registered via the `@planesign_mode_handler(DisplayMode.X)` decorator imported from `modes.py`.
 - **`planesign/planesign.py`** — `PlaneSign` class: initializes the matrix, loads fonts, runs the main sign loop dispatching to mode handlers.
 - **`planesign/utilities.py`** — Shared drawing/math helpers. Use `get_centered_text_x_offset_value(font_width, text)` to horizontally center text (center point is x=64).
-- **`planesign/modes.py`** — `DisplayMode` enum defining all available modes.
+- **`planesign/modes.py`** — `DisplayMode` enum, `planesign_mode_handler` decorator, and shared `defined_mode_handlers` registry. The entry point imports the mode modules to populate the registry before starting the sign.
 - **`planesign/shared_config.py`** — Shared state (multiprocessing values) and configuration from `sign.conf`.
 - **`planesign/psclock.py`** — The sign's wall clock. Normally real time; `--fake-time`, `--time-speed` and `/debug/clock` shift or speed it up for testing.
 - **`web/`** — Frontend served by nginx; communicates with a Flask API (`/api/`).
@@ -124,7 +124,7 @@ cp sign.conf <session files>/test_sign.conf
 ### Rendering Frames Offline For Fast Iteration
 Restarting the app for every pixel tweak is slow, and some states (a rare data combination, a failure mode, expired data) cannot be waited for. For layout and artwork work, render frames directly with the real fonts into a PNG first, then confirm the result in the running app.
 
-- Bootstrap: set `PLANESIGN_EMULATED_DISPLAY=1`, `import emulated_matrix` and assign it to `sys.modules["rgbmatrix"]`, then set `shared_config.local_timezone` and `shared_config.CONF` before importing the mode module. Mode modules `import __main__` for the `@planesign_mode_handler` decorator, so give the running script a `planesign_mode_handler` attribute that returns the function unchanged.
+- Bootstrap: set `PLANESIGN_EMULATED_DISPLAY=1`, `import emulated_matrix` and assign it to `sys.modules["rgbmatrix"]`, then set `shared_config.local_timezone` and `shared_config.CONF` before importing the mode module. Modes register through `modes.py`; no entry-point decorator stub is needed.
 - Build a stub sign exposing `canvas` (an `emulated_matrix.core.Canvas(128, 32)`) plus the `font46`/`font57`/`fontbig`/`fontreallybig` attributes loaded from `fonts/`, then call the mode's frame-drawing function directly. Save `canvas._image` upscaled with `Image.NEAREST` to inspect it.
 - Drive edge cases with synthetic data: parse a real cached payload once, then deep-copy and mutate the parsed snapshot to force states the live feed will not produce on demand.
 - Print a 1:1 ASCII pixel map with `print(emulated_matrix.server.frame_to_text(canvas._image, "header"))`, the same renderer `/frame.txt` uses. It is the fastest way to confirm exact columns, spot 1px overlaps, and prove nothing is clipped at x=0/x=127 — an upscaled screenshot hides all three.

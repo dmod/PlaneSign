@@ -9,7 +9,7 @@ import numpy as np
 import psclock
 import shared_config
 import utilities
-from modes import DisplayMode
+from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageChops, ImageDraw
 from rgbmatrix import graphics
 from satellite import Star
@@ -20,10 +20,8 @@ from skyfield.framelib import ecliptic_frame
 from skyfield.functions import angle_between, length_of
 from skyfield.trigonometry import position_angle_of
 
-import __main__
 
-
-@__main__.planesign_mode_handler(DisplayMode.MOON)
+@planesign_mode_handler(DisplayMode.MOON)
 def moon(sign):
 
     # Fixed radii
