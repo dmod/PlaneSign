@@ -3,6 +3,7 @@ services:
     image: ghcr.io/dmod/planesign:latest
     container_name: PlaneSignRuntime
     restart: unless-stopped
+    stop_grace_period: 90s
     privileged: true
     network_mode: host
     volumes:
