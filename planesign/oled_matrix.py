@@ -7,14 +7,19 @@ import shared_config
 from emulated_matrix import graphics
 from emulated_matrix.core import Canvas, RGBMatrixOptions
 from emulated_matrix.server import FrameServer
+from modes import DisplayMode
 from PIL import Image, ImageChops
 
 __all__ = ["RGBMatrix", "RGBMatrixOptions", "graphics"]
 
 logger = logging.getLogger(__name__)
 
+ART_THRESHOLDS = {DisplayMode.AQUARIUM.value: 96, DisplayMode.PLANTS.value: 96, DisplayMode.CCA.value: 96, DisplayMode.HORSE_RACE.value: 48}
 
-def monochrome_image(image: Image.Image) -> Image.Image:
+
+def monochrome_image(image: Image.Image, *, threshold: int | None = None) -> Image.Image:
+    if threshold is not None:
+        return image.convert("L").point([0] * threshold + [255] * (256 - threshold)).convert("1", dither=Image.Dither.NONE)
     red, green, blue = image.split()
     intensity = ImageChops.lighter(ImageChops.lighter(red, green), blue)
     return intensity.point([0] + [255] * 255).convert("1", dither=Image.Dither.NONE)
@@ -51,6 +56,8 @@ class SSD1305Output:
 
 class RGBMatrix(Canvas):
     """RGBMatrix-compatible OLED output, or a monochrome preview with --web."""
+
+    monochrome = True
 
     def __init__(self, options: RGBMatrixOptions | None = None, **kwargs):
         if options is None:
@@ -96,7 +103,8 @@ class RGBMatrix(Canvas):
         return canvas
 
     def _present(self):
-        image = monochrome_image(self._image) if self._brightness else Image.new("1", (self.width, self.height))
+        threshold = ART_THRESHOLDS.get(shared_config.shared_mode.value)
+        image = monochrome_image(self._image, threshold=threshold) if self._brightness else Image.new("1", (self.width, self.height))
         frame = image.tobytes()
         if self._output is not None and frame != self._last_written:
             self._output.show(image)

@@ -19,7 +19,8 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`planesign/utilities.py`** — Shared drawing/math helpers. Use `get_centered_text_x_offset_value(font_width, text)` to horizontally center text (center point is x=64).
 - **`planesign/modes.py`** — `DisplayMode` enum, `planesign_mode_handler` decorator, and shared `defined_mode_handlers` registry. The entry point imports the mode modules to populate the registry before starting the sign.
 - **`planesign/shared_config.py`** — Shared state (multiprocessing values) and configuration from `sign.conf`.
-- **`planesign/oled_matrix.py`** — RGBMatrix-compatible OLED backend sharing the emulator's PIL canvas and BDF renderer. The entry point loads configuration before importing modes to select the `rgbmatrix` alias. OLED frames map every non-black pixel to white; `--web` previews that conversion without importing hardware libraries. Physical OLED output also streams frames, but is not marked as emulated, so audio remains on the sign and the debug-clock API remains web-only.
+- **`planesign/oled_matrix.py`** — RGBMatrix-compatible OLED backend sharing the emulator's PIL canvas and BDF renderer. The entry point loads configuration before importing modes to select the `rgbmatrix` alias. Text-oriented modes map every non-black pixel to white; Aquarium, Plants, CCA, and Horse Race use fixed luminance thresholds (96, or 48 for the darker horse coats), without dithering. Horse-race text becomes solid white only on this backend. `--web` previews the same conversion without importing hardware libraries. Physical OLED output also streams frames, but is not marked as emulated, so audio remains on the sign and the debug-clock API remains web-only.
+- **`planesign/snow.py`** — Parses both legacy `__NEXT_DATA__` and current Next.js Flight streams. Current hourly weather comes from the resort's weather page, not the daily weather embedded in its snow-report page. Failed refreshes retain usable data as `CACHED`, or show `UNAVAILABLE` without data, and retry with bounded backoff. Missing readings remain unknown; zero readings are valid. Resort status codes are not booleans: `1` is open, `2`/`3`/`6` are closed, and `4`/`5` do not establish current operation.
 - **`planesign/psclock.py`** — The sign's wall clock. Normally real time; `--fake-time`, `--time-speed` and `/debug/clock` shift or speed it up for testing.
 - **`web/`** — Frontend served by nginx; communicates with a Flask API (`/api/`).
 - **`ble/`** — Bluetooth Low Energy setup interface.
@@ -68,6 +69,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Follow a neighboring mode's registration and lifecycle patterns. Append new `DisplayMode` members so existing numeric IDs remain stable, and expose the mode in both `web/index.html` and `web/layout-new.html`.
 - Fetch remote data in a background worker, not in the frame-rendering loop. Use request timeouts, caching, and retry backoff; integrate workers with the existing shutdown handling.
 - Render explicit loading, unavailable, and expired-data states. Identify cached data when it is still usable; do not show missing data as zero or stale data as current.
+- CGOL defaults to style `1` when selected without arguments; style `2` remains the color-shifting variant. Treat a satellite API transaction count of zero as valid, not missing.
 
 ## Docker / Deployment
 - Runs with `--network host` (container shares host network stack — no port mapping needed, host interfaces like `wlan0` are directly accessible).

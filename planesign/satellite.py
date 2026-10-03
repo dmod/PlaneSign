@@ -490,7 +490,7 @@ def satellites(sign):
                         multiplier = 10.0
                         logging.warning("No satellite 'above' info returned - rate limit reached?")
 
-                    elif data and data["info"]["transactionscount"]:
+                    elif data and isinstance(data.get("info"), dict) and isinstance(data["info"].get("transactionscount"), int) and data["info"]["transactionscount"] >= 0:
                         if prev_datatime is not None:
                             delta = t - prev_datatime
                         prev_datatime = t

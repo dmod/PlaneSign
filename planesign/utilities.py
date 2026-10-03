@@ -825,6 +825,8 @@ def getFavicon(website, headers=None):
 
     if headers is None:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0", "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/png,*/*;q=0.8", "Accept-Language": "en-US,en;q=0.5", "Connection": "keep-alive"}
+    else:
+        headers = {key: value for key, value in headers.items() if key.lower() != "host"}
     try:
         logging.debug(f"getFavicon: fetching icons for {website}")
         icons = favicon.get(website, headers=headers, timeout=10)

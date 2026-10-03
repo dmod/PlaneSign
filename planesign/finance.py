@@ -128,10 +128,7 @@ def getLogo(headers, website):
 
     image = None
 
-    host = re.sub(r"https?:\/\/", "", website)
-    host = re.sub(r"\/.*$", "", host)
-
-    headers["Host"] = host
+    headers = {key: value for key, value in headers.items() if key.lower() != "host"}
     headers["Referer"] = website
 
     try:

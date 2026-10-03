@@ -528,6 +528,8 @@ class Race:
         """Blit the frame, overlay the text and pace the loop. False means bail out."""
         self.sign.canvas.SetImage(image, 0, 0)
         for font, x, y, color, text in texts:
+            if getattr(self.sign.matrix, "monochrome", False):
+                color = graphics.Color(255, 255, 255)
             graphics.DrawText(self.sign.canvas, font, x, y, color, text)
         self.sign.canvas = self.sign.matrix.SwapOnVSync(self.sign.canvas)
 

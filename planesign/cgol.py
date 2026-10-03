@@ -18,7 +18,7 @@ def cgol(sign):
 
     generation_time = 0.15
 
-    if shared_config.arg_dict["style"] == "2":
+    if shared_config.arg_dict.get("style", "1") == "2":
         cgol_cellcolor = False
     else:
         cgol_cellcolor = True

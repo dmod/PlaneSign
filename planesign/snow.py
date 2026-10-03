@@ -2,11 +2,12 @@ import json
 import logging.handlers
 import os
 import random
+import re
 import time
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cmp_to_key
-from math import ceil
+from math import ceil, isfinite
 from urllib.parse import urlparse
 
 import requests
@@ -19,6 +20,294 @@ from utilities import CM_2_IN, acquire_lock, convert_c_to_f, getFavicon, release
 
 resortinfo_filename = f"{shared_config.datafiles_dir}/resortdata.json"
 userresorts_filename = f"{shared_config.datafiles_dir}/resortlist.txt"
+SNOW_UPDATE_SECONDS = 20 * 60
+SNOW_RETRY_SECONDS = 60
+SNOW_MAX_RETRY_SECONDS = 5 * 60
+SNOW_MAX_FEED_BYTES = 5 * 1024 * 1024
+
+
+class SnowFeedError(ValueError):
+    """An OnTheSnow response cannot supply a usable report."""
+
+
+def _fetch_snow_feed(session, url, **kwargs):
+    with session.get(url, timeout=(5, 10), stream=True, **kwargs) as response:
+        response.raise_for_status()
+        content = bytearray()
+        deadline = time.monotonic() + 20
+        for chunk in response.iter_content(65536):
+            content.extend(chunk)
+            if len(content) > SNOW_MAX_FEED_BYTES:
+                raise SnowFeedError("feed exceeds 5 MiB")
+            if time.monotonic() > deadline:
+                raise SnowFeedError("feed download exceeded 20 seconds")
+        return bytes(content)
+
+
+def _snow_feed_error(error):
+    if isinstance(error, requests.HTTPError) and error.response is not None:
+        return f"HTTP {error.response.status_code}"
+    if isinstance(error, requests.RequestException):
+        return type(error).__name__
+    if isinstance(error, json.JSONDecodeError):
+        return "invalid JSON"
+    return str(error)[:160]
+
+
+def _parse_snow_page(html, required_key="fullResort"):
+    """Return feed props from legacy Next data or a concatenated Flight stream."""
+    if len(html) > SNOW_MAX_FEED_BYTES:
+        raise SnowFeedError("page exceeds 5 MiB")
+    soup = BeautifulSoup(html, "html.parser")
+    legacy = soup.find("script", {"id": "__NEXT_DATA__"})
+    if legacy is not None:
+        try:
+            data = json.loads(legacy.get_text())
+        except (json.JSONDecodeError, RecursionError) as error:
+            raise SnowFeedError("invalid legacy Next data") from error
+        props = data.get("props") if isinstance(data, dict) else None
+        page = props.get("pageProps") if isinstance(props, dict) else None
+        if not isinstance(page, dict) or required_key not in page:
+            raise SnowFeedError(f"legacy page missing {required_key}")
+        return page
+
+    chunks = []
+    decoder = json.JSONDecoder()
+    for script in soup.find_all("script"):
+        text = script.get_text()
+        for match in re.finditer(r"self\.__next_f\.push\(\s*", text):
+            try:
+                push, _ = decoder.raw_decode(text, match.end())
+            except (json.JSONDecodeError, RecursionError) as error:
+                raise SnowFeedError("invalid Flight script") from error
+            if not isinstance(push, list) or not push:
+                raise SnowFeedError("invalid Flight chunk")
+            if push[0] == 1:
+                if len(push) != 2 or not isinstance(push[1], str):
+                    raise SnowFeedError("invalid Flight text chunk")
+                chunks.append(push[1])
+    if not chunks:
+        raise SnowFeedError("page has no Next data")
+
+    flight = "".join(chunks).encode("utf-8")
+    rows = {}
+    offset = 0
+    row_header = re.compile(rb"([0-9a-fA-F]+):")
+    while offset < len(flight):
+        match = row_header.match(flight, offset)
+        if match is None:
+            raise SnowFeedError("invalid Flight row framing")
+        row_id = match[1].decode("ascii")
+        offset = match.end()
+        # Flight text records use a UTF-8 byte count, not a newline terminator.
+        if flight[offset : offset + 1] == b"T":
+            comma = flight.find(b",", offset, offset + 18)
+            if comma < 0 or not re.fullmatch(rb"T[0-9a-fA-F]+", flight[offset:comma]):
+                raise SnowFeedError("invalid Flight text length")
+            end = comma + 1 + int(flight[offset + 1 : comma], 16)
+            if end > len(flight):
+                raise SnowFeedError("truncated Flight text")
+            try:
+                rows[row_id] = flight[comma + 1 : end].decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise SnowFeedError("invalid Flight text encoding") from error
+            offset = end
+            continue
+        end = flight.find(b"\n", offset)
+        if end < 0:
+            raise SnowFeedError("truncated Flight row")
+        row = flight[offset:end]
+        offset = end + 1
+        if row.startswith((b"{", b"[", b'"', b"null", b"true", b"false")):
+            try:
+                rows[row_id] = json.loads(row)
+            except (json.JSONDecodeError, RecursionError) as error:
+                raise SnowFeedError("invalid Flight JSON row") from error
+
+    remaining = 100000
+
+    def resolve(value, active=(), depth=0):
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0:
+            raise SnowFeedError("Flight references exceed size limit")
+        if depth > 100:
+            raise SnowFeedError("Flight references exceed depth limit")
+        if isinstance(value, str) and re.fullmatch(r"\$[0-9a-fA-F]+", value):
+            ref = value[1:]
+            if ref not in rows or ref in active:
+                raise SnowFeedError("missing or cyclic Flight reference")
+            return resolve(rows[ref], (*active, ref), depth + 1)
+        if isinstance(value, dict):
+            return {key: resolve(item, active, depth + 1) for key, item in value.items()}
+        if isinstance(value, list):
+            return [resolve(item, active, depth + 1) for item in value]
+        return None if value == "$undefined" else value
+
+    stack = list(reversed(list(rows.values())))
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            if required_key in value:
+                return {key: resolve(value[key]) for key in ("fullResort", "nearbyResorts", "weatherInfo", "weatherInfoDaily", "weatherInfoHourly") if key in value}
+            stack.extend(reversed(list(value.values())))
+        elif isinstance(value, list):
+            stack.extend(reversed(value))
+    raise SnowFeedError(f"Flight page missing {required_key}")
+
+
+def _snow_object(value, field):
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise SnowFeedError(f"invalid {field} object")
+    return value
+
+
+def _snow_number(value, field):
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SnowFeedError(f"invalid {field} reading")
+    try:
+        finite = isfinite(value)
+    except OverflowError as error:
+        raise SnowFeedError(f"invalid {field} reading") from error
+    if not finite:
+        raise SnowFeedError(f"invalid {field} reading")
+    return value
+
+
+def _parse_snow_report(page, res_id):
+    full = _snow_object(page.get("fullResort"), "fullResort")
+    if str(full.get("uuid")) != str(res_id) or not isinstance(full.get("snow"), dict):
+        raise SnowFeedError("missing or mismatched resort report")
+    nearby = page.get("nearbyResorts")
+    if nearby is not None and not isinstance(nearby, list):
+        raise SnowFeedError("invalid nearbyResorts list")
+    for item in nearby or []:
+        if isinstance(item, dict) and str(item.get("uuid")) == str(res_id):
+            full = {**full, **item}
+            break
+    snow = _snow_object(full.get("snow"), "snow")
+    runs = _snow_object(full.get("runs"), "runs")
+    flag = _snow_object(full.get("status"), "status").get("openFlag")
+    if isinstance(flag, bool):
+        is_open = flag
+    elif flag in (None, 0, 1, 2, 3, 4, 5, 6):
+        # Weekends-only (4) and no-report (5) do not establish current operation.
+        is_open = None if flag in (None, 0, 4, 5) else flag == 1
+    else:
+        raise SnowFeedError("invalid resort openFlag")
+    forecast = full.get("weather")
+    if forecast is None:
+        future = full.get("forecast")
+        if future is not None and not isinstance(future, list):
+            raise SnowFeedError("invalid forecast list")
+        forecast = [{"snowfall": None} for _ in range(7)]
+        for item in future or []:
+            item = _snow_object(item, "forecast day")
+            forecast.append({"snowfall": item.get("snow")})
+    if not isinstance(forecast, list):
+        raise SnowFeedError("invalid resort weather list")
+    normalized = []
+    for item in forecast:
+        item = _snow_object(item, "forecast day")
+        normalized.append({**item, "snowfall": _snow_number(item.get("snowfall"), "forecast snowfall")})
+    readings = {}
+    for source, target in (("base", "snowBase"), ("middle", "snowMid"), ("summit", "snowPeak"), ("last24", "new")):
+        number = _snow_number(snow.get(source), f"snow.{source}")
+        readings[target] = None if number is None else number * CM_2_IN
+    return {**readings, "isOpen": is_open, "runsOpen": _snow_number(runs.get("open"), "runs.open"), "runsTotal": _snow_number(runs.get("total"), "runs.total"), "forecast": normalized}, full
+
+
+def _snow_weather_icon(icon):
+    if icon is None:
+        return None
+    try:
+        with Image.open(f"{shared_config.icons_dir}/weather/{icon}.png") as image:
+            return image.convert("RGB")
+    except OSError as error:
+        logging.warning("Snow weather icon unavailable: %s", type(error).__name__)
+        return None
+
+
+def _parse_snow_weather(page):
+    info = _snow_object(page.get("weatherInfoHourly"), "weatherInfoHourly")
+    hourly = info.get("weatherItems")
+    if not isinstance(hourly, list) or not hourly:
+        raise SnowFeedError("missing hourly weather")
+    weather = dict.fromkeys(("currTemp", "currWeatherIcon", "dayLow", "dayHigh", "nightLow", "nightHigh"))
+    for index, item in enumerate(hourly):
+        item = _snow_object(item, "hourly weather")
+        stamp = item.get("datetime")
+        if not isinstance(stamp, str):
+            raise SnowFeedError("missing hourly weather datetime")
+        try:
+            hour = datetime.fromisoformat(stamp).hour
+        except ValueError as error:
+            raise SnowFeedError("invalid hourly weather datetime") from error
+        mid = _snow_object(item.get("mid"), "mid weather")
+        base = _snow_object(item.get("base"), "base weather")
+        temp = _snow_object(mid.get("temp") if mid.get("temp") is not None else base.get("temp"), "weather temperature")
+        low = _snow_number(temp.get("min"), "weather minimum")
+        high = _snow_number(temp.get("max"), "weather maximum")
+        is_night = hour <= 6 or hour >= 18
+        if index == 0:
+            if low is not None and high is not None:
+                weather["currTemp"] = convert_c_to_f((low + high) / 2)
+            symbol = mid.get("type") if mid.get("type") is not None else base.get("type")
+            weather["currWeatherIcon"] = _snow_weather_icon(mapIcon(symbol, is_night))
+        period = "night" if is_night else "day"
+        if low is not None:
+            key = period + "Low"
+            value = convert_c_to_f(low)
+            weather[key] = value if weather[key] is None else min(weather[key], value)
+        if high is not None:
+            key = period + "High"
+            value = convert_c_to_f(high)
+            weather[key] = value if weather[key] is None else max(weather[key], value)
+    return weather
+
+
+def _parse_snow_openweather(data):
+    data = _snow_object(data, "OpenWeather")
+    current = _snow_object(data.get("current"), "OpenWeather current")
+    if not current:
+        raise SnowFeedError("missing OpenWeather current weather")
+    weather = dict.fromkeys(("currTemp", "currWeatherIcon", "dayLow", "dayHigh", "nightLow", "nightHigh"))
+    weather["currTemp"] = _snow_number(current.get("temp"), "OpenWeather temperature")
+    conditions = current.get("weather")
+    if isinstance(conditions, list) and conditions and isinstance(conditions[0], dict):
+        dt, sunrise, sunset = (_snow_number(current.get(key), f"OpenWeather {key}") for key in ("dt", "sunrise", "sunset"))
+        if all(value is not None for value in (dt, sunrise, sunset)):
+            is_night = dt < sunrise or dt > sunset
+            condition = conditions[0]
+            if isinstance(condition.get("id"), int) and isinstance(condition.get("main"), str):
+                icon, _ = weather_icon_decode(condition["id"], condition["main"], is_night)
+                weather["currWeatherIcon"] = _snow_weather_icon(icon)
+    daily = data.get("daily")
+    if daily is not None and not isinstance(daily, list):
+        raise SnowFeedError("invalid OpenWeather daily list")
+    for day in daily or []:
+        temp = _snow_object(_snow_object(day, "OpenWeather day").get("temp"), "OpenWeather daily temperature")
+        for period, fields in (("day", ("day", "morn")), ("night", ("night", "eve"))):
+            for field in fields:
+                value = _snow_number(temp.get(field), f"OpenWeather {field}")
+                if value is not None:
+                    low, high = period + "Low", period + "High"
+                    weather[low] = value if weather[low] is None else min(weather[low], value)
+                    weather[high] = value if weather[high] is None else max(weather[high], value)
+    return weather
+
+
+def _snow_forecast_inches(resort):
+    forecast = resort.get("forecast") or []
+    return [None if index >= len(forecast) or forecast[index].get("snowfall") is None else forecast[index]["snowfall"] * CM_2_IN for index in range(7, 15)]
+
+
+def _snow_forecast_total(values):
+    return None if any(value is None for value in values) else sum(values)
 
 
 class SnowMode(Enum):
@@ -249,8 +538,7 @@ def compute_display_name(resdata, desired_length):
     nameopts.add(resdata["title"])
 
     # Check short name from valid resorts info
-    if "resorts" in shared_config.data_dict["resort_info"] and len(shared_config.data_dict["resort_info"]["resorts"]) > 0:
-        info = next((res for res in shared_config.data_dict["resort_info"]["resorts"] if res["uuid"] == resdata["uuid"]), None)
+    info = next((res for res in shared_config.data_dict.get("resort_info", {}).get("resorts") or [] if res["uuid"] == resdata["uuid"]), None)
 
     if info is not None and "title_short" in info and info["title_short"]:
         nameopts.add(info["title_short"])
@@ -342,8 +630,14 @@ class SnowReport:
 
         resort = self.update(res_id)
 
+        if resort is None or resort.get("status") == "unavailable":
+            name = resort["displayName"][:20] if resort else "Snow report"
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 64 - len(name) * 5 // 2, 10, graphics.Color(100, 100, 100), name)
+            graphics.DrawText(self.sign.canvas, self.sign.font57, 36, 23, graphics.Color(180, 80, 30), "UNAVAILABLE")
+            return
+
         if resort is not None:
-            if "isOpen" in resort:
+            if resort.get("isOpen") is not None:
                 if resort["isOpen"]:
                     color = graphics.Color(10, 150, 10)
                 else:
@@ -354,7 +648,9 @@ class SnowReport:
             if "displayName" in resort:
                 graphics.DrawText(self.sign.canvas, self.sign.fontbig, 46 - round(len(resort["displayName"][:15]) * 3), 10, color, resort["displayName"][:15])
 
-            if "logo" in resort and resort["logo"] is not None:
+            if resort.get("status") == "cached":
+                graphics.DrawText(self.sign.canvas, self.sign.font46, 0, 25, graphics.Color(180, 100, 30), "CACHED")
+            elif "logo" in resort and resort["logo"] is not None:
                 sizex, sizey = resort["logo"].size
                 x = 12 - round(sizex / 2)
                 y = 22 - round(sizey / 2)
@@ -398,8 +694,9 @@ class SnowReport:
                 y = 26 - round(sizey / 2)
                 self.sign.canvas.SetImage(image, x, y)
 
-            snow4d = None
-            snow8d = None
+            snowfall_days = _snow_forecast_inches(resort)
+            snow4d = _snow_forecast_total(snowfall_days[:4])
+            snow8d = _snow_forecast_total(snowfall_days[4:])
 
             graphx = 66
             graphy = 30
@@ -411,26 +708,7 @@ class SnowReport:
             graphics.DrawLine(self.sign.canvas, graphx - 1, graphy + 1, graphend + 1, graphy + 1, graphics.Color(13, 13, 25))
             for i in range(num_bars):
                 # Daily forecast
-                snowfall = None
-                if "forecast" in resort:
-                    try:
-                        forecast = resort["forecast"][i + 7]
-                    except Exception:
-                        forecast = {}
-                    if "snowfall" in forecast:
-                        snowfall = forecast["snowfall"] * CM_2_IN
-
-                if snowfall is not None:
-                    if i < round(num_bars / 2):
-                        if snow4d is None:
-                            snow4d = snowfall
-                        else:
-                            snow4d += snowfall
-                    else:
-                        if snow8d is None:
-                            snow8d = snowfall
-                        else:
-                            snow8d += snowfall
+                snowfall = snowfall_days[i]
 
                 if i == 4:
                     offset = 2
@@ -561,45 +839,31 @@ class SnowReport:
             resort = self.update(res_id)
 
             if resort is not None:
-                if resort["isOpen"]:
+                state = resort.get("status", "ready")
+                if state == "unavailable" or resort.get("isOpen") is None:
+                    color = graphics.Color(100, 100, 100)
+                elif resort["isOpen"]:
                     color = graphics.Color(40, 167, 69)
                 else:
                     color = graphics.Color(115, 18, 15)
 
-                graphics.DrawText(self.sign.canvas, self.sign.font57, 1, 7 + offset, color, resort["displayName"][:15])
+                if state == "ready":
+                    graphics.DrawText(self.sign.canvas, self.sign.font57, 1, 7 + offset, color, resort["displayName"][:15])
+                else:
+                    label = "CACHED" if state == "cached" else "N/A"
+                    graphics.DrawText(self.sign.canvas, self.sign.font46, 1, 7 + offset, graphics.Color(180, 100, 30), f"{label} {resort['displayName']}"[:19])
 
                 graphics.DrawLine(self.sign.canvas, 94, 0, 94, 31, graphics.Color(13, 13, 25))
 
-                snownew = resort["new"]
+                snownew = resort.get("new")
                 if snownew is None:
                     snownew = "?"
                 else:
                     snownew = str(round(snownew))
 
-                snow4d = None
-                snow8d = None
-                for i in range(8):
-                    # Daily forecast
-                    snowfall = None
-                    if "forecast" in resort:
-                        try:
-                            forecast = resort["forecast"][i + 7]
-                        except Exception:
-                            forecast = {}
-                        if "snowfall" in forecast:
-                            snowfall = forecast["snowfall"] * CM_2_IN
-
-                    if snowfall is not None:
-                        if i < 4:
-                            if snow4d is None:
-                                snow4d = snowfall
-                            else:
-                                snow4d += snowfall
-                        else:
-                            if snow8d is None:
-                                snow8d = snowfall
-                            else:
-                                snow8d += snowfall
+                snowfall_days = _snow_forecast_inches(resort)
+                snow4d = _snow_forecast_total(snowfall_days[:4])
+                snow8d = _snow_forecast_total(snowfall_days[4:])
                 if snow4d is not None:
                     snow4d = str(round(snow4d))
                 else:
@@ -616,68 +880,66 @@ class SnowReport:
 
                 offset += 8
 
-    def update(self, res_id):
+    def _failed_update(self, resort, error):
+        failures = resort.get("failures", 0) + 1
+        delay = min(SNOW_MAX_RETRY_SECONDS, SNOW_RETRY_SECONDS * 2 ** min(failures - 1, 3))
+        resort.update(status="cached" if "last_update" in resort else "unavailable", failures=failures, next_attempt=time.monotonic() + delay)
+        logging.warning("Snow feed %s for uuid=%s; retry in %ss: %s", resort["status"], resort["uuid"], delay, _snow_feed_error(error))
+        return resort
 
+    def _get_weather(self, session, reporturl, resortdata):
+        weather_url = reporturl.rsplit("/", 1)[0] + "/weather"
+        try:
+            page = _parse_snow_page(_fetch_snow_feed(session, weather_url), "weatherInfoHourly")
+            return _parse_snow_weather(page)
+        except (requests.RequestException, SnowFeedError) as error:
+            key = shared_config.CONF.get("OPENWEATHER_API_KEY")
+            if not key:
+                raise
+            logging.warning("Snow hourly weather unavailable; attempting OpenWeather: %s", _snow_feed_error(error))
+        lat = _snow_number(resortdata.get("latitude"), "resort latitude")
+        lon = _snow_number(resortdata.get("longitude"), "resort longitude")
+        if lat is None or lon is None:
+            raise SnowFeedError("missing coordinates for OpenWeather fallback")
+        params = {"lat": lat, "lon": lon, "appid": key, "exclude": "minutely,hourly", "units": "imperial"}
+        data = json.loads(_fetch_snow_feed(session, "https://api.openweathermap.org/data/3.0/onecall", params=params))
+        return _parse_snow_openweather(data)
+
+    def update(self, res_id):
+        """Return a ready, cached, or unavailable resort; retry failures separately."""
         if not res_id:
             return None
-
-        data_update_interval = timedelta(minutes=20)
-
-        # Do we already have data stored?
         resort = next((res for res in self.resorts if res["uuid"] == res_id), None)
-
         if resort is None:
-            # Need to add resort to list
-            resort = {}
-
-            # Need to construct the report url using the resort's region and slug.
-            # Find the resort with the matching uuid in the global json list
-
-            # Make sure our lists are up to date
-            populate_resort_lists()
-
-            info = None
-            if "resorts" in shared_config.data_dict["resort_info"] and len(shared_config.data_dict["resort_info"]["resorts"]) > 0:
-                info = next((res for res in shared_config.data_dict["resort_info"]["resorts"] if res["uuid"] == res_id), None)
-
-            if info is None:
-                # Updating the resort list failed or the specified uuid is not listed. Give up!
-                logging.error(f"Error getting resort with uuid={res_id} from resort list.")
-                return None
-
-            if "domain" in info and info["domain"]:
-                domain = info["domain"]
-            else:
-                domain = "www.onthesnow.com"
-
-            reporturl = f"https://{domain}/{info['region']}/{info['slug']}/skireport"
-
-            resort["url"] = reporturl
-            resort["uuid"] = res_id
-            resort["name"] = info["title"]
-            resort["slug"] = info["slug"]
-            resort["displayName"] = compute_display_name(info, 15)
-
-            logging.debug(f"Created new data for {resort['displayName']} (uuid: {res_id})")
-
-            # Save this data for recall later
+            resort = {"uuid": res_id, "displayName": "Snow report", "status": "unavailable"}
             self.resorts.append(resort)
-        else:
-            # Found resort in list.
-            if "last_update" in resort and datetime.now() < datetime.fromtimestamp(resort["last_update"]) + data_update_interval:
-                # Data is still valid
-                return resort
-
-            # Need to update the data
-            reporturl = resort["url"]
-
-        logging.debug(f"Updating data for uuid: {res_id} using url: {reporturl}")
-
-        resort["last_update"] = datetime.now().timestamp()
+        if time.monotonic() < resort.get("next_attempt", 0):
+            return resort
+        if resort.get("status") == "ready" and time.time() < resort["last_update"] + SNOW_UPDATE_SECONDS:
+            return resort
+        if "url" not in resort:
+            try:
+                populate_resort_lists()
+            except (requests.RequestException, json.JSONDecodeError) as error:
+                return self._failed_update(resort, error)
+            catalog_info = shared_config.data_dict.get("resort_info", {})
+            if not isinstance(catalog_info, dict):
+                return self._failed_update(resort, SnowFeedError("invalid resort catalog"))
+            catalog = catalog_info.get("resorts") or []
+            if not isinstance(catalog, list) or not all(isinstance(res, dict) for res in catalog):
+                return self._failed_update(resort, SnowFeedError("invalid resort catalog list"))
+            info = next((res for res in catalog if res.get("uuid") == res_id), None)
+            if info is None:
+                return self._failed_update(resort, SnowFeedError("resort not found in catalog"))
+            if not all(isinstance(info.get(key), str) and info[key] for key in ("region", "slug", "title")):
+                return self._failed_update(resort, SnowFeedError("invalid resort catalog entry"))
+            domain = info.get("domain") or "www.onthesnow.com"
+            resort.update(url=f"https://{domain}/{info['region']}/{info['slug']}/skireport", name=info["title"], slug=info["slug"], displayName=compute_display_name(info, 15))
+        reporturl = resort["url"]
+        logging.debug("Updating snow data for uuid=%s using %s", res_id, reporturl)
 
         report_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
-            "Host": "www.onthesnow.com",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "",
@@ -689,291 +951,83 @@ class SnowReport:
         }
 
         with requests.Session() as s:
+            s.headers.update(report_headers)
             try:
-                response = s.get(reporturl, headers=report_headers, timeout=10)
-            except Exception as e:
-                logging.error(f"Error getting snow report data for uuid: {res_id} from url {reporturl}: {e}")
-                response = None
+                page = _parse_snow_page(_fetch_snow_feed(s, reporturl))
+                snapshot, resortdata = _parse_snow_report(page, res_id)
+                snapshot["weather"] = self._get_weather(s, reporturl, resortdata)
+            except (requests.RequestException, SnowFeedError, json.JSONDecodeError, UnicodeDecodeError) as error:
+                return self._failed_update(resort, error)
 
-            if response and response.status_code == requests.codes.ok:
-                soup = BeautifulSoup(response.content, "html.parser")
-                datatxt = soup.find("script", {"id": "__NEXT_DATA__"}).text
-                data = json.loads(datatxt)
+            resort.update(snapshot, last_update=time.time(), status="ready", failures=0, next_attempt=0)
+            logging.info("Snow report refreshed for uuid=%s: %s forecast days", res_id, len(snapshot["forecast"]))
+            if "logo" not in resort or resort["logo"] is None:
+                logo = None
 
-                buildID = data["buildId"]
-                resortdata = data["props"]["pageProps"]["fullResort"]
-                neardata = data["props"]["pageProps"]["nearbyResorts"]
-
-                # Workaround
-                for res in neardata:
-                    if resort["uuid"] == res["uuid"]:
-                        resortdata = res
-                        break
-
-                resort["isOpen"] = resortdata["status"]["openFlag"]
-                resort["runsOpen"] = resortdata["runs"]["open"]
-                resort["runsTotal"] = resortdata["runs"]["total"]
-
-                snowbase = None
-                if "base" in resortdata["snow"] and resortdata["snow"]["base"] is not None:
-                    snowbase = resortdata["snow"]["base"] * CM_2_IN
-
-                snowmid = None
-                if "middle" in resortdata["snow"] and resortdata["snow"]["middle"] is not None:
-                    snowmid = resortdata["snow"]["middle"] * CM_2_IN
-
-                snowpeak = None
-                if "summit" in resortdata["snow"] and resortdata["snow"]["summit"] is not None:
-                    snowpeak = resortdata["snow"]["summit"] * CM_2_IN
-
-                snownew = None
-                if "last24" in resortdata["snow"] and resortdata["snow"]["last24"] is not None:
-                    snownew = resortdata["snow"]["last24"] * CM_2_IN
-
-                resort["snowBase"] = snowbase
-                resort["snowMid"] = snowmid
-                resort["snowPeak"] = snowpeak
-                resort["new"] = snownew
-                resort["forecast"] = resortdata["weather"]
-
-                weather = {}
-                weather["currTemp"] = None
-                weather["currWeatherIcon"] = None
-                weather["dayLow"] = None
-                weather["dayHigh"] = None
-                weather["nightLow"] = None
-                weather["nightHigh"] = None
-
-                weather_url = f"https://www.onthesnow.com/_next/data/{buildID}/{resortdata['region']['slug']}/{resortdata['slug']}/weather.json"
-
-                weather_headers = report_headers
-                weather_headers["Referer"] = reporturl[:-9] + "weather"
-
-                session = requests.Session()
-                session.headers.update(weather_headers)
-
-                fallback = False
+                # First try to get saved logo
                 try:
-                    weather_response = session.get(weather_url, timeout=10)
-                    if weather_response.status_code == requests.codes.ok:
-                        weather_data = json.loads(weather_response.text)
-                        weather_data = weather_data["pageProps"]
-
-                        hourly = weather_data["weatherInfoHourly"]["weatherItems"]
-                        current = hourly[0]
-
-                        icon = None
-                        isNight = False
-                        if "datetime" in current:
-                            curr_h = datetime.fromisoformat(current["datetime"]).hour
-                            if curr_h <= 6 or curr_h >= 18:
-                                isNight = True
-                        if "mid" in current and "type" in current["mid"]:
-                            icon = mapIcon(current["mid"]["type"], isNight)
-                        elif "base" in current and "type" in current["base"]:
-                            icon = mapIcon(current["base"]["type"], isNight)
-
-                        if icon:
-                            image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png").convert("RGB")
-                            weather["currWeatherIcon"] = image
-
-                        temp = None
-                        if "mid" in current and "temp" in current["mid"]:
-                            temp = current["mid"]["temp"]
-                        elif "base" in current and "temp" in current["base"]:
-                            temp = current["base"]["temp"]
-
-                        if temp:
-                            mean = convert_c_to_f((temp["min"] + temp["max"]) / 2)
-                            weather["currTemp"] = mean
-
-                        for hour in hourly:
-                            if "datetime" in hour and hour["datetime"] is not None:
-                                h = datetime.fromisoformat(hour["datetime"]).hour
-                                temp = None
-
-                                if "mid" in hour and "temp" in hour["mid"]:
-                                    temp = hour["mid"]["temp"]
-                                elif "base" in hour and "temp" in hour["base"]:
-                                    temp = hour["base"]["temp"]
-
-                                templow = None
-                                temphigh = None
-                                if temp:
-                                    templow = temp["min"]
-                                    temphigh = temp["max"]
-
-                                if templow is not None and temphigh is not None:
-                                    if h <= 6 or h >= 18:
-                                        # Night 6pm - 7am
-                                        if weather["nightLow"] is None or templow < weather["nightLow"]:
-                                            weather["nightLow"] = templow
-
-                                        if weather["nightHigh"] is None or temphigh > weather["nightHigh"]:
-                                            weather["nightHigh"] = temphigh
-                                    else:
-                                        # Day
-                                        if weather["dayLow"] is None or templow < weather["dayLow"]:
-                                            weather["dayLow"] = templow
-
-                                        if weather["dayHigh"] is None or temphigh > weather["dayHigh"]:
-                                            weather["dayHigh"] = temphigh
-
-                        if weather["dayHigh"] is not None:
-                            weather["dayHigh"] = convert_c_to_f(weather["dayHigh"])
-                        if weather["nightHigh"] is not None:
-                            weather["nightHigh"] = convert_c_to_f(weather["nightHigh"])
-                        if weather["dayLow"] is not None:
-                            weather["dayLow"] = convert_c_to_f(weather["dayLow"])
-                        if weather["nightLow"] is not None:
-                            weather["nightLow"] = convert_c_to_f(weather["nightLow"])
-
-                    else:
-                        fallback = True
-
-                except Exception as e:
-                    logging.error(f"Error getting resort weather data for {resort['name']} from url {weather_url}: {e}")
-                    fallback = True
-
-                if fallback:
-                    # Fallback to openweathermap data
-                    logging.debug(f"There was a problem getting weather data from {urlparse(weather_url).netloc}, attempting fallback back to openweathermap data.")
-                    weather_data = None
-                    if "OPENWEATHER_API_KEY" in shared_config.CONF:
-                        try:
-                            weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={resortdata['latitude']}&lon={resortdata['longitude']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial").json()
-                        except Exception:
-                            logging.debug(f"Could not get weather data for resort {resort['name']} at: {resortdata['latitude']}°, {resortdata['longitude']}°.")
-                    else:
-                        logging.debug("No OPENWEATHER_API_KEY!")
-
-                    if weather_data:
-                        if "current" in weather_data:
-                            if "temp" in weather_data["current"]:
-                                weather["currTemp"] = weather_data["current"]["temp"]
-
-                            if "weather" in weather_data["current"]:
-                                try:
-                                    isNight = weather_data["current"]["dt"] < weather_data["current"]["sunrise"] or weather_data["current"]["dt"] > weather_data["current"]["sunset"]
-                                    icon, _ = weather_icon_decode(weather_data["daily"][0]["weather"][0]["id"], weather_data["daily"][0]["weather"][0]["main"], isNight)
-
-                                    image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png").convert("RGB")
-
-                                    weather["currWeatherIcon"] = image
-                                except Exception:
-                                    pass
-
-                        if "daily" in weather_data:
-                            daily = weather_data["daily"]
-
-                            for day in daily:
-                                if "temp" in day and day["temp"] is not None:
-                                    daytemp = None
-                                    morntemp = None
-                                    nighttemp = None
-                                    evetemp = None
-
-                                    if "day" in day["temp"]:
-                                        daytemp = day["temp"]["day"]
-
-                                    if "morn" in day["temp"]:
-                                        morntemp = day["temp"]["morn"]
-
-                                    if "night" in day["temp"]:
-                                        nighttemp = day["temp"]["night"]
-
-                                    if "eve" in day["temp"]:
-                                        evetemp = day["temp"]["eve"]
-
-                                    if nighttemp:
-                                        if weather["nightLow"] is None or nighttemp < weather["nightLow"]:
-                                            weather["nightLow"] = nighttemp
-                                        if weather["nightHigh"] is None or nighttemp > weather["nightHigh"]:
-                                            weather["nightHigh"] = nighttemp
-
-                                    if evetemp:
-                                        if weather["nightLow"] is None or evetemp < weather["nightLow"]:
-                                            weather["nightLow"] = evetemp
-                                        if weather["nightHigh"] is None or evetemp > weather["nightHigh"]:
-                                            weather["nightHigh"] = evetemp
-
-                                    if daytemp:
-                                        if weather["dayLow"] is None or daytemp < weather["dayLow"]:
-                                            weather["dayLow"] = daytemp
-                                        if weather["dayHigh"] is None or daytemp > weather["dayHigh"]:
-                                            weather["dayHigh"] = daytemp
-
-                                    if morntemp:
-                                        if weather["dayLow"] is None or morntemp < weather["dayLow"]:
-                                            weather["dayLow"] = morntemp
-                                        if weather["dayHigh"] is None or morntemp > weather["dayHigh"]:
-                                            weather["dayHigh"] = morntemp
-                    else:
-                        logging.error("Fallback to openweathermap failed.")
-
-                resort["weather"] = weather
-
-                if "logo" not in resort or resort["logo"] is None:
+                    with Image.open(f"{shared_config.icons_dir}/snow/logos/{resort['slug']}.png") as image:
+                        logo = image.convert("RGB")
+                except FileNotFoundError:
                     logo = None
+                except OSError as error:
+                    logging.warning("Snow resort logo unavailable for uuid=%s: %s", res_id, type(error).__name__)
 
-                    # First try to get saved logo
+                if logo is None:
+                    # List of websites to try getting favicon from (in preference order)
+                    website_list = [resortdata.get(key) for key in ("website", "liftsUrl", "rentalUrl", "lessonsUrl", "mobileWebsite")]
+
+                    if not any(website_list):
+                        logging.debug(f"No websites listed for {resort['name']}.")
+
+                    checked = []
+
+                    for website in website_list:
+                        if not isinstance(website, str) or not website:
+                            continue
+                        if website in checked:
+                            continue
+
+                        logging.debug(f"Attempting to get favicon for {resort['name']} from: {website}.")
+
+                        logo = getFavicon(website)
+                        if logo is not None:
+                            logging.debug(f"Successfully got logo for resort {resort['name']} from: {website}.")
+                            break
+
+                        if len(checked) == 0:
+                            # First website, also try url version without "www."
+                            p = urlparse(website)
+                            baseurl = p.netloc
+                            scheme = p.scheme
+                            if baseurl.startswith("www."):
+                                website = scheme + "://" + baseurl[4:]
+
+                                logging.debug(f"Attempting to get favicon for {resort['name']} from: {website}.")
+
+                                logo = getFavicon(website)
+                                if logo is not None:
+                                    logging.debug(f"Successfully got logo for resort {resort['name']} from: {website}.")
+                                    break
+
+                        checked.append(website)
+
+                if logo is None:
+                    # Give up and use the default image
                     try:
-                        logo = Image.open(f"{shared_config.icons_dir}/snow/logos/{resort['slug']}.png")
-                    except Exception:
-                        logo = None
-
-                    if logo is None:
-                        # List of websites to try getting favicon from (in preference order)
-                        website_list = [resortdata["website"], resortdata["liftsUrl"], resortdata["rentalUrl"], resortdata["lessonsUrl"], resortdata["mobileWebsite"]]
-
-                        if len(website_list) == 0:
-                            logging.debug(f"No websites listed for {resort['name']}.")
-
-                        checked = []
-
-                        for website in website_list:
-                            if website is None:
-                                continue
-                            if website in checked:
-                                continue
-
-                            logging.debug(f"Attempting to get favicon for {resort['name']} from: {website}.")
-
-                            logo = getFavicon(website)
-                            if logo is not None:
-                                logging.debug(f"Successfully got logo for resort {resort['name']} from: {website}.")
-                                break
-
-                            if len(checked) == 0:
-                                # First website, also try url version without "www."
-                                p = urlparse(website)
-                                baseurl = p.netloc
-                                scheme = p.scheme
-                                if baseurl.startswith("www."):
-                                    website = scheme + "://" + baseurl[4:]
-
-                                    logging.debug(f"Attempting to get favicon for {resort['name']} from: {website}.")
-
-                                    logo = getFavicon(website)
-                                    if logo is not None:
-                                        logging.debug(f"Successfully got logo for resort {resort['name']} from: {website}.")
-                                        break
-
-                            checked.append(website)
-
-                    if logo is None:
-                        # Give up and use the default image
-                        logo = Image.open(f"{shared_config.icons_dir}/snow/logos/DEFAULT.png").convert("RGB")
-                        logging.debug(f"Could not get logo for resort {resort['name']}.")
-                    else:
-                        # Save logo to disk so we don't need to get it from the web again
+                        with Image.open(f"{shared_config.icons_dir}/snow/logos/DEFAULT.png") as image:
+                            logo = image.convert("RGB")
+                    except OSError as error:
+                        logging.warning("Snow default logo unavailable: %s", type(error).__name__)
+                    logging.debug(f"Could not get logo for resort {resort['name']}.")
+                else:
+                    # Save logo to disk so we don't need to get it from the web again
+                    try:
                         logo.convert("RGB").save(f"{shared_config.icons_dir}/snow/logos/{resort['slug']}.png")
+                    except OSError as error:
+                        logging.warning("Could not save Snow logo for uuid=%s: %s", res_id, type(error).__name__)
 
-                    resort["logo"] = logo
-
-            else:
-                logging.error(f"Could not update data for uuid: {res_id} using url: {reporturl}")
-                return None
+                resort["logo"] = logo
 
         return resort
 
