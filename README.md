@@ -22,6 +22,29 @@
   - #4S flat washers for spacing
 - [Wiring instructions](https://github.com/hzeller/rpi-rgb-led-matrix/blob/master/wiring.md)
 
+### Alternative: 128x32 OLED Bonnet
+
+The [Adafruit 2.23" Monochrome OLED Bonnet](https://learn.adafruit.com/adafruit-2-23-monochrome-oled-bonnet) can replace the RGB LED panels. It uses an **SSD1305** controller, I2C address **0x3c**, and GPIO **4** for reset. Its 128x32 resolution matches the existing display layouts.
+
+1. Enable I2C with `sudo raspi-config` and reboot if needed. `i2cdetect -y 1` should show `3c`.
+2. Set this in `sign.conf` (or the web configuration screen):
+   ```ini
+   PINOUT_HARDWARE_MAPPING=adafruit-oled
+   ```
+3. Update/rebuild the Docker image, or run `uv sync` for a local installation, to install the OLED driver. Restart PlaneSign after changing the hardware mapping.
+
+Existing mappings such as `adafruit-hat` still select the RGB LED driver. OLED output does not use the LED-specific GPIO slowdown or RGB channel order settings.
+
+All non-black pixels become solid white, including dim text and colored lines. Colors and shading are not retained, so modes that distinguish information by color will lose that distinction. The brightness control adjusts OLED contrast; zero brightness turns the panel off, and raising it restores the current frame.
+
+Try the bonnet without editing your configuration:
+
+```sh
+.venv/bin/python planesign/__main__.py --set PINOUT_HARDWARE_MAPPING=adafruit-oled --mode MOON
+```
+
+The OLED backend also streams its monochrome output to `http://localhost/display.html` when nginx is running, with frame captures on port 5056. Add `--web` to preview the same conversion **without accessing I2C or GPIO**. The OLED's positive contrast levels are not simulated in the preview; zero brightness is shown as black.
+
 ## Software Setup
 
 ### Prepare the SD Card

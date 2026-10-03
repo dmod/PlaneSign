@@ -63,30 +63,7 @@ def read_config():
     logging.info("Reading  config...")
 
     # Build the new config locally and then apply it, so other processes and API threads never see a half-loaded CONF
-    conf = {}
-
-    if not os.path.exists(shared_config.config_path):
-        logging.warning(f"WARNING! No {shared_config.config_path} found... using default values from sign.conf.sample")
-    else:
-        with open(shared_config.config_path) as f:
-            for line in f.readlines():
-                if line.isspace() or line[0] == "#":
-                    continue
-                key, val = line.split("=")
-                conf[key] = val.rstrip()
-
-    with open("sign.conf.sample") as f:
-        for line in f.readlines():
-            if line.isspace() or line[0] == "#":
-                continue
-            key, val = line.split("=")
-            if key not in conf:
-                logging.warning(f"WARNING! No setting for '{key}' found in {shared_config.config_path}, using value '{val.rstrip()}' from sign.conf.sample")
-                conf[key] = val.rstrip()
-
-    if shared_config.config_overrides:
-        logging.info(f"Overriding config from the command line: {', '.join(shared_config.config_overrides)}")
-        conf.update(shared_config.config_overrides)
+    conf = shared_config.load_config_values()
 
     shared_config.CONF.update(conf)
     for key in set(shared_config.CONF.keys()) - conf.keys():

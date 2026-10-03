@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(prog="planesign", description="Drive the PlaneSign RGB LED matrix.")
+    parser = argparse.ArgumentParser(prog="planesign", description="Drive the PlaneSign LED matrix or OLED display.")
     parser.add_argument("--web", action="store_true", help="emulate the matrix and stream frames to web/display.html instead of driving hardware")
     parser.add_argument("--mode", type=str.upper, metavar="MODE", help="mode to show after the welcome screen, e.g. MOON (default PLANES_ALERT)")
     parser.add_argument("--fake-time", metavar="ISO_TIME", help="start the clock at this time, e.g. 2026-12-24T18:00; without an offset it is local to the sign's location")
@@ -44,6 +44,23 @@ cli_args = parse_args()
 
 if cli_args.web:
     os.environ["PLANESIGN_EMULATED_DISPLAY"] = "1"
+
+import shared_config
+
+# Select the driver before importing modes, which all import rgbmatrix.
+shared_config.config_path = cli_args.config
+shared_config.config_overrides = cli_args.overrides
+if cli_args.api_port:
+    shared_config.api_port = cli_args.api_port
+if cli_args.ws_port:
+    shared_config.ws_port = cli_args.ws_port
+
+startup_conf = shared_config.load_config_values(log_settings=False)
+if startup_conf["PINOUT_HARDWARE_MAPPING"] == "adafruit-oled":
+    import oled_matrix
+
+    sys.modules["rgbmatrix"] = oled_matrix
+elif cli_args.web:
     import emulated_matrix
 
     sys.modules["rgbmatrix"] = emulated_matrix
@@ -87,14 +104,6 @@ import welcome
 from modes import DisplayMode, defined_mode_handlers
 
 import planesign
-
-# Applied before any config is read or child process is forked, so every process sees them
-shared_config.config_path = cli_args.config
-shared_config.config_overrides = cli_args.overrides
-if cli_args.api_port:
-    shared_config.api_port = cli_args.api_port
-if cli_args.ws_port:
-    shared_config.ws_port = cli_args.ws_port
 
 manager = Manager()
 shared_config.data_dict = manager.dict()
@@ -200,63 +209,40 @@ if cli_args.fake_time or cli_args.time_speed != 1:
     psclock.set_clock(psclock.parse_time(cli_args.fake_time) if cli_args.fake_time else psclock.time(), cli_args.time_speed)
     logging.info(f"Clock set to {psclock.describe()}")
 
-api_server_process.start()
-plane_data_process.start()
-weather_data_process.start()
-tides_data_process.start()
-nfl_data_process.start()
-mlb_data_process.start()
+workers = [(api_server_process, 5), (plane_data_process, 10), (weather_data_process, 10), (tides_data_process, 10), (nfl_data_process, 10), (mlb_data_process, 10)]
+ps = None
+try:
+    for process, _ in workers:
+        process.start()
+    ps = planesign.PlaneSign(defined_mode_handlers)
+    defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
+    shared_config.shared_mode.value = DisplayMode[cli_args.mode or "PLANES_ALERT"].value
+    ps.sign_loop()
+finally:
+    logging.info("Shutting down sign and child processes...")
+    shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
+    shared_config.shared_shutdown_event.set()
+    shared_config.shared_forced_sign_update.set()
 
-ps = planesign.PlaneSign(defined_mode_handlers)
-defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
-shared_config.shared_mode.value = DisplayMode[cli_args.mode or "PLANES_ALERT"].value
-ps.sign_loop()
+    for process, timeout in workers:
+        if process.pid is None:
+            continue
+        process.join(timeout=timeout)
+        if process.is_alive():
+            logging.warning("%s did not exit in time, terminating...", process.name)
+            process.terminate()
+            process.join(timeout=2)
 
-logging.info("Sign loop exited, shutting down child processes...")
-shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
-shared_config.shared_shutdown_event.set()
-shared_config.shared_forced_sign_update.set()
-
-api_server_process.join(timeout=5)
-if api_server_process.is_alive():
-    logging.warning("API server did not exit in time, terminating...")
-    api_server_process.terminate()
-    api_server_process.join(timeout=2)
-
-plane_data_process.join(timeout=10)
-if plane_data_process.is_alive():
-    logging.warning("Plane data process did not exit in time, terminating...")
-    plane_data_process.terminate()
-    plane_data_process.join(timeout=2)
-
-weather_data_process.join(timeout=10)
-if weather_data_process.is_alive():
-    logging.warning("Weather data process did not exit in time, terminating...")
-    weather_data_process.terminate()
-    weather_data_process.join(timeout=2)
-
-tides_data_process.join(timeout=10)
-if tides_data_process.is_alive():
-    logging.warning("Tides data process did not exit in time, terminating...")
-    tides_data_process.terminate()
-    tides_data_process.join(timeout=2)
-
-nfl_data_process.join(timeout=10)
-if nfl_data_process.is_alive():
-    logging.warning("NFL data process did not exit in time, terminating...")
-    nfl_data_process.terminate()
-    nfl_data_process.join(timeout=2)
-
-mlb_data_process.join(timeout=10)
-if mlb_data_process.is_alive():
-    logging.warning("MLB data process did not exit in time, terminating...")
-    mlb_data_process.terminate()
-    mlb_data_process.join(timeout=2)
-
-logging_queue.put(None)
-listener.join(timeout=5)
-if listener.is_alive():
-    listener.terminate()
-    listener.join(timeout=2)
+    try:
+        if ps is not None:
+            close_display = getattr(ps.matrix, "close", None)
+            if close_display is not None:
+                close_display()
+    finally:
+        logging_queue.put(None)
+        listener.join(timeout=5)
+        if listener.is_alive():
+            listener.terminate()
+            listener.join(timeout=2)
 
 print("Done.")

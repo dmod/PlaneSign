@@ -11,6 +11,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 ## Hardware
 - **Display:** Two chained 64x32 RGB LED matrix panels = **128 pixels wide × 32 pixels tall**
 - **Platform:** Raspberry Pi 4, uses the [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) library (`rgbmatrix` Python bindings)
+- **Alternative display:** Adafruit 2.23" 128x32 monochrome OLED bonnet (SSD1305, I2C 0x3c, GPIO 4 reset), selected by `PINOUT_HARDWARE_MAPPING=adafruit-oled`. Other mapping values still select the native RGB driver; changing the mapping requires a restart.
 
 ## Architecture
 - **`planesign/`** — Main application. Each display mode is a separate module (e.g., `planes.py`, `weather.py`, `moon.py`) registered via the `@planesign_mode_handler(DisplayMode.X)` decorator imported from `modes.py`.
@@ -18,6 +19,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`planesign/utilities.py`** — Shared drawing/math helpers. Use `get_centered_text_x_offset_value(font_width, text)` to horizontally center text (center point is x=64).
 - **`planesign/modes.py`** — `DisplayMode` enum, `planesign_mode_handler` decorator, and shared `defined_mode_handlers` registry. The entry point imports the mode modules to populate the registry before starting the sign.
 - **`planesign/shared_config.py`** — Shared state (multiprocessing values) and configuration from `sign.conf`.
+- **`planesign/oled_matrix.py`** — RGBMatrix-compatible OLED backend sharing the emulator's PIL canvas and BDF renderer. The entry point loads configuration before importing modes to select the `rgbmatrix` alias. OLED frames map every non-black pixel to white; `--web` previews that conversion without importing hardware libraries. Physical OLED output also streams frames, but is not marked as emulated, so audio remains on the sign and the debug-clock API remains web-only.
 - **`planesign/psclock.py`** — The sign's wall clock. Normally real time; `--fake-time`, `--time-speed` and `/debug/clock` shift or speed it up for testing.
 - **`web/`** — Frontend served by nginx; communicates with a Flask API (`/api/`).
 - **`ble/`** — Bluetooth Low Energy setup interface.
@@ -85,6 +87,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Uses VS Code devcontainer (`.devcontainer/devcontainer.json`) built from the project `Dockerfile`.
 - Devcontainer runs with `--privileged` and `--network=host`.
 - Development uses the `uv`-managed `.venv`; use its Python interpreter rather than assuming system Python has the project dependencies. Run `uv sync` when dependency setup is needed. Native/system packages are installed via apt in the Dockerfile.
+- The native RGB driver build needs Pillow's `Imaging.h` from the system `python3-pil` package. If uv's Python version differs from the system Python, point `CFLAGS` at the system include directory containing that header before running `uv sync`; do not assume the two Python versions match.
 - The `PlaneSign Debug - Web Display` VS Code launch configuration runs with `--web` and has a pre-launch task for `uv sync` and nginx startup.
 
 ## Testing And Visual Verification

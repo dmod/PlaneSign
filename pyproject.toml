@@ -4,6 +4,7 @@ version = "0.1.0"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "adafruit-circuitpython-ssd1305>=1.4.4",
     "beautifulsoup4>=4.15.0",
     "favicon>=0.7.0",
     "finnhub-python>=2.4.28",
@@ -12,6 +13,7 @@ dependencies = [
     "pillow>=12.3.0",
     "requests>=2.34.2",
     "rgbmatrix",
+    "RPi.GPIO>=0.7.1; sys_platform == 'linux' and platform_machine == 'aarch64'",
     "shapely>=2.1.2",
     "skyfield>=1.54",
     "tzfpy>=2.1.0",

@@ -25,7 +25,7 @@ CLOSEST_HEIGHT_LIMIT=10000
 #number min 0 max 100
 PLANE_ALERT_RADIUS=2
 
-#text
+#text RGB matrix mapping or adafruit-oled (restart required)
 PINOUT_HARDWARE_MAPPING=adafruit-hat
 
 #number min 0 max 5

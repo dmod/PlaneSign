@@ -1,3 +1,4 @@
+import logging
 import os
 from multiprocessing import Array, Event, Value
 
@@ -74,6 +75,37 @@ CONF = None
 code_to_airport = {}
 airport_codes_to_ignore = set()
 country_name_to_code = {}
+
+
+def load_config_values(*, log_settings=True):
+    """Read configuration without importing a display driver or changing shared state."""
+    conf = {}
+    if not os.path.exists(config_path):
+        if log_settings:
+            logging.warning(f"WARNING! No {config_path} found... using default values from sign.conf.sample")
+    else:
+        with open(config_path) as f:
+            for line in f:
+                if line.isspace() or line.startswith("#"):
+                    continue
+                key, val = line.split("=", 1)
+                conf[key] = val.rstrip()
+
+    with open("sign.conf.sample") as f:
+        for line in f:
+            if line.isspace() or line.startswith("#"):
+                continue
+            key, val = line.split("=", 1)
+            if key not in conf:
+                if log_settings:
+                    logging.warning(f"WARNING! No setting for '{key}' found in {config_path}, using value '{val.rstrip()}' from sign.conf.sample")
+                conf[key] = val.rstrip()
+
+    if config_overrides:
+        if log_settings:
+            logging.info(f"Overriding config from the command line: {', '.join(config_overrides)}")
+        conf.update(config_overrides)
+    return conf
 
 
 def shutdown_in_progress():
