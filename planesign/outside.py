@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 WEATHER_LIVE_SECONDS = 1800
 WEATHER_CACHE_SECONDS = 7200
 WEATHER_CODES = frozenset((200, 201, 202, 210, 211, 212, 221, 230, 231, 232, 300, 301, 302, 310, 311, 312, 313, 314, 321, 500, 501, 502, 503, 504, 511, 520, 521, 522, 531, 600, 601, 602, 611, 612, 613, 615, 616, 620, 621, 622, 701, 711, 721, 731, 741, 751, 761, 762, 771, 781, 800, 801, 802, 803, 804))
+SKY_SAMPLE_SECONDS = 60
+SKY_PRELOAD_SECONDS = 26 * 3600
+SKY_REFRESH_MARGIN_SECONDS = 1800
+SKY_FIELDS = ("sun_altitude", "sun_azimuth", "moon_altitude", "moon_azimuth", "moon_phase")
+OFFSET_TRANSITION_SECONDS = 0.15
 
 
 @dataclass(frozen=True)
@@ -107,7 +112,7 @@ def weather_snapshot(payload, real_now: float, *, forecast_time: float | None = 
     return OutsideWeather("UNAVAILABLE", observed_at=observed)
 
 
-def outside_moment(tz, offset_minutes: int) -> datetime:
+def outside_moment(tz, offset_minutes: float) -> datetime:
     # Add elapsed seconds before converting to local time, including across DST.
     return datetime.fromtimestamp(psclock.time() + offset_minutes * 60, tz)
 
@@ -123,15 +128,41 @@ def location_timezone(latitude: float, longitude: float):
     return ZoneInfo(name) if name is not None else UTC
 
 
+def sky_covers(sky, start: float, end: float, latitude: float, longitude: float) -> bool:
+    if not isinstance(sky, dict) or sky.get("status") != "READY" or sky.get("location") != [latitude, longitude]:
+        return False
+    first = reading(sky.get("start"))
+    last = reading(sky.get("end"))
+    return first is not None and last is not None and first <= start <= end <= last
+
+
+def sky_snapshot(sky, timestamp: float, latitude: float, longitude: float):
+    if not sky_covers(sky, timestamp, timestamp, latitude, longitude):
+        return None
+    position = (timestamp - sky["start"]) / SKY_SAMPLE_SECONDS
+    index = min(int(position), len(sky["sun_altitude"]) - 2)
+    fraction = position - index
+    values = {}
+    for field in SKY_FIELDS:
+        first, second = sky[field][index : index + 2]
+        delta = second - first
+        circular = field.endswith("azimuth") or field == "moon_phase"
+        if circular:
+            delta = (delta + 180) % 360 - 180
+        value = first + delta * fraction
+        values[field] = value % 360 if circular else value
+    return values
+
+
 def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0) -> OutsideEnvironment:
     observed = weather_snapshot(weather, time.time(), forecast_time=moment.timestamp() if offset_minutes else None)
     season = local_season(moment, latitude)
     if not isinstance(sky, dict):
         return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes)
-    usable = sky.get("location") == [latitude, longitude] and sky.get("offset_minutes", 0) == offset_minutes and abs(moment.timestamp() - sky.get("at", 0)) <= 90 and sky.get("status") == "READY"
-    if not usable:
+    positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
+    if positions is None:
         return OutsideEnvironment(season, observed, "UNAVAILABLE" if sky.get("status") == "UNAVAILABLE" else "LOADING", offset_minutes=offset_minutes)
-    return OutsideEnvironment(season, observed, "READY", sky["sun_altitude"], sky["sun_azimuth"], sky["moon_altitude"], sky["moon_azimuth"], sky["moon_phase"], offset_minutes)
+    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes)
 
 
 def load_ephemeris():
@@ -158,21 +189,41 @@ def load_ephemeris():
             os.unlink(temporary)
 
 
-def calculate_sky(ephemeris, timescale, moment: datetime, latitude: float, longitude: float):
+def sky_angles(ephemeris, instant, latitude: float, longitude: float):
     observer = ephemeris["earth"] + wgs84.latlon(latitude, longitude)
-    instant = timescale.from_datetime(moment)
     here = observer.at(instant)
     sun_altitude, sun_azimuth, _ = here.observe(ephemeris["sun"]).apparent().altaz()
     moon_altitude, moon_azimuth, _ = here.observe(ephemeris["moon"]).apparent().altaz()
     return {
+        "sun_altitude": sun_altitude.degrees,
+        "sun_azimuth": sun_azimuth.degrees,
+        "moon_altitude": moon_altitude.degrees,
+        "moon_azimuth": moon_azimuth.degrees,
+        "moon_phase": almanac.moon_phase(ephemeris, instant).degrees,
+    }
+
+
+def calculate_sky(ephemeris, timescale, moment: datetime, latitude: float, longitude: float):
+    angles = sky_angles(ephemeris, timescale.from_datetime(moment), latitude, longitude)
+    return {
         "status": "READY",
         "at": moment.timestamp(),
         "location": [latitude, longitude],
-        "sun_altitude": float(sun_altitude.degrees),
-        "sun_azimuth": float(sun_azimuth.degrees),
-        "moon_altitude": float(moon_altitude.degrees),
-        "moon_azimuth": float(moon_azimuth.degrees),
-        "moon_phase": float(almanac.moon_phase(ephemeris, instant).degrees),
+        **{field: float(value) for field, value in angles.items()},
+    }
+
+
+def calculate_sky_timeline(ephemeris, timescale, timestamp: float, latitude: float, longitude: float):
+    start = math.floor(timestamp / SKY_SAMPLE_SECONDS) * SKY_SAMPLE_SECONDS - SKY_SAMPLE_SECONDS
+    count = SKY_PRELOAD_SECONDS // SKY_SAMPLE_SECONDS + 3
+    moments = [datetime.fromtimestamp(start + index * SKY_SAMPLE_SECONDS, UTC) for index in range(count)]
+    angles = sky_angles(ephemeris, timescale.from_datetimes(moments), latitude, longitude)
+    return {
+        "status": "READY",
+        "start": start,
+        "end": start + (count - 1) * SKY_SAMPLE_SECONDS,
+        "location": [latitude, longitude],
+        **{field: value.tolist() for field, value in angles.items()},
     }
 
 
@@ -182,10 +233,11 @@ def get_outside_data_worker(data_dict):
     timescale = None
     retry_at = 0
     failures = 0
+    sky = None
     try:
         while not shared_config.shutdown_in_progress():
             shared_config.shared_outside_time_update.clear()
-            if shared_config.shared_mode.value != DisplayMode.OUTSIDE.value or time.monotonic() < retry_at:
+            if time.monotonic() < retry_at:
                 shared_config.shared_shutdown_event.wait(1)
                 continue
             try:
@@ -198,15 +250,15 @@ def get_outside_data_worker(data_dict):
                     ephemeris = load_ephemeris()
                 if timescale is None:
                     timescale = Loader(shared_config.datafiles_dir).timescale(builtin=True)
-                offset_minutes = shared_config.shared_outside_offset_minutes.value
-                moment = outside_moment(UTC, offset_minutes)
-                sky = calculate_sky(ephemeris, timescale, moment, latitude, longitude)
-                sky["offset_minutes"] = offset_minutes
-                data_dict["outside_sky"] = sky
+                now = psclock.time()
+                if not sky_covers(sky, now, now + 24 * 3600 + SKY_REFRESH_MARGIN_SECONDS, latitude, longitude):
+                    sky = calculate_sky_timeline(ephemeris, timescale, now, latitude, longitude)
+                    data_dict["outside_sky"] = sky
                 failures = 0
             except (OSError, ValueError, KeyError, requests.RequestException, EphemerisRangeError):
                 logger.exception("Outside astronomy unavailable; retaining the landscape without invented sun/moon positions")
                 data_dict["outside_sky"] = {"status": "UNAVAILABLE"}
+                sky = None
                 failures += 1
                 retry_at = time.monotonic() + min(300, 15 * 2 ** min(failures - 1, 5))
             shared_config.shared_outside_time_update.wait(1)
@@ -252,25 +304,37 @@ def outside(sign):
     last_snapshot = -1
     last_status = None
     environment = None
-    last_offset = None
+    rendered_offset = float(shared_config.shared_outside_offset_minutes.value)
+    target_offset = rendered_offset
+    transition_from = rendered_offset
+    transition_started = started
     while shared_config.shared_mode.value == DisplayMode.OUTSIDE.value:
-        elapsed = time.perf_counter() - started
+        frame_time = time.perf_counter()
+        elapsed = frame_time - started
         offset_minutes = shared_config.shared_outside_offset_minutes.value
-        if int(elapsed) != last_snapshot or offset_minutes != last_offset or environment is None or environment.sky_status == "LOADING":
+        fraction = min(1, (frame_time - transition_started) / OFFSET_TRANSITION_SECONDS)
+        rendered_offset = transition_from + (target_offset - transition_from) * fraction
+        if offset_minutes != target_offset:
+            transition_from = rendered_offset
+            target_offset = offset_minutes
+            transition_started = frame_time
+        if int(elapsed) != last_snapshot or environment is None or environment.sky_status == "LOADING":
             latitude = float(shared_config.CONF["SENSOR_LAT"])
             longitude = float(shared_config.CONF["SENSOR_LON"])
-            moment = outside_moment(location_timezone(latitude, longitude), offset_minutes)
+            tz = location_timezone(latitude, longitude)
             military_time = shared_config.CONF["MILITARY_TIME"].lower() == "true"
-            environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes)
-            status = environment.weather.status, environment.sky_status
-            if status != last_status:
-                if status[0] in ("LIVE", "FORECAST") and status[1] == "READY":
-                    logger.info("Outside: %s weather and local astronomy ready", status[0].lower())
-                else:
-                    logger.warning("Outside: weather %s, astronomy %s", *status)
-                last_status = status
+            sky = shared_config.data_dict.get("outside_sky")
+            weather = shared_config.data_dict.get("weather")
             last_snapshot = int(elapsed)
-            last_offset = offset_minutes
+        moment = outside_moment(tz, rendered_offset)
+        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset))
+        status = environment.weather.status, environment.sky_status
+        if status != last_status:
+            if status[0] in ("LIVE", "FORECAST") and status[1] == "READY":
+                logger.info("Outside: %s weather and local astronomy ready", status[0].lower())
+            else:
+                logger.warning("Outside: weather %s, astronomy %s", *status)
+            last_status = status
         draw_outside_frame(sign, environment, elapsed, seed, moment=moment, military_time=military_time)
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         if sign.wait_loop(max(0, started + elapsed + 0.05 - time.perf_counter())):
