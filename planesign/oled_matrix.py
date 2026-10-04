@@ -70,15 +70,20 @@ class RGBMatrix(Canvas):
         super().__init__(width, height)
         self._brightness = max(0, min(100, options.brightness))
         self._last_written: bytes | None = None
+        self._frame_server: FrameServer | None = None
         with ExitStack() as resources:
             self._output = None if shared_config.emulated_display else SSD1305Output()
             if self._output is not None:
                 resources.callback(self._output.close)
                 self._output.set_brightness(self._brightness)
-            self._frame_server = FrameServer(width, height)
-            self._frame_server.start()
+            else:
+                self._frame_server = FrameServer(width, height)
+                self._frame_server.start()
             resources.pop_all()
-        logger.info("SSD1305 OLED %s initialized: 128x32, I2C address 0x3c, preview port %d", "preview" if self._output is None else "bonnet", self._frame_server.port)
+        if self._frame_server is not None:
+            logger.info("SSD1305 OLED preview initialized: 128x32, streaming on port %d", self._frame_server.port)
+        else:
+            logger.info("SSD1305 OLED bonnet initialized: 128x32, I2C address 0x3c")
 
     @property
     def brightness(self) -> int:
@@ -109,7 +114,8 @@ class RGBMatrix(Canvas):
         if self._output is not None and frame != self._last_written:
             self._output.show(image)
             self._last_written = frame
-        self._frame_server.broadcast(image.convert("RGBA").tobytes())
+        if self._frame_server is not None:
+            self._frame_server.broadcast(image.convert("RGBA").tobytes())
 
     def Clear(self):
         super().Clear()
