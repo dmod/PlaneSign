@@ -219,6 +219,7 @@ def outside(sign):
             latitude = float(shared_config.CONF["SENSOR_LAT"])
             longitude = float(shared_config.CONF["SENSOR_LON"])
             moment = psclock.now(location_timezone(latitude, longitude))
+            military_time = shared_config.CONF["MILITARY_TIME"].lower() == "true"
             environment = environment_snapshot(
                 shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude
             )
@@ -230,7 +231,7 @@ def outside(sign):
                     logger.warning("Outside: weather %s, astronomy %s", *status)
                 last_status = status
             last_snapshot = int(elapsed)
-        draw_outside_frame(sign, environment, elapsed, seed)
+        draw_outside_frame(sign, environment, elapsed, seed, moment=moment, military_time=military_time)
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         if sign.wait_loop(max(0, started + elapsed + 0.05 - time.perf_counter())):
             return

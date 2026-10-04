@@ -1,11 +1,16 @@
 """Quiet Valley pixel art. Static geometry is cached; only intended motion changes."""
 
 import math
+import os
 import random
 from dataclasses import dataclass, fields, replace
+from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+import shared_config
+from emulated_matrix import graphics as bitmap_graphics
+from emulated_matrix.core import Canvas
 from PIL import Image, ImageDraw
 from rgbmatrix import graphics
 
@@ -397,8 +402,40 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     return image
 
 
-def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0):
-    sign.canvas.SetImage(render_outside_frame(environment, elapsed, seed))
+@lru_cache(maxsize=1)
+def overlay_font() -> bitmap_graphics.Font:
+    font = bitmap_graphics.Font()
+    font.LoadFont(os.path.join(shared_config.font_dir, "4x6.bdf"))
+    return font
+
+
+@lru_cache(maxsize=128)
+def overlay_text_mask(text: str) -> Image.Image:
+    canvas = Canvas(len(text) * 4, 5)
+    bitmap_graphics.DrawText(canvas, overlay_font(), 0, 5, bitmap_graphics.Color(255, 255, 255), text)
+    mask = canvas._image.convert("L")
+    bounds = mask.getbbox()
+    if bounds is None:
+        raise ValueError("Outside overlay text must contain visible glyphs")
+    return mask.crop((bounds[0], 0, bounds[2], 5))
+
+
+def draw_corner_label(image: Image.Image, text: str, *, right: bool = False):
+    mask = overlay_text_mask(text)
+    x = WIDTH - mask.width if right else 0
+    background = image.crop((x, 0, x + mask.width, mask.height))
+    lettering = Image.blend(background, Image.new("RGB", background.size, (205, 218, 231)), 0.28)
+    image.paste(lettering, (x, 0), mask)
+
+
+def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool):
+    image = render_outside_frame(environment, elapsed, seed)
+    clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
+    temperature = environment.weather.temperature
+    temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED") else "--°F"
+    draw_corner_label(image, clock)
+    draw_corner_label(image, temperature_text, right=True)
+    sign.canvas.SetImage(image)
     notices = []
     if environment.weather.status != "LIVE":
         notices.append("WX~" if environment.weather.status == "CACHED" else "WX?")
@@ -406,4 +443,5 @@ def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, 
         notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")
     if notices:
         color = graphics.Color(145, 152, 156)
-        graphics.DrawText(sign.canvas, sign.font46, 1, 6, color, " ".join(notices))
+        text = " ".join(notices)
+        graphics.DrawText(sign.canvas, sign.font46, WIDTH // 2 - len(text) * 2, 5, color, text)

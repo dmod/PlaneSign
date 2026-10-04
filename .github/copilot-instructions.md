@@ -4,7 +4,7 @@
 PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-time information across multiple display modes (planes, weather, satellites, finance, moon phases, etc.). It runs as a Docker container with `--network host` and `--privileged` flags.
 
 ## Documentation Policy
-- Update `README.md` only when the change concerns something an end-user needs to know, such as installation, hardware requirements, configuration, usage, or upgrade actions. Do not add routine bug-fix notes or an implementation changelog.
+- Update `README.md` ONLY when the project's installation instructions change. Do not update it for general operation, configuration, usage, display features, routine bug-fix notes, or an implementation changelog.
 - Keep technical information, implementation details, developer workflows, and agent guidance in `.github/copilot-instructions.md`, not in `README.md`.
 - Record concise, verified, reusable findings here. Do not include session-specific process IDs, temporary paths, credentials, or speculative explanations.
 
@@ -24,6 +24,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`planesign/psclock.py`** — The sign's wall clock. Normally real time; `--fake-time`, `--time-speed` and `/debug/clock` shift or speed it up for testing.
 - **`planesign/outside.py` / `outside_scene.py`** — Outside's astronomy worker reuses Moon mode's DE421 and computes local solar/lunar altitude, azimuth and phase off the frame loop. Weather is a snapshot of the existing OpenWeather worker, never a second feed. Observation age uses real time (live <=30 min; cached <=2 h). Seasons use the local display date and hemisphere; winter alone does not imply snowfall. `render_outside_frame(environment, elapsed, seed)` is pure; geometry and colorized landscape layers are cached, texture is deterministic, and elapsed animation time is monotonic. The original Quiet Valley composition is intentional. Missing weather/astronomy is explicit on the sign and `/outside/status`.
 - Outside's right-hand tree has separate cached foliage and wood masks: only foliage/blossoms sway; the trunk, roots and branches stay fixed, including the bare winter tree. Star positions and colors are deterministic; smooth, independently phased brightness curves range from 4% to near-full intensity before daylight, cloud and moonlight attenuation.
+- Outside's corner clock/temperature use cached 4x6 BDF masks from the shared PIL renderer, blended into the actual scene pixels before `SetImage` on every backend. Ink touches the top and outer edges; centered weather/astronomy notices stay between the labels. The frame caller supplies sensor-local `psclock` time and `MILITARY_TIME`; unavailable/expired temperature is never displayed as a current reading.
 - **`web/`** — Frontend served by nginx; communicates with a Flask API (`/api/`).
 - **`ble/`** — Bluetooth Low Energy setup interface.
 - **`fonts/`** — BDF bitmap fonts: `4x6`, `5x7`, `6x13`, `9x18B`, `helvR12`.
