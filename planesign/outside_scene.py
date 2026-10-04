@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import shared_config
 from emulated_matrix import graphics as bitmap_graphics
 from emulated_matrix.core import Canvas
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageStat
 from rgbmatrix import graphics
 
 if TYPE_CHECKING:
@@ -19,6 +19,13 @@ if TYPE_CHECKING:
 
 Color = tuple[int, int, int]
 WIDTH, HEIGHT = 128, 32
+OVERLAY_DARK_LUMINANCE = 0.01
+OVERLAY_BRIGHT_LUMINANCE = 0.10
+OVERLAY_NIGHT_OPACITY = 0.60
+OVERLAY_LINEAR_LUT = [round(255 * (value / 255 / 12.92 if value <= 10 else ((value / 255 + 0.055) / 1.055) ** 2.4)) for value in range(256)] * 3
+# Black and white have equal contrast at this relative luminance.
+OVERLAY_POLARITY_LUMINANCE = math.sqrt(0.05 * 1.05) - 0.05
+OVERLAY_POLARITY_HYSTERESIS = 0.01
 
 
 def mix(a: Color, b: Color, fraction: float) -> Color:
@@ -411,21 +418,41 @@ def overlay_text_mask(text: str) -> Image.Image:
     return mask.crop((bounds[0], 0, bounds[2], 5))
 
 
-def draw_corner_label(image: Image.Image, text: str, *, right: bool = False):
+def overlay_relative_luminance(background: Image.Image, mask: Image.Image) -> float:
+    channels = ImageStat.Stat(background.point(OVERLAY_LINEAR_LUT), mask).mean
+    return sum(value * weight for value, weight in zip(channels, (0.2126, 0.7152, 0.0722))) / 255
+
+
+def overlay_contrast_fraction(luminance: float) -> float:
+    fraction = max(0, min(1, (luminance - OVERLAY_DARK_LUMINANCE) / (OVERLAY_BRIGHT_LUMINANCE - OVERLAY_DARK_LUMINANCE)))
+    return fraction * fraction * (3 - 2 * fraction)
+
+
+def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, previous_dark: bool | None = None) -> bool:
     mask = overlay_text_mask(text)
     x = WIDTH - mask.width if right else 0
     background = image.crop((x, 0, x + mask.width, mask.height))
-    lettering = Image.blend(background, Image.new("RGB", background.size, (205, 218, 231)), 0.60)
+    luminance = overlay_relative_luminance(background, mask)
+    threshold = OVERLAY_POLARITY_LUMINANCE + (OVERLAY_POLARITY_HYSTERESIS if previous_dark is False else -OVERLAY_POLARITY_HYSTERESIS if previous_dark is True else 0)
+    dark_text = luminance >= threshold
+    if dark_text:
+        lettering = Image.new("RGB", background.size)
+    else:
+        contrast = overlay_contrast_fraction(luminance)
+        color = mix((205, 218, 231), (255, 255, 255), contrast)
+        opacity = OVERLAY_NIGHT_OPACITY + (1 - OVERLAY_NIGHT_OPACITY) * contrast
+        lettering = Image.blend(background, Image.new("RGB", background.size, color), opacity)
     image.paste(lettering, (x, 0), mask)
+    return dark_text
 
 
-def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool):
+def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, bool | None] = (None, None)) -> tuple[bool, bool]:
     image = render_outside_frame(environment, elapsed, seed)
     clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
-    draw_corner_label(image, clock)
-    draw_corner_label(image, temperature_text, right=True)
+    clock_dark = draw_corner_label(image, clock, previous_dark=previous_text_styles[0])
+    temperature_dark = draw_corner_label(image, temperature_text, right=True, previous_dark=previous_text_styles[1])
     sign.canvas.SetImage(image)
     notices = []
     if environment.offset_minutes:
@@ -438,3 +465,4 @@ def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, 
         color = graphics.Color(145, 152, 156)
         text = " ".join(notices)
         graphics.DrawText(sign.canvas, sign.font46, WIDTH // 2 - len(text) * 2, 5, color, text)
+    return clock_dark, temperature_dark

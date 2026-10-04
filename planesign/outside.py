@@ -308,6 +308,7 @@ def outside(sign):
     target_offset = rendered_offset
     transition_from = rendered_offset
     transition_started = started
+    text_styles: tuple[bool | None, bool | None] = (None, None)
     while shared_config.shared_mode.value == DisplayMode.OUTSIDE.value:
         frame_time = time.perf_counter()
         elapsed = frame_time - started
@@ -335,7 +336,7 @@ def outside(sign):
             else:
                 logger.warning("Outside: weather %s, astronomy %s", *status)
             last_status = status
-        draw_outside_frame(sign, environment, elapsed, seed, moment=moment, military_time=military_time)
+        text_styles = draw_outside_frame(sign, environment, elapsed, seed, moment=moment, military_time=military_time, previous_text_styles=text_styles)
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         if sign.wait_loop(max(0, started + elapsed + 0.05 - time.perf_counter())):
             return
