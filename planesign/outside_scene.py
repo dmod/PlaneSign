@@ -107,14 +107,28 @@ class Palette:
     water: Color
     glint: Color
     animal: Color
+    snowcap: Color
 
 
-DUSK = Palette((24, 46, 82), (99, 105, 136), (241, 162, 110), (95, 99, 125), (43, 71, 81), (62, 88, 76), (22, 48, 48), (116, 132, 94), (85, 84, 73), (159, 130, 78), (35, 56, 59), (32, 42, 49), (57, 47, 60), (156, 62, 51), (235, 198, 139), (68, 102, 121), (220, 163, 122), (170, 155, 122))
-DAY = Palette((48, 130, 175), (100, 175, 191), (194, 213, 181), (99, 147, 143), (54, 106, 91), (104, 153, 79), (43, 94, 53), (164, 183, 86), (63, 125, 65), (148, 181, 74), (40, 86, 57), (80, 62, 47), (67, 65, 72), (171, 62, 51), (239, 220, 171), (55, 147, 169), (167, 219, 208), (166, 119, 73))
-NIGHT = Palette((5, 11, 28), (16, 29, 55), (53, 67, 91), (36, 48, 70), (23, 42, 55), (29, 51, 51), (13, 30, 35), (59, 79, 60), (46, 62, 60), (83, 98, 70), (26, 44, 47), (18, 26, 34), (23, 28, 43), (78, 47, 50), (139, 149, 146), (34, 65, 85), (129, 159, 171), (122, 127, 108))
+DUSK = Palette(
+    (24, 46, 82), (99, 105, 136), (241, 162, 110), (95, 99, 125), (43, 71, 81), (62, 88, 76), (22, 48, 48), (116, 132, 94), (85, 84, 73), (159, 130, 78), (35, 56, 59), (32, 42, 49), (57, 47, 60), (156, 62, 51), (235, 198, 139), (68, 102, 121), (220, 163, 122), (170, 155, 122), (238, 196, 186)
+)
+DAY = Palette(
+    (48, 130, 175), (100, 175, 191), (194, 213, 181), (99, 147, 143), (54, 106, 91), (104, 153, 79), (43, 94, 53), (164, 183, 86), (63, 125, 65), (148, 181, 74), (40, 86, 57), (80, 62, 47), (67, 65, 72), (171, 62, 51), (239, 220, 171), (55, 147, 169), (167, 219, 208), (166, 119, 73), (232, 238, 245)
+)
+NIGHT = Palette((5, 11, 28), (16, 29, 55), (53, 67, 91), (36, 48, 70), (23, 42, 55), (29, 51, 51), (13, 30, 35), (59, 79, 60), (46, 62, 60), (83, 98, 70), (26, 44, 47), (18, 26, 34), (23, 28, 43), (78, 47, 50), (139, 149, 146), (34, 65, 85), (129, 159, 171), (122, 127, 108), (122, 137, 162))
 MATERIALS = tuple(field.name for field in fields(Palette))
 INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
+INDEX["peak"] = len(MATERIALS) + 2
+# One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
+MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 18), (77, 16), (80, 15), (83, 14), (86, 15), (89, 16), (92, 18), (96, 20), (100, 21), (106, 23), (127, 23))
+# The sunlit face runs from the summit down this spur to the foot of the mountain.
+MOUNTAIN_LIT_FACE = ((83, 14), (80, 15), (77, 16), (74, 18), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 16))
+TREE_X, TREE_CANOPY_Y = 115, 15
+TREE_RADIUS_X, TREE_RADIUS_Y = 10.5, 7.8
+TREE_BRANCHES = ((-10, -4), (9, -2), (-2, -8), (4, -7))
+TREE_BLOSSOMS = ((-7, -5), (2, -7), (6, -2), (-4, 0), (4, 1))
 
 
 def blend_palette(a: Palette, b: Palette, fraction: float) -> Palette:
@@ -193,8 +207,9 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
     def hill(points, material):
         d.polygon([(0, 31), *points, (127, 31)], fill=INDEX[material])
 
-    hill([(0, 21), (14, 17), (28, 19), (43, 16), (57, 18), (72, 14), (91, 17), (108, 16), (127, 20)], "far")
-    hill([(0, 23), (20, 21), (35, 22), (57, 20), (76, 22), (97, 19), (127, 23)], "hill")
+    hill([*MOUNTAIN], "far")
+    d.polygon(MOUNTAIN_LIT_FACE, fill=INDEX["peak"])
+    hill([(0, 23), (20, 22), (35, 23), (57, 22), (76, 23), (97, 22), (127, 23)], "hill")
     for x in range(0, 100, 4):
         height = 2 + grain(x, 24) % 3
         if grain(x, 24, 3) < 55:
@@ -228,31 +243,33 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         d.point((x, 27), fill=INDEX["trim"])
     leafy = Image.new("P", (WIDTH, HEIGHT), 0)
     bare = Image.new("P", (WIDTH, HEIGHT), 0)
+    cx, cy = TREE_X, TREE_CANOPY_Y
     for mask in (leafy, bare):
         td = ImageDraw.Draw(mask)
-        td.line((116, 14, 116, 31), fill=INDEX["trunk"], width=2)
-        for dx, dy in [(-8, -3), (7, -2), (-2, -8), (3, -6)]:
-            td.line((116, 28, 116 + dx, 16 + dy), fill=INDEX["trunk"])
+        td.line((cx, cy - 2, cx, 31), fill=INDEX["trunk"], width=2)
+        td.line((cx - 1, 31, cx + 2, 31), fill=INDEX["trunk"])
+        for dx, dy in TREE_BRANCHES:
+            td.line((cx, 28, cx + dx, cy + dy), fill=INDEX["trunk"])
             if mask is bare:
-                td.line((116 + dx, 16 + dy, 115 + dx, 14 + dy), fill=INDEX["trunk"])
+                td.line((cx + dx, cy + dy, cx + dx - 1, cy + dy - 2), fill=INDEX["trunk"])
     td = ImageDraw.Draw(leafy)
-    for y in range(8, 21):
-        for x in range(107, 126):
+    for y in range(round(cy - TREE_RADIUS_Y) - 2, round(cy + TREE_RADIUS_Y) + 3):
+        for x in range(round(cx - TREE_RADIUS_X) - 2, min(WIDTH, round(cx + TREE_RADIUS_X) + 3)):
             n = grain(x, y, 12)
-            if ((x - 116) / 8.5) ** 2 + ((y - 16) / 6.4) ** 2 < 0.8 + n / 290:
+            if ((x - cx) / TREE_RADIUS_X) ** 2 + ((y - cy) / TREE_RADIUS_Y) ** 2 < 0.8 + n / 290:
                 material = "leaf_dark" if n <= 37 else "leaf"
-                if y < 15 and x < 119 and n > 48:
+                if y < cy - 1 and x < cx + 3 and n > 48:
                     material = "leaf_light"
                 td.point((x, y), fill=INDEX[material])
-    td.line((116, 27, 114, 18), fill=INDEX["trunk"])
-    td.line((116, 26, 119, 18), fill=INDEX["trunk"])
+    td.line((cx, 27, cx - 2, cy + 2), fill=INDEX["trunk"])
+    td.line((cx, 26, cx + 3, cy + 2), fill=INDEX["trunk"])
     return land, leafy, bare
 
 
 LAND, LEAFY_TREE, BARE_TREE = geometry()
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
-STARS = tuple((x, y, grain(x, y, 5)) for y in range(1, 14) for x in range(2, 126) if grain(x, y, 9) < 2)
+STARS = tuple((x, y, grain(x, y, 5)) for y in range(1, 21) for x in range(2, 126) if grain(x, y, 9) < 2)
 STAR_COLORS = ((232, 244, 255), (255, 239, 207), (225, 231, 255))
 RIPPLES = ((60, 27, 15, 0), (55, 28, 9, 2.3), (68, 29, 7, 4.5))
 PARTICLES = tuple((grain(i, 3) / 97 * 128, grain(i, 9) / 97 * 35, 0.7 + grain(i, 5) / 97, grain(i, 7)) for i in range(80))
@@ -260,11 +277,12 @@ MOON_PIXELS = tuple((x, y, math.sqrt(9 - y * y)) for y in range(-3, 4) for x in 
 
 
 @lru_cache(maxsize=96)
-def landscape(palette: Palette, bare: bool, snow: bool):
+def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
     table = [0, 0, 0]
     for name in MATERIALS:
         table.extend(getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
+    table.extend(mix(palette.far, palette.horizon, 0.16))
     table.extend([0] * (768 - len(table)))
 
     def colorize(mask):
@@ -284,6 +302,14 @@ def landscape(palette: Palette, bare: bool, snow: bool):
                 d.point((x, 26), fill=palette.grass)
         d.line((19, 19, 27, 15, 36, 19), fill=palette.trim)
         d.line((3, 27, 40, 27), fill=palette.grass)
+    if snowcap:
+        d = ImageDraw.Draw(land)
+        summit = min(y for _, y in MOUNTAIN)
+        for y in range(summit, summit + 4):
+            for x in range(WIDTH):
+                material = LAND.getpixel((x, y))
+                if material in (INDEX["far"], INDEX["peak"]) and y < summit + 2 + grain(x, y, 4) % 2:
+                    d.point((x, y), fill=palette.snowcap if material == INDEX["peak"] else mix(palette.snowcap, palette.far, 0.35))
     return land, foliage, wood
 
 
@@ -409,7 +435,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         d.line((0, y, 127, y), fill=color)
     draw_sky(image, environment, palette, elapsed)
     rain, snow = precipitation(environment)
-    land, foliage, wood = landscape(palette, environment.season == "winter", snow > 0)
+    winter = environment.season == "winter"
+    # The mountain keeps its snow all winter, even between snowfalls.
+    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0)
     image.paste(land, (0, 0), land)
     d = ImageDraw.Draw(image)
     for x, y, width, phase in RIPPLES:
@@ -434,9 +462,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         image.paste(foliage, (sway, 0), foliage)
     d = ImageDraw.Draw(image)
     if environment.season == "spring":
-        for x, y in [(110, 12), (118, 10), (121, 14), (113, 16), (119, 17)]:
+        for dx, dy in TREE_BLOSSOMS:
             if environment.sun_altitude is not None and environment.sun_altitude > -5:
-                d.point((x + sway, y), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
+                d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
     night = environment.sun_altitude is not None and environment.sun_altitude < -6
     if night and environment.season in ("spring", "summer", "autumn") and rain == 0 and snow == 0 and wind < 15:
