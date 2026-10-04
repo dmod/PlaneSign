@@ -44,6 +44,8 @@ cli_args = parse_args()
 
 if cli_args.web:
     os.environ["PLANESIGN_EMULATED_DISPLAY"] = "1"
+else:
+    os.environ.pop("PLANESIGN_EMULATED_DISPLAY", None)
 
 import shared_config
 
