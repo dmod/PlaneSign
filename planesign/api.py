@@ -105,6 +105,17 @@ def get_outside_status():
     return jsonify(outside.outside_status())
 
 
+@app.route("/outside/time", methods=["POST"])
+def set_outside_time():
+    data = request.get_json(silent=True)
+    offset = data.get("offset_minutes") if isinstance(data, dict) else None
+    if not isinstance(offset, int) or isinstance(offset, bool) or not 0 <= offset <= 1440:
+        return jsonify({"error": "offset_minutes must be an integer from 0 to 1440"}), 400
+    shared_config.shared_outside_offset_minutes.value = offset
+    shared_config.shared_outside_time_update.set()
+    return jsonify(outside.outside_status())
+
+
 def clock_status():
     return {"now": psclock.now(shared_config.local_timezone).isoformat(), "fake": psclock.is_fake(), "speed": psclock.speed(), "description": psclock.describe()}
 

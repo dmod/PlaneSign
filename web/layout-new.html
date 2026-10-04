@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="layout-new.css?v=outside-1">
+  <link rel="stylesheet" href="layout-new.css?v=outside-forecast-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=outside-1"></script>
+  <script src="index.js?v=outside-forecast-1"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -289,6 +289,15 @@
             <div class="command-mode-item">
               <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>
               <div id="outside_div" hidden>
+                <div class="outside_timeline">
+                  <label for="outside_time_slider">Preview the next 24 hours</label>
+                  <output id="outside_time_label" for="outside_time_slider" aria-live="polite">Now</output>
+                  <input id="outside_time_slider" type="range" min="0" max="1440" step="1" value="0" oninput="set_outside_time(this.value)" aria-describedby="outside_time_help">
+                  <div class="outside_time_ticks" aria-hidden="true"><span>Now</span><span>+6h</span><span>+12h</span><span>+18h</span><span>+24h</span></div>
+                  <button type="button" onclick="set_outside_time(0)">Return to now</button>
+                  <p id="outside_time_help">Drag to preview local daylight and hourly weather. Only Outside is affected.</p>
+                  <p id="outside_time_error" role="alert"></p>
+                </div>
                 <p id="outside_status" class="outside_status" role="status">Loading local sky and weather...</p>
               </div>
             </div>

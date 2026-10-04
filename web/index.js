@@ -4,6 +4,11 @@ var MAX_MIC_AUDIO_BYTES = 32 * 1024 * 1024;
 var volume_send_timer = null;
 var outside_status_timer = null;
 var outside_status_request = null;
+var outside_latest_status = null;
+var outside_time_pending = null;
+var outside_time_sending = false;
+var outside_time_timer = null;
+var outside_time_version = 0;
 var valid_tickers = null;
 var valid_resorts = null;
 var free_sketch_is_drawing = false;
@@ -86,24 +91,115 @@ function sync_outside_controls(mode) {
     }
 }
 
+function update_outside_time_label(minutes) {
+    var offset = minutes === 0 ? 'Now' : '+' + Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+    var label = offset;
+    if (outside_latest_status) {
+        var target = new Date(Date.parse(outside_latest_status.now) + minutes * 60000);
+        label += ' / ' + new Intl.DateTimeFormat('en-US', {
+            timeZone: outside_latest_status.timezone,
+            weekday: 'short', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+            hour12: !outside_latest_status.military_time
+        }).format(target);
+    }
+    document.getElementById('outside_time_label').textContent = label;
+    document.getElementById('outside_time_slider').setAttribute('aria-valuetext', label);
+}
+
+function apply_outside_status(data) {
+    if (!data || typeof data.season !== 'string' || typeof data.weather !== 'string' ||
+        typeof data.astronomy !== 'string' || !Number.isInteger(data.offset_minutes) ||
+        data.offset_minutes < 0 || data.offset_minutes > 1440 ||
+        !Number.isFinite(Date.parse(data.now)) || typeof data.timezone !== 'string' ||
+        typeof data.military_time !== 'boolean') {
+        throw new Error('Invalid Outside status response');
+    }
+    outside_latest_status = data;
+    document.getElementById('outside_time_slider').value = data.offset_minutes;
+    update_outside_time_label(data.offset_minutes);
+    var weather;
+    if (data.weather === 'FORECAST') {
+        weather = 'hourly weather forecast (FCST)';
+    } else if (data.weather === 'FORECAST_CACHED') {
+        weather = 'cached hourly forecast (FCST~)';
+    } else if (data.weather === 'LIVE') {
+        weather = 'live weather';
+    } else if (data.weather === 'CACHED') {
+        weather = 'cached weather (WX~)';
+    } else {
+        weather = (data.offset_minutes ? 'forecast unavailable (FCST?)' : 'weather unavailable (WX?)') + '; atmosphere is illustrative';
+    }
+    var astronomy = data.astronomy === 'READY' ? 'local sun and moon' : data.astronomy === 'LOADING' ? 'loading astronomy' : 'astronomy unavailable (SKY?)';
+    document.getElementById('outside_status').textContent = data.season + ' / ' + weather + ' / ' + astronomy;
+}
+
+function set_outside_time(value) {
+    var minutes = Number(value);
+    document.getElementById('outside_time_slider').value = minutes;
+    update_outside_time_label(minutes);
+    document.getElementById('outside_time_error').textContent = '';
+    outside_time_pending = minutes;
+    outside_time_version++;
+    if (!outside_time_sending && outside_time_timer === null) {
+        outside_time_timer = setTimeout(send_outside_time, 100);
+    }
+}
+
+async function send_outside_time() {
+    outside_time_timer = null;
+    var minutes = outside_time_pending;
+    outside_time_pending = null;
+    outside_time_sending = true;
+    var version = outside_time_version;
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, 10000);
+    try {
+        var response = await fetch('api/outside/time', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({offset_minutes: minutes}),
+            signal: controller.signal
+        });
+        var data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'HTTP ' + response.status);
+        }
+        if (version === outside_time_version && global_current_mode === 'OUTSIDE') {
+            apply_outside_status(data);
+        }
+    } catch (error) {
+        if (version === outside_time_version) {
+            document.getElementById('outside_time_error').textContent = 'Could not update Outside preview: ' + error.message;
+            console.error('Outside time request failed', error);
+        }
+    } finally {
+        clearTimeout(timeout);
+        outside_time_sending = false;
+        if (outside_time_pending !== null) {
+            outside_time_timer = setTimeout(send_outside_time, 100);
+        } else if (global_current_mode === 'OUTSIDE' && !outside_status_request) {
+            clearTimeout(outside_status_timer);
+            update_outside_status();
+        }
+    }
+}
+
 async function update_outside_status() {
     var controller = new AbortController();
     outside_status_request = controller;
     var timeout = setTimeout(function () { controller.abort(); }, 10000);
     var status = document.getElementById('outside_status');
+    var version = outside_time_version;
     try {
         var response = await fetch('api/outside/status', {signal: controller.signal, cache: 'no-store'});
         if (!response.ok) {
             throw new Error('HTTP ' + response.status);
         }
         var data = await response.json();
-        if (!data || typeof data.season !== 'string' || typeof data.weather !== 'string' || typeof data.astronomy !== 'string') {
-            throw new Error('Invalid Outside status response');
-        }
-        if (global_current_mode === 'OUTSIDE' && outside_status_request === controller) {
-            var weather = data.weather === 'LIVE' ? 'live weather' : data.weather === 'CACHED' ? 'cached weather (WX~)' : 'weather unavailable (WX?); atmosphere is illustrative';
-            var astronomy = data.astronomy === 'READY' ? 'local sun and moon' : data.astronomy === 'LOADING' ? 'loading astronomy' : 'astronomy unavailable (SKY?)';
-            status.textContent = data.season + ' / ' + weather + ' / ' + astronomy;
+        if (global_current_mode === 'OUTSIDE' && outside_status_request === controller &&
+            version === outside_time_version && !outside_time_sending && outside_time_pending === null) {
+            apply_outside_status(data);
         }
     } catch (error) {
         if (global_current_mode === 'OUTSIDE' && outside_status_request === controller) {
@@ -115,7 +211,7 @@ async function update_outside_status() {
         if (outside_status_request === controller) {
             outside_status_request = null;
             if (global_current_mode === 'OUTSIDE') {
-                outside_status_timer = setTimeout(update_outside_status, 5000);
+                outside_status_timer = setTimeout(update_outside_status, outside_latest_status && outside_latest_status.astronomy === 'LOADING' ? 1000 : 5000);
             }
         }
     }

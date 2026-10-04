@@ -27,6 +27,9 @@ shared_mandelbrot_colorscale = Value("d", 3)
 
 shared_snow_mode = Value("i", 1)
 
+shared_outside_offset_minutes = Value("i", 0)
+shared_outside_time_update = Event()
+
 free_sketch_pixels = Array("B", 128 * 32 * 3)
 
 # Wall clock as [fake_base, real_base, speed]: now = fake_base + (time.time() - real_base) * speed.

@@ -432,12 +432,14 @@ def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, 
     image = render_outside_frame(environment, elapsed, seed)
     clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
     temperature = environment.weather.temperature
-    temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED") else "--°F"
+    temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
     draw_corner_label(image, clock)
     draw_corner_label(image, temperature_text, right=True)
     sign.canvas.SetImage(image)
     notices = []
-    if environment.weather.status != "LIVE":
+    if environment.offset_minutes:
+        notices.append("FCST" if environment.weather.status == "FORECAST" else "FCST~" if environment.weather.status == "FORECAST_CACHED" else "FCST?")
+    elif environment.weather.status != "LIVE":
         notices.append("WX~" if environment.weather.status == "CACHED" else "WX?")
     if environment.sky_status != "READY":
         notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")

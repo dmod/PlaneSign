@@ -468,6 +468,49 @@ input::placeholder {
   margin: 4px 0;
 }
 
+.outside_timeline {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.outside_timeline label,
+.outside_timeline output {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.outside_timeline output {
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+#outside_time_slider {
+  display: block;
+  width: 100%;
+  margin: 0;
+  min-height: 36px;
+}
+
+.outside_time_ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  margin-bottom: 10px;
+}
+
+.outside_timeline p {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+
+#outside_time_error {
+  color: #b91c1c;
+}
+
 .command-mode-item > div {
   grid-column: 1 / -1;
   min-width: 0;
