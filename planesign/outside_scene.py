@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+import numpy as np
 import shared_config
 from emulated_matrix import graphics as bitmap_graphics
 from emulated_matrix.core import Canvas
@@ -26,11 +27,60 @@ OVERLAY_LINEAR_LUT = [round(255 * (value / 255 / 12.92 if value <= 10 else ((val
 # Black and white have equal contrast at this relative luminance.
 OVERLAY_POLARITY_LUMINANCE = math.sqrt(0.05 * 1.05) - 0.05
 OVERLAY_POLARITY_HYSTERESIS = 0.01
+# Clouds and precipitation dim the palette toward slate haze by cover * this amount.
+WEATHER_DIM_CLOUDS = 0.0225
+WEATHER_DIM_PRECIPITATION = 0.04
+# Oklab grade tuned on the LED panel: art colors are muted slightly, then the finished
+# frame gets deeper midtones and stronger saturation so the scene does not wash out.
+PALETTE_CHROMA = 0.75
+PALETTE_CONTRAST = 0.15
+FRAME_BLACK_POINT = 0.03
+FRAME_GAMMA = 1.36
+FRAME_CONTRAST = 0.35
+FRAME_CHROMA = 1.6
+FRAME_VIBRANCE = 0.25
+VIBRANCE_CHROMA = 0.16
+SRGB_TO_LINEAR = tuple(value / 255 / 12.92 if value <= 10 else ((value / 255 + 0.055) / 1.055) ** 2.4 for value in range(256))
+SRGB_TO_LINEAR_ARRAY = np.array(SRGB_TO_LINEAR)
+LINEAR_TO_LMS = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]])
+LMS_TO_OKLAB = np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099], [0.0259040371, 0.7827717662, -0.8086757660]])
+OKLAB_TO_LMS = np.linalg.inv(LMS_TO_OKLAB)
+LMS_TO_LINEAR = np.linalg.inv(LINEAR_TO_LMS)
+
+
+def linear_to_srgb(value: float) -> int:
+    value = max(0.0, min(1.0, value))
+    return round(255 * (value * 12.92 if value <= 0.0031308 else 1.055 * value ** (1 / 2.4) - 0.055))
 
 
 def mix(a: Color, b: Color, fraction: float) -> Color:
+    """Interpolate in linear light so blends keep their brightness instead of turning muddy."""
     fraction = max(0, min(1, fraction))
-    return (round(a[0] + (b[0] - a[0]) * fraction), round(a[1] + (b[1] - a[1]) * fraction), round(a[2] + (b[2] - a[2]) * fraction))
+    return tuple(linear_to_srgb(SRGB_TO_LINEAR[int(x)] + (SRGB_TO_LINEAR[int(y)] - SRGB_TO_LINEAR[int(x)]) * fraction) for x, y in zip(a, b))
+
+
+def to_oklab(rgb: np.ndarray) -> np.ndarray:
+    return np.cbrt(SRGB_TO_LINEAR_ARRAY[rgb] @ LINEAR_TO_LMS.T) @ LMS_TO_OKLAB.T
+
+
+def from_oklab(lab: np.ndarray) -> np.ndarray:
+    linear = np.clip(((lab @ OKLAB_TO_LMS.T) ** 3) @ LMS_TO_LINEAR.T, 0, 1)
+    srgb = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * np.power(linear, 1 / 2.4) - 0.055)
+    return np.round(srgb * 255).astype(np.uint8)
+
+
+def grade_oklab(lab: np.ndarray, *, chroma: float, contrast: float, black_point: float = 0, gamma: float = 1, vibrance: float = 0) -> np.ndarray:
+    lightness = lab[..., 0]
+    if black_point:
+        lightness = np.clip((lightness - black_point) / (1 - black_point), 0, 1)
+    if gamma != 1:
+        lightness = np.power(np.clip(lightness, 0, 1), gamma)
+    if contrast:
+        curve = np.clip(lightness, 0, 1)
+        lightness = lightness + (curve * curve * (3 - 2 * curve) - lightness) * contrast
+    # Vibrance lifts muted colors more than already-saturated ones.
+    scale = chroma * (1 + vibrance * (1 - np.clip(np.hypot(lab[..., 1], lab[..., 2]) / VIBRANCE_CHROMA, 0, 1)))
+    return np.stack([lightness, lab[..., 1] * scale, lab[..., 2] * scale], axis=-1)
 
 
 def grain(x: int, y: int, seed: int = 0) -> int:
@@ -121,8 +171,19 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
         palette = replace(palette, grass=mix(palette.grass, (181, 199, 195), daylight * 0.35), water=mix(palette.water, (131, 168, 180), daylight * 0.25))
     if snow > 0:
         palette = replace(palette, field=mix(palette.field, (207, 218, 226), daylight * 0.85 + 0.1), foreground=mix(palette.foreground, (151, 180, 199), daylight * 0.8 + 0.1), grass=mix(palette.grass, (236, 235, 226), daylight * 0.75))
-    dim = cloud_cover(environment) * (0.16 if rain or snow else 0.09)
-    return Palette(*(mix(getattr(palette, name), (45, 60, 75), dim) for name in MATERIALS))
+    dim = cloud_cover(environment) * (WEATHER_DIM_PRECIPITATION if rain or snow else WEATHER_DIM_CLOUDS)
+    return graded_palette(Palette(*(mix(getattr(palette, name), (45, 60, 75), dim) for name in MATERIALS)))
+
+
+@lru_cache(maxsize=512)
+def graded_palette(palette: Palette) -> Palette:
+    lab = grade_oklab(to_oklab(np.array([getattr(palette, name) for name in MATERIALS])), chroma=PALETTE_CHROMA, contrast=PALETTE_CONTRAST)
+    return Palette(*(tuple(int(value) for value in color) for color in from_oklab(lab)))
+
+
+def grade_frame(image: Image.Image) -> Image.Image:
+    lab = grade_oklab(to_oklab(np.asarray(image)), chroma=FRAME_CHROMA, contrast=FRAME_CONTRAST, black_point=FRAME_BLACK_POINT, gamma=FRAME_GAMMA, vibrance=FRAME_VIBRANCE)
+    return Image.fromarray(from_oklab(lab), "RGB")
 
 
 def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
@@ -397,7 +458,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
                 d.point((x, y), fill=color)
                 if kind == "rain" and index % 3 == 0:
                     d.point((max(0, x - 1), min(31, y + 1)), fill=mix(base, color, 0.6))
-    return image
+    return grade_frame(image)
 
 
 @lru_cache(maxsize=1)
