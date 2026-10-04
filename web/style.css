@@ -29,6 +29,12 @@ body {
   row-gap: 30px;
 }
 
+.outside_status {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  max-width: 32rem;
+}
+
 .box1 {
   grid-column-start: 1;
   grid-column-end: 2;

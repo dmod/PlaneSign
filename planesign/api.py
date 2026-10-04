@@ -13,6 +13,7 @@ from datetime import datetime
 
 import mlb
 import nfl
+import outside
 import planes
 import psclock
 import shared_config
@@ -97,6 +98,11 @@ def write_config():
 @app.route("/status")
 def get_status():
     return str(shared_config.shared_mode.value)
+
+
+@app.route("/outside/status")
+def get_outside_status():
+    return jsonify(outside.outside_status())
 
 
 def clock_status():

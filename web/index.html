@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=sketch-scroll-1">
+  <link rel="stylesheet" href="style.css?v=outside-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=mlb-game-list-1"></script>
+  <script src="index.js?v=outside-1"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -256,6 +256,10 @@
       <button id="CCA" class="mode_button" onclick="set_mode(this.id)">CCA</button>
       <button id="AQUARIUM" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
       <button id="PLANTS" class="mode_button" onclick="set_mode(this.id)">Plants</button>
+      <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>
+      <div id="outside_div" hidden>
+        <p id="outside_status" class="outside_status" role="status">Loading local sky and weather...</p>
+      </div>
       <button id="FIREWORKS" class="mode_button" onclick="set_mode(this.id)">Fireworks</button>
       <button id="HORSE_RACE" class="mode_button" onclick="set_mode(this.id)">Horse Race 🐎</button>
       <button id="FREE_SKETCH" class="mode_button" onclick="set_mode(this.id); open_free_sketch_modal()">Free Sketch</button>

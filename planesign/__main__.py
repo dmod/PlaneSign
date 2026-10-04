@@ -87,6 +87,7 @@ import mandelbrot
 import mlb
 import moon
 import nfl
+import outside
 import planes
 import plants
 import pong
@@ -201,6 +202,7 @@ weather_data_process = Process(target=weather.get_weather_data_worker, name="Wea
 tides_data_process = Process(target=tides.get_tides_data_worker, name="TidesData", args=(shared_config.data_dict,))
 nfl_data_process = Process(target=nfl.get_nfl_data_worker, name="NFLData", args=(shared_config.data_dict,))
 mlb_data_process = Process(target=mlb.get_mlb_data_worker, name="MLBData", args=(shared_config.data_dict,))
+outside_data_process = Process(target=outside.get_outside_data_worker, name="OutsideData", args=(shared_config.data_dict,))
 
 utilities.read_config()
 
@@ -209,7 +211,7 @@ if cli_args.fake_time or cli_args.time_speed != 1:
     psclock.set_clock(psclock.parse_time(cli_args.fake_time) if cli_args.fake_time else psclock.time(), cli_args.time_speed)
     logging.info(f"Clock set to {psclock.describe()}")
 
-workers = [(api_server_process, 5), (plane_data_process, 10), (weather_data_process, 10), (tides_data_process, 10), (nfl_data_process, 10), (mlb_data_process, 10)]
+workers = [(api_server_process, 5), (plane_data_process, 10), (weather_data_process, 10), (tides_data_process, 10), (nfl_data_process, 10), (mlb_data_process, 10), (outside_data_process, 5)]
 ps = None
 try:
     for process, _ in workers:

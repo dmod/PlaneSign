@@ -462,6 +462,12 @@ input::placeholder {
   display: contents;
 }
 
+.outside_status {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 4px 0;
+}
+
 .command-mode-item > div {
   grid-column: 1 / -1;
   min-width: 0;

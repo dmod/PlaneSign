@@ -77,6 +77,15 @@ The [publishing workflow](.github/workflows/pipeline.yml) runs on pushes to `mai
 - Cleanup prunes only that builder's cache entries unused for seven days. It does not prune the runner's other builders or Docker images.
 - Images target `linux/arm64/v8` and retain build provenance. GitHub's `unknown/unknown` entry is the provenance attestation, not another runnable architecture.
 
+## Outside
+
+Select **Outside** in either web control layout for an animated rural valley: a small red barn, layered distant hills and trees, a reflective pond, and occasional visiting wildlife. Stars twinkle, birds cross the sky, and clouds, rain and snow move gently without covering the scene in text.
+
+- Lighting and the visible sun/moon follow `SENSOR_LAT` and `SENSOR_LON`, using the same astronomy data as Moon mode. Seasons follow the sign's local date and hemisphere. The scene is artistic, not a map or camera view of your location.
+- Live cloud cover, wind, precipitation, mist and temperature come from Weather mode's existing OpenWeather feed; configure `OPENWEATHER_API_KEY` for these effects. Winter trees are bare; snow cover is shown when the weather reports snowfall, not simply because it is winter.
+- A small **WX~** means the weather observation is cached (30 minutes to two hours old). **WX?** means weather is missing or expired; the atmosphere is illustrative rather than a claim of clear weather. **SKY...** / **SKY?** indicate loading / unavailable astronomy. Both control layouts also show data status.
+- Outside shares Moon mode's cached `de421.bsp`; its first use may download that file if it is not already installed. The RGB panels give the intended full-color appearance; the OLED bonnet uses a monochrome interpretation.
+
 ## Testing Locally Without a Matrix
 
 Run the sign against an emulated matrix instead of the LED panels:

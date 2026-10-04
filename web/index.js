@@ -2,6 +2,8 @@ var global_current_mode;
 var recordButton, recorder;
 var MAX_MIC_AUDIO_BYTES = 32 * 1024 * 1024;
 var volume_send_timer = null;
+var outside_status_timer = null;
+var outside_status_request = null;
 var valid_tickers = null;
 var valid_resorts = null;
 var free_sketch_is_drawing = false;
@@ -62,6 +64,7 @@ function set_current_mode_button(mode) {
 
     set_mode_button_active(mode, true);
     global_current_mode = mode;
+    sync_outside_controls(mode);
 }
 
 function clear_current_mode_button() {
@@ -69,6 +72,53 @@ function clear_current_mode_button() {
         set_mode_button_active(global_current_mode, false);
     }
     global_current_mode = null;
+    sync_outside_controls(null);
+}
+
+function sync_outside_controls(mode) {
+    clearTimeout(outside_status_timer);
+    if (outside_status_request) {
+        outside_status_request.abort();
+    }
+    document.getElementById('outside_div').hidden = mode !== 'OUTSIDE';
+    if (mode === 'OUTSIDE') {
+        update_outside_status();
+    }
+}
+
+async function update_outside_status() {
+    var controller = new AbortController();
+    outside_status_request = controller;
+    var timeout = setTimeout(function () { controller.abort(); }, 10000);
+    var status = document.getElementById('outside_status');
+    try {
+        var response = await fetch('api/outside/status', {signal: controller.signal, cache: 'no-store'});
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+        var data = await response.json();
+        if (!data || typeof data.season !== 'string' || typeof data.weather !== 'string' || typeof data.astronomy !== 'string') {
+            throw new Error('Invalid Outside status response');
+        }
+        if (global_current_mode === 'OUTSIDE' && outside_status_request === controller) {
+            var weather = data.weather === 'LIVE' ? 'live weather' : data.weather === 'CACHED' ? 'cached weather (WX~)' : 'weather unavailable (WX?); atmosphere is illustrative';
+            var astronomy = data.astronomy === 'READY' ? 'local sun and moon' : data.astronomy === 'LOADING' ? 'loading astronomy' : 'astronomy unavailable (SKY?)';
+            status.textContent = data.season + ' / ' + weather + ' / ' + astronomy;
+        }
+    } catch (error) {
+        if (global_current_mode === 'OUTSIDE' && outside_status_request === controller) {
+            status.textContent = 'Outside status unavailable: ' + error.message;
+            console.error('Outside status request failed', error);
+        }
+    } finally {
+        clearTimeout(timeout);
+        if (outside_status_request === controller) {
+            outside_status_request = null;
+            if (global_current_mode === 'OUTSIDE') {
+                outside_status_timer = setTimeout(update_outside_status, 5000);
+            }
+        }
+    }
 }
 
 window.onload = function () {
