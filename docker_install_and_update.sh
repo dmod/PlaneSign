@@ -108,8 +108,7 @@ apt_get() {
   return 1
 }
 
-# Copies one file out of the clone into the install tree. The mode is forced
-# rather than inherited because sign.conf.sample is tracked executable.
+# Copies one file out of the clone into the install tree.
 install_from_clone() {
   local relative_path="$1"
   local destination="$2"
@@ -143,6 +142,10 @@ main() {
   echo "PlaneSign install starting..."
 
   stop_background_apt_jobs
+  # Remove the old source before even apt-get --fix-broken reads the conflict.
+  if [ -f /etc/apt/sources.list.d/docker.sources ]; then
+    rm -f /etc/apt/sources.list.d/docker.list
+  fi
   repair_dpkg
 
   if [ -f /boot/firmware/cmdline.txt ]; then
@@ -200,7 +203,6 @@ main() {
       ca-certificates \
       curl \
       git \
-      gnupg \
       python3-dbus
 
   # A single shallow clone supplies both the runtime files and the seed data
@@ -263,14 +265,19 @@ main() {
 
   # Add Docker's official GPG key:
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
+  curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
 
-  # Add the repository to Apt sources:
-  echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-    tee /etc/apt/sources.list.d/docker.list > /dev/null
+  # Replace the legacy repository with Docker's current deb822 format.
+  rm -f /etc/apt/sources.list.d/docker.list
+  cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
   apt_get update
 
   apt_get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
