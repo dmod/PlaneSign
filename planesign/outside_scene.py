@@ -143,14 +143,14 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         else:
             d.polygon([(x, 24 - height), (x - 2, 24), (x + 2, 24)], fill=INDEX["ridge"])
     hill([(0, 26), (29, 25), (51, 27), (82, 25), (110, 26), (127, 25)], "field")
-    d.rectangle((22, 20, 32, 25), fill=INDEX["barn"])
-    d.rectangle((29, 20, 32, 25), fill=INDEX["barn"])
-    d.polygon([(20, 21), (27, 17), (35, 21)], fill=INDEX["roof"])
-    d.line((20, 21, 27, 17), fill=INDEX["trunk"])
-    d.rectangle((25, 21, 28, 25), fill=INDEX["roof"])
-    d.line((25, 21, 28, 21), fill=INDEX["trim"])
-    d.line((25, 22, 28, 25), fill=INDEX["trim"])
-    d.line((28, 22, 25, 25), fill=INDEX["trim"])
+    d.rectangle((21, 19, 33, 25), fill=INDEX["barn"])
+    d.rectangle((30, 19, 33, 25), fill=INDEX["barn"])
+    d.polygon([(19, 20), (27, 15), (36, 20)], fill=INDEX["roof"])
+    d.line((19, 20, 27, 15), fill=INDEX["trunk"])
+    d.rectangle((25, 20, 29, 25), fill=INDEX["roof"])
+    d.line((25, 20, 29, 20), fill=INDEX["trim"])
+    d.line((25, 21, 29, 25), fill=INDEX["trim"])
+    d.line((29, 21, 25, 25), fill=INDEX["trim"])
     for x, base, height in [(4, 28, 12), (38, 25, 7)]:
         d.line((x, base - height, x, base), fill=INDEX["trunk"])
         for offset in range(2, height - 1, 2):
@@ -223,7 +223,7 @@ def landscape(palette: Palette, bare: bool, snow: bool):
         for x in range(0, 128):
             if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["roof"], INDEX["barn"]):
                 d.point((x, 26), fill=palette.grass)
-        d.line((20, 20, 27, 17, 35, 20), fill=palette.trim)
+        d.line((19, 19, 27, 15, 36, 19), fill=palette.trim)
         d.line((3, 27, 40, 27), fill=palette.grass)
     return land, foliage, wood
 
