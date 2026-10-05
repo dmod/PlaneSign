@@ -264,6 +264,8 @@ LAMP_POST_X = 14
 LAMP_LENS = (17, 17)
 LAMP_GROUND_Y = 26
 LAMP_SECONDS = 3 * 3600
+# Sun altitude (degrees) at which the scene palette becomes pure night.
+NIGHT_ALTITUDE = -10
 LAMP_LIGHT = (255, 200, 120)
 LAMP_GLOW = (255, 236, 190)
 TREE_RADIUS_X, TREE_RADIUS_Y = 10.5, 7.8
@@ -307,8 +309,8 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
     altitude = environment.sun_altitude
     altitude = 0 if altitude is None else altitude
     if altitude < 0:
-        palette = blend_palette(NIGHT, DUSK, (altitude + 10) / 10)
-        illumination = moonlight(environment) * max(0, min(1, -altitude / 10))
+        palette = blend_palette(NIGHT, DUSK, 1 - altitude / NIGHT_ALTITUDE)
+        illumination = moonlight(environment) * max(0, min(1, altitude / NIGHT_ALTITUDE))
         palette = Palette(*(mix(getattr(palette, name), (106, 133, 157), illumination * (0.075 if name in ("top", "middle", "horizon") else 0.12)) for name in MATERIALS))
     else:
         palette = blend_palette(DUSK, DAY, altitude / 14)
@@ -421,7 +423,26 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
 LAND, LEAFY_TREE, BARE_TREE = geometry()
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
-STARS = tuple((x, y, grain(x, y, 5)) for y in range(1, 21) for x in range(2, 126) if grain(x, y, 9) < 2)
+# The Big Dipper (Ursa Major) right of the mountain, projected from the real stars at 0.7 px per degree in its
+# autumn-evening pose (bowl upright, handle to the left), turned 20 degrees to level the handle:
+# (x, y, peak brightness from magnitude, color). Dubhe and Merak, the pointers, form the bowl's right edge.
+BIG_DIPPER = (
+    (83, 7, 0.98, (232, 240, 255)),  # Alkaid
+    (87, 6, 0.87, (232, 240, 255)),  # Mizar
+    (90, 6, 1.0, (232, 240, 255)),  # Alioth
+    (94, 7, 0.55, (232, 240, 255)),  # Megrez
+    (95, 10, 0.81, (232, 240, 255)),  # Phecda
+    (101, 9, 0.83, (232, 240, 255)),  # Merak
+    (101, 5, 1.0, (255, 222, 180)),  # Dubhe
+)
+# Random field stars keep a 3 px berth around the constellation so its shape reads cleanly.
+DIPPER_BOUNDS = (min(s[0] for s in BIG_DIPPER) - 3, min(s[1] for s in BIG_DIPPER) - 3, max(s[0] for s in BIG_DIPPER) + 3, max(s[1] for s in BIG_DIPPER) + 3)
+STARS = tuple(
+    (x, y, grain(x, y, 5))
+    for y in range(1, 21)
+    for x in range(2, 126)
+    if grain(x, y, 9) < 2 and not (DIPPER_BOUNDS[0] <= x <= DIPPER_BOUNDS[2] and DIPPER_BOUNDS[1] <= y <= DIPPER_BOUNDS[3])
+)
 STAR_COLORS = ((232, 244, 255), (255, 239, 207), (225, 231, 255))
 RIPPLES = ((60, 27, 15, 0), (55, 28, 9, 2.3), (68, 29, 7, 4.5))
 PARTICLES = tuple((grain(i, 3) / 97 * 128, grain(i, 9) / 97 * 35, 0.7 + grain(i, 5) / 97, grain(i, 7)) for i in range(80))
@@ -618,13 +639,19 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
     cover = cloud_cover(environment)
+    visibility = night * (1 - cover * 0.92) * (1 - moonlight(environment) * 0.25)
     for x, y, phase in STARS:
         swell = 0.5 + 0.5 * math.sin(elapsed * (0.65 + phase / 160) + phase)
         sparkle = 0.85 + 0.15 * (0.5 + 0.5 * math.sin(elapsed * (1.8 + phase / 110) + phase * 0.37))
         shimmer = 0.04 + 0.96 * swell * swell * sparkle
-        strength = night * (1 - cover * 0.92) * (1 - moonlight(environment) * 0.25) * shimmer
+        strength = visibility * shimmer
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), STAR_COLORS[phase % len(STAR_COLORS)], strength))
+    # The constellation twinkles only gently so its shape never drops out.
+    for index, (x, y, peak, color) in enumerate(BIG_DIPPER):
+        strength = visibility * peak * (0.85 + 0.15 * math.sin(elapsed * (1.1 + index * 0.23) + index * 1.7))
+        if strength > 0:
+            d.point((x, y), fill=mix(image.getpixel((x, y)), color, strength))
     glows = []
     if altitude is not None and altitude > -0.833:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
@@ -901,8 +928,8 @@ def draw_hut_and_dog(image: Image.Image, palette: Palette, door: float, dog, ela
 
 
 def lamp_level(environment: "OutsideEnvironment") -> float:
-    """The yard lamp comes on at sunset, warming up over 40 s, and switches off three hours later."""
-    since = environment.since_sunset
+    """The yard lamp comes on once the sky is pure night, warming up over 40 s, and switches off three hours later."""
+    since = environment.since_nightfall
     if since is None or not 0 <= since < LAMP_SECONDS:
         return 0.0
     return min(1.0, since / 40, (LAMP_SECONDS - since) / 20)
