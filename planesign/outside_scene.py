@@ -14,7 +14,6 @@ import shared_config
 from emulated_matrix import graphics as bitmap_graphics
 from emulated_matrix.core import Canvas
 from PIL import Image, ImageDraw, ImageStat
-from rgbmatrix import graphics
 
 if TYPE_CHECKING:
     from outside import OutsideEnvironment
@@ -28,6 +27,69 @@ OVERLAY_LINEAR_LUT = [round(255 * (value / 255 / 12.92 if value <= 10 else ((val
 # Black and white have equal contrast at this relative luminance.
 OVERLAY_POLARITY_LUMINANCE = math.sqrt(0.05 * 1.05) - 0.05
 OVERLAY_POLARITY_HYSTERESIS = 0.01
+OVERLAY_GAP = 5
+# Notices too wide for the space between the corner labels pause, then scroll.
+NOTICE_SCROLL_SPEED = 12
+NOTICE_SCROLL_PAUSE = 1.5
+NOTICE_SCROLL_SPACING = 16
+# OpenWeather condition descriptions; also the set of codes Outside accepts.
+WEATHER_DESCRIPTIONS = {
+    200: "thunderstorm with light rain",
+    201: "thunderstorm with rain",
+    202: "thunderstorm with heavy rain",
+    210: "light thunderstorm",
+    211: "thunderstorm",
+    212: "heavy thunderstorm",
+    221: "ragged thunderstorm",
+    230: "thunderstorm with light drizzle",
+    231: "thunderstorm with drizzle",
+    232: "thunderstorm with heavy drizzle",
+    300: "light intensity drizzle",
+    301: "drizzle",
+    302: "heavy intensity drizzle",
+    310: "light intensity drizzle rain",
+    311: "drizzle rain",
+    312: "heavy intensity drizzle rain",
+    313: "shower rain and drizzle",
+    314: "heavy shower rain and drizzle",
+    321: "shower drizzle",
+    500: "light rain",
+    501: "moderate rain",
+    502: "heavy intensity rain",
+    503: "very heavy rain",
+    504: "extreme rain",
+    511: "freezing rain",
+    520: "light intensity shower rain",
+    521: "shower rain",
+    522: "heavy intensity shower rain",
+    531: "ragged shower rain",
+    600: "light snow",
+    601: "snow",
+    602: "heavy snow",
+    611: "sleet",
+    612: "light shower sleet",
+    613: "shower sleet",
+    615: "light rain and snow",
+    616: "rain and snow",
+    620: "light shower snow",
+    621: "shower snow",
+    622: "heavy shower snow",
+    701: "mist",
+    711: "smoke",
+    721: "haze",
+    731: "sand/dust whirls",
+    741: "fog",
+    751: "sand",
+    761: "dust",
+    762: "volcanic ash",
+    771: "squalls",
+    781: "tornado",
+    800: "clear sky",
+    801: "few clouds",
+    802: "scattered clouds",
+    803: "broken clouds",
+    804: "overcast clouds",
+}
 # Clouds and precipitation dim the palette toward slate haze by cover * this amount.
 WEATHER_DIM_CLOUDS = 0.0225
 WEATHER_DIM_PRECIPITATION = 0.04
@@ -318,7 +380,151 @@ def celestial_position(altitude: float, azimuth: float) -> tuple[int, int]:
     return round(64 - 56 * math.sin(math.radians(azimuth))), round(18 - 15 * math.sin(math.radians(max(0, altitude))))
 
 
-def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None):
+CLOUD_TILE = 256
+CLOUD_STREAK_MAX_COVER = 0.35
+CLOUD_COLUMNS = np.arange(WIDTH)
+CLOUD_ROWS = np.arange(HEIGHT)
+CLOUD_FLASH_CATCH = np.array([0.95, 0.8, 0.6, 0.4], dtype=np.float32)
+
+
+@dataclass(frozen=True)
+class CloudLayer:
+    salt: int
+    count: int
+    width: tuple[int, int]
+    base: tuple[int, int]
+    speed: float
+    wind: float
+    haze: float
+
+
+# Small, hazy, slow clouds high up behind larger, lower cumulus that drift faster with the wind.
+CLOUD_LAYERS = (CloudLayer(salt=3, count=26, width=(10, 24), base=(8, 12), speed=0.12, wind=0.012, haze=0.35), CloudLayer(salt=7, count=24, width=(16, 38), base=(15, 19), speed=0.3, wind=0.03, haze=0.0))
+
+
+def periodic_noise(cell_x: int, cell_y: int, salt: int) -> np.ndarray:
+    """Smooth value noise that wraps horizontally across CLOUD_TILE columns."""
+    columns = CLOUD_TILE // cell_x
+    grid = np.random.default_rng(salt).random((HEIGHT // cell_y + 2, columns))
+    x, y = np.arange(CLOUD_TILE) / cell_x, np.arange(HEIGHT) / cell_y
+    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+    fx, fy = x - x0, y - y0
+    fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+    x1 = (x0 + 1) % columns
+    top = grid[y0][:, x0] + (grid[y0][:, x1] - grid[y0][:, x0]) * fx
+    bottom = grid[y0 + 1][:, x0] + (grid[y0 + 1][:, x1] - grid[y0 + 1][:, x0]) * fx
+    return top + (bottom - top) * fy[:, None]
+
+
+@lru_cache(maxsize=len(CLOUD_LAYERS))
+def cumulus(layer: CloudLayer) -> tuple[tuple[int, np.ndarray], ...]:
+    """Cloud tone patches, in the order clouds appear as cover rises: (base row, tile-wide tones)."""
+    rng = random.Random(layer.salt)
+    clouds = []
+    for _ in range(layer.count):
+        width = rng.uniform(*layer.width)
+        height = width * rng.uniform(0.26, 0.36)
+        center, base = rng.uniform(0, CLOUD_TILE), rng.randint(*layer.base)
+        tones = np.full((HEIGHT, CLOUD_TILE), -1, dtype=np.int8)
+        puffs = max(3, round(width / 6))
+        for index in range(puffs):
+            # Puffs rise into a dome over a flat base; later puffs overlap earlier ones, each with its own lit rim.
+            radius = height * (0.55 + 0.45 * math.sin(math.pi * (index + 0.5) / puffs)) * rng.uniform(0.8, 1.1)
+            px = center - width / 2 + (index + 0.5) * width / puffs + rng.uniform(-1.5, 1.5)
+            py = base - radius * 0.75
+            rows = np.arange(max(0, math.floor(py - radius)), min(HEIGHT, base + 1))
+            columns = np.arange(math.floor(px - radius), math.ceil(px + radius) + 1)
+            dx, dy = columns[None, :] - px, rows[:, None] - py
+            inside = dx * dx + dy * dy <= radius * radius
+            light = (dx * 0.6 + dy) / radius
+            patch = np.where(light < -0.8, 0, np.where(light < -0.35, 1, 2)).astype(np.int8)
+            view = tones[rows[0] : rows[-1] + 1]
+            wrapped = columns % CLOUD_TILE
+            view[:, wrapped] = np.where(inside, patch, view[:, wrapped])
+        cloud = tones >= 0
+        tones[cloud & (CLOUD_ROWS[:, None] == base)] = 3
+        clouds.append((base, tones))
+    return tuple(clouds)
+
+
+@lru_cache(maxsize=64)
+def cloud_tones(layer: CloudLayer, coverage: int) -> np.ndarray:
+    """Posterized tone per pixel: 0 rim light, 1 sunlit body, 2 body, 3 shadowed base; -1 is clear sky."""
+    clouds = cumulus(layer)
+    shown = clouds[: round(len(clouds) * max(0, min(1, (coverage / 20 - 0.1) / 0.9)) ** 1.4)]
+    tones = np.full((HEIGHT, CLOUD_TILE), -1, dtype=np.int8)
+    # Higher (more distant) clouds first, so lower ones overlap them.
+    for _, patch in sorted(shown, key=lambda cloud: cloud[0]):
+        tones = np.where(patch >= 0, patch, tones)
+    return tones
+
+
+@lru_cache(maxsize=32)
+def ceiling_tones(coverage: int) -> np.ndarray | None:
+    """An overcast stratus ceiling that lowers from the top of the sky as cover approaches 100%."""
+    thickness = max(0, min(1, (coverage / 20 - 0.65) / 0.35)) * 9
+    if thickness < 1:
+        return None
+    edge = thickness + (periodic_noise(64, HEIGHT, 11)[0] - 0.5) * 5 + (periodic_noise(16, HEIGHT, 12)[0] - 0.5) * 2
+    rows = CLOUD_ROWS[:, None]
+    cloud = rows < edge[None, :]
+    streaks = periodic_noise(32, 2, 13) > 0.62
+    tones = np.where(cloud, np.where(streaks, 1, 2), -1).astype(np.int8)
+    tones[cloud & (rows >= edge[None, :] - 1)] = 3
+    return tones
+
+
+def cloud_palette(palette: Palette, haze: float, gloom: float) -> np.ndarray:
+    # The palette's snow color is a neutral, time-of-day-lit white: white-blue by day, pink at dusk, cool at night.
+    light = mix(palette.snowcap, palette.horizon, 0.25)
+    body = mix(palette.snowcap, palette.top, 0.45)
+    shadow = mix(body, palette.roof, 0.45)
+    tones = [light, mix(light, body, 0.5), body, shadow]
+    # Rain clouds darken from the base up; distant clouds fade toward the sky.
+    tones = [mix(tone, mix(palette.top, palette.roof, 0.4), gloom * (0.35 + index * 0.2)) for index, tone in enumerate(tones)]
+    return np.array([mix(tone, palette.middle, haze) for tone in tones], dtype=np.float32)
+
+
+def draw_cloudscape(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, glows: list[tuple[int, int, Color, float]], lightning: "tuple[LightningEvent, float] | None") -> np.ndarray:
+    """Draw the cloud layers and return the mask of cloud pixels."""
+    covered = np.zeros((HEIGHT, WIDTH), dtype=bool)
+    coverage = round(cloud_cover(environment) * 20)
+    if coverage < 4:
+        return covered
+    rain, snow = precipitation(environment)
+    # Overcast skies turn dull and gray; rain clouds darker still.
+    gloom = 0.55 if rain or snow else 0.4 * max(0, min(1, (coverage / 20 - 0.7) / 0.3))
+    wind = min(30, environment.weather.wind or 0)
+    pixels = np.asarray(image, dtype=np.float32).copy()
+    layers = [(ceiling_tones(coverage), 0.05, 0.006, 0.2), *((cloud_tones(layer, coverage), layer.speed, layer.wind, layer.haze) for layer in CLOUD_LAYERS)]
+    for tile, speed, drift, haze in layers:
+        if tile is None:
+            continue
+        offset = int(elapsed * (speed + wind * drift)) % CLOUD_TILE
+        tones = np.take(tile, (CLOUD_COLUMNS + offset) % CLOUD_TILE, axis=1)
+        cloud = tones >= 0
+        if not cloud.any():
+            continue
+        colors = cloud_palette(palette, haze, gloom)[np.maximum(tones, 0)]
+        # Silver linings: cloud edges near the sun or moon catch its light.
+        for cx, cy, color, strength in glows:
+            glow = strength * np.exp(-(((CLOUD_COLUMNS[None, :] - cx) / 18) ** 2 + ((CLOUD_ROWS[:, None] - cy) / 7) ** 2))
+            colors += (np.array(color, dtype=np.float32) - colors) * (glow * np.where(tones <= 1, 0.75, 0.3))[..., None]
+        if lightning is not None and lightning[1] >= 0:
+            event, age = lightning
+            base, local, spread = LIGHTNING_LIGHT[event.kind]
+            light = event.intensity(age) * (base + local * np.exp(-0.5 * ((CLOUD_COLUMNS - event.center) / spread) ** 2))
+            # Lit from within: billow tops catch the most light, so the cloud shapes stay readable.
+            catch = CLOUD_FLASH_CATCH[np.maximum(tones, 0)]
+            colors += (np.array(LIGHTNING_BRANCH, dtype=np.float32) - colors) * (np.clip(light * 1.1, 0, 1)[None, :] * catch)[..., None]
+        pixels[cloud] = colors[cloud]
+        covered |= cloud
+    image.paste(Image.fromarray(np.round(pixels).astype(np.uint8), "RGB"))
+    return covered
+
+
+def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None) -> np.ndarray:
+    """Draw the sky and return the mask of cloud pixels."""
     d = ImageDraw.Draw(image)
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
@@ -330,16 +536,19 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         strength = night * (1 - cover * 0.92) * (1 - moonlight(environment) * 0.25) * shimmer
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), STAR_COLORS[phase % len(STAR_COLORS)], strength))
+    glows = []
     if altitude is not None and altitude > -0.833:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
         sun = mix((255, 164, 94), (255, 235, 170), altitude / 20)
         d.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=mix(palette.middle, sun, 0.23))
         d.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill=sun)
+        glows.append((cx, cy, sun, 0.8))
     if environment.moon_altitude is not None and environment.moon_altitude > 0:
         cx, cy = celestial_position(environment.moon_altitude, environment.moon_azimuth)
         phase = math.radians(environment.moon_phase)
         fraction = (1 - math.cos(phase)) / 2
         strength = max(0.18, night) * (1 - cover * 0.5)
+        glows.append((cx, cy, (214, 222, 235), fraction * night * 0.6))
         halo = Image.new("RGBA", (WIDTH, HEIGHT))
         hd = ImageDraw.Draw(halo)
         for radius, alpha in ((5, 10), (4, 18)):
@@ -351,8 +560,11 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
                 x, y = cx + dx, cy + dy
                 if 0 <= x < WIDTH and 0 <= y < HEIGHT:
                     d.point((x, y), fill=mix(image.getpixel((x, y)), (239, 226, 186), strength))
+    clouds = draw_cloudscape(image, environment, palette, elapsed, glows, lightning)
+    d = ImageDraw.Draw(image)
     wind = environment.weather.wind or 0
-    cloud_count = 1 + round(cover * 5)
+    # Thin streaks carry light cloud cover; the cloudscape takes over as the sky fills in.
+    cloud_count = 1 + round(cover * 5) if cover < CLOUD_STREAK_MAX_COVER else 0
     for index in range(cloud_count):
         width = 16 + (index * 7) % 19
         x = round(((index * 37 + 12 + elapsed * (0.18 + min(30, wind) * 0.02)) % (128 + width)) - width)
@@ -366,6 +578,7 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         d.line((x + 3, y, x + width - 5, y), fill=color)
         d.line((x + 7, y - 1, x + width - 9, y - 1), fill=mix(color, palette.top, 0.1))
         d.line((x, y + 1, x + width, y + 1), fill=mix(color, palette.middle, 0.2))
+    return clouds
 
 
 @lru_cache(maxsize=64)
@@ -628,10 +841,12 @@ def lightning_light(event: LightningEvent, intensity: float, column: float) -> f
     return intensity * (base + local * math.exp(-0.5 * ((column - event.center) / spread) ** 2))
 
 
-def flash_scene(image: Image.Image, event: LightningEvent, intensity: float) -> Image.Image:
+def flash_scene(image: Image.Image, event: LightningEvent, intensity: float, clouds: np.ndarray) -> Image.Image:
     base, local, spread = LIGHTNING_LIGHT[event.kind]
     across = base + local * np.exp(-0.5 * ((FLASH_COLUMNS - event.center) / spread) ** 2)
-    light = np.clip(intensity * across[None, :] * FLASH_FALLOFF[:, None] * FLASH_RECEIVE, 0, 0.92)[..., None]
+    # Clouds are already lit from within, so the general flash only half-lights them to keep their shape.
+    receive = np.where(clouds, FLASH_RECEIVE * 0.5, FLASH_RECEIVE)
+    light = np.clip(intensity * across[None, :] * FLASH_FALLOFF[:, None] * receive, 0, 0.92)[..., None]
     pixels = np.asarray(image, dtype=np.float32)
     return Image.fromarray(np.round(pixels + (np.array(LIGHTNING_FLASH, dtype=np.float32) - pixels) * light).astype(np.uint8), "RGB")
 
@@ -680,7 +895,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         color = mix(palette.top, palette.middle, t / 0.55) if t < 0.55 else mix(palette.middle, palette.horizon, (t - 0.55) / 0.45)
         d.line((0, y, 127, y), fill=color)
     lightning = lightning_at(environment, elapsed, seed)
-    draw_sky(image, environment, palette, elapsed, lightning)
+    clouds = draw_sky(image, environment, palette, elapsed, lightning)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
@@ -730,7 +945,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     if lightning is not None:
         event, age = lightning
         if age >= 0 and event.intensity(age) > 0.01:
-            image = flash_scene(image, event, event.intensity(age))
+            image = flash_scene(image, event, event.intensity(age), clouds)
         draw_lightning(image, event, age)
     return grade_frame(image)
 
@@ -763,9 +978,9 @@ def overlay_contrast_fraction(luminance: float) -> float:
     return fraction * fraction * (3 - 2 * fraction)
 
 
-def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, previous_dark: bool | None = None, hold_style: bool = False) -> bool:
-    mask = overlay_text_mask(text)
-    x = WIDTH - mask.width if right else 0
+def draw_overlay(image: Image.Image, mask: Image.Image, x: int, *, previous_dark: bool | None = None, hold_style: bool = False) -> bool | None:
+    if mask.getbbox() is None:
+        return previous_dark
     background = image.crop((x, 0, x + mask.width, mask.height))
     luminance = overlay_relative_luminance(background, mask)
     threshold = OVERLAY_POLARITY_LUMINANCE + (OVERLAY_POLARITY_HYSTERESIS if previous_dark is False else -OVERLAY_POLARITY_HYSTERESIS if previous_dark is True else 0)
@@ -781,25 +996,66 @@ def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, pre
     return dark_text
 
 
-def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, bool | None] = (None, None)) -> tuple[bool, bool]:
+def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, previous_dark: bool | None = None, hold_style: bool = False) -> bool | None:
+    mask = overlay_text_mask(text)
+    return draw_overlay(image, mask, WIDTH - mask.width if right else 0, previous_dark=previous_dark, hold_style=hold_style)
+
+
+def outside_notice(environment: "OutsideEnvironment") -> str:
+    """Forecast conditions while scrubbing ahead, otherwise data-status notices."""
+    weather = environment.weather
+    notices = []
+    if environment.offset_minutes:
+        if weather.status in ("FORECAST", "FORECAST_CACHED") and weather.code in WEATHER_DESCRIPTIONS:
+            notices.append(WEATHER_DESCRIPTIONS[weather.code].upper() + ("~" if weather.status == "FORECAST_CACHED" else ""))
+        else:
+            notices.append("FCST?")
+    elif weather.status != "LIVE":
+        notices.append("WX~" if weather.status == "CACHED" else "WX?")
+    if environment.sky_status != "READY":
+        notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")
+    return " ".join(notices)
+
+
+@lru_cache(maxsize=64)
+def notice_strip(text: str) -> Image.Image:
+    mask = overlay_text_mask(text)
+    strip = Image.new("L", (mask.width * 2 + NOTICE_SCROLL_SPACING, mask.height))
+    strip.paste(mask, (0, 0))
+    strip.paste(mask, (mask.width + NOTICE_SCROLL_SPACING, 0))
+    return strip
+
+
+def draw_notice(image: Image.Image, text: str, left: int, right: int, elapsed: float, *, previous_dark: bool | None = None, hold_style: bool = False) -> bool | None:
+    """Center `text` between the corner labels, scrolling it when it does not fit."""
+    mask = overlay_text_mask(text)
+    width = right - left
+    if width <= 0:
+        return previous_dark
+    if mask.width <= width:
+        x = max(left, min(right - mask.width, WIDTH // 2 - mask.width // 2))
+        return draw_overlay(image, mask, x, previous_dark=previous_dark, hold_style=hold_style)
+    period = mask.width + NOTICE_SCROLL_SPACING
+    moment = elapsed % (NOTICE_SCROLL_PAUSE + period / NOTICE_SCROLL_SPEED)
+    offset = round(max(0, moment - NOTICE_SCROLL_PAUSE) * NOTICE_SCROLL_SPEED) % period
+    return draw_overlay(image, notice_strip(text).crop((offset, 0, offset + width, mask.height)), left, previous_dark=previous_dark, hold_style=hold_style)
+
+
+def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, ...] = (None, None, None)) -> tuple[bool | None, bool | None, bool | None]:
     image = render_outside_frame(environment, elapsed, seed)
     clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
+    previous_clock, previous_temperature, previous_notice = (*previous_text_styles, None, None, None)[:3]
     # Lightning flashes last a few frames; keep the labels' black/white style steady through them.
     flashing = lightning_at(environment, elapsed, seed) is not None
-    clock_dark = draw_corner_label(image, clock, previous_dark=previous_text_styles[0], hold_style=flashing)
-    temperature_dark = draw_corner_label(image, temperature_text, right=True, previous_dark=previous_text_styles[1], hold_style=flashing)
+    clock_dark = draw_corner_label(image, clock, previous_dark=previous_clock, hold_style=flashing)
+    temperature_dark = draw_corner_label(image, temperature_text, right=True, previous_dark=previous_temperature, hold_style=flashing)
+    notice = outside_notice(environment)
+    notice_dark = None
+    if notice:
+        left = overlay_text_mask(clock).width + OVERLAY_GAP
+        right = WIDTH - overlay_text_mask(temperature_text).width - OVERLAY_GAP
+        notice_dark = draw_notice(image, notice, left, right, elapsed, previous_dark=previous_notice, hold_style=flashing)
     sign.canvas.SetImage(image)
-    notices = []
-    if environment.offset_minutes:
-        notices.append("FCST" if environment.weather.status == "FORECAST" else "FCST~" if environment.weather.status == "FORECAST_CACHED" else "FCST?")
-    elif environment.weather.status != "LIVE":
-        notices.append("WX~" if environment.weather.status == "CACHED" else "WX?")
-    if environment.sky_status != "READY":
-        notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")
-    if notices:
-        color = graphics.Color(145, 152, 156)
-        text = " ".join(notices)
-        graphics.DrawText(sign.canvas, sign.font46, WIDTH // 2 - len(text) * 2, 5, color, text)
-    return clock_dark, temperature_dark
+    return clock_dark, temperature_dark, notice_dark

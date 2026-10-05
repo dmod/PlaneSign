@@ -119,10 +119,11 @@ function apply_outside_status(data) {
     document.getElementById('outside_time_slider').value = data.offset_minutes;
     update_outside_time_label(data.offset_minutes);
     var weather;
+    var condition = typeof data.condition === 'string' ? data.condition : 'conditions unknown';
     if (data.weather === 'FORECAST') {
-        weather = 'hourly weather forecast (FCST)';
+        weather = 'hourly forecast: ' + condition;
     } else if (data.weather === 'FORECAST_CACHED') {
-        weather = 'cached hourly forecast (FCST~)';
+        weather = 'cached hourly forecast: ' + condition + ' (~)';
     } else if (data.weather === 'LIVE') {
         weather = 'live weather';
     } else if (data.weather === 'CACHED') {

@@ -17,7 +17,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import draw_outside_frame
+from outside_scene import WEATHER_DESCRIPTIONS, draw_outside_frame
 from skyfield import almanac
 from skyfield.api import Loader, load_file, wgs84
 from skyfield.errors import EphemerisRangeError
@@ -25,7 +25,7 @@ from skyfield.errors import EphemerisRangeError
 logger = logging.getLogger(__name__)
 WEATHER_LIVE_SECONDS = 1800
 WEATHER_CACHE_SECONDS = 7200
-WEATHER_CODES = frozenset((200, 201, 202, 210, 211, 212, 221, 230, 231, 232, 300, 301, 302, 310, 311, 312, 313, 314, 321, 500, 501, 502, 503, 504, 511, 520, 521, 522, 531, 600, 601, 602, 611, 612, 613, 615, 616, 620, 621, 622, 701, 711, 721, 731, 741, 751, 761, 762, 771, 781, 800, 801, 802, 803, 804))
+WEATHER_CODES = frozenset(WEATHER_DESCRIPTIONS)
 SKY_SAMPLE_SECONDS = 60
 SKY_PRELOAD_SECONDS = 26 * 3600
 SKY_REFRESH_MARGIN_SECONDS = 1800
@@ -288,6 +288,7 @@ def outside_status():
         "temperature_f": environment.weather.temperature,
         "wind_mph": environment.weather.wind,
         "condition_code": environment.weather.code,
+        "condition": WEATHER_DESCRIPTIONS.get(environment.weather.code),
         "cloud_cover": environment.weather.clouds,
         "rain_mm_h": environment.weather.rain,
         "snow_mm_h": environment.weather.snow,
@@ -308,7 +309,7 @@ def outside(sign):
     target_offset = rendered_offset
     transition_from = rendered_offset
     transition_started = started
-    text_styles: tuple[bool | None, bool | None] = (None, None)
+    text_styles: tuple[bool | None, bool | None, bool | None] = (None, None, None)
     while shared_config.shared_mode.value == DisplayMode.OUTSIDE.value:
         frame_time = time.perf_counter()
         elapsed = frame_time - started
