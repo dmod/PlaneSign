@@ -6,6 +6,7 @@ import random
 from dataclasses import dataclass, fields, replace
 from datetime import datetime
 from functools import lru_cache
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -317,7 +318,7 @@ def celestial_position(altitude: float, azimuth: float) -> tuple[int, int]:
     return round(64 - 56 * math.sin(math.radians(azimuth))), round(18 - 15 * math.sin(math.radians(max(0, altitude))))
 
 
-def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float):
+def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None):
     d = ImageDraw.Draw(image)
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
@@ -359,6 +360,9 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         color = mix(palette.middle, palette.horizon, 0.22 + index * 0.07)
         if cover > 0.65:
             color = mix(color, palette.roof, cover * 0.35)
+        if lightning is not None and lightning[1] >= 0:
+            # Clouds near the bolt light up from within.
+            color = mix(color, LIGHTNING_BRANCH, min(1, lightning_light(lightning[0], lightning[0].intensity(lightning[1]), x + width / 2) * 1.1))
         d.line((x + 3, y, x + width - 5, y), fill=color)
         d.line((x + 7, y - 1, x + width - 9, y - 1), fill=mix(color, palette.top, 0.1))
         d.line((x, y + 1, x + width, y + 1), fill=mix(color, palette.middle, 0.2))
@@ -425,6 +429,248 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 d.line((x - 1, y - wing, x, y, x + 1, y - wing), fill=palette.roof)
 
 
+RAIN_SPEED = 52
+RAIN_COLOR = (206, 221, 234)
+RAIN_GAP = 12
+
+
+def draw_rain(image: Image.Image, rate: float, wind: float, elapsed: float):
+    """Fast, wind-slanted streaks that end in a brief splash on the ground."""
+    d = ImageDraw.Draw(image)
+    slant = min(wind, 30) / 60
+    count = min(60, round(8 + rate * 8))
+    strength = min(1, 0.75 + rate * 0.06)
+    for x0, y0, pace, phase in PARTICLES[:count]:
+        # Faster drops leave longer motion streaks.
+        length = 3 if pace < 1.2 else 4
+        speed = RAIN_SPEED * (0.6 + 0.4 * pace)
+        landing = 26 + phase % 6
+        period = landing + length + RAIN_GAP + phase % 9
+        travel, cycle = math.fmod(y0 / 35 * period + elapsed * speed, period), math.floor((y0 / 35 * period + elapsed * speed) / period)
+        head = travel - length
+        x = x0 + cycle * 53 + slant * head
+        if head <= landing:
+            for k in range(length):
+                py = round(head) - k
+                if 0 <= py < HEIGHT:
+                    px = round(x - slant * k) % WIDTH
+                    d.point((px, py), fill=mix(image.getpixel((px, py)), RAIN_COLOR, (0.8 - k * 0.18 + (phase % 5) * 0.02) * strength))
+        elif head - landing < 3:
+            px = round(x - slant * (head - landing))
+            for dx, dy, amount in ((-1, 0, 0.4), (1, 0, 0.4), (0, -1, 0.25)):
+                sx, sy = (px + dx) % WIDTH, landing + dy
+                d.point((sx, sy), fill=mix(image.getpixel((sx, sy)), RAIN_COLOR, amount * strength))
+
+
+LIGHTNING_SLOT_SECONDS = 4.0
+LIGHTNING_LEADER_SECONDS = 0.1
+LIGHTNING_CRAWL_SECONDS = 0.14
+# Each stroke holds full brightness long enough to land on at least one ~20 fps frame, then decays.
+LIGHTNING_HOLD_SECONDS = 0.06
+LIGHTNING_DECAY_SECONDS = 0.08
+LIGHTNING_AFTERGLOW_SECONDS = 0.6
+LIGHTNING_FLASH = (226, 222, 255)
+LIGHTNING_GLOW = (160, 140, 255)
+LIGHTNING_BRANCH = (235, 230, 255)
+LIGHTNING_CORE = (255, 255, 255)
+# Relative storm activity per thunderstorm code; lightning frequency scales with it.
+THUNDERSTORM_ACTIVITY = {200: 0.7, 201: 1.0, 202: 1.4, 210: 0.5, 211: 1.0, 212: 1.6, 221: 1.1, 230: 0.6, 231: 0.9, 232: 1.2}
+# How strongly each lightning kind lights the whole sky versus the region around the bolt, and that region's width.
+LIGHTNING_LIGHT = {"ground": (0.5, 0.45, 26), "cloud": (0.22, 0.6, 18), "sheet": (0.12, 0.35, 34)}
+SURFACE = tuple(next(y for y in range(HEIGHT) if LAND.getpixel((x, y))) for x in range(WIDTH))
+SCENERY = (np.asarray(LAND) > 0) | (np.asarray(LEAFY_TREE) > 0) | (np.asarray(BARE_TREE) > 0)
+# Scenery catches less of the flash than open sky.
+FLASH_RECEIVE = np.where(SCENERY, 0.38, 1.0)
+FLASH_COLUMNS = np.arange(WIDTH)
+FLASH_FALLOFF = np.linspace(1, 0.65, HEIGHT)
+
+
+@dataclass(frozen=True)
+class LightningEvent:
+    kind: str
+    start: float
+    strokes: tuple[tuple[float, float], ...]
+    center: int
+    channel: tuple[tuple[int, int], ...]
+    branches: tuple[tuple[int, int], ...]
+    strike: tuple[int, int] | None
+
+    @property
+    def end(self) -> float:
+        return self.strokes[-1][0] + LIGHTNING_AFTERGLOW_SECONDS
+
+    def intensity(self, age: float) -> float:
+        level = 0.0
+        for offset, strength in self.strokes:
+            since = age - offset
+            if since >= 0:
+                level = max(level, strength if since < LIGHTNING_HOLD_SECONDS else strength * math.exp(-(since - LIGHTNING_HOLD_SECONDS) / LIGHTNING_DECAY_SECONDS))
+        return level
+
+
+def trace(points: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    pixels: list[tuple[int, int]] = []
+    for (x0, y0), (x1, y1) in pairwise(points):
+        steps = max(abs(x1 - x0), abs(y1 - y0), 1)
+        for step in range(steps + 1):
+            pixel = (round(x0 + (x1 - x0) * step / steps), round(y0 + (y1 - y0) * step / steps))
+            if 0 <= pixel[0] < WIDTH and 0 <= pixel[1] < HEIGHT and (not pixels or pixels[-1] != pixel):
+                pixels.append(pixel)
+    return pixels
+
+
+def ground_bolt(rng: random.Random):
+    target = rng.randint(6, 100)
+    x, y = max(4, min(100, target + rng.randint(-18, 18))), rng.randint(1, 4)
+    points = [(x, y)]
+    if rng.random() < 0.5:
+        # Sometimes the channel crawls along the cloud base before it drops.
+        side = rng.choice((-1, 1))
+        for _ in range(rng.randint(2, 4)):
+            x, y = max(4, min(100, x + side * rng.randint(3, 6))), max(0, min(6, y + rng.choice((-1, 0, 1))))
+            points.append((x, y))
+    while True:
+        previous_x, previous_y = x, y
+        y += rng.randint(2, 4)
+        # Wander, drifting toward the strike target, until the bolt meets the land surface.
+        x = max(2, min(102, round(x + max(-2, min(2, (target - x) / 4)) + rng.choice((-3, -2, -1, 0, 1, 2, 3)))))
+        if y >= SURFACE[x] - 1:
+            if SURFACE[x] - 1 < previous_y:
+                x = previous_x
+            points.append((x, SURFACE[x] - 1))
+            break
+        points.append((x, y))
+    channel = trace(points)
+    branches = []
+    for _ in range(rng.randint(2, 4)):
+        bx, by = channel[rng.randrange(max(1, len(channel) * 3 // 4))]
+        side = rng.choice((-1, 1))
+        fork = [(bx, by)]
+        for _ in range(rng.randint(2, 5)):
+            bx, by = bx + side * rng.randint(1, 3), by + rng.randint(1, 3)
+            if by >= SURFACE[max(0, min(WIDTH - 1, bx))] - 1:
+                break
+            fork.append((bx, by))
+        branches.extend(trace(fork)[1:])
+    return x, tuple(channel), tuple(dict.fromkeys(branches)), (x, SURFACE[x])
+
+
+def cloud_bolt(rng: random.Random):
+    direction = rng.choice((-1, 1))
+    x = rng.randint(10, 60) if direction > 0 else rng.randint(68, 118)
+    y = rng.randint(3, 9)
+    end = x + direction * rng.randint(24, 56)
+    points = [(x, y)]
+    while (x - end) * direction < 0:
+        x += direction * rng.randint(3, 6)
+        y = max(1, min(12, y + rng.choice((-2, -1, 0, 0, 1, 2))))
+        points.append((x, y))
+    channel = trace(points)
+    branches = []
+    for _ in range(rng.randint(2, 4)):
+        bx, by = channel[rng.randrange(len(channel))]
+        fork = [(bx, by)]
+        for _ in range(rng.randint(1, 3)):
+            bx, by = bx + rng.choice((-2, -1, 1, 2)), max(0, min(14, by + rng.choice((-2, 1, 2, 2))))
+            fork.append((bx, by))
+        branches.extend(trace(fork)[1:])
+    xs = [px for px, _ in channel]
+    return (min(xs) + max(xs)) // 2, tuple(channel), tuple(dict.fromkeys(branches)), None
+
+
+@lru_cache(maxsize=32)
+def lightning_event(slot: int, seed: int, activity: float) -> LightningEvent | None:
+    rng = random.Random(seed * 7919 + slot * 104729 + 17)
+    if rng.random() >= min(0.85, 0.42 * activity):
+        return None
+    start = slot * LIGHTNING_SLOT_SECONDS + rng.uniform(0.2, LIGHTNING_SLOT_SECONDS - 0.2)
+    roll = rng.random()
+    kind = "ground" if roll < 0.45 else "cloud" if roll < 0.85 else "sheet"
+    if kind == "ground":
+        center, channel, branches, strike = ground_bolt(rng)
+        strokes, offset = [(0.0, 1.0)], 0.0
+        for _ in range(rng.choice((1, 2, 2, 3))):
+            offset += rng.uniform(0.06, 0.16)
+            strokes.append((offset, rng.uniform(0.45, 0.95)))
+    elif kind == "cloud":
+        center, channel, branches, strike = cloud_bolt(rng)
+        strokes, offset = [(0.0, 0.9)], 0.0
+        for _ in range(rng.randint(2, 4)):
+            offset += rng.uniform(0.04, 0.12)
+            strokes.append((offset, rng.uniform(0.35, 0.85)))
+    else:
+        center, channel, branches, strike = rng.randint(10, 118), (), (), None
+        strokes, offset = [(0.0, rng.uniform(0.3, 0.5))], 0.0
+        for _ in range(rng.randint(1, 3)):
+            offset += rng.uniform(0.05, 0.14)
+            strokes.append((offset, rng.uniform(0.2, 0.45)))
+    return LightningEvent(kind, start, tuple(strokes), center, channel, branches, strike)
+
+
+def lightning_at(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[LightningEvent, float] | None:
+    """Return the lightning event visible at `elapsed` and its age, or None outside thunderstorms."""
+    code = environment.weather.code
+    if code is None or not 200 <= code < 300:
+        return None
+    activity = THUNDERSTORM_ACTIVITY.get(code, 1.0)
+    slot = math.floor(elapsed / LIGHTNING_SLOT_SECONDS)
+    for candidate in (slot, slot - 1):
+        event = lightning_event(candidate, seed, activity)
+        if event is not None:
+            age = elapsed - event.start
+            if (-LIGHTNING_LEADER_SECONDS if event.kind == "ground" else 0) <= age <= event.end:
+                return event, age
+    return None
+
+
+def lightning_light(event: LightningEvent, intensity: float, column: float) -> float:
+    base, local, spread = LIGHTNING_LIGHT[event.kind]
+    return intensity * (base + local * math.exp(-0.5 * ((column - event.center) / spread) ** 2))
+
+
+def flash_scene(image: Image.Image, event: LightningEvent, intensity: float) -> Image.Image:
+    base, local, spread = LIGHTNING_LIGHT[event.kind]
+    across = base + local * np.exp(-0.5 * ((FLASH_COLUMNS - event.center) / spread) ** 2)
+    light = np.clip(intensity * across[None, :] * FLASH_FALLOFF[:, None] * FLASH_RECEIVE, 0, 0.92)[..., None]
+    pixels = np.asarray(image, dtype=np.float32)
+    return Image.fromarray(np.round(pixels + (np.array(LIGHTNING_FLASH, dtype=np.float32) - pixels) * light).astype(np.uint8), "RGB")
+
+
+def draw_lightning(image: Image.Image, event: LightningEvent, age: float):
+    d = ImageDraw.Draw(image)
+
+    def light(pixels, color, amount):
+        for x, y in pixels:
+            if not SCENERY[y, x]:
+                d.point((x, y), fill=mix(image.getpixel((x, y)), color, amount))
+
+    if age < 0:
+        # The faint stepped leader feels its way down before the return stroke.
+        reveal = (age + LIGHTNING_LEADER_SECONDS) / LIGHTNING_LEADER_SECONDS
+        light(event.channel[: max(1, round(len(event.channel) * reveal))], LIGHTNING_GLOW, 0.5)
+        return
+    intensity = event.intensity(age)
+    channel = event.channel
+    if event.kind == "cloud":
+        channel = channel[: max(1, round(len(channel) * min(1, age / LIGHTNING_CRAWL_SECONDS)))]
+    if intensity >= 0.22:
+        on_channel = set(channel)
+        halo = {(x + dx, y + dy) for x, y in channel for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}
+        light([(x, y) for x, y in halo - on_channel if 0 <= x < WIDTH and 0 <= y < HEIGHT], LIGHTNING_GLOW, min(1, intensity * 0.75))
+        light(channel, LIGHTNING_CORE, min(1, intensity * 1.6))
+        if len(channel) == len(event.channel):
+            light(event.branches, LIGHTNING_BRANCH, min(1, intensity * 1.1) * 0.85)
+        if event.strike is not None:
+            sx, sy = event.strike
+            for dx, dy, amount in ((0, 0, 0.95), (-1, 0, 0.7), (1, 0, 0.7), (0, 1, 0.55), (-2, 0, 0.35), (2, 0, 0.35)):
+                x, y = sx + dx, sy + dy
+                if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+                    d.point((x, y), fill=mix(image.getpixel((x, y)), (255, 246, 228), amount * min(1, intensity * 1.3)))
+    elif intensity > 0.03:
+        # The channel lingers as a fading violet afterimage between strokes.
+        light(channel, LIGHTNING_GLOW, min(1, intensity * 2.2))
+
+
 def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0) -> Image.Image:
     palette = scene_palette(environment)
     image = Image.new("RGB", (WIDTH, HEIGHT))
@@ -433,7 +679,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         t = min(1, y / 21)
         color = mix(palette.top, palette.middle, t / 0.55) if t < 0.55 else mix(palette.middle, palette.horizon, (t - 0.55) / 0.45)
         d.line((0, y, 127, y), fill=color)
-    draw_sky(image, environment, palette, elapsed)
+    lightning = lightning_at(environment, elapsed, seed)
+    draw_sky(image, environment, palette, elapsed, lightning)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
@@ -471,21 +718,20 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         for index, (x, y) in enumerate([(48, 29), (69, 31), (78, 28), (102, 30)]):
             glow = max(0, math.sin(elapsed * 0.8 + index * 2.4)) ** 3
             d.point((x, y), fill=mix(image.getpixel((x, y)), (180, 172, 74), glow * 0.65))
-    for kind, rate in (("rain", rain), ("snow", snow)):
-        if rate <= 0:
-            continue
-        count = min(70 if kind == "rain" else 40, round(10 + rate * 9))
-        for index, (x0, y0, pace, phase) in enumerate(PARTICLES[:count]):
-            falling = 8 * pace if kind == "rain" else 1.6 * pace
-            y = int((y0 + elapsed * falling) % 36) - 2
-            drift = min(wind, 25) * elapsed * (0.1 if kind == "rain" else 0.035)
-            x = int((x0 + drift + (math.sin(elapsed * 0.7 + phase) * 2 if kind == "snow" else 0)) % 128)
+    if rain > 0:
+        draw_rain(image, rain, wind, elapsed)
+    if snow > 0:
+        count = min(40, round(10 + snow * 9))
+        for x0, y0, pace, phase in PARTICLES[:count]:
+            y = int((y0 + elapsed * 1.6 * pace) % 36) - 2
+            x = int((x0 + min(wind, 25) * elapsed * 0.035 + math.sin(elapsed * 0.7 + phase) * 2) % 128)
             if 0 <= y < HEIGHT:
-                base = image.getpixel((x, y))
-                color = mix(base, (192, 209, 220) if kind == "rain" else (234, 235, 225), (0.25 if kind == "rain" else 0.65) + (phase % 5) * 0.025)
-                d.point((x, y), fill=color)
-                if kind == "rain" and index % 3 == 0:
-                    d.point((max(0, x - 1), min(31, y + 1)), fill=mix(base, color, 0.6))
+                d.point((x, y), fill=mix(image.getpixel((x, y)), (234, 235, 225), 0.65 + (phase % 5) * 0.025))
+    if lightning is not None:
+        event, age = lightning
+        if age >= 0 and event.intensity(age) > 0.01:
+            image = flash_scene(image, event, event.intensity(age))
+        draw_lightning(image, event, age)
     return grade_frame(image)
 
 
@@ -517,13 +763,13 @@ def overlay_contrast_fraction(luminance: float) -> float:
     return fraction * fraction * (3 - 2 * fraction)
 
 
-def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, previous_dark: bool | None = None) -> bool:
+def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, previous_dark: bool | None = None, hold_style: bool = False) -> bool:
     mask = overlay_text_mask(text)
     x = WIDTH - mask.width if right else 0
     background = image.crop((x, 0, x + mask.width, mask.height))
     luminance = overlay_relative_luminance(background, mask)
     threshold = OVERLAY_POLARITY_LUMINANCE + (OVERLAY_POLARITY_HYSTERESIS if previous_dark is False else -OVERLAY_POLARITY_HYSTERESIS if previous_dark is True else 0)
-    dark_text = luminance >= threshold
+    dark_text = previous_dark if hold_style and previous_dark is not None else luminance >= threshold
     if dark_text:
         lettering = Image.new("RGB", background.size)
     else:
@@ -540,8 +786,10 @@ def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, 
     clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
-    clock_dark = draw_corner_label(image, clock, previous_dark=previous_text_styles[0])
-    temperature_dark = draw_corner_label(image, temperature_text, right=True, previous_dark=previous_text_styles[1])
+    # Lightning flashes last a few frames; keep the labels' black/white style steady through them.
+    flashing = lightning_at(environment, elapsed, seed) is not None
+    clock_dark = draw_corner_label(image, clock, previous_dark=previous_text_styles[0], hold_style=flashing)
+    temperature_dark = draw_corner_label(image, temperature_text, right=True, previous_dark=previous_text_styles[1], hold_style=flashing)
     sign.canvas.SetImage(image)
     notices = []
     if environment.offset_minutes:
