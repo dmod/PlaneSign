@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import psclock
 import requests
 import shared_config
@@ -28,6 +29,9 @@ WEATHER_CACHE_SECONDS = 7200
 WEATHER_CODES = frozenset(WEATHER_DESCRIPTIONS)
 SKY_SAMPLE_SECONDS = 60
 SKY_PRELOAD_SECONDS = 26 * 3600
+# Past samples let the scene know when the sun last set (the yard lamp burns for three hours after sunset).
+SKY_HISTORY_SECONDS = 4 * 3600
+SUNSET_ALTITUDE = -0.833
 SKY_REFRESH_MARGIN_SECONDS = 1800
 SKY_FIELDS = ("sun_altitude", "sun_azimuth", "moon_altitude", "moon_azimuth", "moon_phase")
 OFFSET_TRANSITION_SECONDS = 0.15
@@ -58,6 +62,7 @@ class OutsideEnvironment:
     moon_azimuth: float = 180
     moon_phase: float = 0
     offset_minutes: int = 0
+    since_sunset: float | None = None
 
 
 def reading(value):
@@ -162,7 +167,9 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
     positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
     if positions is None:
         return OutsideEnvironment(season, observed, "UNAVAILABLE" if sky.get("status") == "UNAVAILABLE" else "LOADING", offset_minutes=offset_minutes)
-    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes)
+    passed = [sunset for sunset in sky.get("sunsets", ()) if sunset <= moment.timestamp()]
+    since_sunset = moment.timestamp() - passed[-1] if passed else None
+    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_sunset)
 
 
 def load_ephemeris():
@@ -214,15 +221,19 @@ def calculate_sky(ephemeris, timescale, moment: datetime, latitude: float, longi
 
 
 def calculate_sky_timeline(ephemeris, timescale, timestamp: float, latitude: float, longitude: float):
-    start = math.floor(timestamp / SKY_SAMPLE_SECONDS) * SKY_SAMPLE_SECONDS - SKY_SAMPLE_SECONDS
-    count = SKY_PRELOAD_SECONDS // SKY_SAMPLE_SECONDS + 3
+    start = math.floor(timestamp / SKY_SAMPLE_SECONDS) * SKY_SAMPLE_SECONDS - SKY_SAMPLE_SECONDS - SKY_HISTORY_SECONDS
+    count = (SKY_PRELOAD_SECONDS + SKY_HISTORY_SECONDS) // SKY_SAMPLE_SECONDS + 3
     moments = [datetime.fromtimestamp(start + index * SKY_SAMPLE_SECONDS, UTC) for index in range(count)]
     angles = sky_angles(ephemeris, timescale.from_datetimes(moments), latitude, longitude)
+    altitude = np.asarray(angles["sun_altitude"])
+    setting = np.nonzero((altitude[:-1] >= SUNSET_ALTITUDE) & (altitude[1:] < SUNSET_ALTITUDE))[0]
+    sunsets = [float(start + (index + (altitude[index] - SUNSET_ALTITUDE) / (altitude[index] - altitude[index + 1])) * SKY_SAMPLE_SECONDS) for index in setting]
     return {
         "status": "READY",
         "start": start,
         "end": start + (count - 1) * SKY_SAMPLE_SECONDS,
         "location": [latitude, longitude],
+        "sunsets": sunsets,
         **{field: value.tolist() for field, value in angles.items()},
     }
 

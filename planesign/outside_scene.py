@@ -165,21 +165,89 @@ class Palette:
     leaf_dark: Color
     trunk: Color
     roof: Color
-    barn: Color
+    hut: Color
     trim: Color
     water: Color
     glint: Color
     animal: Color
     snowcap: Color
+    shingle: Color
+    door: Color
+    dog: Color
 
 
 DUSK = Palette(
-    (24, 46, 82), (99, 105, 136), (241, 162, 110), (95, 99, 125), (43, 71, 81), (62, 88, 76), (22, 48, 48), (116, 132, 94), (85, 84, 73), (159, 130, 78), (35, 56, 59), (32, 42, 49), (57, 47, 60), (156, 62, 51), (235, 198, 139), (68, 102, 121), (220, 163, 122), (170, 155, 122), (238, 196, 186)
+    (24, 46, 82),
+    (99, 105, 136),
+    (241, 162, 110),
+    (95, 99, 125),
+    (43, 71, 81),
+    (62, 88, 76),
+    (22, 48, 48),
+    (116, 132, 94),
+    (85, 84, 73),
+    (159, 130, 78),
+    (35, 56, 59),
+    (32, 42, 49),
+    (57, 47, 60),
+    (190, 138, 98),
+    (235, 198, 139),
+    (68, 102, 121),
+    (220, 163, 122),
+    (170, 155, 122),
+    (238, 196, 186),
+    (76, 50, 46),
+    (66, 42, 36),
+    (242, 212, 174),
 )
 DAY = Palette(
-    (48, 130, 175), (100, 175, 191), (194, 213, 181), (99, 147, 143), (54, 106, 91), (104, 153, 79), (43, 94, 53), (164, 183, 86), (63, 125, 65), (148, 181, 74), (40, 86, 57), (80, 62, 47), (67, 65, 72), (171, 62, 51), (239, 220, 171), (55, 147, 169), (167, 219, 208), (166, 119, 73), (232, 238, 245)
+    (48, 130, 175),
+    (100, 175, 191),
+    (194, 213, 181),
+    (99, 147, 143),
+    (54, 106, 91),
+    (104, 153, 79),
+    (43, 94, 53),
+    (164, 183, 86),
+    (63, 125, 65),
+    (148, 181, 74),
+    (40, 86, 57),
+    (80, 62, 47),
+    (67, 65, 72),
+    (200, 154, 106),
+    (239, 220, 171),
+    (55, 147, 169),
+    (167, 219, 208),
+    (166, 119, 73),
+    (232, 238, 245),
+    (96, 62, 44),
+    (84, 54, 36),
+    (238, 228, 198),
 )
-NIGHT = Palette((5, 11, 28), (16, 29, 55), (53, 67, 91), (36, 48, 70), (23, 42, 55), (29, 51, 51), (13, 30, 35), (59, 79, 60), (46, 62, 60), (83, 98, 70), (26, 44, 47), (18, 26, 34), (23, 28, 43), (78, 47, 50), (139, 149, 146), (34, 65, 85), (129, 159, 171), (122, 127, 108), (122, 137, 162))
+NIGHT = Palette(
+    (5, 11, 28),
+    (16, 29, 55),
+    (53, 67, 91),
+    (36, 48, 70),
+    (23, 42, 55),
+    (29, 51, 51),
+    (13, 30, 35),
+    (59, 79, 60),
+    (46, 62, 60),
+    (83, 98, 70),
+    (26, 44, 47),
+    (18, 26, 34),
+    (23, 28, 43),
+    (86, 72, 64),
+    (139, 149, 146),
+    (34, 65, 85),
+    (129, 159, 171),
+    (122, 127, 108),
+    (122, 137, 162),
+    (34, 27, 31),
+    (30, 23, 22),
+    (116, 114, 106),
+)
 MATERIALS = tuple(field.name for field in fields(Palette))
 INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
@@ -189,6 +257,15 @@ MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 18), (77, 16), (80, 15), (83, 14)
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
 MOUNTAIN_LIT_FACE = ((83, 14), (80, 15), (77, 16), (74, 18), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 16))
 TREE_X, TREE_CANOPY_Y = 115, 15
+HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
+HUT_DOOR = (26, 21, 29, 25)
+HUT_KNOB = (28, 23)
+LAMP_POST_X = 14
+LAMP_LENS = (17, 17)
+LAMP_GROUND_Y = 26
+LAMP_SECONDS = 3 * 3600
+LAMP_LIGHT = (255, 200, 120)
+LAMP_GLOW = (255, 236, 190)
 TREE_RADIUS_X, TREE_RADIUS_Y = 10.5, 7.8
 TREE_BRANCHES = ((-10, -4), (9, -2), (-2, -8), (4, -7))
 TREE_BLOSSOMS = ((-7, -5), (2, -7), (6, -2), (-4, 0), (4, 1))
@@ -280,14 +357,26 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         else:
             d.polygon([(x, 24 - height), (x - 2, 24), (x + 2, 24)], fill=INDEX["ridge"])
     hill([(0, 26), (29, 25), (51, 27), (82, 25), (110, 26), (127, 25)], "field")
-    d.rectangle((21, 19, 33, 25), fill=INDEX["barn"])
-    d.rectangle((30, 19, 33, 25), fill=INDEX["barn"])
-    d.polygon([(19, 20), (27, 15), (36, 20)], fill=INDEX["roof"])
-    d.line((19, 20, 27, 15), fill=INDEX["trunk"])
-    d.rectangle((25, 20, 29, 25), fill=INDEX["roof"])
-    d.line((25, 20, 29, 20), fill=INDEX["trim"])
-    d.line((25, 21, 29, 25), fill=INDEX["trim"])
-    d.line((29, 21, 25, 25), fill=INDEX["trim"])
+    # Wood hut: plank walls with corner posts, a shingled roof and a front door with a knob.
+    d.rectangle((21, 20, 34, 25), fill=INDEX["hut"])
+    for y in (22, 24):
+        d.line((21, y, 34, y), fill=INDEX["trunk"])
+    d.line((21, 20, 21, 25), fill=INDEX["trunk"])
+    d.line((34, 20, 34, 25), fill=INDEX["trunk"])
+    d.polygon(HUT_ROOF, fill=INDEX["shingle"])
+    for y in (17, 19):
+        inset = math.ceil((20 - y) * 8 / 5)
+        d.line((19 + inset, y, 36 - inset, y), fill=INDEX["trunk"])
+    d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
+    d.line((19, 20, 36, 20), fill=INDEX["trunk"])
+    d.rectangle(HUT_DOOR, fill=INDEX["door"])
+    d.point(HUT_KNOB, fill=INDEX["trim"])
+    # Yard lamp: a post with an arm reaching toward the hut and a hood that shines down.
+    lens_x, lens_y = LAMP_LENS
+    d.line((LAMP_POST_X, lens_y - 1, LAMP_POST_X, LAMP_GROUND_Y), fill=INDEX["roof"])
+    d.line((LAMP_POST_X - 1, LAMP_GROUND_Y, LAMP_POST_X + 1, LAMP_GROUND_Y), fill=INDEX["roof"])
+    d.line((LAMP_POST_X, lens_y - 1, lens_x + 1, lens_y - 1), fill=INDEX["roof"])
+    d.line((lens_x - 1, lens_y, lens_x + 1, lens_y), fill=INDEX["roof"])
     for x, base, height in [(4, 28, 12), (38, 25, 7)]:
         d.line((x, base - height, x, base), fill=INDEX["trunk"])
         for offset in range(2, height - 1, 2):
@@ -361,9 +450,9 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
     if snow:
         d = ImageDraw.Draw(land)
         for x in range(0, 128):
-            if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["roof"], INDEX["barn"]):
+            if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["hut"], INDEX["door"]):
                 d.point((x, 26), fill=palette.grass)
-        d.line((19, 19, 27, 15, 36, 19), fill=palette.trim)
+        d.line((19, 19, 27, 15, 28, 15, 36, 19), fill=palette.trim)
         d.line((3, 27, 40, 27), fill=palette.grass)
     if snowcap:
         d = ImageDraw.Draw(land)
@@ -588,11 +677,14 @@ def wildlife_visit(slot: int, seed: int):
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside."""
     d = ImageDraw.Draw(image)
     rain, snow = precipitation(environment)
     slot, age = divmod(elapsed, 100)
     present, species, start, duration, target, pair = wildlife_visit(int(slot), seed)
-    if present and start <= age < start + duration and rain < 3 and snow < 2:
+    visit = slot * 100 + start
+    dog_nearby = dog_allowed(environment) and next(dog_outings_between(seed, visit, visit + duration), None) is not None
+    if present and start <= age < start + duration and rain < 3 and snow < 2 and not dog_nearby:
         visit_age = age - start
         arrival = max(0, min(1, visit_age / 18))
         departure = max(0, min(1, (visit_age - duration + 18) / 18))
@@ -640,6 +732,204 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 y = 7 + index % 2 + round(math.sin(elapsed * 0.2 + index) * 1.5)
                 wing = 1 if math.sin(elapsed * 7 + index) > 0 else -1
                 d.line((x - 1, y - wing, x, y, x + 1, y - wing), fill=palette.roof)
+
+
+DOG_SLOT_SECONDS = 120
+DOG_DOOR_SECONDS = 0.6
+DOG_DOORWAY = (27.5, 25)
+DOG_PORCH = (27.5, 26)
+# The fenced yard in front of the hut connects to the meadow past the fence's end.
+DOG_GATE = ((44, 26), (47, 29))
+DOG_DARK = (30, 24, 22)
+# Soft-coated wheaten terrier, facing right: c coat, s shaded coat, t wagging tail, e eye, n nose.
+DOG_SPRITES = {
+    "run": ("t.....ec", ".ccccccn", ".cccccs.", "s.....s."),
+    "gather": ("......ec", "tccccccn", ".cccccs.", "..s.s..."),
+    "sit": (".....ec.", ".....ccn", "t..cccs.", ".ccccs.."),
+    "sniff": ("........", "tcccc...", ".cccccec", ".s..s.cn"),
+    "bow": ("t.......", ".cc.....", ".cccc.ec", ".s..cccn"),
+}
+
+
+@dataclass(frozen=True)
+class DogStep:
+    start: float
+    end: float
+    pose: str
+    origin: tuple[float, float]
+    target: tuple[float, float]
+    facing: int
+    leap: float
+
+
+@dataclass(frozen=True)
+class DogOuting:
+    start: float
+    end: float
+    steps: tuple[DogStep, ...]
+
+
+@lru_cache(maxsize=16)
+def dog_outing(slot: int, seed: int) -> DogOuting | None:
+    """One energetic trip outside: out the door, zoomies around the yard and meadow, then home."""
+    rng = random.Random(seed * 6151 + slot * 92821 + 5)
+    if rng.random() > 0.85:
+        return None
+    start = slot * DOG_SLOT_SECONDS + rng.uniform(2, 18)
+    t = start + DOG_DOOR_SECONDS
+    steps: list[DogStep] = []
+    position, facing, zone = DOG_DOORWAY, 1, "yard"
+
+    def hold(pose: str, seconds: float):
+        nonlocal t
+        steps.append(DogStep(t, t + seconds, pose, position, position, facing, 0))
+        t += seconds
+
+    def go(target: tuple[float, float], speed: float, pose: str = "run"):
+        nonlocal t, position, facing
+        distance = math.dist(position, target)
+        if target[0] != position[0]:
+            facing = 1 if target[0] > position[0] else -1
+        leap = rng.uniform(2.5, 4) if pose == "run" and distance > 18 and rng.random() < 0.3 else 0
+        seconds = max(0.05, distance / speed)
+        steps.append(DogStep(t, t + seconds, pose, position, target, facing, leap))
+        t += seconds
+        position = target
+
+    hold("gather", 0.5)
+    go(DOG_PORCH, 10, "trot")
+    play_until = t + rng.uniform(35, 65)
+    while t < play_until:
+        meadow = rng.random() < 0.7
+        target = (rng.uniform(48, 100), rng.randint(29, 31)) if meadow else (rng.uniform(9, 40), 26)
+        if meadow != (zone == "meadow"):
+            for gate in DOG_GATE if meadow else reversed(DOG_GATE):
+                go(gate, rng.uniform(22, 30))
+        go(target, rng.uniform(22, 34))
+        zone = "meadow" if meadow else "yard"
+        roll = rng.random()
+        if roll < 0.15:
+            hold("sniff", rng.uniform(1, 2.5))
+        elif roll < 0.27:
+            hold("sit", rng.uniform(1.5, 3))
+        elif roll < 0.37:
+            hold("bow", rng.uniform(0.6, 1))
+    if zone == "meadow":
+        for gate in reversed(DOG_GATE):
+            go(gate, 26)
+    go(DOG_PORCH, 24)
+    go(DOG_DOORWAY, 8, "trot")
+    t += 0.3
+    return DogOuting(start, t + DOG_DOOR_SECONDS, tuple(steps))
+
+
+def dog_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0
+
+
+def dog_outings_between(seed: int, first: float, last: float):
+    for slot in range(math.floor(first / DOG_SLOT_SECONDS) - 1, math.floor(last / DOG_SLOT_SECONDS) + 1):
+        outing = dog_outing(slot, seed)
+        if outing is not None and outing.start < last and outing.end > first:
+            yield outing
+
+
+def dog_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Return (door openness, dog pose or None) at `elapsed`."""
+    if not dog_allowed(environment):
+        return 0.0, None
+    outing = next(dog_outings_between(seed, elapsed, elapsed), None)
+    if outing is None:
+        return 0.0, None
+    door = max(0.0, min(1.0, (elapsed - outing.start) / DOG_DOOR_SECONDS, (outing.end - elapsed) / DOG_DOOR_SECONDS))
+    step = next((step for step in outing.steps if step.start <= elapsed < step.end), None)
+    if step is None:
+        return door, None
+    progress = (elapsed - step.start) / (step.end - step.start)
+    x = step.origin[0] + (step.target[0] - step.origin[0]) * progress
+    y = step.origin[1] + (step.target[1] - step.origin[1]) * progress
+    pose = step.pose
+    if pose in ("run", "trot"):
+        stride = int(math.dist(step.origin, (x, y)) / 2.5) % 2
+        pose = "gather" if stride else "run"
+        if step.leap:
+            y -= step.leap * math.sin(math.pi * progress)
+        elif step.pose == "run" and stride:
+            y -= 1
+    # How much of the dog has emerged from the doorway: it steps out gradually and back in the same way.
+    reveal = 1.0
+    if step.origin == DOG_DOORWAY:
+        reveal = 0.0 if step.target == DOG_DOORWAY else progress
+    elif step.target == DOG_DOORWAY:
+        reveal = 1 - progress
+    return door, (x, y, step.facing, pose, reveal)
+
+
+def draw_hut_and_dog(image: Image.Image, palette: Palette, door: float, dog, elapsed: float):
+    d = ImageDraw.Draw(image)
+    x0, y0, x1, y1 = HUT_DOOR
+    if door > 0:
+        d.rectangle(HUT_DOOR, fill=mix(palette.door, (6, 4, 4), 0.75))
+        panel = round((x1 - x0 + 1) * (1 - door))
+        if panel > 0:
+            d.rectangle((x0, y0, x0 + panel - 1, y1), fill=palette.door)
+            if panel >= 3:
+                d.point((x0 + panel - 1, HUT_KNOB[1]), fill=palette.trim)
+        else:
+            # The open door, seen edge-on at its hinge.
+            d.line((x0, y0, x0, y1), fill=mix(palette.door, palette.trunk, 0.5))
+    if dog is None:
+        return
+    x, y, facing, pose, reveal = dog
+    coat, shade = palette.dog, mix(palette.dog, palette.trunk, 0.3)
+    colors = {"c": coat, "s": shade, "t": coat, "e": DOG_DARK, "n": DOG_DARK}
+    wag = int(elapsed * 7) % 2
+    sprite = DOG_SPRITES[pose]
+    left, top = round(x) - 4, round(y) - len(sprite) + 1
+    for row, line in enumerate(sprite):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            px = left + (column if facing > 0 else len(line) - 1 - column)
+            py = top + row - (wag if char == "t" else 0)
+            # Only the part of the dog that has come out through the doorway shows.
+            if reveal < 1 and not (x0 - reveal * 10 <= px <= x1 + reveal * 10 and py >= y0):
+                continue
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=colors[char])
+
+
+def lamp_level(environment: "OutsideEnvironment") -> float:
+    """The yard lamp comes on at sunset, warming up over 40 s, and switches off three hours later."""
+    since = environment.since_sunset
+    if since is None or not 0 <= since < LAMP_SECONDS:
+        return 0.0
+    return min(1.0, since / 40, (LAMP_SECONDS - since) / 20)
+
+
+def lamp_light_mask() -> np.ndarray:
+    """A faint downward cone from the lamp's lens, a pool of light on the ground, and a small halo."""
+    lens_x, lens_y = LAMP_LENS
+    rows, columns = np.arange(HEIGHT)[:, None], np.arange(WIDTH)[None, :]
+    depth = (rows - lens_y) / (LAMP_GROUND_Y - lens_y)
+    across = np.clip(1 - np.abs(columns - lens_x) / (0.6 + depth * 4.4), 0, 1)
+    cone = np.where((depth > 0) & (depth <= 1.15), across**0.7 * (0.3 - 0.16 * np.clip(depth, 0, 1)), 0)
+    reach = ((columns - lens_x) / 6.5) ** 2 + ((rows - (LAMP_GROUND_Y + 0.5)) / 1.8) ** 2
+    pool = np.clip(1 - reach, 0, 1) * 0.38
+    halo = np.clip(1 - np.hypot(columns - lens_x, (rows - lens_y) * 1.3) / 2.6, 0, 1) * 0.55
+    return np.maximum(np.maximum(cone, pool), halo).astype(np.float32)
+
+
+LAMP_MASK = lamp_light_mask()
+
+
+def draw_lamp_light(image: Image.Image, level: float) -> Image.Image:
+    pixels = np.asarray(image, dtype=np.float32)
+    pixels = pixels + (np.array(LAMP_LIGHT, dtype=np.float32) - pixels) * (LAMP_MASK * level)[..., None]
+    lit = Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
+    lit.putpixel(LAMP_LENS, mix(image.getpixel(LAMP_LENS), LAMP_GLOW, level))
+    return lit
 
 
 RAIN_SPEED = 52
@@ -918,6 +1208,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
     draw_wildlife(image, palette, environment, elapsed, seed)
+    draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     wind = environment.weather.wind or 0
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
@@ -942,6 +1233,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = int((x0 + min(wind, 25) * elapsed * 0.035 + math.sin(elapsed * 0.7 + phase) * 2) % 128)
             if 0 <= y < HEIGHT:
                 d.point((x, y), fill=mix(image.getpixel((x, y)), (234, 235, 225), 0.65 + (phase % 5) * 0.025))
+    lamp = lamp_level(environment)
+    if lamp > 0:
+        image = draw_lamp_light(image, lamp)
     if lightning is not None:
         event, age = lightning
         if age >= 0 and event.intensity(age) > 0.01:
