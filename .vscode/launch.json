@@ -4,18 +4,11 @@
         {
             "name": "PlaneSign Debug",
             "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/planesign",
-            "console": "integratedTerminal",
-            "sudo": true
-        },
-        {
-            "name": "PlaneSign Debug - devcontainer",
-            "type": "debugpy",
             "python": "${workspaceFolder}/.venv/bin/python",
             "request": "launch",
             "program": "${workspaceFolder}/planesign",
             "console": "integratedTerminal",
+            "sudo": true,
             "preLaunchTask": "uv sync and start nginx"
         },
         {
@@ -43,19 +36,12 @@
         {
             "name": "Run Test Script",
             "type": "debugpy",
+            "python": "${workspaceFolder}/.venv/bin/python",
             "justMyCode": false,
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
             "console": "integratedTerminal",
             "sudo": true
-        },
-        {
-            "name": "Run Test Script - devcontainer",
-            "type": "debugpy",
-            "justMyCode": false,
-            "request": "launch",
-            "program": "${workspaceFolder}/test/test.py",
-            "console": "integratedTerminal"
         }
     ]
 }

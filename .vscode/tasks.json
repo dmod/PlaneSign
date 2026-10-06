@@ -30,7 +30,8 @@
         {
             "label": "Start nginx",
             "type": "shell",
-            "command": "service nginx start",
+            // nginx only exists in the container; skip it when debugging directly on the Pi.
+            "command": "if command -v nginx >/dev/null; then service nginx start; fi",
             "presentation": {
                 "reveal": "silent"
             }

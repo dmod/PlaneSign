@@ -633,7 +633,65 @@ def draw_cloudscape(image: Image.Image, environment: "OutsideEnvironment", palet
     return covered
 
 
-def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None) -> np.ndarray:
+SHOOTING_STAR_SLOT_SECONDS = 30
+SHOOTING_STAR_CHANCE = 0.35
+SHOOTING_STAR_TRAIL = 8
+SHOOTING_STAR_LOWEST_ROW = 17
+SHOOTING_STAR_COLOR = (238, 244, 255)
+
+
+@dataclass(frozen=True)
+class ShootingStar:
+    start: float
+    duration: float
+    origin: tuple[float, float]
+    velocity: tuple[float, float]
+    peak: float
+
+
+@lru_cache(maxsize=16)
+def shooting_star(slot: int, seed: int) -> ShootingStar | None:
+    """At most one meteor per slot, streaking down and across the upper sky."""
+    rng = random.Random(seed * 7919 + slot * 104729 + 11)
+    if rng.random() > SHOOTING_STAR_CHANCE:
+        return None
+    duration = rng.uniform(0.45, 0.9)
+    direction = rng.choice((-1, 1))
+    x = rng.uniform(12, 88) if direction > 0 else rng.uniform(40, 116)
+    y = rng.uniform(3, 9)
+    angle = math.radians(rng.uniform(15, 38))
+    distance = min(rng.uniform(18, 34), (SHOOTING_STAR_LOWEST_ROW - y) / math.sin(angle))
+    start = slot * SHOOTING_STAR_SLOT_SECONDS + rng.uniform(0, SHOOTING_STAR_SLOT_SECONDS - duration)
+    velocity = (direction * distance * math.cos(angle) / duration, distance * math.sin(angle) / duration)
+    return ShootingStar(start, duration, (x, y), velocity, rng.uniform(0.75, 1.0))
+
+
+def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int):
+    star = shooting_star(math.floor(elapsed / SHOOTING_STAR_SLOT_SECONDS), seed)
+    if star is None or not star.start <= elapsed < star.start + star.duration:
+        return
+    age = elapsed - star.start
+    progress = age / star.duration
+    # Flares quickly, then burns out toward the end of its path.
+    envelope = star.peak * min(1, progress / 0.15) * min(1, (1 - progress) / 0.45)
+    speed = math.hypot(*star.velocity)
+    trail = min(SHOOTING_STAR_TRAIL, speed * age)
+    head_x, head_y = star.origin[0] + star.velocity[0] * age, star.origin[1] + star.velocity[1] * age
+    strengths: dict[tuple[int, int], float] = {}
+    samples = max(1, math.ceil(trail * 2))
+    for index in range(samples + 1):
+        back = trail * index / samples
+        x = round(head_x - star.velocity[0] / speed * back)
+        y = round(head_y - star.velocity[1] / speed * back)
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+            fade = (1 - back / SHOOTING_STAR_TRAIL) ** 1.6
+            strengths[(x, y)] = max(strengths.get((x, y), 0), fade)
+    d = ImageDraw.Draw(image)
+    for (x, y), fade in strengths.items():
+        d.point((x, y), fill=mix(image.getpixel((x, y)), SHOOTING_STAR_COLOR, min(1, visibility * envelope * fade)))
+
+
+def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None, seed: int = 0) -> np.ndarray:
     """Draw the sky and return the mask of cloud pixels."""
     d = ImageDraw.Draw(image)
     altitude = environment.sun_altitude
@@ -652,6 +710,8 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         strength = visibility * peak * (0.85 + 0.15 * math.sin(elapsed * (1.1 + index * 0.23) + index * 1.7))
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), color, strength))
+    if visibility > 0:
+        draw_shooting_star(image, elapsed, visibility, seed)
     glows = []
     if altitude is not None and altitude > -0.833:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
@@ -762,6 +822,7 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
 
 
 DOG_SLOT_SECONDS = 120
+DOG_OUTING_CHANCE = 0.55
 DOG_DOOR_SECONDS = 0.6
 DOG_DOORWAY = (27.5, 25)
 DOG_PORCH = (27.5, 26)
@@ -800,7 +861,7 @@ class DogOuting:
 def dog_outing(slot: int, seed: int) -> DogOuting | None:
     """One energetic trip outside: out the door, zoomies around the yard and meadow, then home."""
     rng = random.Random(seed * 6151 + slot * 92821 + 5)
-    if rng.random() > 0.85:
+    if rng.random() > DOG_OUTING_CHANCE:
         return None
     start = slot * DOG_SLOT_SECONDS + rng.uniform(2, 18)
     t = start + DOG_DOOR_SECONDS
@@ -1212,7 +1273,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         color = mix(palette.top, palette.middle, t / 0.55) if t < 0.55 else mix(palette.middle, palette.horizon, (t - 0.55) / 0.45)
         d.line((0, y, 127, y), fill=color)
     lightning = lightning_at(environment, elapsed, seed)
-    clouds = draw_sky(image, environment, palette, elapsed, lightning)
+    clouds = draw_sky(image, environment, palette, elapsed, lightning, seed)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
