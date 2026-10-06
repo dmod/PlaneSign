@@ -14,7 +14,7 @@ from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from requests import Session
 from rgbmatrix import graphics
-from utilities import convert_unix_to_local_time, getFavicon, improcess
+from utilities import convert_unix_to_local_time, download_image, getFavicon, improcess
 
 
 def update_global_lists(client=None):
@@ -163,27 +163,25 @@ def getLogo(headers, website):
     headers["Referer"] = website
 
     try:
-        req = network.get("company logos", website, stream=True, headers=headers, timeout=5)
-        if req.status_code == requests.codes.ok:
-            image = Image.open(req.raw)
-
-            width, height = image.size
-
-            desired_size = 300
-            # Pre-shrink if image is too big so imageprocess is faster
-            if height > desired_size or width > desired_size:
-                if width > height:
-                    image = image.resize((desired_size, int(desired_size * height / width)), Image.BICUBIC)
-                elif height > width:
-                    image = image.resize((int(desired_size * width / height), desired_size), Image.BICUBIC)
-                else:
-                    image = image.resize((desired_size, desired_size), Image.BICUBIC)
-
-            image = improcess(image.convert("RGBA"))
-            image = image.convert("RGB")
-            return image
-        else:
+        image = download_image("company logos", website, headers=headers)
+        if image is None:
             return None
+
+        width, height = image.size
+
+        desired_size = 300
+        # Pre-shrink if image is too big so imageprocess is faster
+        if height > desired_size or width > desired_size:
+            if width > height:
+                image = image.resize((desired_size, int(desired_size * height / width)), Image.BICUBIC)
+            elif height > width:
+                image = image.resize((int(desired_size * width / height), desired_size), Image.BICUBIC)
+            else:
+                image = image.resize((desired_size, desired_size), Image.BICUBIC)
+
+        image = improcess(image.convert("RGBA"))
+        image = image.convert("RGB")
+        return image
     except Exception:
         return None
 
@@ -210,16 +208,13 @@ def get_crypto(symbol):
         if coinid == 0:
             return None
         else:
-            req = network.get("CoinMarketCap", f"https://s2.coinmarketcap.com/static/img/coins/64x64/{coinid}.png", stream=True, timeout=5)
-            if req.status_code == requests.codes.ok:
-                try:
-                    image = Image.open(req.raw)
-                    image = improcess(image.convert("RGBA"))
-                    image = image.convert("RGB")
-                    return image
-                except Exception:
-                    return None
-            else:
+            image = download_image("CoinMarketCap", f"https://s2.coinmarketcap.com/static/img/coins/64x64/{coinid}.png")
+            if image is None:
+                return None
+            try:
+                image = improcess(image.convert("RGBA"))
+                return image.convert("RGB")
+            except Exception:
                 return None
     else:
         return None

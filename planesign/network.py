@@ -6,7 +6,9 @@ request would be sent, so both take one code path and the sign shows the same th
 
 import errno
 import logging
+import os
 import socket
+import tempfile
 import time
 from urllib.error import URLError
 
@@ -102,6 +104,32 @@ def get(service, url, *, session=None, **kwargs):
     require_online(service)
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
     return (session or requests).get(url, **kwargs)
+
+
+def download(service, url, path, **kwargs):
+    """Stream `url` into the file at `path`, replacing it only once the whole download has arrived.
+
+    Raises requests.HTTPError for an error status, and InterruptedError when shutdown begins mid-download.
+    """
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    temporary = None
+    try:
+        with get(service, url, stream=True, **kwargs) as response:
+            response.raise_for_status()
+            logging.info("Downloading %s from %s", os.path.basename(path), service)
+            with tempfile.NamedTemporaryFile(dir=directory, prefix=".download-", delete=False) as destination:
+                temporary = destination.name
+                for chunk in response.iter_content(65536):
+                    if shared_config.shutdown_in_progress():
+                        raise InterruptedError(f"{service} download interrupted by shutdown")
+                    destination.write(chunk)
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def retry_delay(failures, base, cap, max_doublings=5):

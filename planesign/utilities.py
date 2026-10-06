@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import math
@@ -832,6 +833,28 @@ def improcess(image, desired_size=20):
     return image.convert("RGB")
 
 
+def download_image(service, url, **kwargs):
+    """Fetch and decode an image, or None when the server returns an error status or something that is not an image.
+
+    Connection failures propagate, as they do from network.get.
+    """
+    kwargs.setdefault("timeout", 5)
+    response = network.get(service, url, **kwargs)
+    if response.status_code != requests.codes.ok:
+        logging.debug(f"{service}: {url} returned status {response.status_code}")
+        return None
+    if not response.content:
+        logging.debug(f"{service}: {url} returned empty content")
+        return None
+    try:
+        image = Image.open(io.BytesIO(response.content))
+        image.load()
+        return image
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
+        logging.debug(f"{service}: {url} is not a usable image: {e}")
+        return None
+
+
 def getFavicon(website, headers=None):
     network.require_online("website favicons")
 
@@ -932,55 +955,29 @@ def getFavicon(website, headers=None):
     for icon in icons_sorted:
         try:
             logging.debug(f"getFavicon: downloading icon {icon.url} ({icon.width}x{icon.height}, {icon.format})")
-            req = network.get("website favicons", icon.url, stream=True, headers=headers, timeout=5)
+            image = download_image("website favicons", icon.url, headers=headers)
         except Exception as e:
             logging.warning(f"getFavicon: failed to download icon {icon.url}: {e}")
             logging.debug(traceback.format_exc())
             continue
-        if req.status_code != requests.codes.ok:
-            logging.debug(f"getFavicon: icon {icon.url} returned status {req.status_code}")
+        if image is None:
             continue
-        if len(req.content) == 0:
-            logging.debug(f"getFavicon: icon {icon.url} returned empty content")
-            continue
-
-        image = open(f"{shared_config.icons_dir}/favicon", "wb")
-        image.write(req.content)
-        image.close()
-
-        try:
-            image = Image.open(f"{shared_config.icons_dir}/favicon")
-            if image.width > 500 or image.height > 500 or image.width <= 10 or image.height <= 10:
-                # Actual image size is too big or too small
-                logging.debug(f"getFavicon: icon {icon.url} size {image.width}x{image.height} out of range, skipping")
-                image = None
-                continue
-            logging.debug(f"getFavicon: successfully loaded icon {icon.url} ({image.width}x{image.height})")
-            break
-        except Exception as e:
-            logging.debug(f"getFavicon: failed to open downloaded icon {icon.url}: {e}")
+        if image.width > 500 or image.height > 500 or image.width <= 10 or image.height <= 10:
+            # Actual image size is too big or too small
+            logging.debug(f"getFavicon: icon {icon.url} size {image.width}x{image.height} out of range, skipping")
             image = None
             continue
+        logging.debug(f"getFavicon: successfully loaded icon {icon.url} ({image.width}x{image.height})")
+        break
 
     if image is None:
         # Fallback to getting favicon from google
         google_url = f"https://www.google.com/s2/favicons?domain={urlparse(website).netloc}"
         logging.debug(f"getFavicon: trying Google fallback for {website}: {google_url}")
         try:
-            req = network.get("website favicons", google_url, stream=True, timeout=5)
-            if req.status_code == requests.codes.ok:
-                image = open(f"{shared_config.icons_dir}/favicon", "wb")
-                image.write(req.content)
-                image.close()
-
-                try:
-                    image = Image.open(f"{shared_config.icons_dir}/favicon")
-                    logging.debug(f"getFavicon: Google fallback succeeded for {website} ({image.width}x{image.height})")
-                except Exception as e:
-                    logging.debug(f"getFavicon: Google fallback image failed to open: {e}")
-                    image = None
-            else:
-                logging.debug(f"getFavicon: Google fallback returned status {req.status_code}")
+            image = download_image("website favicons", google_url)
+            if image is not None:
+                logging.debug(f"getFavicon: Google fallback succeeded for {website} ({image.width}x{image.height})")
         except Exception as e:
             logging.warning(f"getFavicon: Google fallback failed for {website}: {e}")
             logging.debug(traceback.format_exc())

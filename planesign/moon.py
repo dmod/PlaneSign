@@ -1,10 +1,9 @@
 import logging
-import os.path
 import random
-import shutil
 import time
 from datetime import UTC, timedelta
 
+import datasources
 import network
 import numpy as np
 import psclock
@@ -15,11 +14,16 @@ from PIL import Image, ImageChops, ImageDraw
 from rgbmatrix import graphics
 from satellite import Star
 from skyfield import almanac
-from skyfield.api import Loader, PlanetaryConstants, wgs84
+from skyfield.api import PlanetaryConstants, wgs84
 from skyfield.constants import ERAD
 from skyfield.framelib import ecliptic_frame
 from skyfield.functions import angle_between, length_of
 from skyfield.trigonometry import position_angle_of
+
+
+def log_load_error(error, filename):
+    logging.error("Error loading %s: %s", datasources.path(filename), error)
+    logging.error("Try manually downloading %s into %s.", datasources.source_url(filename), shared_config.datafiles_dir)
 
 
 @planesign_mode_handler(DisplayMode.MOON)
@@ -59,68 +63,31 @@ def moon(sign):
     # ---------------------------------------------------------
     # Load Ephemeris
     # ---------------------------------------------------------
-    load = Loader(shared_config.datafiles_dir)
-
-    # Move data files from old location if needed
-    datfiles = ["de421.bsp", "moon_080317.tf", "pck00008.tpc", "moon_pa_de421_1900-2050.bpc"]
-    datsource = ["https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp", "https://naif.jpl.nasa.gov/pub/naif/LADEE/kernels/fk/moon_080317.tf", "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00008.tpc", "https://ssd.jpl.nasa.gov/ftp/eph/planets/bpc/moon_pa_de421_1900-2050.bpc"]
-    for datfile in datfiles:
-        if os.path.isfile(f"./{datfile}"):
-            logging.debug(f"Moving {datfile} to datafiles directory")
-            shutil.move(f"./{datfile}", f"{shared_config.datafiles_dir}/{datfile}")
-    if not all(os.path.isfile(f"{shared_config.datafiles_dir}/{datfile}") for datfile in datfiles):
-        network.require_online("NASA JPL/NAIF ephemeris download")
-
     msg = ""
     try:
-        eph = load(datfiles[0])
+        eph = datasources.load_ephemeris()
     except Exception as e:
         if network.is_offline_error(e):
             raise
+        log_load_error(e, datasources.DE421)
         msg = "Error getting ephemeris!"
-        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[0]}: %s", e)
-        logging.error(
-            f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
-              or manually download from {datfiles[0]} and place it in {shared_config.datafiles_dir}."
-        )
 
     pc = PlanetaryConstants()
-
-    try:
-        pc.read_text(load(datfiles[1]))
-    except Exception as e:
-        if network.is_offline_error(e):
-            raise
-        msg = "Error getting lunar ref frame!"
-        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[1]}: %s", e)
-        logging.error(
-            f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
-              or manually download from {datfiles[1]} and place it in {shared_config.datafiles_dir}."
-        )
-
-    try:
-        pc.read_text(load(datfiles[2]))
-    except Exception as e:
-        if network.is_offline_error(e):
-            raise
-        msg = "Error getting planetary consts!"
-        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[2]}: %s", e)
-        logging.error(
-            f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
-              or manually download from {datfiles[2]} and place it in {shared_config.datafiles_dir}."
-        )
-
-    try:
-        pc.read_binary(load(datfiles[3]))
-    except Exception as e:
-        if network.is_offline_error(e):
-            raise
-        msg = "Error getting lunar orient data!"
-        logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[3]}: %s", e)
-        logging.error(
-            f"Try updating certifi package with: pip3 install --upgrade --break-system-packages certifi \
-              or manually download from {datfiles[3]} and place it in {shared_config.datafiles_dir}."
-        )
+    kernels = (("moon_080317.tf", "Error getting lunar ref frame!"), ("pck00008.tpc", "Error getting planetary consts!"), ("moon_pa_de421_1900-2050.bpc", "Error getting lunar orient data!"))
+    for filename, error_msg in kernels:
+        try:
+            kernel = datasources.ensure(filename)
+            if filename.endswith(".bpc"):
+                # Skyfield reads binary kernels lazily, so the file stays open.
+                pc.read_binary(open(kernel, "rb"))  # noqa: SIM115
+            else:
+                with open(kernel, "rb") as f:
+                    pc.read_text(f)
+        except Exception as e:
+            if network.is_offline_error(e):
+                raise
+            log_load_error(e, filename)
+            msg = error_msg
 
     if msg != "":
         sign.canvas.SetImage(image.convert("RGB"), 0, 0)
@@ -143,7 +110,7 @@ def moon(sign):
     # to the top center of our moon image.
     mnp = moon + pc.build_latlon_degrees(lunar_frame, 90.0, 0.0)
 
-    ts = load.timescale()
+    ts = datasources.timescale()
 
     # ---------------------------------------------------------
 

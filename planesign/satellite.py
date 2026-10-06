@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from os.path import exists
 
+import datasources
 import network
 import requests
 import shared_config
@@ -343,16 +344,9 @@ def satellites(sign):
 
     satellite_data = []
     try:
-        with open(f"{shared_config.datafiles_dir}/satdat.txt", encoding="windows-1252") as f:
-            pass
-    except:
-        satdaturl = "https://www.ucsusa.org/media/11490"
-        file = network.get("UCS satellite database", satdaturl, stream=True, allow_redirects=True)
-        if file.status_code == requests.codes.ok:
-            sat_lines = file.text.splitlines()[1:]
-            logging.info(f"Found static data for {len(sat_lines)} satellites")
-            with open(f"{shared_config.datafiles_dir}/satdat.txt", "wb") as f:
-                f.write(file.content)
+        datasources.ensure("satdat.txt")
+    except requests.HTTPError as e:
+        logging.warning("Can't download static satellite data: %s", e)
 
     try:
         with open(f"{shared_config.datafiles_dir}/satdat.txt", encoding="windows-1252", errors="replace") as f:

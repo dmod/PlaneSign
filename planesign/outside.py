@@ -2,16 +2,15 @@
 
 import logging
 import math
-import os
 import random
 import signal
-import tempfile
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
+import datasources
 import network
 import numpy as np
 import psclock
@@ -21,7 +20,7 @@ import utilities
 from modes import DisplayMode, planesign_mode_handler
 from outside_scene import NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, draw_outside_frame
 from skyfield import almanac
-from skyfield.api import Loader, load_file, wgs84
+from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
 
 logger = logging.getLogger(__name__)
@@ -172,30 +171,6 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
     return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall)
 
 
-def load_ephemeris():
-    path = os.path.join(shared_config.datafiles_dir, "de421.bsp")
-    if os.path.isfile(path):
-        return load_file(path)
-    os.makedirs(shared_config.datafiles_dir, exist_ok=True)
-    temporary = None
-    try:
-        with network.get("NASA JPL ephemeris download", "https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp", stream=True, timeout=(5, 20)) as response:
-            response.raise_for_status()
-            logger.info("Outside: downloading the Moon mode's shared DE421 ephemeris")
-            with tempfile.NamedTemporaryFile(dir=shared_config.datafiles_dir, suffix=".bsp", delete=False) as destination:
-                temporary = destination.name
-                for chunk in response.iter_content(65536):
-                    if shared_config.shutdown_in_progress():
-                        raise InterruptedError("Outside ephemeris download interrupted by shutdown")
-                    destination.write(chunk)
-        ephemeris = load_file(temporary)
-        os.replace(temporary, path)
-        return ephemeris
-    finally:
-        if temporary is not None and os.path.exists(temporary):
-            os.unlink(temporary)
-
-
 def sky_angles(ephemeris, instant, latitude: float, longitude: float):
     observer = ephemeris["earth"] + wgs84.latlon(latitude, longitude)
     here = observer.at(instant)
@@ -261,9 +236,9 @@ def get_outside_data_worker(data_dict):
                     raise ValueError("Outside requires valid SENSOR_LAT and SENSOR_LON")
                 if ephemeris is None:
                     data_dict["outside_sky"] = {"status": "LOADING"}
-                    ephemeris = load_ephemeris()
+                    ephemeris = datasources.load_ephemeris()
                 if timescale is None:
-                    timescale = Loader(shared_config.datafiles_dir).timescale(builtin=True)
+                    timescale = datasources.timescale()
                 now = psclock.time()
                 if not sky_covers(sky, now, now + 24 * 3600 + SKY_REFRESH_MARGIN_SECONDS, latitude, longitude):
                     sky = calculate_sky_timeline(ephemeris, timescale, now, latitude, longitude)
