@@ -13,6 +13,7 @@ RUN apt update && apt -y install --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.22 /uv /bin/
 ENV CFLAGS="-I/usr/include/python3.12"
+ENV UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /planesign
 

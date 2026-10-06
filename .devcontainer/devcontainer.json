@@ -8,7 +8,23 @@
 		}
 	},
 	"runArgs": ["--privileged", "--network=host"],
+	// Run as Ubuntu's uid-1000 user so files written to the bind-mounted
+	// workspace stay owned by the Pi's pi user; root work goes through sudo.
+	"remoteUser": "ubuntu",
+	// Keep the container's venv off the host: the Pi's Python differs, so a
+	// shared .venv only works in whichever environment created it.
+	"mounts": [
+		"source=planesign-venv-${devcontainerId},target=${containerWorkspaceFolder}/.venv,type=volume"
+	],
 	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"username": "ubuntu",
+			"addGroups": "audio",
+			"installZsh": false,
+			"installOhMyZsh": false,
+			"installOhMyZshConfig": false,
+			"upgradePackages": false
+		},
 		"ghcr.io/devcontainers-extra/features/apt-packages:1": {
 			"packages": "python3-dev,python3-pil,build-essential,cmake,sudo"
 		},
@@ -20,7 +36,7 @@
 	"containerEnv": {
 		"CFLAGS": "-I/usr/include/python3.12"
 	},
-	"postCreateCommand": "uv sync --frozen --no-install-project --no-dev",
+	"postCreateCommand": "sudo chown ubuntu:ubuntu .venv && uv sync --frozen --no-install-project --no-dev",
 	"forwardPorts": [80, 443, 5055, 5056],
 	"portsAttributes": {
 		"80": { "label": "PlaneSign HTTP", "protocol": "http" },

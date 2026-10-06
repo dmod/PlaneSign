@@ -86,6 +86,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Runs with `--network host` (container shares host network stack — no port mapping needed, host interfaces like `wlan0` are directly accessible).
 - Production install script: `docker_install_and_update.sh`. Nginx config: `docker_nginx_planesign.conf`.
 - The Docker installer uses Docker's current Debian repository format (`docker.sources` and `docker.asc`). It removes its legacy `docker.list` before APT recovery when `docker.sources` already exists, and before configuring the modern repository.
+- The image's `.venv` links to Ubuntu's system Python; the runtime stage copies only `.venv` and installs the matching `python3`/`libpython` packages. The builder sets `UV_PYTHON_DOWNLOADS=never`, so a `.python-version` the base image cannot satisfy fails the build instead of linking the venv to a uv-managed interpreter that the runtime stage lacks. Changing the Ubuntu base image means updating `.python-version`, `CFLAGS` and the `libpython` package together.
 - Flask API listens on port 5055; nginx proxies `/api/` to it and serves `web/` static files on ports 80/443.
 
 ## Web Interface and Free Sketch
@@ -100,9 +101,11 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 ## Dev Environment
 - Uses VS Code devcontainer (`.devcontainer/devcontainer.json`) built from the project `Dockerfile`.
 - Devcontainer runs with `--privileged` and `--network=host`.
+- The workspace is shared between the devcontainer and remote SSH as `pi`. The devcontainer runs as Ubuntu's uid-1000 `ubuntu` user (matching `pi`) with passwordless sudo from `common-utils`, so files it writes stay editable over SSH. Tasks that need root (such as starting nginx) use `sudo`. If files become root-owned anyway, restore them with `sudo chown -R pi:pi ~/PlaneSign`.
+- The devcontainer mounts a per-container named volume over `.venv`, because the Pi's system Python differs from the image's and a shared venv only runs where it was created. The host keeps its own `.venv`; `launch.json` paths stay `${workspaceFolder}/.venv`.
 - Development uses the `uv`-managed `.venv`; use its Python interpreter rather than assuming system Python has the project dependencies. Run `uv sync` when dependency setup is needed. Native/system packages are installed via apt in the Dockerfile.
 - The native RGB driver build needs Pillow's `Imaging.h` from the system `python3-pil` package. If uv's Python version differs from the system Python, point `CFLAGS` at the system include directory containing that header before running `uv sync`; do not assume the two Python versions match.
-- The `PlaneSign Debug` launch configuration serves both remote SSH on the Pi and the devcontainer. It uses `.venv` with `sudo: true`, which the hardware matrix needs as the `pi` user. The devcontainer installs `sudo` for this configuration. The nginx task is skipped when nginx is not installed.
+- The `PlaneSign Debug` launch configuration serves both remote SSH on the Pi and the devcontainer. It uses `.venv` with `sudo: true`, which the hardware matrix needs as the `pi` user. The devcontainer's passwordless `sudo` serves this configuration. The nginx task is skipped when nginx is not installed.
 - The `PlaneSign Debug - Web Display` VS Code launch configuration runs with `--web` and has a pre-launch task for `uv sync` and nginx startup.
 
 ## Testing And Visual Verification
