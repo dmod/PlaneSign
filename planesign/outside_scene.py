@@ -815,7 +815,7 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
         flock_age = (elapsed + seed % 30) % 85
         flock_start = elapsed - flock_age
         # Small birds keep clear of the sky while an eagle is hunting.
-        eagle_near = eagle_allowed(environment) and next(eagle_visits_between(seed, flock_start, flock_start + 35), None) is not None
+        eagle_near = next(eagle_visits_present(environment, seed, flock_start, flock_start + 35), None) is not None
         if flock_age < 35 and not eagle_near:
             for index in range(3 if environment.season != "winter" else 2):
                 x = round(-12 + flock_age * 4.5 - index * 7)
@@ -825,7 +825,7 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
 
 
 DOG_SLOT_SECONDS = 120
-DOG_OUTING_CHANCE = 0.55
+DOG_OUTING_CHANCE = 0.275
 DOG_DOOR_SECONDS = 0.6
 DOG_DOORWAY = (27.5, 25)
 DOG_PORCH = (27.5, 26)
@@ -1127,6 +1127,8 @@ def draw_owl(image: Image.Image, palette: Palette, owl):
 EAGLE_SLOT_SECONDS = 240
 EAGLE_VISIT_CHANCE = 0.5
 EAGLE_SUN_ALTITUDE = 5
+# Seconds the dog must be indoors, door shut, before and after an eagle visit.
+EAGLE_DOG_CLEARANCE = 10
 # Soaring circles over the pond: center x, center y and vertical radius of the orbit ellipse.
 EAGLE_ORBIT = (66, 10, 2.5)
 EAGLE_GLIDE_SPEED = 15
@@ -1204,6 +1206,16 @@ def eagle_visits_between(seed: int, first: float, last: float):
             yield visit
 
 
+def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: float, last: float):
+    """Visits that actually happen: the dog is scared of the eagle, so it skips any visit near a dog outing."""
+    if not eagle_allowed(environment):
+        return
+    dog_out = dog_allowed(environment)
+    for visit in eagle_visits_between(seed, first, last):
+        if not dog_out or next(dog_outings_between(seed, visit.start - EAGLE_DOG_CLEARANCE, visit.end + EAGLE_DOG_CLEARANCE), None) is None:
+            yield visit
+
+
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
     """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond."""
     w = environment.weather
@@ -1223,9 +1235,7 @@ def eagle_allowed(environment: "OutsideEnvironment") -> bool:
 
 def eagle_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     """Return (visit, x, y, facing, pose, carrying a fish) or None while no eagle is about."""
-    if not eagle_allowed(environment):
-        return None
-    visit = next(eagle_visits_between(seed, elapsed, elapsed), None)
+    visit = next(eagle_visits_present(environment, seed, elapsed, elapsed), None)
     if visit is None:
         return None
     t = elapsed
