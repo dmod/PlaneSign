@@ -1,8 +1,8 @@
 import logging
 import time
 
+import network
 import psclock
-import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
@@ -15,6 +15,12 @@ def show_weather(sign):
     polltime = None
 
     while shared_config.shared_mode.value == DisplayMode.WEATHER.value:
+        if shared_config.data_dict.get("weather_status") == "offline":
+            polltime = None
+            if utilities.show_offline(sign, "WEATHER", 1):
+                return
+            continue
+
         sign.canvas.Clear()
 
         day_0_xoffset = 2
@@ -99,25 +105,33 @@ def get_weather_data_worker(data_dict):
 
     while not shutdown_flag:
         try:
-            weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial", timeout=20)
+            weather_data = network.get("OpenWeather", f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial", timeout=20)
             weather_json = weather_data.json()
 
             current = weather_json.get("current")
             daily = weather_json.get("daily")
             if current and isinstance(daily, list) and len(daily) >= 3:
                 data_dict["weather"] = weather_json
+                data_dict["weather_status"] = "ready"
                 logging.info(f"At: {utilities.convert_unix_to_local_time(current['dt'])} Temp: {current['temp']}")
                 timeout = 900
             else:
                 cod = weather_json.get("cod", weather_data.status_code)
                 message = weather_json.get("message", "missing expected weather fields")
                 logging.error(f"OpenWeather response invalid (cod={cod}): {message}")
+                data_dict["weather_status"] = "error"
                 timeout = 30
         except Exception as e:
-            logging.exception("Error getting weather data...", exc_info=e)
-            timeout = 15
+            if network.is_offline_error(e):
+                network.log_unreachable("OpenWeather", e)
+                data_dict["weather_status"] = "offline"
+                timeout = 60
+            else:
+                logging.exception("Error getting weather data...", exc_info=e)
+                data_dict["weather_status"] = "error"
+                timeout = 15
 
-        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=timeout)
+        shutdown_flag = network.wait(timeout)
 
 
 def draw_daily_forcast(sign, day, xloc):

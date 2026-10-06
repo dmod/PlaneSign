@@ -2,7 +2,9 @@ import logging
 import os
 import time
 
+import network
 import shared_config
+import utilities
 from modes import DisplayMode
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 
@@ -98,7 +100,12 @@ class PlaneSign:
                 logging.info("KeyboardInterrupt received, shutting down sign loop...")
                 shared_config.shutdown_requested.value = 1
                 break
-            except Exception:
+            except Exception as error:
+                if network.is_offline_error(error):
+                    # Retry the same mode later (or on a config/mode change) instead of falling back to planes.
+                    network.log_unreachable(display_mode.name, error)
+                    utilities.show_offline(self, display_mode.name.replace("_", " "))
+                    continue
                 logging.exception("General error in main loop, waiting...")
                 time.sleep(3)
                 shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value  # Reset to default mode

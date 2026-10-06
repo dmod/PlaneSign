@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from os.path import exists
 
+import network
 import requests
 import shared_config
 from bs4 import BeautifulSoup
@@ -273,8 +274,7 @@ def get_flag(selected, satellite_data):
         # Still can't find country: go scrape country from website
         else:
             try:
-                with requests.Session() as s:
-                    response = s.get(f"https://www.n2yo.com/satellite/?s={selected['satid']}", timeout=2)
+                response = network.get("N2YO", f"https://www.n2yo.com/satellite/?s={selected['satid']}", timeout=2)
             except Exception:
                 response = None
 
@@ -347,7 +347,7 @@ def satellites(sign):
             pass
     except:
         satdaturl = "https://www.ucsusa.org/media/11490"
-        file = requests.get(satdaturl, stream=True, allow_redirects=True)
+        file = network.get("UCS satellite database", satdaturl, stream=True, allow_redirects=True)
         if file.status_code == requests.codes.ok:
             sat_lines = file.text.splitlines()[1:]
             logging.info(f"Found static data for {len(sat_lines)} satellites")
@@ -393,7 +393,7 @@ def satellites(sign):
     with requests.Session() as s:
         s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5, respect_retry_after_header=False)))
         try:
-            response = s.get(f"https://api.open-elevation.com/api/v1/lookup?locations={shared_config.CONF['SENSOR_LAT']},{shared_config.CONF['SENSOR_LON']}", timeout=1)
+            response = network.get("Open-Elevation", f"https://api.open-elevation.com/api/v1/lookup?locations={shared_config.CONF['SENSOR_LAT']},{shared_config.CONF['SENSOR_LON']}", session=s, timeout=1)
 
             if response.status_code == requests.codes.ok:
                 data = response.json()
@@ -467,9 +467,9 @@ def satellites(sign):
 
             if polltime == None or (t - polltime) > (above_pollperiod * multiplier):
                 with requests.Session() as s:
-                    s.timeout = (10, 30)
-                    s.mount("https://", HTTPAdapter(max_retries=Retry(total=10, status_forcelist=[408, 429, 500, 502, 503, 504, 520, 522, 524], backoff_factor=1.0, respect_retry_after_header=True)))
-                    response = s.get(satsite + f"/above/{shared_config.CONF['SENSOR_LAT']}/{shared_config.CONF['SENSOR_LON']}/{elevation}/45/0/&apiKey={shared_config.CONF['N2YO_API_KEY']}")
+                    # Few connect retries, so an outage reaches the OFFLINE screen in seconds rather than minutes.
+                    s.mount("https://", HTTPAdapter(max_retries=Retry(total=10, connect=2, status_forcelist=[408, 429, 500, 502, 503, 504, 520, 522, 524], backoff_factor=1.0, respect_retry_after_header=True)))
+                    response = network.get("N2YO", satsite + f"/above/{shared_config.CONF['SENSOR_LAT']}/{shared_config.CONF['SENSOR_LON']}/{elevation}/45/0/&apiKey={shared_config.CONF['N2YO_API_KEY']}", session=s, timeout=(10, 30))
 
                     if response.status_code == requests.codes.ok:
                         try:
@@ -661,8 +661,8 @@ def satellites(sign):
             if iss_polltime is None or (time.perf_counter() - iss_polltime) > iss_pollperiod:
                 iss_pos = None
                 with requests.Session() as s:
-                    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5)))
-                    response = s.get(satsite + f"/positions/25544/{shared_config.CONF['SENSOR_LAT']}/{shared_config.CONF['SENSOR_LON']}/{elevation}/300/&apiKey={shared_config.CONF['N2YO_API_KEY']}")
+                    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, connect=2, backoff_factor=0.5)))
+                    response = network.get("N2YO", satsite + f"/positions/25544/{shared_config.CONF['SENSOR_LAT']}/{shared_config.CONF['SENSOR_LON']}/{elevation}/300/&apiKey={shared_config.CONF['N2YO_API_KEY']}", session=s)
 
                     if response.status_code == requests.codes.ok:
                         try:
@@ -686,8 +686,8 @@ def satellites(sign):
                 iss_flyby = None
                 iss_pass_error_flag = False
                 with requests.Session() as s:
-                    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1.0)))
-                    iss_response = s.get(satsite + f"/visualpasses/25544/{shared_config.CONF['SENSOR_LAT']}/{shared_config.CONF['SENSOR_LON']}/{elevation}/10/180/&apiKey={shared_config.CONF['N2YO_API_KEY']}")
+                    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, connect=2, backoff_factor=1.0)))
+                    iss_response = network.get("N2YO", satsite + f"/visualpasses/25544/{shared_config.CONF['SENSOR_LAT']}/{shared_config.CONF['SENSOR_LON']}/{elevation}/10/180/&apiKey={shared_config.CONF['N2YO_API_KEY']}", session=s)
 
                     if iss_response.status_code == requests.codes.ok:
                         try:

@@ -128,10 +128,12 @@ function apply_outside_status(data) {
         weather = 'live weather';
     } else if (data.weather === 'CACHED') {
         weather = 'cached weather (WX~)';
+    } else if (data.weather === 'OFFLINE') {
+        weather = 'weather offline (OFFLINE); atmosphere is illustrative';
     } else {
         weather = (data.offset_minutes ? 'forecast unavailable (FCST?)' : 'weather unavailable (WX?)') + '; atmosphere is illustrative';
     }
-    var astronomy = data.astronomy === 'READY' ? 'local sun and moon' : data.astronomy === 'LOADING' ? 'loading astronomy' : 'astronomy unavailable (SKY?)';
+    var astronomy = data.astronomy === 'READY' ? 'local sun and moon' : data.astronomy === 'LOADING' ? 'loading astronomy' : data.astronomy === 'OFFLINE' ? 'astronomy offline (OFFLINE)' : 'astronomy unavailable (SKY?)';
     document.getElementById('outside_status').textContent = data.season + ' / ' + weather + ' / ' + astronomy;
 }
 

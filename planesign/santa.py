@@ -4,9 +4,9 @@ import random
 import time
 from datetime import UTC, datetime, timedelta
 
+import network
 import PIL.Image as Image
 import psclock
-import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
@@ -427,24 +427,36 @@ def santa(sign):
 
                 if weatherpoll is None or time.perf_counter() - weatherpoll > 900:
                     weatherpoll = time.perf_counter()
-                    weather_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat=90&lon=0&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial").json()
-                    isNight = True
-                    icon, _ = utilities.weather_icon_decode(weather_data["daily"][0]["weather"][0]["id"], weather_data["daily"][0]["weather"][0]["main"], isNight)
+                    try:
+                        weather_data = network.get("OpenWeather", f"https://api.openweathermap.org/data/3.0/onecall?lat=90&lon=0&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&exclude=minutely,hourly&units=imperial", timeout=20).json()
+                        isNight = True
+                        icon, _ = utilities.weather_icon_decode(weather_data["daily"][0]["weather"][0]["id"], weather_data["daily"][0]["weather"][0]["main"], isNight)
+                    except Exception as error:
+                        if not network.is_offline_error(error):
+                            raise
+                        network.log_unreachable("North Pole weather", error)
+                        weather_data = None
+                        # Retry in a minute rather than waiting out the normal 15-minute refresh.
+                        weatherpoll = time.perf_counter() - 840
 
-                image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
-                iw, ih = image.size
-                if iw > ih:
-                    image = image.resize((13, int(13 * ih / iw)), Image.BICUBIC)
-                elif ih > iw:
-                    image = image.resize((int(13 * iw / ih), 13), Image.BICUBIC)
+                if weather_data is None:
+                    weatherstring = "N Pole: OFFLINE"
+                    graphics.DrawText(sign.canvas, sign.font46, 60 - len(weatherstring) * 2, 24, graphics.Color(230, 140, 30), weatherstring)
                 else:
-                    image = image.resize((13, 13), Image.BICUBIC)
+                    image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
+                    iw, ih = image.size
+                    if iw > ih:
+                        image = image.resize((13, int(13 * ih / iw)), Image.BICUBIC)
+                    elif ih > iw:
+                        image = image.resize((int(13 * iw / ih), 13), Image.BICUBIC)
+                    else:
+                        image = image.resize((13, 13), Image.BICUBIC)
 
-                iw, ih = image.size
-                sign.canvas.SetImage(image.convert("RGB"), round(13 - iw / 2), round(21 - ih / 2))
+                    iw, ih = image.size
+                    sign.canvas.SetImage(image.convert("RGB"), round(13 - iw / 2), round(21 - ih / 2))
 
-                weatherstring = f"N Pole: {weather_data['current']['weather'][0]['main']} {round(weather_data['current']['temp'])}°F"
-                graphics.DrawText(sign.canvas, sign.font46, max(7 + iw, 60 - len(weatherstring) * 2), 24, graphics.Color(160, 160, 20), weatherstring)
+                    weatherstring = f"N Pole: {weather_data['current']['weather'][0]['main']} {round(weather_data['current']['temp'])}°F"
+                    graphics.DrawText(sign.canvas, sign.font46, max(7 + iw, 60 - len(weatherstring) * 2), 24, graphics.Color(160, 160, 20), weatherstring)
 
             for i in range(len(reindeer_status)):
                 if random.random() < 0.001:

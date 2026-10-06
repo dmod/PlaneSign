@@ -11,6 +11,7 @@ import threading
 import time
 from multiprocessing import Manager, Process, Value
 
+import network
 import numpy as np
 import PIL.Image as Image
 import PIL.ImageDraw as ImageDraw
@@ -40,10 +41,12 @@ def lightning(sign):
         breakout = False
         while failed_connections < 5:
             if LM.connected.value == 0:
+                network.require_online("Blitzortung")
                 LM.connect()
 
             if LM.connected.value == 1:
                 failed_connections = 0
+                LM.unreachable = False
 
                 while LM.connected.value:
                     if last_draw is None or time.perf_counter() - last_draw > 2 or (LM.last_drawn_zoomind.value != shared_config.shared_lightning_zoomind.value) or (LM.last_drawn_mode.value != shared_config.shared_lightning_mode.value):
@@ -59,6 +62,9 @@ def lightning(sign):
                 logging.error(f"Websocket failed to connect {failed_connections} times")
                 sign.wait_loop(1.0 * failed_connections)
 
+        if LM.unreachable:
+            # The sign loop shows OFFLINE and retries, the same as when offline mode is on.
+            raise network.ServiceUnreachable("Blitzortung lightning feed is unreachable")
         # Only set mode to PLANES_ALERT if we exited due to connection failures, not if we're switching modes
         shared_config.shared_mode.value = DisplayMode.PLANES_ALERT.value
         return
@@ -113,6 +119,7 @@ class LightningManager:
         self.header = None
         self.floc = f"{shared_config.icons_dir}/lightning/"
         self.connected = Value("i", 0)
+        self.unreachable = False
         self.sign = sign
         self.bgwidth = 64
         self.bgheight = 32
@@ -382,6 +389,8 @@ class LightningManager:
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
+        if network.is_offline_error(err):
+            self.unreachable = True
         self.connected.value = 0
 
     def onClose(self, ws, close_status_code="", close_msg=""):
@@ -396,7 +405,7 @@ class LightningManager:
 
         # Fetch the JavaScript file from the URL
         url = "https://www.blitzortung.org/en/JS/live_lightning_maps.js"
-        response = requests.get(url)
+        response = network.get("Blitzortung", url)
 
         heartbeatmode = None
         heartbeatkey = None

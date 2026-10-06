@@ -12,6 +12,7 @@ import wave
 from datetime import datetime
 
 import mlb
+import network
 import nfl
 import outside
 import planes
@@ -175,7 +176,10 @@ def set_countdown(datetimestr, countdownmsg):
 def get_possible_flights(query_string):
     try:
         flights = planes.search_live_flights(query_string)
-    except Exception:
+    except Exception as error:
+        if network.is_offline_error(error):
+            network.log_unreachable("Live flight search", error)
+            return jsonify({"results": [], "error": "The sign is offline"}), 503
         logging.exception("Live flight search failed")
         return jsonify({"results": [], "error": "Flight search is unavailable right now"}), 502
 
@@ -556,7 +560,13 @@ def set_custom_message(message):
 
 @app.route("/get_resort_opts")
 def get_resort_opts():
-    populate_resort_lists()
+    try:
+        populate_resort_lists()
+    except Exception as error:
+        if not network.is_offline_error(error):
+            raise
+        network.log_unreachable("Ski resort list", error)
+        return jsonify({"error": "The sign is offline"}), 503
     return jsonify(shared_config.data_dict["resort_info"])
 
 
@@ -601,7 +611,13 @@ def get_resorts():
 
 @app.route("/get_ticker_opts")
 def get_ticker_opts():
-    options = get_tickers()
+    try:
+        options = get_tickers()
+    except Exception as error:
+        if not network.is_offline_error(error):
+            raise
+        network.log_unreachable("Ticker list", error)
+        return jsonify({"error": "The sign is offline"}), 503
     return jsonify(options)
 
 
@@ -618,9 +634,9 @@ def pinned_game_id(league, module, snapshot):
     game_id = shared_config.data_dict.get(key) or ""
     if not game_id:
         return ""
-    # "unavailable" means the fetch itself failed, so its empty game list is no evidence that
+    # "unavailable" and "offline" mean the fetch itself failed, so an empty game list is no evidence that
     # the pinned game is gone and the selection survives until real data comes back.
-    if snapshot.get("status") != "unavailable" and module.find_game(snapshot, game_id) is None:
+    if snapshot.get("status") not in ("unavailable", "offline") and module.find_game(snapshot, game_id) is None:
         shared_config.data_dict[key] = ""
         shared_config.shared_forced_sign_update.set()
         return ""

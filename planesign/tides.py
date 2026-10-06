@@ -7,6 +7,7 @@ from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
+import network
 from modes import DisplayMode, planesign_mode_handler
 
 
@@ -158,7 +159,7 @@ def noaa_json(session, url, params, now):
     summary = ", ".join(f"{key}={params[key]}" for key in ("product", "type", "station", "interval", "begin_date", "end_date") if key in params)
     logging.info("NOAA request: %s (%s)", url, summary or "no parameters")
     started = time.monotonic()
-    response = session.get(url, params=params, timeout=(5, 20))
+    response = network.get("NOAA tides", url, session=session, params=params, timeout=(5, 20))
     logging.debug("NOAA response: HTTP %s in %.2fs, %s bytes (%s)", response.status_code, time.monotonic() - started, len(response.content), summary or "no parameters")
     retry_after = response.headers.get("Retry-After", "0")
     try:
@@ -302,6 +303,8 @@ class TideCache:
         self.cycle_at = 0
         self.cycle_next_attempt = 0
         self.pooled = False
+        # Set when offline mode is toggled so the next active poll refetches (or reports offline) right away.
+        self.force = False
 
     def cycles(self, now):
         station_id = self.station["id"]
@@ -343,8 +346,9 @@ class TideCache:
             return {"location": None, "status": "invalid"}
         if now < self.next_attempt:
             return None
-        if self.snapshot and now - self.snapshot["fetched_at"] < PREDICTIONS_TTL and covers_display(self.snapshot, now):
+        if self.snapshot and not self.force and now - self.snapshot["fetched_at"] < PREDICTIONS_TTL and covers_display(self.snapshot, now):
             return None
+        self.force = False
         self.pooled = True
         try:
             if not self.catalog or now - self.catalog_at >= CATALOG_TTL:
@@ -371,7 +375,11 @@ class TideCache:
             return snapshot
         except Exception as error:
             self.failures += 1
-            delay = min(MAX_RETRY, 30 * 2 ** min(self.failures - 1, 5))
+            delay = network.retry_delay(self.failures, 30, MAX_RETRY)
+            if network.is_offline_error(error):
+                self.next_attempt = now + delay
+                network.log_unreachable("NOAA tides", error)
+                return {"location": location, "status": "offline"}
             if isinstance(error, NOAAError):
                 delay = max(delay, error.retry_after)
                 if error.unsupported and self.station:
@@ -396,7 +404,11 @@ def get_tides_data_worker(data_dict):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     with requests.Session() as session:
         cache = TideCache(session)
+        toggle = network.OfflineToggle()
         while not shared_config.shared_shutdown_event.is_set():
+            if toggle.changed():
+                cache.next_attempt = 0
+                cache.force = True
             config = shared_config.CONF.copy()
             payload = cache.poll(config, time.time(), active=shared_config.shared_mode.value == DisplayMode.TIDES.value)
             if payload is not None and payload["location"] == sensor_location(shared_config.CONF.copy()):
@@ -536,6 +548,11 @@ def draw_tides_frame(sign, payload, config, now, elapsed):
         graphics.DrawText(sign.canvas, sign.font46, column, baseline, graphics.Color(*color), text)
 
     location = sensor_location(config)
+    if payload and payload.get("status") == "offline" and payload.get("location") == location:
+        import utilities
+
+        utilities.draw_offline(sign, "TIDES")
+        return
     if location is None:
         message = "INVALID SENSOR LOCATION"
     elif not payload or payload.get("location") != location:

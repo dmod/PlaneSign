@@ -10,13 +10,14 @@ from functools import cmp_to_key
 from math import ceil, isfinite
 from urllib.parse import urlparse
 
+import network
 import requests
 import shared_config
 from bs4 import BeautifulSoup
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
 from rgbmatrix import graphics
-from utilities import CM_2_IN, acquire_lock, convert_c_to_f, getFavicon, release_lock, weather_icon_decode
+from utilities import CM_2_IN, acquire_lock, convert_c_to_f, draw_offline, getFavicon, release_lock, weather_icon_decode
 
 resortinfo_filename = f"{shared_config.datafiles_dir}/resortdata.json"
 userresorts_filename = f"{shared_config.datafiles_dir}/resortlist.txt"
@@ -31,7 +32,8 @@ class SnowFeedError(ValueError):
 
 
 def _fetch_snow_feed(session, url, **kwargs):
-    with session.get(url, timeout=(5, 10), stream=True, **kwargs) as response:
+    service = "OpenWeather" if "openweathermap.org" in url else "OnTheSnow"
+    with network.get(service, url, session=session, timeout=(5, 10), stream=True, **kwargs) as response:
         response.raise_for_status()
         content = bytearray()
         deadline = time.monotonic() + 20
@@ -425,7 +427,7 @@ def populate_resort_lists():
     session.headers.update(headers)
 
     allresorts_url = "https://www.onthesnow.com/index/resorts-en-US.json"
-    allresorts_response = session.get(allresorts_url, timeout=10)
+    allresorts_response = network.get("OnTheSnow", allresorts_url, session=session, timeout=10)
     if allresorts_response.status_code == requests.codes.ok:
         resort_info["resorts"] = json.loads(allresorts_response.text)
     else:
@@ -433,7 +435,7 @@ def populate_resort_lists():
         logging.error(f"Error getting resort list from url: {allresorts_url}")
 
     altnames_url = "https://www.onthesnow.com/index/resorts-alt-en-US.json"
-    altnames_response = session.get(altnames_url, timeout=10)
+    altnames_response = network.get("OnTheSnow", altnames_url, session=session, timeout=10)
     if altnames_response.status_code == requests.codes.ok:
         resort_info["alt_names"] = json.loads(altnames_response.text)
     else:
@@ -441,7 +443,7 @@ def populate_resort_lists():
         logging.error(f"Error getting alternate names list from url: {altnames_url}")
 
     misspellings_url = "https://www.onthesnow.com/index/resorts-misspellings-en-US.json"
-    misspellings_response = session.get(misspellings_url, timeout=10)
+    misspellings_response = network.get("OnTheSnow", misspellings_url, session=session, timeout=10)
     if misspellings_response.status_code == requests.codes.ok:
         resort_info["misspellings"] = json.loads(misspellings_response.text)
     else:
@@ -470,6 +472,7 @@ def draw_loading(sign):
 
     nf = gif.n_frames
     frame = 0
+    attempted = False
     sign.canvas.Clear()
     # Potentially also pre-load user resort list data in a separate thread and check for that here also
     while not ("resort_info" in shared_config.data_dict and "resorts" in shared_config.data_dict["resort_info"] and len(shared_config.data_dict["resort_info"]["resorts"]) > 0 and datetime.now() < datetime.fromtimestamp(shared_config.data_dict["resort_info"]["last_update"]) + timedelta(days=30)):
@@ -488,6 +491,16 @@ def draw_loading(sign):
         sign.canvas.Clear()
 
         frame = (frame + 1) % nf
+
+        if not attempted:
+            attempted = True
+            # Unreachable OnTheSnow shows OFFLINE instead of loading forever; other failures still wait for the web UI.
+            try:
+                populate_resort_lists()
+            except Exception as error:
+                if network.is_offline_error(error):
+                    raise
+                logging.warning("Ski resort list unavailable: %s", error)
 
         breakout = sign.wait_loop(1.0)
 
@@ -629,6 +642,10 @@ class SnowReport:
     def drawresort(self, res_id):
 
         resort = self.update(res_id)
+
+        if resort is not None and resort.get("status") == "offline":
+            draw_offline(self.sign, "SNOW")
+            return
 
         if resort is None or resort.get("status") == "unavailable":
             name = resort["displayName"][:20] if resort else "Snow report"
@@ -834,10 +851,13 @@ class SnowReport:
             display_ids.append(user_list[index])
             index = (index + 1) % n
 
-        offset = 0
-        for res_id in display_ids:
-            resort = self.update(res_id)
+        resorts = [self.update(res_id) for res_id in display_ids]
+        if any(resort is not None and resort.get("status") == "offline" for resort in resorts):
+            draw_offline(self.sign, "SNOW")
+            return
 
+        offset = 0
+        for resort in resorts:
             if resort is not None:
                 state = resort.get("status", "ready")
                 if state == "unavailable" or resort.get("isOpen") is None:
@@ -882,8 +902,12 @@ class SnowReport:
 
     def _failed_update(self, resort, error):
         failures = resort.get("failures", 0) + 1
-        delay = min(SNOW_MAX_RETRY_SECONDS, SNOW_RETRY_SECONDS * 2 ** min(failures - 1, 3))
-        resort.update(status="cached" if "last_update" in resort else "unavailable", failures=failures, next_attempt=time.monotonic() + delay)
+        delay = network.retry_delay(failures, SNOW_RETRY_SECONDS, SNOW_MAX_RETRY_SECONDS, max_doublings=3)
+        if network.is_offline_error(error):
+            status = "offline"
+        else:
+            status = "cached" if "last_update" in resort else "unavailable"
+        resort.update(status=status, failures=failures, next_attempt=time.monotonic() + delay)
         logging.warning("Snow feed %s for uuid=%s; retry in %ss: %s", resort["status"], resort["uuid"], delay, _snow_feed_error(error))
         return resort
 

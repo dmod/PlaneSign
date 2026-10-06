@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
+import network
 import numpy as np
 import psclock
 import requests
@@ -158,14 +159,14 @@ def sky_snapshot(sky, timestamp: float, latitude: float, longitude: float):
     return values
 
 
-def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0) -> OutsideEnvironment:
-    observed = weather_snapshot(weather, time.time(), forecast_time=moment.timestamp() if offset_minutes else None)
+def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False) -> OutsideEnvironment:
+    observed = OutsideWeather("OFFLINE") if weather_offline else weather_snapshot(weather, time.time(), forecast_time=moment.timestamp() if offset_minutes else None)
     season = local_season(moment, latitude)
     if not isinstance(sky, dict):
         return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes)
     positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
     if positions is None:
-        return OutsideEnvironment(season, observed, "UNAVAILABLE" if sky.get("status") == "UNAVAILABLE" else "LOADING", offset_minutes=offset_minutes)
+        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes)
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
     return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall)
@@ -178,9 +179,9 @@ def load_ephemeris():
     os.makedirs(shared_config.datafiles_dir, exist_ok=True)
     temporary = None
     try:
-        logger.info("Outside: downloading the Moon mode's shared DE421 ephemeris")
-        with requests.get("https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp", stream=True, timeout=(5, 20)) as response:
+        with network.get("NASA JPL ephemeris download", "https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp", stream=True, timeout=(5, 20)) as response:
             response.raise_for_status()
+            logger.info("Outside: downloading the Moon mode's shared DE421 ephemeris")
             with tempfile.NamedTemporaryFile(dir=shared_config.datafiles_dir, suffix=".bsp", delete=False) as destination:
                 temporary = destination.name
                 for chunk in response.iter_content(65536):
@@ -244,9 +245,12 @@ def get_outside_data_worker(data_dict):
     retry_at = 0
     failures = 0
     sky = None
+    toggle = network.OfflineToggle()
     try:
         while not shared_config.shutdown_in_progress():
             shared_config.shared_outside_time_update.clear()
+            if toggle.changed():
+                retry_at = 0
             if time.monotonic() < retry_at:
                 shared_config.shared_shutdown_event.wait(1)
                 continue
@@ -265,12 +269,16 @@ def get_outside_data_worker(data_dict):
                     sky = calculate_sky_timeline(ephemeris, timescale, now, latitude, longitude)
                     data_dict["outside_sky"] = sky
                 failures = 0
-            except (OSError, ValueError, KeyError, requests.RequestException, EphemerisRangeError):
-                logger.exception("Outside astronomy unavailable; retaining the landscape without invented sun/moon positions")
-                data_dict["outside_sky"] = {"status": "UNAVAILABLE"}
+            except (OSError, ValueError, KeyError, requests.RequestException, EphemerisRangeError) as error:
+                if network.is_offline_error(error):
+                    network.log_unreachable("Outside ephemeris download", error)
+                    data_dict["outside_sky"] = {"status": "OFFLINE"}
+                else:
+                    logger.exception("Outside astronomy unavailable; retaining the landscape without invented sun/moon positions")
+                    data_dict["outside_sky"] = {"status": "UNAVAILABLE"}
                 sky = None
                 failures += 1
-                retry_at = time.monotonic() + min(300, 15 * 2 ** min(failures - 1, 5))
+                retry_at = time.monotonic() + network.retry_delay(failures, 15, 300)
             shared_config.shared_outside_time_update.wait(1)
     finally:
         if ephemeris is not None:
@@ -283,7 +291,7 @@ def outside_status():
     tz = location_timezone(latitude, longitude)
     offset_minutes = shared_config.shared_outside_offset_minutes.value
     moment = outside_moment(tz, offset_minutes)
-    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes)
+    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline")
     return {
         "offset_minutes": offset_minutes,
         "now": datetime.fromtimestamp(moment.timestamp() - offset_minutes * 60, tz).isoformat(),
@@ -337,9 +345,10 @@ def outside(sign):
             military_time = shared_config.CONF["MILITARY_TIME"].lower() == "true"
             sky = shared_config.data_dict.get("outside_sky")
             weather = shared_config.data_dict.get("weather")
+            weather_offline = shared_config.data_dict.get("weather_status") == "offline"
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
-        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset))
+        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline)
         status = environment.weather.status, environment.sky_status
         if status != last_status:
             if status[0] in ("LIVE", "FORECAST") and status[1] == "READY":

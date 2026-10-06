@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import favicon
+import network
 import numpy as np
 import psclock
 import requests
@@ -36,6 +37,7 @@ country_polys = None
 state_polys = None
 water_polys = None
 geojsons_loaded = False
+logged_offline_mode = None
 
 from modes import DisplayMode, planesign_mode_handler
 
@@ -70,6 +72,15 @@ def read_config():
         shared_config.CONF.pop(key, None)
 
     logging.info("Config loaded: " + str(shared_config.CONF))
+
+    global logged_offline_mode
+    offline = network.offline_mode(conf)
+    if offline != logged_offline_mode:
+        if offline:
+            logging.warning("OFFLINE MODE ON: third-party services (FlightRadar24, OpenWeather, NOAA, ESPN, Blitzortung, N2YO, Finnhub, OnTheSnow, ephemeris downloads, ...) are disabled; the web API remains available")
+        elif logged_offline_mode is not None:
+            logging.warning("Offline mode off: third-party services are enabled again")
+        logged_offline_mode = offline
 
     local_tz = timezone_at(lat=float(shared_config.CONF["SENSOR_LAT"]), lng=float(shared_config.CONF["SENSOR_LON"]))
     if local_tz is None:
@@ -822,6 +833,7 @@ def improcess(image, desired_size=20):
 
 
 def getFavicon(website, headers=None):
+    network.require_online("website favicons")
 
     if headers is None:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0", "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/png,*/*;q=0.8", "Accept-Language": "en-US,en;q=0.5", "Connection": "keep-alive"}
@@ -920,7 +932,7 @@ def getFavicon(website, headers=None):
     for icon in icons_sorted:
         try:
             logging.debug(f"getFavicon: downloading icon {icon.url} ({icon.width}x{icon.height}, {icon.format})")
-            req = requests.get(icon.url, stream=True, headers=headers, timeout=5)
+            req = network.get("website favicons", icon.url, stream=True, headers=headers, timeout=5)
         except Exception as e:
             logging.warning(f"getFavicon: failed to download icon {icon.url}: {e}")
             logging.debug(traceback.format_exc())
@@ -955,7 +967,7 @@ def getFavicon(website, headers=None):
         google_url = f"https://www.google.com/s2/favicons?domain={urlparse(website).netloc}"
         logging.debug(f"getFavicon: trying Google fallback for {website}: {google_url}")
         try:
-            req = requests.get(google_url, stream=True, timeout=5)
+            req = network.get("website favicons", google_url, stream=True, timeout=5)
             if req.status_code == requests.codes.ok:
                 image = open(f"{shared_config.icons_dir}/favicon", "wb")
                 image.write(req.content)
@@ -1415,7 +1427,8 @@ def show_time(sign):
 
     xloc = 86
     weather = shared_config.data_dict.get("weather")
-    current = weather.get("current") if weather else None
+    # An unreachable weather service shows "--" whether it is down or disabled by offline mode.
+    current = weather.get("current") if weather and shared_config.data_dict.get("weather_status") != "offline" else None
     if current and "temp" in current:
         tempval = round(current["temp"])
         if tempval < 0 or tempval > 99:
@@ -1432,6 +1445,23 @@ def show_time(sign):
     graphics.DrawText(sign.canvas, sign.fontreallybig, xloc, 21, graphics.Color(20, 20, 240), tempstr)
 
     sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+
+
+OFFLINE_RETRY_SECONDS = 30
+
+
+def draw_offline(sign, title):
+    """Draw the screen for a mode whose internet service is unreachable, either disabled by offline mode or down."""
+    sign.canvas.Clear()
+    title = title.upper()[:25]
+    graphics.DrawText(sign.canvas, sign.font57, int(get_centered_text_x_offset_value(5, title)), 11, graphics.Color(110, 110, 150), title)
+    graphics.DrawText(sign.canvas, sign.fontreallybig, int(get_centered_text_x_offset_value(9, "OFFLINE")), 27, graphics.Color(230, 140, 30), "OFFLINE")
+
+
+def show_offline(sign, title, seconds=OFFLINE_RETRY_SECONDS):
+    draw_offline(sign, title)
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+    return sign.wait_loop(seconds)
 
 
 def weather_icon_decode(code, status, isNight=False):

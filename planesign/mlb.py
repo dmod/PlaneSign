@@ -5,6 +5,7 @@ import time
 import unicodedata
 from datetime import datetime
 
+import network
 import psclock
 import requests
 import shared_config
@@ -449,6 +450,8 @@ class MLBCache:
         self.next_attempt = 0
         self.failures = 0
         self.pooled = False
+        # Set when offline mode is toggled so the next active poll refetches (or reports offline) right away.
+        self.force = False
 
     def interval(self):
         games = (self.snapshot or {}).get("games") or []
@@ -463,12 +466,13 @@ class MLBCache:
             return None
         if now < self.next_attempt:
             return None
-        if self.snapshot and now - self.snapshot["fetched_at"] < self.interval():
+        if self.snapshot and not self.force and now - self.snapshot["fetched_at"] < self.interval():
             return None
+        self.force = False
         try:
             started = time.monotonic()
             self.pooled = True
-            response = self.session.get(SCOREBOARD_URL, timeout=REQUEST_TIMEOUT)
+            response = network.get("ESPN", SCOREBOARD_URL, session=self.session, timeout=REQUEST_TIMEOUT)
             if response.status_code != 200:
                 raise ValueError(f"ESPN HTTP {response.status_code}")
             games = parse_scoreboard(response.json())
@@ -478,8 +482,11 @@ class MLBCache:
             return self.snapshot
         except (requests.RequestException, KeyError, TypeError, ValueError) as error:
             self.failures += 1
-            delay = min(MAX_RETRY, 15 * 2 ** min(self.failures - 1, 5))
+            delay = network.retry_delay(self.failures, 15, MAX_RETRY)
             self.next_attempt = now + delay
+            if network.is_offline_error(error):
+                network.log_unreachable("ESPN MLB scoreboard", error)
+                return {**self.snapshot, "status": "offline"} if self.snapshot else {"games": [], "fetched_at": now, "status": "offline"}
             logging.warning("ESPN MLB scoreboard unavailable; retry in %ss: %s", delay, error)
             if self.snapshot:
                 return {**self.snapshot, "status": "cached"}
@@ -492,7 +499,11 @@ def get_mlb_data_worker(data_dict):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     with requests.Session() as session:
         cache = MLBCache(session)
+        toggle = network.OfflineToggle()
         while not shared_config.shared_shutdown_event.is_set():
+            if toggle.changed():
+                cache.next_attempt = 0
+                cache.force = True
             payload = cache.poll(time.time(), active=shared_config.shared_mode.value == DisplayMode.MLB.value)
             if payload is not None:
                 data_dict["mlb"] = payload
@@ -899,6 +910,9 @@ def draw_upcoming(sign, game, snapshot, config, now, elapsed):
 def draw_mlb_frame(sign, snapshot, game_id, config, now, elapsed):
     if not snapshot:
         draw_message(sign, [("Loading...", INFO_COLOR)])
+        return
+    if snapshot.get("status") == "offline":
+        utilities.draw_offline(sign, "MLB")
         return
     if snapshot.get("status") == "unavailable":
         draw_message(sign, [("No data", WARN_COLOR), ("Check network", INFO_COLOR)])

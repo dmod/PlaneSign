@@ -2,9 +2,11 @@ import logging
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import network
 import planes
 import psclock
 import shared_config
+import utilities
 from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
 from utilities import get_centered_text_x_offset_value, get_distance, reverse_geocode, timezone_at
@@ -49,15 +51,21 @@ def track_a_flight(sign):
     blip_count = 0
     flight = None
     formatted_address = None
+    offline = False
 
     while shared_config.shared_mode.value == DisplayMode.TRACK_A_FLIGHT.value:
         callsign = shared_config.data_dict["track_a_flight_num"]
 
         if requests_limiter % REFRESH_EVERY_N_LOOPS == 0:
+            offline = False
             try:
                 flight = planes.get_live_flight(callsign)
-            except Exception:
-                logging.exception(f"Could not fetch live data for {callsign}")
+            except Exception as error:
+                if network.is_offline_error(error):
+                    network.log_unreachable("FlightRadar24", error)
+                    offline = True
+                else:
+                    logging.exception(f"Could not fetch live data for {callsign}")
                 flight = None
 
             if flight:
@@ -71,9 +79,15 @@ def track_a_flight(sign):
                 logging.info(f"{flight.callsign} at {flight.latitude}, {flight.longitude} over {formatted_address}")
             else:
                 formatted_address = None
-                logging.warning(f"No live flight data for {callsign}")
+                if not offline:
+                    logging.warning(f"No live flight data for {callsign}")
 
         requests_limiter = requests_limiter + 1
+
+        if offline:
+            if utilities.show_offline(sign, "TRACK A FLIGHT", 0.8):
+                return
+            continue
 
         sign.canvas.Clear()
 

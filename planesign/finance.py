@@ -5,6 +5,7 @@ import time
 from threading import Lock, Thread
 
 import finnhub
+import network
 import psclock
 import requests
 import shared_config
@@ -27,11 +28,14 @@ def update_global_lists(client=None):
 
     if "us_symbols" not in shared_config.data_dict:
         try:
+            network.require_online("Finnhub")
             # Halve the number of symbols by only saving "Common Stock" types (filters out ETFs, preferred shares, etc)
             us_symbols = client.stock_symbols("US")
             us_symbols = list(filter(lambda x: x["type"] == "Common Stock", us_symbols))
             shared_config.data_dict["us_symbols"] = us_symbols
         except Exception as e:
+            if network.is_offline_error(e):
+                raise
             logging.error(f"Finnhub API Error: {e}")
             us_symbols = []
     else:
@@ -42,10 +46,13 @@ def update_global_lists(client=None):
 
     if "cb_symbols" not in shared_config.data_dict:
         try:
+            network.require_online("Finnhub")
             cb_symbols = client.crypto_symbols("COINBASE")
             cb_symbols = list(filter(lambda x: cbpat.match(x["symbol"]), cb_symbols))
             shared_config.data_dict["cb_symbols"] = cb_symbols
         except Exception as e:
+            if network.is_offline_error(e):
+                raise
             logging.error(f"Finnhub API Error: {e}")
             cb_symbols = []
     else:
@@ -53,10 +60,13 @@ def update_global_lists(client=None):
 
     if "bn_symbols" not in shared_config.data_dict:
         try:
+            network.require_online("Finnhub")
             bn_symbols = client.crypto_symbols("BINANCE")
             bn_symbols = list(filter(lambda x: bnpat.match(x["displaySymbol"]), bn_symbols))
             shared_config.data_dict["bn_symbols"] = bn_symbols
         except Exception as e:
+            if network.is_offline_error(e):
+                raise
             logging.error(f"Finnhub API Error: {e}")
             bn_symbols = []
     else:
@@ -75,10 +85,29 @@ def get_tickers():
     return {"bn": bn_symbols, "cb": cb_symbols, "us": us_symbols}
 
 
+FINANCE_RESUME_SECONDS = 60
+finance_offline_at = None
+
+
 @planesign_mode_handler(DisplayMode.FINANCE)
 def finance(self):
+    global finance_offline_at
+    try:
+        show_finance(self)
+    except Exception as error:
+        if network.is_offline_error(error):
+            finance_offline_at = time.monotonic()
+        raise
+
+
+def show_finance(self):
+    global finance_offline_at
+    network.require_online("Finnhub")
     self.canvas.Clear()
-    shared_config.data_dict["ticker"] = None
+    # The sign loop's retry after an OFFLINE screen keeps the chosen ticker; a fresh visit starts without one.
+    if finance_offline_at is None or time.monotonic() - finance_offline_at > FINANCE_RESUME_SECONDS:
+        shared_config.data_dict["ticker"] = None
+    finance_offline_at = None
     s = None
 
     graphics.DrawText(self.canvas, self.fontreallybig, 7, 12, graphics.Color(50, 150, 0), "Finance")
@@ -107,6 +136,8 @@ def finance(self):
 
     try:
         while shared_config.shared_mode.value == DisplayMode.FINANCE.value:
+            if s is not None and s.offline:
+                raise network.ServiceUnreachable("Finnhub stream is unreachable")
             ticker = shared_config.data_dict["ticker"]
 
             if ticker is not None:
@@ -132,7 +163,7 @@ def getLogo(headers, website):
     headers["Referer"] = website
 
     try:
-        req = requests.get(website, stream=True, headers=headers, timeout=5)
+        req = network.get("company logos", website, stream=True, headers=headers, timeout=5)
         if req.status_code == requests.codes.ok:
             image = Image.open(req.raw)
 
@@ -166,7 +197,7 @@ def get_crypto(symbol):
     session = Session()
     session.headers.update(headers)
 
-    response = session.get(url, params=parameters, timeout=10)
+    response = network.get("CoinMarketCap", url, session=session, params=parameters, timeout=10)
 
     if response.status_code == requests.codes.ok:
         data = json.loads(response.text)
@@ -179,7 +210,7 @@ def get_crypto(symbol):
         if coinid == 0:
             return None
         else:
-            req = requests.get(f"https://s2.coinmarketcap.com/static/img/coins/64x64/{coinid}.png", stream=True, timeout=5)
+            req = network.get("CoinMarketCap", f"https://s2.coinmarketcap.com/static/img/coins/64x64/{coinid}.png", stream=True, timeout=5)
             if req.status_code == requests.codes.ok:
                 try:
                     image = Image.open(req.raw)
@@ -206,6 +237,7 @@ class Stock:
         self.lock = Lock()
         self.errLock = Lock()
         self.errCode = None
+        self.offline = False
 
         # Multithreading safe variables so that
         # the websocket thread can update them
@@ -247,6 +279,8 @@ class Stock:
         try:
             data = self.client.quote(ticker)
         except Exception as e:
+            if network.is_offline_error(e):
+                raise
             logging.error(f"No data for ticker {ticker}: {e}")
             data = None
 
@@ -352,7 +386,9 @@ Open Price={self.open_price}"
     def connect(self):
 
         self.kill_ws()
+        network.require_online("Finnhub")
         self.closed = False
+        self.offline = False
 
         # Set to true for debugging
         websocket.enableTrace(False)
@@ -390,6 +426,8 @@ Open Price={self.open_price}"
 
     def onError(self, ws, err):
         logging.error(f"Websocket Error: {err}")
+        if network.is_offline_error(err):
+            self.offline = True
         with self.errLock:
             if err is None:
                 self.errCode = -1
@@ -413,6 +451,9 @@ Open Price={self.open_price}"
             time.sleep(0.25)
         if self.closed or shared_config.shared_mode.value != DisplayMode.FINANCE.value:
             logging.debug("Finance mode no longer active, not reconnecting websocket.")
+            return
+        if network.offline_mode():
+            logging.debug("Offline mode is on, not reconnecting websocket.")
             return
         logging.debug("Attempting to reconnect to websocket.")
         self.connect()

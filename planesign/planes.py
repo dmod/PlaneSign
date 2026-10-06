@@ -3,6 +3,7 @@ import re
 import time
 import types
 
+import network
 import requests
 import shared_config
 import utilities
@@ -28,7 +29,7 @@ prev_stats.ground_speed = 0
 
 def get_flights(bounds, **filters):
     params = FR24_PARAMS | {"bounds": bounds} | {name: value for name, value in filters.items() if value}
-    response = requests.get(FR24_FEED_URL, params=params, headers=FR24_HEADERS, timeout=30)
+    response = network.get("FlightRadar24", FR24_FEED_URL, params=params, headers=FR24_HEADERS, timeout=30)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
@@ -77,11 +78,13 @@ def normalize_callsign(query):
 def resolve_icao_callsign(query):
     """Translate an IATA flight number (e.g. DL1837) into its ICAO callsign (e.g. DAL1837)."""
     try:
-        response = requests.get(f"{ADSBDB_CALLSIGN_URL}{query}", headers={"Accept": "application/json"}, timeout=10)
+        response = network.get("adsbdb", f"{ADSBDB_CALLSIGN_URL}{query}", headers={"Accept": "application/json"}, timeout=10)
         if response.status_code != requests.codes.ok:
             return None
         payload = response.json()
-    except (requests.RequestException, ValueError):
+    except (requests.RequestException, ValueError) as error:
+        if network.is_offline_error(error):
+            raise
         logging.warning(f"Could not look up ICAO callsign for {query}", exc_info=True)
         return None
 
@@ -172,11 +175,16 @@ def shorten_airport_name(name, desired_length):
     return name
 
 
+def planes_offline():
+    return shared_config.data_dict.get("planes_status") == "offline"
+
+
 @planesign_mode_handler(DisplayMode.PLANES_ALERT)
 def show_closest_plane_if_in_alert_radius(sign):
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_ALERT.value:
-        if shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= float(shared_config.CONF["PLANE_ALERT_RADIUS"]):
+        # The default display stays a plain clock while FR24 is unreachable, never a stale plane.
+        if not planes_offline() and shared_config.data_dict["closest"] and shared_config.data_dict["closest"].distance <= float(shared_config.CONF["PLANE_ALERT_RADIUS"]):
             plane_to_show = shared_config.data_dict["closest"]
         else:
             # No closest plane, show time
@@ -185,36 +193,33 @@ def show_closest_plane_if_in_alert_radius(sign):
         show_a_plane(sign, plane_to_show, scroll)
 
 
+def always_show_plane(sign, mode, key):
+    scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
+    while shared_config.shared_mode.value == mode.value:
+        if planes_offline():
+            utilities.show_offline(sign, mode.name.replace("_", " "), 1)
+            continue
+        show_a_plane(sign, shared_config.data_dict[key], scroll)
+
+
 @planesign_mode_handler(DisplayMode.PLANES_CLOSEST)
 def always_show_closest_plane(sign):
-    scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.PLANES_CLOSEST.value:
-        plane_to_show = shared_config.data_dict["closest"]
-        show_a_plane(sign, plane_to_show, scroll)
+    always_show_plane(sign, DisplayMode.PLANES_CLOSEST, "closest")
 
 
 @planesign_mode_handler(DisplayMode.PLANES_HIGHEST)
 def always_show_highest_plane(sign):
-    scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.PLANES_HIGHEST.value:
-        plane_to_show = shared_config.data_dict["highest"]
-        show_a_plane(sign, plane_to_show, scroll)
+    always_show_plane(sign, DisplayMode.PLANES_HIGHEST, "highest")
 
 
 @planesign_mode_handler(DisplayMode.PLANES_FASTEST)
 def always_show_fastest_plane(sign):
-    scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.PLANES_FASTEST.value:
-        plane_to_show = shared_config.data_dict["fastest"]
-        show_a_plane(sign, plane_to_show, scroll)
+    always_show_plane(sign, DisplayMode.PLANES_FASTEST, "fastest")
 
 
 @planesign_mode_handler(DisplayMode.PLANES_SLOWEST)
 def always_show_slowest_plane(sign):
-    scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
-    while shared_config.shared_mode.value == DisplayMode.PLANES_SLOWEST.value:
-        plane_to_show = shared_config.data_dict["slowest"]
-        show_a_plane(sign, plane_to_show, scroll)
+    always_show_plane(sign, DisplayMode.PLANES_SLOWEST, "slowest")
 
 
 def show_a_plane(sign, plane_to_show, scroll):
@@ -313,8 +318,14 @@ def get_plane_data_worker(data_dict):
             else:
                 try:
                     flights = get_flights(bounds)
-                except Exception:
-                    logging.exception("Error requesting FR24 flight data")
+                    data_dict["planes_status"] = "ready"
+                except Exception as error:
+                    if network.is_offline_error(error):
+                        network.log_unreachable("FlightRadar24", error)
+                        data_dict["planes_status"] = "offline"
+                    else:
+                        logging.exception("Error requesting FR24 flight data")
+                        data_dict["planes_status"] = "error"
                     flights = None
 
                 closest = None
@@ -353,9 +364,9 @@ def get_plane_data_worker(data_dict):
                     data_dict["highest"] = highest
                     data_dict["fastest"] = fastest
                     data_dict["slowest"] = slowest
-                else:
+                elif data_dict.get("planes_status") == "ready":
                     logging.warning("No flights found")
         except Exception:
             logging.exception("Error getting FR24 data...")
 
-        shutdown_flag = shared_config.shared_shutdown_event.wait(timeout=7)
+        shutdown_flag = network.wait(7)

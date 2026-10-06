@@ -16,6 +16,9 @@ AIRPORT_SCROLL=true
 #checkbox
 HIDE_STARLINK=false
 
+#checkbox Disable third-party internet services (planes, weather, sports, etc.); the web controls keep working
+OFFLINE_MODE=false
+
 #range min 0 max 100
 DEFAULT_BRIGHTNESS=80
 

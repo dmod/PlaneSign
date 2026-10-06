@@ -5,6 +5,7 @@ import shutil
 import time
 from datetime import UTC, timedelta
 
+import network
 import numpy as np
 import psclock
 import shared_config
@@ -67,11 +68,15 @@ def moon(sign):
         if os.path.isfile(f"./{datfile}"):
             logging.debug(f"Moving {datfile} to datafiles directory")
             shutil.move(f"./{datfile}", f"{shared_config.datafiles_dir}/{datfile}")
+    if not all(os.path.isfile(f"{shared_config.datafiles_dir}/{datfile}") for datfile in datfiles):
+        network.require_online("NASA JPL/NAIF ephemeris download")
 
     msg = ""
     try:
         eph = load(datfiles[0])
     except Exception as e:
+        if network.is_offline_error(e):
+            raise
         msg = "Error getting ephemeris!"
         logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[0]}: %s", e)
         logging.error(
@@ -84,6 +89,8 @@ def moon(sign):
     try:
         pc.read_text(load(datfiles[1]))
     except Exception as e:
+        if network.is_offline_error(e):
+            raise
         msg = "Error getting lunar ref frame!"
         logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[1]}: %s", e)
         logging.error(
@@ -94,6 +101,8 @@ def moon(sign):
     try:
         pc.read_text(load(datfiles[2]))
     except Exception as e:
+        if network.is_offline_error(e):
+            raise
         msg = "Error getting planetary consts!"
         logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[2]}: %s", e)
         logging.error(
@@ -104,6 +113,8 @@ def moon(sign):
     try:
         pc.read_binary(load(datfiles[3]))
     except Exception as e:
+        if network.is_offline_error(e):
+            raise
         msg = "Error getting lunar orient data!"
         logging.error(f"Error loading {shared_config.datafiles_dir}/{datfiles[3]}: %s", e)
         logging.error(

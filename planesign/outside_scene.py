@@ -1695,14 +1695,16 @@ def outside_notice(environment: "OutsideEnvironment") -> str:
     """Forecast conditions while scrubbing ahead, otherwise data-status notices."""
     weather = environment.weather
     notices = []
+    if weather.status == "OFFLINE" or environment.sky_status == "OFFLINE":
+        notices.append("OFFLINE")
     if environment.offset_minutes:
         if weather.status in ("FORECAST", "FORECAST_CACHED") and weather.code in WEATHER_DESCRIPTIONS:
             notices.append(WEATHER_DESCRIPTIONS[weather.code].upper() + ("~" if weather.status == "FORECAST_CACHED" else ""))
-        else:
+        elif weather.status != "OFFLINE":
             notices.append("FCST?")
-    elif weather.status != "LIVE":
+    elif weather.status not in ("LIVE", "OFFLINE"):
         notices.append("WX~" if weather.status == "CACHED" else "WX?")
-    if environment.sky_status != "READY":
+    if environment.sky_status not in ("READY", "OFFLINE"):
         notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")
     return " ".join(notices)
 
