@@ -1293,6 +1293,149 @@ def draw_eagle(image: Image.Image, palette: Palette, eagle, elapsed: float):
                 d.point((px, py), fill=mix(image.getpixel((px, py)), water, 0.9 * fade))
 
 
+FIREFLY_COUNT = 12
+# Fireflies rise from the grass at dusk and thin out a couple of hours after nightfall.
+FIREFLY_DUSK_ALTITUDE = -3
+FIREFLY_DUSK_RAMP = 3
+FIREFLY_SECONDS = 2.25 * 3600
+FIREFLY_FADE_SECONDS = 3600
+FIREFLY_MIN_TEMPERATURE = 60
+FIREFLY_WARM_TEMPERATURE = 75
+FIREFLY_MAX_WIND = 10
+FIREFLY_FLASH_SECONDS = 0.55
+FIREFLY_FLASH_CHANCE = 0.85
+FIREFLY_ANSWER_CHANCE = 0.8
+FIREFLY_JITTER = 0.8
+# Each flash is a short rising "J" stroke.
+FIREFLY_RISE = 2
+FIREFLY_ROWS = (20, 30)
+FIREFLY_COLUMNS = (2, 102)
+FIREFLY_LIGHT = (214, 255, 92)
+FIREFLY_GLOW = (120, 170, 40)
+# Followers answer the flash of the firefly they court.
+FIREFLY_PAIRS = {1: 0, 6: 5}
+# Pond reflections mirror about the water's top edge.
+POND_MIRROR_Y = 51
+
+
+@dataclass(frozen=True)
+class Firefly:
+    home: tuple[float, float]
+    reach: tuple[float, float]
+    rates: tuple[float, float]
+    phases: tuple[float, float]
+    period: float
+    offset: float
+    leader: int
+    delay: float
+
+
+def unit_hash(*values: int) -> float:
+    """A cheap, stable hash of integers to [0, 1)."""
+    h = 2166136261
+    for value in values:
+        h = ((h ^ (value & 0xFFFFFFFF)) * 16777619) & 0xFFFFFFFF
+    h ^= h >> 15
+    h = (h * 2246822519) & 0xFFFFFFFF
+    h ^= h >> 13
+    return h / 2**32
+
+
+@lru_cache(maxsize=4)
+def fireflies(seed: int) -> tuple[Firefly, ...]:
+    """Fixed flight paths and flash rhythms, listed in the order they appear as activity rises."""
+    rng = random.Random(seed * 6271 + 29)
+    flies: list[Firefly] = []
+    for index in range(FIREFLY_COUNT):
+        leader = FIREFLY_PAIRS.get(index, index)
+        if leader != index:
+            hx = flies[leader].home[0]
+            home = (min(FIREFLY_COLUMNS[1] - 4, max(FIREFLY_COLUMNS[0] + 4, hx + rng.choice((-1, 1)) * rng.uniform(6, 12))), rng.uniform(23, 28))
+        else:
+            home = (rng.uniform(FIREFLY_COLUMNS[0] + 4, FIREFLY_COLUMNS[1] - 4), rng.uniform(22, 28))
+        flies.append(Firefly(
+            home=home,
+            reach=(rng.uniform(4, 9), rng.uniform(1, 2.2)),
+            rates=(rng.uniform(0.05, 0.11), rng.uniform(0.12, 0.25)),
+            phases=(rng.uniform(0, math.tau), rng.uniform(0, math.tau)),
+            period=rng.uniform(2.5, 5),
+            offset=rng.uniform(0, 5),
+            leader=leader,
+            delay=rng.uniform(0.5, 0.9) if leader != index else 0.0,
+        ))
+    return tuple(flies)
+
+
+def firefly_activity(environment: "OutsideEnvironment") -> float:
+    """0..1: warm, calm, dry summer evenings only, from dusk until a couple of hours after nightfall."""
+    w = environment.weather
+    altitude = environment.sun_altitude
+    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None:
+        return 0.0
+    rain, snow = precipitation(environment)
+    if rain > 0 or snow > 0 or (w.wind or 0) >= FIREFLY_MAX_WIND or w.temperature < FIREFLY_MIN_TEMPERATURE:
+        return 0.0
+    since = environment.since_nightfall
+    if since is not None and since < 12 * 3600:
+        evening = (FIREFLY_SECONDS - since) / FIREFLY_FADE_SECONDS
+    elif altitude > NIGHT_ALTITUDE and environment.sun_azimuth >= 180:
+        # Evening twilight before tonight's nightfall; the setting sun is always in the west.
+        evening = 1.0
+    else:
+        return 0.0
+    dusk = (FIREFLY_DUSK_ALTITUDE - altitude) / FIREFLY_DUSK_RAMP
+    warmth = (w.temperature - FIREFLY_MIN_TEMPERATURE) / (FIREFLY_WARM_TEMPERATURE - FIREFLY_MIN_TEMPERATURE)
+    return max(0.0, min(1.0, evening, dusk)) * (0.35 + 0.65 * max(0.0, min(1.0, warmth)))
+
+
+def firefly_flash(index: int, fly: Firefly, flies: tuple[Firefly, ...], elapsed: float, seed: int) -> float | None:
+    """Seconds into the current flash, or None while the firefly is dark."""
+    source = flies[fly.leader]
+    t = elapsed - fly.delay
+    cycle = math.floor((t - source.offset) / source.period)
+    if unit_hash(seed, fly.leader, cycle, 1) > FIREFLY_FLASH_CHANCE:
+        return None
+    if index != fly.leader and unit_hash(seed, index, cycle, 2) > FIREFLY_ANSWER_CHANCE:
+        return None
+    age = t - (source.offset + cycle * source.period + unit_hash(seed, fly.leader, cycle, 3) * FIREFLY_JITTER)
+    return age if 0 <= age < FIREFLY_FLASH_SECONDS else None
+
+
+def firefly_glows(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[float, float, float]]:
+    """Return (x, y, brightness) for each firefly currently lit."""
+    present = firefly_activity(environment) * FIREFLY_COUNT
+    flies = fireflies(seed)
+    lit = []
+    for index, fly in enumerate(flies[:math.ceil(present)]):
+        age = firefly_flash(index, fly, flies, elapsed, seed)
+        if age is None:
+            continue
+        # A quick rise, a short hold, then a fading afterglow.
+        envelope = age / 0.08 if age < 0.08 else 1.0 if age < 0.2 else ((FIREFLY_FLASH_SECONDS - age) / (FIREFLY_FLASH_SECONDS - 0.2)) ** 2
+        (hx, hy), (ax, ay), (fx, fy), (px, py) = fly.home, fly.reach, fly.rates, fly.phases
+        x = hx + ax * math.sin(elapsed * fx + px) + 0.4 * ax * math.sin(elapsed * fx * 2.3 + px * 1.7)
+        y = hy + ay * math.sin(elapsed * fy + py) - FIREFLY_RISE * (age / FIREFLY_FLASH_SECONDS) ** 1.5
+        x = min(FIREFLY_COLUMNS[1], max(FIREFLY_COLUMNS[0], x))
+        y = min(FIREFLY_ROWS[1], max(FIREFLY_ROWS[0], y))
+        lit.append((x, y, envelope * min(1.0, present - index)))
+    return lit
+
+
+def draw_fireflies(image: Image.Image, glows: list[tuple[float, float, float]]):
+    d = ImageDraw.Draw(image)
+    for fx, fy, strength in glows:
+        x, y = round(fx), round(fy)
+        if strength > 0.5:
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                px, py = x + dx, y + dy
+                if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                    d.point((px, py), fill=mix(image.getpixel((px, py)), FIREFLY_GLOW, (strength - 0.5) * 0.45))
+        reflection = POND_MIRROR_Y - y
+        if 0 <= reflection < HEIGHT and LAND.getpixel((x, reflection)) == INDEX["water"]:
+            d.point((x, reflection), fill=mix(image.getpixel((x, reflection)), FIREFLY_LIGHT, strength * 0.35))
+        d.point((x, y), fill=mix(image.getpixel((x, y)), FIREFLY_LIGHT, strength))
+
+
 def lamp_level(environment: "OutsideEnvironment") -> float:
     """The yard lamp comes on once the sky is pure night, warming up over 40 s, and switches off three hours later."""
     since = environment.since_nightfall
@@ -1603,6 +1746,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_wildlife(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
+    draw_fireflies(image, firefly_glows(environment, elapsed, seed))
     wind = environment.weather.wind or 0
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
@@ -1615,11 +1759,6 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image.paste(wood, (0, 0), wood)
     # The owl perches on the fixed branch, in front of the swaying foliage.
     draw_owl(image, palette, owl_state(environment, elapsed, seed))
-    night = environment.sun_altitude is not None and environment.sun_altitude < -6
-    if night and environment.season in ("spring", "summer", "autumn") and rain == 0 and snow == 0 and wind < 15:
-        for index, (x, y) in enumerate([(48, 29), (69, 31), (78, 28), (102, 30)]):
-            glow = max(0, math.sin(elapsed * 0.8 + index * 2.4)) ** 3
-            d.point((x, y), fill=mix(image.getpixel((x, y)), (180, 172, 74), glow * 0.65))
     if rain > 0:
         draw_rain(image, rain, wind, elapsed)
     if snow > 0:
