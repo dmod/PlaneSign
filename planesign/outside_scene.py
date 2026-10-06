@@ -488,8 +488,21 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
     return land, foliage, wood
 
 
+SET_ALTITUDE = -0.833
+CELESTIAL_CENTER_X, CELESTIAL_SWING_X = 68.5, 89.5
+CELESTIAL_SET_Y, CELESTIAL_ZENITH_Y = 25.5, 2
+
+
 def celestial_position(altitude: float, azimuth: float) -> tuple[int, int]:
-    return round(64 - 56 * math.sin(math.radians(azimuth))), round(18 - 15 * math.sin(math.radians(max(0, altitude))))
+    # Half the azimuth from south keeps the mapping monotonic, so a setting body keeps moving
+    # right past the tree instead of folding back at due west; due east and west land near the
+    # edges, and the center is clamped so a summer sun slides down the edge rather than leaving.
+    swing = math.sin(math.radians((azimuth % 360 - 180) / 2))
+    x = min(WIDTH - 2, max(1, CELESTIAL_CENTER_X + CELESTIAL_SWING_X * swing))
+    # The square root spreads low altitudes out, so bodies visibly sink into the land and are
+    # fully below the right-hand horizon (y=23) at SET_ALTITUDE.
+    height = math.sqrt(max(0, altitude - SET_ALTITUDE) / (90 - SET_ALTITUDE))
+    return round(x), round(CELESTIAL_SET_Y - (CELESTIAL_SET_Y - CELESTIAL_ZENITH_Y) * height)
 
 
 CLOUD_TILE = 256
@@ -715,13 +728,13 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     if visibility > 0:
         draw_shooting_star(image, elapsed, visibility, seed)
     glows = []
-    if altitude is not None and altitude > -0.833:
+    if altitude is not None and altitude > SET_ALTITUDE:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
         sun = mix((255, 164, 94), (255, 235, 170), altitude / 20)
         d.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=mix(palette.middle, sun, 0.23))
         d.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill=sun)
         glows.append((cx, cy, sun, 0.8))
-    if environment.moon_altitude is not None and environment.moon_altitude > 0:
+    if environment.moon_altitude is not None and environment.moon_altitude > SET_ALTITUDE:
         cx, cy = celestial_position(environment.moon_altitude, environment.moon_azimuth)
         phase = math.radians(environment.moon_phase)
         fraction = (1 - math.cos(phase)) / 2
