@@ -1436,6 +1436,91 @@ def draw_fireflies(image: Image.Image, glows: list[tuple[float, float, float]]):
         d.point((x, y), fill=mix(image.getpixel((x, y)), FIREFLY_LIGHT, strength))
 
 
+LEAF_SLOT_SECONDS = 45
+LEAF_GUST_CHANCE = 0.72
+LEAF_REST_SECONDS = 3
+LEAF_FADE_SECONDS = 4
+LEAF_BREEZE_MPH = 8
+LEAF_GUST_MPH = 16
+LEAF_SHAPES = (((0, 0), (1, 0)), ((0, 0),), ((0, 0), (1, 1)), ((0, 0),), ((0, 0), (0, 1)), ((0, 0),), ((0, 0), (-1, 1)), ((0, 0),))
+
+
+@dataclass(frozen=True)
+class LeafDrift:
+    release: float
+    origin: tuple[int, int]
+    flight_seconds: float
+    ground_y: int
+    phase: float
+    tint: float
+
+
+@lru_cache(maxsize=16)
+def leaf_gust(slot: int, seed: int) -> tuple[LeafDrift, ...]:
+    """Fixed release order: wind adds leaves to a gust without reshuffling its paths."""
+    rng = random.Random(seed * 7919 + slot * 104729 + 43)
+    if rng.random() > LEAF_GUST_CHANCE:
+        return ()
+    start = slot * LEAF_SLOT_SECONDS + rng.uniform(4, 10)
+    leaves = []
+    for index in range(3):
+        dx, dy = rng.choice(TREE_BLOSSOMS)
+        leaves.append(LeafDrift(
+            release=start + index * rng.uniform(0.65, 1.2),
+            origin=(TREE_X + dx, TREE_CANOPY_Y + dy),
+            flight_seconds=rng.uniform(8, 12),
+            ground_y=rng.randrange(29, 31),
+            phase=rng.uniform(0, math.tau),
+            tint=rng.random(),
+        ))
+    return tuple(leaves)
+
+
+def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[int, int, int, float, float]]:
+    """(x, y, pose, tint, opacity) for dry autumn leaves or spring blossom petals."""
+    weather = environment.weather
+    if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None:
+        return []
+    rain, snow = precipitation(environment)
+    if rain > 0 or snow > 0:
+        return []
+    wind = min(30, weather.wind)
+    count = 1 + (wind >= LEAF_BREEZE_MPH) + (wind >= LEAF_GUST_MPH)
+    particles = []
+    for leaf in leaf_gust(math.floor(elapsed / LEAF_SLOT_SECONDS), seed)[:count]:
+        age = elapsed - leaf.release
+        end = leaf.flight_seconds + LEAF_REST_SECONDS + LEAF_FADE_SECONDS
+        if not 0 <= age < end:
+            continue
+        progress = min(1.0, age / leaf.flight_seconds)
+        # The scene's breeze carries leaves left into the meadow; only strong gusts reach the yard.
+        travel = min(leaf.origin[0] - 3, 3 + wind * 4)
+        sway = round(math.sin(leaf.release * 0.6) * min(1, wind / 12))
+        flutter = (math.sin(age * 1.65 + leaf.phase) - math.sin(leaf.phase)) * (1 - progress) * (1.2 + wind / 30)
+        x = round(leaf.origin[0] + sway - travel * progress + flutter)
+        y = round(leaf.origin[1] + (leaf.ground_y - leaf.origin[1]) * progress)
+        pose = int(age * 2.5 + leaf.phase) % len(LEAF_SHAPES) if progress < 1 else 0
+        opacity = min(1.0, age / 0.3, (end - age) / LEAF_FADE_SECONDS)
+        particles.append((x, y, pose, leaf.tint, opacity))
+    return particles
+
+
+def draw_leaves(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    particles = leaf_particles(environment, elapsed, seed)
+    if not particles:
+        return
+    colors = ((239, 186, 182), (215, 146, 166)) if environment.season == "spring" else ((231, 153, 63), (176, 82, 40))
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    d = ImageDraw.Draw(image)
+    for x, y, pose, tint, opacity in particles:
+        color = mix(*colors, tint)
+        color = (round(color[0] * illumination), round(color[1] * illumination), round(color[2] * illumination))
+        for dx, dy in LEAF_SHAPES[pose]:
+            px, py = x + dx, y + dy
+            if 0 <= px < WIDTH and 5 <= py < HEIGHT:
+                d.point((px, py), fill=mix(image.getpixel((px, py)), color, opacity))
+
+
 def lamp_level(environment: "OutsideEnvironment") -> float:
     """The yard lamp comes on once the sky is pure night, warming up over 40 s, and switches off three hours later."""
     since = environment.since_nightfall
@@ -1743,6 +1828,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = round((elapsed * 0.22 + index * 49) % 168) - 40
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
+    draw_leaves(image, palette, environment, elapsed, seed)
     draw_wildlife(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
