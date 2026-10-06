@@ -6,7 +6,7 @@ import random
 import signal
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, draw_outside_frame
+from outside_scene import NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, draw_outside_frame, holiday_features
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -62,6 +62,8 @@ class OutsideEnvironment:
     moon_phase: float = 0
     offset_minutes: int = 0
     since_nightfall: float | None = None
+    # The displayed moment's local date, which selects the holiday decorations.
+    local_date: date | None = None
 
 
 def reading(value):
@@ -162,13 +164,13 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
     observed = OutsideWeather("OFFLINE") if weather_offline else weather_snapshot(weather, time.time(), forecast_time=moment.timestamp() if offset_minutes else None)
     season = local_season(moment, latitude)
     if not isinstance(sky, dict):
-        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes)
+        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date())
     positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
     if positions is None:
-        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes)
+        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date())
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
-    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall)
+    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date())
 
 
 def sky_angles(ephemeris, instant, latitude: float, longitude: float):
@@ -274,6 +276,7 @@ def outside_status():
         "timezone": getattr(tz, "key", "UTC"),
         "military_time": shared_config.CONF["MILITARY_TIME"].lower() == "true",
         "season": environment.season,
+        "holidays": sorted(holiday_features(environment)),
         "weather": environment.weather.status,
         "astronomy": environment.sky_status,
         "observed_at": environment.weather.observed_at,

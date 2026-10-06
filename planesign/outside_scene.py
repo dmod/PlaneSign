@@ -257,6 +257,8 @@ MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 18), (77, 16), (80, 15), (83, 14)
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
 MOUNTAIN_LIT_FACE = ((83, 14), (80, 15), (77, 16), (74, 18), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 16))
 TREE_X, TREE_CANOPY_Y = 115, 15
+# Small conifers flanking the hut: (trunk x, base row, height); the apex is at row base - height.
+CONIFERS = ((4, 28, 12), (38, 25, 7))
 HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
 HUT_DOOR = (26, 21, 29, 25)
 HUT_KNOB = (28, 23)
@@ -379,7 +381,7 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
     d.line((LAMP_POST_X - 1, LAMP_GROUND_Y, LAMP_POST_X + 1, LAMP_GROUND_Y), fill=INDEX["roof"])
     d.line((LAMP_POST_X, lens_y - 1, lens_x + 1, lens_y - 1), fill=INDEX["roof"])
     d.line((lens_x - 1, lens_y, lens_x + 1, lens_y), fill=INDEX["roof"])
-    for x, base, height in [(4, 28, 12), (38, 25, 7)]:
+    for x, base, height in CONIFERS:
         d.line((x, base - height, x, base), fill=INDEX["trunk"])
         for offset in range(2, height - 1, 2):
             w, y = max(1, offset // 3), base - height + offset
@@ -1807,6 +1809,382 @@ def draw_lightning(image: Image.Image, event: LightningEvent, age: float):
         light(channel, LIGHTNING_GLOW, min(1, intensity * 2.2))
 
 
+def holiday_features(environment: "OutsideEnvironment") -> frozenset[str]:
+    """Holiday easter eggs for the displayed local date."""
+    day = environment.local_date
+    if day is None:
+        return frozenset()
+    features = set()
+    if day.month == 12 and day.day <= CHRISTMAS_LAST_DAY:
+        features.add("christmas_lights")
+    if (day.month, day.day) == (12, 24):
+        features.add("santa")
+    if (day.month, day.day) in ((12, 31), (1, 1), (7, 4)):
+        features.add("fireworks")
+    if (day.month, day.day) == (7, 4):
+        features.add("flag")
+    return frozenset(features)
+
+
+def holiday_darkness(environment: "OutsideEnvironment") -> float:
+    """0 in daylight to 1 once dusk deepens; emitted holiday light glows into its surroundings only after dark."""
+    altitude = environment.sun_altitude
+    return max(0, min(1, -(altitude + 2) / 8)) if altitude is not None else 0
+
+
+# Christmas lights stay up from December 1 through the day after Christmas.
+CHRISTMAS_LAST_DAY = 26
+CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
+TOPPER_GOLD = (255, 206, 60)
+TOPPER_CORE = (255, 250, 214)
+
+
+def christmas_bulbs() -> tuple[tuple[int, int], ...]:
+    """Bulbs strung along the hut's gable and wound around each conifer."""
+    bulbs = trace(list(HUT_ROOF))[::2]
+    foliage = (INDEX["leaf"], INDEX["leaf_dark"])
+    for cx, base, height in CONIFERS:
+        top = base - height
+        for y in range(top + 2, base):
+            row = [x for x in range(cx - 3, cx + 4) if LAND.getpixel((x, y)) in foliage]
+            # Garlands spiral down the tree: one bulb per row, swinging from side to side.
+            if row and (y - top) % 2 == 0:
+                bulbs.append((row[0] if (y - top) % 4 == 0 else row[-1], y))
+    return tuple(dict.fromkeys(bulbs))
+
+
+CHRISTMAS_BULBS = christmas_bulbs()
+CHRISTMAS_BULB_ROWS = np.array([y for _, y in CHRISTMAS_BULBS])
+CHRISTMAS_BULB_COLUMNS = np.array([x for x, _ in CHRISTMAS_BULBS])
+CHRISTMAS_BULB_INDEX = np.arange(len(CHRISTMAS_BULBS))
+CHRISTMAS_BULB_LIGHT = SRGB_TO_LINEAR_ARRAY[np.array([CHRISTMAS_COLORS[index % len(CHRISTMAS_COLORS)] for index in range(len(CHRISTMAS_BULBS))])]
+# Each bulb's neighbors catch a little of its color after dark: (row, column, bulb index).
+CHRISTMAS_HALO = np.array([(y + dy, x + dx, index) for index, (x, y) in enumerate(CHRISTMAS_BULBS) for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (x + dx, y + dy) not in CHRISTMAS_BULBS and 0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT])
+# A star sits just above each conifer's apex.
+TREE_TOPPERS = tuple((cx, base - height - 2) for cx, base, height in CONIFERS)
+
+
+def linear_to_srgb_array(linear: np.ndarray) -> np.ndarray:
+    linear = np.clip(linear, 0, 1)
+    return np.round(np.where(linear <= 0.0031308, linear * 12.92, 1.055 * np.power(linear, 1 / 2.4) - 0.055) * 255).astype(np.uint8)
+
+
+def draw_christmas_lights(image: Image.Image, environment: "OutsideEnvironment", elapsed: float) -> Image.Image:
+    night = holiday_darkness(environment)
+    twinkle = 0.5 + 0.5 * np.sin(elapsed * (1.1 + (CHRISTMAS_BULB_INDEX % 7) * 0.23) + CHRISTMAS_BULB_INDEX * 2.4)
+    # Blend in linear light, converting only the pixels the lights touch.
+    pixels = np.array(image)
+    if night > 0:
+        rows, columns, bulbs = CHRISTMAS_HALO.T
+        halo = SRGB_TO_LINEAR_ARRAY[pixels[rows, columns]]
+        halo += (CHRISTMAS_BULB_LIGHT[bulbs] - halo) * (0.28 * night * (0.72 + 0.28 * twinkle[bulbs]))[:, None]
+        pixels[rows, columns] = linear_to_srgb_array(halo)
+    bulb = SRGB_TO_LINEAR_ARRAY[pixels[CHRISTMAS_BULB_ROWS, CHRISTMAS_BULB_COLUMNS]]
+    bulb += (CHRISTMAS_BULB_LIGHT - bulb) * 0.9
+    pixels[CHRISTMAS_BULB_ROWS, CHRISTMAS_BULB_COLUMNS] = linear_to_srgb_array(bulb + (1 - bulb) * (0.12 * twinkle)[:, None])
+    image = Image.fromarray(pixels, "RGB")
+    d = ImageDraw.Draw(image)
+    for index, (x, y) in enumerate(TREE_TOPPERS):
+        shine = 0.5 + 0.5 * math.sin(elapsed * 2.1 + index * 1.9)
+        if night > 0:
+            for dx, dy in ((-2, 0), (2, 0), (0, -2), (-1, -1), (1, -1), (-1, 1), (1, 1)):
+                point = (x + dx, y + dy)
+                d.point(point, fill=mix(image.getpixel(point), TOPPER_GOLD, night * (0.16 + 0.1 * shine)))
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            d.point((x + dx, y + dy), fill=mix(image.getpixel((x + dx, y + dy)), TOPPER_GOLD, 0.8 + 0.2 * shine))
+        d.point((x, y), fill=TOPPER_CORE)
+        # Now and then the star glints with a brief diagonal sparkle.
+        glint = (elapsed + index * 1.7) % 3.2
+        if glint < 0.35:
+            strength = math.sin(math.pi * glint / 0.35)
+            for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+                point = (x + dx, y + dy)
+                d.point(point, fill=mix(image.getpixel(point), TOPPER_CORE, 0.7 * strength))
+    return image
+
+
+SANTA_SLOT_SECONDS = 30
+SANTA_REINDEER = 4
+SANTA_REINDEER_SPACING = 9
+SANTA_SLEIGH_GAP = 3
+SANTA_SPRITE_WIDTH = {"sleigh": 10, "reindeer": 7}
+SANTA_LENGTH = SANTA_SPRITE_WIDTH["sleigh"] + SANTA_SLEIGH_GAP + SANTA_REINDEER * SANTA_REINDEER_SPACING
+SANTA_TRAIL_SECONDS = 0.9
+SANTA_DUST_SPACING = 2.5
+# Facing right. Santa: w pompom, r suit, f face, W beard, k toy sack, s sleigh, g gold trim, y runners.
+SANTA_SLEIGH = ("...w......", "..rr......", "kkrf.....y", "kkrW.....y", "gsrrssssgy", "sssssssss.", "yyyyyyyyy.")
+# Reindeer in two gallop frames: a antlers, b coat, t tail, l legs, n nose (Rudolph's glows red).
+SANTA_REINDEER_SPRITES = (("....a.a", ".....bn", "tbbbbb.", ".bbbb..", "l....l."), ("....a.a", ".....bn", "tbbbbb.", ".bbbb..", "..l.l.."))
+SANTA_COLORS = {"w": (255, 255, 255), "r": (240, 44, 44), "f": (250, 196, 160), "W": (245, 245, 245), "k": (128, 86, 52), "s": (150, 14, 26), "g": (255, 196, 54), "y": (255, 204, 70), "a": (205, 170, 120), "b": (150, 96, 54), "t": (235, 225, 205), "l": (105, 64, 36)}
+RUDOLPH_NOSE = (255, 36, 28)
+SANTA_REINS = (200, 160, 60)
+SANTA_DUST = ((255, 236, 150), (255, 255, 255), (255, 200, 90))
+
+
+@dataclass(frozen=True)
+class SantaPass:
+    start: float
+    duration: float
+    speed: float
+    direction: int
+    altitude: float
+    climb: float
+
+
+@lru_cache(maxsize=8)
+def santa_pass(slot: int, seed: int) -> SantaPass:
+    """Santa's sleigh streaks across the sky once per slot on Christmas Eve."""
+    rng = random.Random(seed * 3571 + slot * 65537 + 23)
+    speed = rng.uniform(40, 52)
+    duration = (WIDTH + SANTA_LENGTH + SANTA_TRAIL_SECONDS * speed) / speed
+    start = slot * SANTA_SLOT_SECONDS + rng.uniform(0, SANTA_SLOT_SECONDS - duration)
+    return SantaPass(start, duration, speed, rng.choice((-1, 1)), rng.uniform(9.5, 11), rng.uniform(-1.5, 1.5))
+
+
+def santa_path(santa: SantaPass, distance: float) -> tuple[float, float]:
+    """Position along the flight path `distance` px after the team's front entered the sky."""
+    x = distance - 1 if santa.direction > 0 else WIDTH - distance
+    y = santa.altitude + santa.climb * distance / (WIDTH + SANTA_LENGTH) + math.sin(distance * 0.07)
+    return x, y
+
+
+def draw_santa_sprite(image: Image.Image, rows: tuple[str, ...], center_x: float, top: float, direction: int, colors: dict[str, Color]):
+    width = len(rows[0])
+    left, top = round(center_x - (width - 1) / 2), round(top)
+    points: dict[str, list[tuple[int, int]]] = {}
+    for row, line in enumerate(rows):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            x, y = left + (column if direction > 0 else width - 1 - column), top + row
+            if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+                points.setdefault(char, []).append((x, y))
+    d = ImageDraw.Draw(image)
+    for char, pixels in points.items():
+        d.point(pixels, fill=colors[char])
+
+
+def draw_santa(image: Image.Image, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    santa = santa_pass(math.floor(elapsed / SANTA_SLOT_SECONDS), seed)
+    age = elapsed - santa.start
+    if not 0 <= age < santa.duration:
+        return
+    night = holiday_darkness(environment)
+    traveled = age * santa.speed
+    sleigh_width = SANTA_SPRITE_WIDTH["sleigh"]
+    sleigh_back = traveled - SANTA_LENGTH
+    d = ImageDraw.Draw(image)
+    # Magic dust trails off the back of the sleigh, drifting down and twinkling out.
+    newest = math.floor(sleigh_back / SANTA_DUST_SPACING)
+    for index in range(newest, newest - math.ceil(SANTA_TRAIL_SECONDS * santa.speed / SANTA_DUST_SPACING), -1):
+        emitted = index * SANTA_DUST_SPACING
+        if emitted < -sleigh_width:
+            break
+        since = (sleigh_back - emitted) / santa.speed
+        x, y = santa_path(santa, emitted)
+        x += (unit_hash(index, seed, 1) - 0.5) * 2
+        y += 4 + (unit_hash(index, seed, 2) - 0.5) * 4 + since * 4
+        sparkle = unit_hash(index, math.floor(elapsed * 14), 3)
+        strength = (1 - since / SANTA_TRAIL_SECONDS) * (0.45 + 0.55 * sparkle)
+        px, py = round(x), round(y)
+        if strength > 0 and 0 <= px < WIDTH and 0 <= py < HEIGHT:
+            d.point((px, py), fill=mix(image.getpixel((px, py)), SANTA_DUST[index % len(SANTA_DUST)], strength))
+    sleigh_x, sleigh_y = santa_path(santa, sleigh_back + sleigh_width / 2)
+    front = traveled - SANTA_SPRITE_WIDTH["reindeer"] / 2
+    lead_x, lead_y = santa_path(santa, front)
+    # Reins run from the sleigh's dash to the lead reindeer; the team is drawn over them.
+    reins = trace([(round(sleigh_x + santa.direction * sleigh_width / 2), round(sleigh_y) - 1), (round(lead_x), round(lead_y))])
+    d.point(reins, fill=SANTA_REINS)
+    draw_santa_sprite(image, SANTA_SLEIGH, sleigh_x, sleigh_y - 4, santa.direction, SANTA_COLORS)
+    for index in range(SANTA_REINDEER):
+        x, y = santa_path(santa, front - index * SANTA_REINDEER_SPACING)
+        frame = (math.floor(elapsed * 8) + index) % 2
+        lead = index == 0
+        colors = {**SANTA_COLORS, "n": RUDOLPH_NOSE if lead else SANTA_COLORS["b"]}
+        draw_santa_sprite(image, SANTA_REINDEER_SPRITES[frame], x, y - 3 + frame, santa.direction, colors)
+        if lead and night > 0:
+            nose_x, nose_y = round(x + santa.direction * 3), round(y - 2 + frame)
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                point = (nose_x + dx, nose_y + dy)
+                if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT and point != (nose_x - santa.direction, nose_y):
+                    d.point(point, fill=mix(image.getpixel(point), RUDOLPH_NOSE, 0.35 * night))
+
+
+FIREWORK_SLOT_SECONDS = 0.7
+FIREWORK_CHANCE = 0.75
+# Each cycle ends with a finale that fires several shells per slot.
+FIREWORK_FINALE_PERIOD = 75
+FIREWORK_FINALE_SECONDS = 7
+FIREWORK_MAX_SECONDS = 4.2
+FIREWORK_HORIZON = 24
+FIREWORK_COLORS = ((255, 40, 40), (255, 190, 40), (40, 255, 90), (60, 130, 255), (200, 80, 255), (255, 255, 255), (255, 110, 200), (40, 230, 255))
+FIREWORK_PATRIOTIC = ((255, 30, 40), (255, 255, 255), (80, 150, 255))
+FIREWORK_WILLOW = (255, 176, 70)
+FIREWORK_GLITTER = (255, 244, 210)
+FIREWORK_ROCKET = (255, 214, 150)
+FIREWORK_X, FIREWORK_Y = np.meshgrid(np.arange(WIDTH, dtype=np.float32), np.arange(HEIGHT, dtype=np.float32))
+WATER = np.asarray(LAND) == INDEX["water"]
+WATER_ROWS = (int(np.flatnonzero(WATER.any(axis=1))[0]), int(np.flatnonzero(WATER.any(axis=1))[-1]) + 1)
+
+
+@dataclass(frozen=True, eq=False)
+class FireworkShell:
+    launch: float
+    rise: float
+    origin: float
+    burst: tuple[float, float]
+    kind: str
+    life: float
+    gravity: float
+    radius: float
+    salt: int
+    angles: np.ndarray
+    speeds: np.ndarray
+    colors: np.ndarray
+
+
+@lru_cache(maxsize=32)
+def firework_shells(slot: int, seed: int, patriotic: bool) -> tuple[FireworkShell, ...]:
+    rng = random.Random(seed * 2741 + slot * 48611 + 31)
+    start = slot * FIREWORK_SLOT_SECONDS
+    finale = start % FIREWORK_FINALE_PERIOD >= FIREWORK_FINALE_PERIOD - FIREWORK_FINALE_SECONDS
+    count = rng.choice((1, 2, 2, 3)) if finale else int(rng.random() < FIREWORK_CHANCE)
+    palette = FIREWORK_PATRIOTIC if patriotic else FIREWORK_COLORS
+    shells = []
+    for _ in range(count):
+        kind = rng.choice(("peony", "peony", "ring", "willow", "crackle"))
+        radius = rng.uniform(4.5, 7.5) if kind != "ring" else rng.uniform(5, 7)
+        burst = (rng.uniform(10, 118), rng.uniform(radius + 5, 15))
+        stars = round(radius * (3.6 if kind != "ring" else 2.8))
+        angles = np.array([2 * math.pi * (i + rng.uniform(-0.25, 0.25)) / stars for i in range(stars)], dtype=np.float32)
+        if kind == "ring":
+            speeds = np.full(stars, radius, dtype=np.float32)
+        else:
+            # Shells read as filled spheres: most stars fly near full radius, some stay in the core.
+            speeds = np.array([radius * (rng.uniform(0.85, 1.05) if rng.random() < 0.7 else rng.uniform(0.35, 0.65)) for _ in range(stars)], dtype=np.float32)
+        outer, inner = rng.sample(palette, 2)
+        if kind == "willow":
+            colors = np.tile(np.array(FIREWORK_WILLOW, dtype=np.float32) / 255, (stars, 1))
+        else:
+            colors = np.where((speeds < radius * 0.7)[:, None], np.array(inner, dtype=np.float32) / 255, np.array(outer, dtype=np.float32) / 255)
+        life = rng.uniform(2.4, 2.9) if kind == "willow" else rng.uniform(1.5, 2.1)
+        shells.append(
+            FireworkShell(
+                launch=start + rng.uniform(0, FIREWORK_SLOT_SECONDS), rise=rng.uniform(0.7, 1.1), origin=burst[0] + rng.uniform(-4, 4), burst=burst, kind=kind, life=life, gravity=3.2 if kind == "willow" else 1.4, radius=radius, salt=rng.randrange(2**30), angles=angles, speeds=speeds, colors=colors
+            )
+        )
+    return tuple(shells)
+
+
+def splat(light: np.ndarray, xs: np.ndarray, ys: np.ndarray, colors: np.ndarray, weights: np.ndarray):
+    columns, rows = np.rint(xs).astype(int), np.rint(ys).astype(int)
+    keep = (columns >= 0) & (columns < WIDTH) & (rows >= 0) & (rows < HEIGHT) & (weights > 0.004)
+    np.add.at(light, (rows[keep], columns[keep]), colors[keep] * weights[keep, None])
+
+
+def firework_light(elapsed: float, seed: int, patriotic: bool, night: float) -> np.ndarray | None:
+    """Light from distant fireworks, as a (row, column, rgb) array in 0..1, or None when the sky is quiet."""
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    active = False
+    for slot in range(math.floor((elapsed - FIREWORK_MAX_SECONDS) / FIREWORK_SLOT_SECONDS), math.floor(elapsed / FIREWORK_SLOT_SECONDS) + 1):
+        for shell in firework_shells(slot, seed, patriotic):
+            age = elapsed - shell.launch
+            if not 0 <= age < shell.rise + shell.life:
+                continue
+            active = True
+            bx, by = shell.burst
+            if age < shell.rise:
+                # The rocket climbs from behind the hills, slowing as it nears the top, with a short spark trail.
+                for back, weight in ((0, 0.9), (0.05, 0.45), (0.1, 0.22), (0.15, 0.1)):
+                    progress = max(0, age - back) / shell.rise
+                    climb = 1 - (1 - progress) ** 2
+                    x = shell.origin + (bx - shell.origin) * climb + math.sin(age * 23 + shell.salt) * 0.4
+                    y = FIREWORK_HORIZON + (by - FIREWORK_HORIZON) * climb
+                    splat(light, np.array([x]), np.array([y]), np.array([FIREWORK_ROCKET], dtype=np.float32) / 255, np.array([weight]))
+                continue
+            age -= shell.rise
+            fade = 1.0 if age < 0.15 else max(0.0, 1 - (age - 0.15) / (shell.life - 0.15)) ** 1.3
+            # The burst opens with a white-hot flash that briefly lights the sky around it after dark.
+            heat = max(0.0, 1 - age / 0.2)
+            colors = shell.colors + (1 - shell.colors) * heat * 0.8
+            glow = 0.42 * math.exp(-age / 0.3) * (0.15 + 0.85 * night)
+            if glow > 0.01:
+                distance = (FIREWORK_X - bx) ** 2 + (FIREWORK_Y - by) ** 2
+                tint = shell.colors.mean(axis=0) * 0.6 + 0.4
+                light += np.exp(-distance / (2 * (shell.radius * 1.3) ** 2))[..., None] * tint * glow
+            trail = 6 if shell.kind == "willow" else 3
+            for step in range(trail + 1):
+                at = age - step * 0.05
+                if at < 0:
+                    break
+                reach = shell.speeds * (1 - math.exp(-at / 0.28))
+                xs = bx + reach * np.cos(shell.angles)
+                ys = by + reach * np.sin(shell.angles) * 0.9 + shell.gravity * at * at
+                weights = np.full(len(xs), fade * (0.72 if shell.kind == "willow" else 0.5) ** step, dtype=np.float32)
+                if shell.kind == "crackle" and age > shell.life * 0.45:
+                    # Crackle shells end in strobing white glitter.
+                    flicker = np.array([unit_hash(shell.salt, index, math.floor(elapsed * 16)) for index in range(len(xs))], dtype=np.float32)
+                    sparkle = np.array(FIREWORK_GLITTER, dtype=np.float32) / 255
+                    splat(light, xs, ys, np.tile(sparkle, (len(xs), 1)), weights * (flicker > 0.45) * 1.3)
+                    continue
+                splat(light, xs, ys, colors, weights)
+            if age < 0.08:
+                splat(light, np.array([bx]), np.array([by]), np.ones((1, 3), dtype=np.float32), np.array([1.0]))
+    return light if active else None
+
+
+def composite_light(image: Image.Image, light: np.ndarray) -> Image.Image:
+    """Lay emitted light over the scene as premultiplied color, so stars keep their saturation even against a daytime sky."""
+    light = np.clip(light, 0, 1)
+    base = np.asarray(image, dtype=np.float32) / 255
+    return Image.fromarray(np.round((base * (1 - light.max(axis=-1, keepdims=True)) + light) * 255).astype(np.uint8), "RGB")
+
+
+def reflect_fireworks(image: Image.Image, light: np.ndarray, elapsed: float) -> Image.Image:
+    """Bursts shimmer on the pond below them."""
+    top, bottom = WATER_ROWS
+    shimmer = 0.5 + 0.5 * np.sin(FIREWORK_X[top:bottom] * 0.9 + FIREWORK_Y[top:bottom] * 2.3 - elapsed * 4)
+    reflection = np.clip(light.max(axis=0), 0, 1)[None, :, :] * (WATER[top:bottom] * shimmer * 0.5)[..., None]
+    pond = image.crop((0, top, WIDTH, bottom))
+    image.paste(composite_light(pond, reflection), (0, top))
+    return image
+
+
+FLAG_POLE_X = 43
+FLAG_TOP = 6
+FLAG_GROUND = 26
+# Seven stripes and a starred canton, 13 x 7 like the real flag's 1.9:1 proportions.
+FLAG_ROWS = ("sbsbsbRRRRRRR", "bbbbbbWWWWWWW", "bsbsbsRRRRRRR", "bbbbbbWWWWWWW", "RRRRRRRRRRRRR", "WWWWWWWWWWWWW", "RRRRRRRRRRRRR")
+FLAG_COLORS = {"R": (206, 22, 44), "W": (246, 246, 240), "b": (28, 46, 150), "s": (246, 246, 240)}
+FLAG_POLE = (196, 200, 206)
+FLAG_FINIAL = (255, 204, 70)
+
+
+def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float):
+    """A big American flag rippling on a pole beside the hut."""
+    d = ImageDraw.Draw(image)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+
+    def lit(color: Color, shade: float = 1.0) -> Color:
+        return tuple(min(255, round(value * illumination * shade)) for value in color)
+
+    d.line((FLAG_POLE_X, FLAG_TOP, FLAG_POLE_X, FLAG_GROUND), fill=lit(FLAG_POLE))
+    d.point((FLAG_POLE_X, FLAG_TOP - 1), fill=lit(FLAG_FINIAL))
+    breeze = 0.6 + min(wind, 25) / 25
+    speed = 3.5 + min(wind, 25) * 0.15
+    for column in range(len(FLAG_ROWS[0])):
+        phase = column * 0.75 - elapsed * speed
+        # Ripples grow away from the hoist; their slopes catch more or less light.
+        lift = round(breeze * math.sin(phase) * column / 12)
+        shade = 1 + 0.2 * math.cos(phase) * min(1, column / 3)
+        x = FLAG_POLE_X + 1 + column
+        points: dict[str, list[tuple[int, int]]] = {}
+        for row, line in enumerate(FLAG_ROWS):
+            points.setdefault(line[column], []).append((x, FLAG_TOP + row + lift))
+        for char, pixels in points.items():
+            d.point(pixels, fill=lit(FLAG_COLORS[char], shade))
+
+
 def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0) -> Image.Image:
     palette = scene_palette(environment)
     image = Image.new("RGB", (WIDTH, HEIGHT))
@@ -1817,6 +2195,14 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         d.line((0, y, 127, y), fill=color)
     lightning = lightning_at(environment, elapsed, seed)
     clouds = draw_sky(image, environment, palette, elapsed, lightning, seed)
+    holidays = holiday_features(environment)
+    # Fireworks and Santa fly in the distance, in front of the clouds but behind the land.
+    night = holiday_darkness(environment)
+    fireworks = firework_light(elapsed, seed, "flag" in holidays, night) if "fireworks" in holidays else None
+    if fireworks is not None:
+        image = composite_light(image, fireworks)
+    if "santa" in holidays:
+        draw_santa(image, environment, elapsed, seed)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
@@ -1830,6 +2216,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         for column in range(x + drift, x + width + drift + 1):
             if LAND.getpixel((column, y)) == INDEX["water"]:
                 d.point((column, y), fill=color)
+    if fireworks is not None:
+        image = reflect_fireworks(image, fireworks, elapsed)
+        d = ImageDraw.Draw(image)
     mist = environment.weather.visibility is not None and environment.weather.visibility < 5000
     if mist or environment.weather.code in (701, 711, 721, 741):
         fog = Image.new("RGBA", (WIDTH, HEIGHT))
@@ -1838,12 +2227,14 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = round((elapsed * 0.22 + index * 49) % 168) - 40
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
+    wind = environment.weather.wind or 0
+    if "flag" in holidays:
+        draw_flag(image, palette, wind, elapsed)
     draw_leaves(image, palette, environment, elapsed, seed)
     draw_wildlife(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
-    wind = environment.weather.wind or 0
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
         image.paste(foliage, (sway, 0), foliage)
@@ -1867,6 +2258,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     lamp = lamp_level(environment)
     if lamp > 0:
         image = draw_lamp_light(image, lamp)
+    # Christmas lights shine on top of the lamp's wash so they stay saturated.
+    if "christmas_lights" in holidays:
+        image = draw_christmas_lights(image, environment, elapsed)
     if lightning is not None:
         event, age = lightning
         if age >= 0 and event.intensity(age) > 0.01:
