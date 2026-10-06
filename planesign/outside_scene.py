@@ -813,7 +813,10 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
     sun_altitude = environment.sun_altitude
     if sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1:
         flock_age = (elapsed + seed % 30) % 85
-        if flock_age < 35:
+        flock_start = elapsed - flock_age
+        # Small birds keep clear of the sky while an eagle is hunting.
+        eagle_near = eagle_allowed(environment) and next(eagle_visits_between(seed, flock_start, flock_start + 35), None) is not None
+        if flock_age < 35 and not eagle_near:
             for index in range(3 if environment.season != "winter" else 2):
                 x = round(-12 + flock_age * 4.5 - index * 7)
                 y = 7 + index % 2 + round(math.sin(elapsed * 0.2 + index) * 1.5)
@@ -986,6 +989,308 @@ def draw_hut_and_dog(image: Image.Image, palette: Palette, door: float, dog, ela
                 continue
             if 0 <= px < WIDTH and 0 <= py < HEIGHT:
                 d.point((px, py), fill=colors[char])
+
+
+def draw_sprite(image: Image.Image, rows: tuple[str, ...], anchor: str, x: float, y: float, facing: int, colors: dict[str, Color]):
+    """Draw a right-facing character sprite (mirrored when facing left) with its anchor pixel at (x, y)."""
+    anchor_y = next(row for row, line in enumerate(rows) if anchor in line)
+    anchor_x = rows[anchor_y].index(anchor)
+    d = ImageDraw.Draw(image)
+    for row, line in enumerate(rows):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            px = round(x) + (column - anchor_x) * (1 if facing >= 0 else -1)
+            py = round(y) + row - anchor_y
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=colors[char])
+
+
+OWL_SLOT_SECONDS = 300
+OWL_VISIT_CHANCE = 0.65
+# Owls come out once civil twilight has ended.
+OWL_SUN_ALTITUDE = -6
+# Feet on the tip of the tree's left branch, clear of the temperature label.
+OWL_PERCH = (105, 11)
+OWL_FLIGHT_SPEED = 17
+OWL_LANDING_SECONDS = 0.4
+OWL_EYES = (255, 208, 40)
+OWL_BLINK_WINDOW = 4.0
+OWL_BLINK_SECONDS = 0.2
+# Facing the viewer unless noted: u ear tufts, e eyes, k beak, f feathers, c chest, t talons.
+OWL_SPRITES = {
+    "perch": (("u.u", "eke", "fff", "fcf", "fcf", ".t."), "t"),
+    # Head turned to the right; mirrored to look left.
+    "look": (("u.u", "fek", "fff", "fcf", "fcf", ".t."), "t"),
+    "flare": (("f...f", "fekef", ".fff.", ".fcf.", ".fcf.", "..t.."), "t"),
+    "up": (("f...f", ".fef.", "..f.."), "e"),
+    "glide": (("ffeff", "..f.."), "e"),
+    "down": ((".fef.", "f.f.f"), "e"),
+}
+
+
+@dataclass(frozen=True)
+class OwlVisit:
+    arrive: float
+    land: float
+    leave: float
+    gone: float
+    entry: tuple[float, float]
+    exit: tuple[float, float]
+
+
+@lru_cache(maxsize=16)
+def owl_visit(slot: int, seed: int) -> OwlVisit | None:
+    """Glide in from either edge, perch on the tree for a few minutes, then fly off. Never spans two slots."""
+    rng = random.Random(seed * 7919 + slot * 104729 + 11)
+    if rng.random() > OWL_VISIT_CHANCE:
+        return None
+    arrive = slot * OWL_SLOT_SECONDS + rng.uniform(5, 40)
+    entry = (rng.choice((-6, WIDTH + 5)), rng.uniform(8, 12))
+    exit = (rng.choice((-6, WIDTH + 5)), rng.uniform(6, 10))
+    land = arrive + math.dist(entry, OWL_PERCH) / OWL_FLIGHT_SPEED
+    leave = land + rng.uniform(150, 220)
+    return OwlVisit(arrive, land, leave, leave + math.dist(OWL_PERCH, exit) / OWL_FLIGHT_SPEED, entry, exit)
+
+
+@lru_cache(maxsize=64)
+def owl_glances(window: int, seed: int):
+    """Blink times within a window, plus an occasional head turn: (blinks, look direction, look start, look end)."""
+    rng = random.Random(seed * 3571 + window * 7307 + 3)
+    first = rng.uniform(0.2, OWL_BLINK_WINDOW - 0.8)
+    blinks = (first, first + 0.38) if rng.random() < 0.3 else (first,)
+    look_start = rng.uniform(0, OWL_BLINK_WINDOW - 2.5)
+    look = rng.choice((-1, 1)) if rng.random() < 0.2 else 0
+    return blinks, look, look_start, look_start + rng.uniform(1.2, 2.5)
+
+
+def owl_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25
+
+
+def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
+    """A silent swooping glide with short bursts of slow wingbeats."""
+    x = origin[0] + (target[0] - origin[0]) * progress
+    y = origin[1] + (target[1] - origin[1]) * progress + 3 * math.sin(math.pi * progress)
+    beat = age % 1.6
+    pose = ("up", "glide", "down", "glide")[int(beat / 0.2) % 4] if beat < 0.8 else "glide"
+    return x, y, 1 if target[0] > origin[0] else -1, pose
+
+
+def owl_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Return (x, y, facing, pose, eye openness) or None while the owl is away."""
+    if not owl_allowed(environment):
+        return None
+    visit = owl_visit(math.floor(elapsed / OWL_SLOT_SECONDS), seed)
+    if visit is None or not visit.arrive <= elapsed < visit.gone:
+        return None
+    if elapsed < visit.land:
+        progress = (elapsed - visit.arrive) / (visit.land - visit.arrive)
+        if elapsed >= visit.land - OWL_LANDING_SECONDS:
+            return *OWL_PERCH, 1, "flare", 1.0
+        return *owl_flight(visit.entry, OWL_PERCH, progress, elapsed - visit.arrive), 1.0
+    if elapsed >= visit.leave:
+        progress = (elapsed - visit.leave) / (visit.gone - visit.leave)
+        return *owl_flight(OWL_PERCH, visit.exit, progress, elapsed - visit.leave), 1.0
+    window, moment = divmod(elapsed, OWL_BLINK_WINDOW)
+    blinks, look, look_start, look_end = owl_glances(int(window), seed)
+    openness = 1.0
+    for blink in blinks:
+        if blink <= moment < blink + OWL_BLINK_SECONDS:
+            # The lids snap shut, stay closed briefly, then open again.
+            phase = (moment - blink) / OWL_BLINK_SECONDS
+            openness = 0.35 if phase < 0.25 or phase >= 0.75 else 0.0
+    if look and look_start <= moment < look_end:
+        return *OWL_PERCH, look, "look", openness
+    return *OWL_PERCH, 1, "perch", openness
+
+
+def draw_owl(image: Image.Image, palette: Palette, owl):
+    if owl is None:
+        return
+    x, y, facing, pose, openness = owl
+    feathers = mix(palette.animal, palette.trunk, 0.2)
+    colors = {
+        "u": mix(feathers, palette.trunk, 0.3),
+        "f": feathers,
+        "c": mix(palette.animal, palette.trim, 0.35),
+        "k": mix(feathers, palette.trunk, 0.5),
+        "t": mix(palette.animal, palette.trim, 0.5),
+        # Eyeshine stays bright in the dark; a blink dims it to the surrounding feathers.
+        "e": mix(feathers, OWL_EYES, openness),
+    }
+    rows, anchor = OWL_SPRITES[pose]
+    draw_sprite(image, rows, anchor, x, y, facing, colors)
+
+
+EAGLE_SLOT_SECONDS = 240
+EAGLE_VISIT_CHANCE = 0.5
+EAGLE_SUN_ALTITUDE = 5
+# Soaring circles over the pond: center x, center y and vertical radius of the orbit ellipse.
+EAGLE_ORBIT = (66, 10, 2.5)
+EAGLE_GLIDE_SPEED = 15
+EAGLE_DIVE_SECONDS = 1.3
+EAGLE_STRIKE_SECONDS = 0.55
+EAGLE_CLIMB_SPEED = 15
+# Body row while the talons are in the pond.
+EAGLE_STRIKE_Y = 25
+EAGLE_WATER_Y = 27
+EAGLE_SPLASH_SECONDS = 0.8
+EAGLE_RIPPLE_SECONDS = 2.2
+EAGLE_DARK = (74, 50, 34)
+EAGLE_WHITE = (242, 240, 228)
+EAGLE_GOLD = (238, 182, 52)
+FISH_SILVER = (214, 226, 228)
+# Bald eagle facing right: d dark plumage, b body (anchor), w white head and tail, y beak and talons.
+EAGLE_SPRITES = {
+    "glide": ("d.......d", ".ddddddd.", "...wbwy.."),
+    "up": (".d.....d.", "..dd.dd..", "...wbwy.."),
+    "down": ("...wbwy..", "..dd.dd..", ".d.....d."),
+    "stoop": ("w...", ".dd.", "..bw", "...y"),
+    "flare": ("d...d..", ".d.d...", "..wbwy.", "...y..."),
+}
+SPLASH_DROPS = ((-1.6, 13), (-0.8, 17), (0, 19), (0.8, 16), (1.7, 12), (-2.6, 9), (2.5, 10))
+
+
+@dataclass(frozen=True)
+class EagleVisit:
+    start: float
+    soar: float
+    dive: float
+    strike: float
+    climb: float
+    end: float
+    heading: int
+    entry: tuple[float, float]
+    radius: float
+    lap: float
+    strike_x: float
+    exit: tuple[float, float]
+
+    def orbit_point(self, t: float) -> tuple[float, float, float]:
+        """Position on the soaring circle and the sign of horizontal travel at time t."""
+        cx, cy, ry = EAGLE_ORBIT
+        angle = 2 * math.pi * (t - self.soar) / self.lap
+        return cx + self.heading * self.radius * math.sin(angle), cy - ry * math.cos(angle), self.heading * math.cos(angle)
+
+
+@lru_cache(maxsize=16)
+def eagle_visit(slot: int, seed: int) -> EagleVisit | None:
+    """Glide in, circle over the pond, stoop to snatch a fish, then labor away with it. Never spans two slots."""
+    rng = random.Random(seed * 4421 + slot * 65537 + 17)
+    if rng.random() > EAGLE_VISIT_CHANCE:
+        return None
+    cx, cy, ry = EAGLE_ORBIT
+    heading = rng.choice((-1, 1))
+    entry = (-8 if heading > 0 else WIDTH + 7, rng.uniform(7, 9))
+    start = slot * EAGLE_SLOT_SECONDS + rng.uniform(5, 60)
+    soar = start + math.dist(entry, (cx, cy - ry)) / EAGLE_GLIDE_SPEED
+    radius = rng.uniform(20, 26)
+    lap = 2 * math.pi * radius / EAGLE_GLIDE_SPEED
+    # Laps end at the far left or right of the circle, where the eagle turns and stoops toward the pond.
+    dive = soar + lap * rng.choice((1.25, 1.75, 2.25))
+    strike = dive + EAGLE_DIVE_SECONDS
+    climb = strike + EAGLE_STRIKE_SECONDS
+    strike_x = rng.uniform(58, 73)
+    exit = (rng.choice((-8, WIDTH + 7)), rng.uniform(7, 10))
+    return EagleVisit(start, soar, dive, strike, climb, climb + abs(exit[0] - strike_x) / EAGLE_CLIMB_SPEED, heading, entry, radius, lap, strike_x, exit)
+
+
+def eagle_visits_between(seed: int, first: float, last: float):
+    for slot in range(math.floor(first / EAGLE_SLOT_SECONDS), math.floor(last / EAGLE_SLOT_SECONDS) + 1):
+        visit = eagle_visit(slot, seed)
+        if visit is not None and visit.start < last and visit.end > first:
+            yield visit
+
+
+def eagle_allowed(environment: "OutsideEnvironment") -> bool:
+    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond."""
+    w = environment.weather
+    rain, snow = precipitation(environment)
+    return (
+        environment.sun_altitude is not None
+        and environment.sun_altitude > EAGLE_SUN_ALTITUDE
+        and w.code in (800, 801, 802, 803)
+        and cloud_cover(environment) <= 0.75
+        and rain == 0
+        and snow == 0
+        and (w.wind or 0) < 25
+        and (w.visibility is None or w.visibility >= 5000)
+        and (w.temperature is None or w.temperature > 32)
+    )
+
+
+def eagle_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Return (visit, x, y, facing, pose, carrying a fish) or None while no eagle is about."""
+    if not eagle_allowed(environment):
+        return None
+    visit = next(eagle_visits_between(seed, elapsed, elapsed), None)
+    if visit is None:
+        return None
+    t = elapsed
+    cx, cy, ry = EAGLE_ORBIT
+    if t < visit.soar:
+        progress = (t - visit.start) / (visit.soar - visit.start)
+        x = visit.entry[0] + (cx - visit.entry[0]) * progress
+        y = visit.entry[1] + (cy - ry - visit.entry[1]) * progress
+        return visit, x, y, visit.heading, "glide", False
+    if t < visit.dive:
+        x, y, travel = visit.orbit_point(t)
+        # A lazy wingbeat now and then between long glides.
+        beat = (t - visit.soar) % 7
+        pose = ("up", "glide", "down", "glide")[int(beat / 0.18) % 4] if beat < 0.72 else "glide"
+        return visit, x, y, 1 if travel >= 0 else -1, pose, False
+    if t < visit.strike:
+        x0, y0, _ = visit.orbit_point(visit.dive)
+        progress = (t - visit.dive) / EAGLE_DIVE_SECONDS
+        x = x0 + (visit.strike_x - x0) * progress
+        y = y0 + (EAGLE_STRIKE_Y - y0) * progress * progress
+        return visit, x, y, 1 if visit.strike_x >= x0 else -1, "stoop" if progress > 0.2 else "glide", False
+    x0, _, _ = visit.orbit_point(visit.dive)
+    toward_pond = 1 if visit.strike_x >= x0 else -1
+    if t < visit.climb:
+        return visit, visit.strike_x, EAGLE_STRIKE_Y, toward_pond, "flare", False
+    progress = (t - visit.climb) / (visit.end - visit.climb)
+    x = visit.strike_x + (visit.exit[0] - visit.strike_x) * progress
+    y = EAGLE_STRIKE_Y + (visit.exit[1] - EAGLE_STRIKE_Y) * (1 - (1 - progress) ** 2)
+    # Hard, quick wingbeats carrying the catch.
+    pose = ("up", "glide", "down", "glide")[int((t - visit.climb) / 0.12) % 4]
+    return visit, x, y, 1 if visit.exit[0] > visit.strike_x else -1, pose, True
+
+
+def draw_eagle(image: Image.Image, palette: Palette, eagle, elapsed: float):
+    if eagle is None:
+        return
+    visit, x, y, facing, pose, fish = eagle
+    d = ImageDraw.Draw(image)
+    water = mix(palette.glint, (240, 246, 246), 0.5)
+    since_strike = elapsed - visit.strike
+    if 0 <= since_strike < EAGLE_RIPPLE_SECONDS:
+        # Rings spread across the pond from where the talons hit the water.
+        fade = 1 - since_strike / EAGLE_RIPPLE_SECONDS
+        reach = 1.5 + since_strike * 5
+        for dx, dy in ((-reach, 0), (reach, 0), (-reach * 0.7, 1), (reach * 0.7, 1)):
+            px, py = round(visit.strike_x + dx), EAGLE_WATER_Y + dy
+            if 0 <= px < WIDTH and LAND.getpixel((px, py)) == INDEX["water"]:
+                d.point((px, py), fill=mix(image.getpixel((px, py)), water, fade * 0.7))
+    lit = mix(EAGLE_DARK, palette.animal, 0.15)
+    colors = {"d": lit, "b": lit, "w": mix(EAGLE_WHITE, palette.snowcap, 0.3), "y": EAGLE_GOLD}
+    draw_sprite(image, EAGLE_SPRITES[pose], "b", x, y, facing, colors)
+    if fish:
+        # The catch hangs below the talons, its tail flicking.
+        bx, by = round(x), round(y)
+        flick = int(elapsed * 6) % 2
+        for px, py, color in ((bx, by + 1, EAGLE_GOLD), (bx, by + 2, FISH_SILVER), (bx - facing, by + 2 + flick, mix(FISH_SILVER, palette.water, 0.4)), (bx + facing, by + 2, FISH_SILVER)):
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=color)
+    if 0 <= since_strike < EAGLE_SPLASH_SECONDS:
+        fade = 1 - since_strike / EAGLE_SPLASH_SECONDS
+        for vx, vy in SPLASH_DROPS:
+            px = round(visit.strike_x + vx * since_strike * 4)
+            py = round(EAGLE_WATER_Y - (vy * since_strike - 24 * since_strike * since_strike))
+            if 0 <= px < WIDTH and 0 <= py <= EAGLE_WATER_Y:
+                d.point((px, py), fill=mix(image.getpixel((px, py)), water, 0.9 * fade))
 
 
 def lamp_level(environment: "OutsideEnvironment") -> float:
@@ -1296,6 +1601,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
     draw_wildlife(image, palette, environment, elapsed, seed)
+    draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     wind = environment.weather.wind or 0
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
@@ -1307,6 +1613,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             if environment.sun_altitude is not None and environment.sun_altitude > -5:
                 d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
+    # The owl perches on the fixed branch, in front of the swaying foliage.
+    draw_owl(image, palette, owl_state(environment, elapsed, seed))
     night = environment.sun_altitude is not None and environment.sun_altitude < -6
     if night and environment.season in ("spring", "summer", "autumn") and rain == 0 and snow == 0 and wind < 15:
         for index, (x, y) in enumerate([(48, 29), (69, 31), (78, 28), (102, 30)]):
