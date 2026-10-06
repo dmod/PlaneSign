@@ -119,7 +119,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - The native RGB driver build needs Pillow's `Imaging.h` from the system `python3-pil` package. If uv's Python version differs from the system Python, point `CFLAGS` at the system include directory containing that header before running `uv sync`; do not assume the two Python versions match.
 - The `PlaneSign Debug` launch configuration serves both remote SSH on the Pi and the devcontainer. It uses `.venv` with `sudo: true`, which the hardware matrix needs as the `pi` user. The devcontainer's passwordless `sudo` serves this configuration. The nginx task is skipped when nginx is not installed.
 - The `PlaneSign Debug - Web Display` VS Code launch configuration runs with `--web` and has a pre-launch task for `uv sync` and nginx startup.
-- The devcontainer replaces the image's `CMD`, which starts nginx in production, so `devcontainer.json` starts nginx with `postStartCommand`. If `http://localhost/` does not respond, run `service nginx start`; it is safe to run when nginx is already running.
+- The devcontainer replaces the image's `CMD`, which starts nginx in production, so `devcontainer.json` starts nginx with `postStartCommand`. nginx needs root to read the TLS key in `/etc/ssl/private` and bind ports 80/443, so always use `sudo service nginx start`; without `sudo` it fails as the `ubuntu` user. If `http://localhost/` does not respond, run it; it is safe to run when nginx is already running.
 
 ## Testing And Visual Verification
 - Do not create unit-test or pytest files, automated test suites, or test-only scaffolding. Do not add testing frameworks or dependencies.
