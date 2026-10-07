@@ -256,7 +256,7 @@ INDEX["peak"] = len(MATERIALS) + 2
 MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 18), (77, 16), (80, 15), (83, 14), (86, 15), (89, 16), (92, 18), (96, 20), (100, 21), (106, 23), (127, 23))
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
 MOUNTAIN_LIT_FACE = ((83, 14), (80, 15), (77, 16), (74, 18), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 16))
-TREE_X, TREE_CANOPY_Y = 115, 15
+TREE_X, TREE_CANOPY_Y = 111, 15
 # Small conifers flanking the hut: (trunk x, base row, height); the apex is at row base - height.
 CONIFERS = ((4, 28, 12), (38, 25, 7))
 HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
@@ -270,9 +270,29 @@ LAMP_SECONDS = 3 * 3600
 NIGHT_ALTITUDE = -10
 LAMP_LIGHT = (255, 200, 120)
 LAMP_GLOW = (255, 236, 190)
-TREE_RADIUS_X, TREE_RADIUS_Y = 10.5, 7.8
-TREE_BRANCHES = ((-10, -4), (9, -2), (-2, -8), (4, -7))
-TREE_BLOSSOMS = ((-7, -5), (2, -7), (6, -2), (-4, 0), (4, 1))
+# A full, lobed maple: a 2 px trunk forks into limbs ((points), width) under a shaded core crown
+# ringed by nine small lobes, which gives a scalloped edge instead of one smooth blob.
+TREE_LIMBS = (
+    (((111, 31), (111, 22)), 2),
+    (((111, 23), (107, 19), (104, 16), (102, 13)), 1),
+    (((112, 23), (116, 19), (119, 16), (120, 13)), 1),
+    (((111, 22), (111, 16), (110, 11)), 1),
+    (((111, 18), (115, 14), (116, 11)), 1),
+    (((111, 18), (107, 15), (106, 11)), 1),
+    (((107, 19), (103, 19)), 1),
+    (((116, 19), (120, 19)), 1),
+)
+TREE_FLARE = ((109, 31), (114, 31))
+TREE_TWIG_LENGTH = 2.34
+TREE_CROWN = (111, 14.8)
+# Foliage clumps, back to front: (x, y, rx, ry).
+TREE_CLUMPS = (
+    (*TREE_CROWN, 6.84, 4.32),
+    *((TREE_CROWN[0] + 7.38 * math.cos(angle), TREE_CROWN[1] + 4.14 * math.sin(angle), 2.61, 2.16) for angle in (-math.pi / 2 + i * 2 * math.pi / 9 for i in range(9))),
+)
+# The temperature label owns rows 0-4; leaves never start above this row.
+TREE_FOLIAGE_TOP = 7
+TREE_BLOSSOMS = ((-8, -3), (-2, -5), (5, 1), (4, 2), (7, -3))
 
 
 def blend_palette(a: Palette, b: Palette, fraction: float) -> Palette:
@@ -399,26 +419,51 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         d.point((x, 27), fill=INDEX["trim"])
     leafy = Image.new("P", (WIDTH, HEIGHT), 0)
     bare = Image.new("P", (WIDTH, HEIGHT), 0)
-    cx, cy = TREE_X, TREE_CANOPY_Y
+    trunk = INDEX["trunk"]
     for mask in (leafy, bare):
         td = ImageDraw.Draw(mask)
-        td.line((cx, cy - 2, cx, 31), fill=INDEX["trunk"], width=2)
-        td.line((cx - 1, 31, cx + 2, 31), fill=INDEX["trunk"])
-        for dx, dy in TREE_BRANCHES:
-            td.line((cx, 28, cx + dx, cy + dy), fill=INDEX["trunk"])
-            if mask is bare:
-                td.line((cx + dx, cy + dy, cx + dx - 1, cy + dy - 2), fill=INDEX["trunk"])
-    td = ImageDraw.Draw(leafy)
-    for y in range(round(cy - TREE_RADIUS_Y) - 2, round(cy + TREE_RADIUS_Y) + 3):
-        for x in range(round(cx - TREE_RADIUS_X) - 2, min(WIDTH, round(cx + TREE_RADIUS_X) + 3)):
-            n = grain(x, y, 12)
-            if ((x - cx) / TREE_RADIUS_X) ** 2 + ((y - cy) / TREE_RADIUS_Y) ** 2 < 0.8 + n / 290:
-                material = "leaf_dark" if n <= 37 else "leaf"
-                if y < cy - 1 and x < cx + 3 and n > 48:
-                    material = "leaf_light"
-                td.point((x, y), fill=INDEX[material])
-    td.line((cx, 27, cx - 2, cy + 2), fill=INDEX["trunk"])
-    td.line((cx, 26, cx + 3, cy + 2), fill=INDEX["trunk"])
+        for points, width in TREE_LIMBS:
+            td.line(points, fill=trunk, width=width)
+            if width > 1:
+                # PIL centers wide lines; fill the joints so bends stay solid.
+                for x, y in points[1:-1]:
+                    td.rectangle((x, y, x + width - 1, y), fill=trunk)
+        td.line(TREE_FLARE, fill=trunk)
+    # Winter twigs: two fan out from each limb tip, and one leaves the last bend of longer limbs.
+    td = ImageDraw.Draw(bare)
+    for points, width in TREE_LIMBS:
+        if width > 1:
+            continue
+        (x0, y0), (x1, y1) = points[-2:]
+        angle = math.atan2(y1 - y0, x1 - x0)
+        for turn in (-0.62, 0.55):
+            td.line((x1, y1, round(x1 + math.cos(angle + turn) * TREE_TWIG_LENGTH), round(y1 + math.sin(angle + turn) * TREE_TWIG_LENGTH)), fill=trunk)
+        if len(points) >= 3:
+            (mx, my), (nx, ny) = points[-3:-1]
+            angle = math.atan2(ny - my, nx - mx) + (-0.9 if nx < TREE_X else 0.9)
+            td.line((nx, ny, round(nx + math.cos(angle) * TREE_TWIG_LENGTH * 0.8), round(ny + math.sin(angle) * TREE_TWIG_LENGTH * 0.8)), fill=trunk)
+    # Foliage: each pixel belongs to the front-most clump containing it. Clumps are shaded from the
+    # upper left, a front lobe casts a dark rim onto the clump behind it, and a few pixels open to the sky.
+    owner = {}
+    for y in range(TREE_FOLIAGE_TOP, HEIGHT):
+        for x in range(TREE_X - 14, min(WIDTH, TREE_X + 15)):
+            for index, (cx, cy, rx, ry) in enumerate(TREE_CLUMPS):
+                nx, ny = (x - cx) / rx, (y - cy) / ry
+                if nx * nx + ny * ny < 1 + (grain(x, y, 12 + index) - 48) / 210:
+                    owner[x, y] = (index, nx, ny)
+    pixels = leafy.load()
+    for (x, y), (index, nx, ny) in owner.items():
+        n = grain(x, y, 31)
+        shade = -(0.55 * nx + 0.85 * ny) + (n - 48) / 160
+        material = "leaf_light" if shade > 0.42 else "leaf_dark" if shade < -0.38 else "leaf"
+        above, left = owner.get((x, y - 1)), owner.get((x - 1, y))
+        if (above and above[0] > index) or (left and left[0] > index and n < 60):
+            material = "leaf_dark"
+        if owner.get((x, y + 1)) is None and material == "leaf_light":
+            material = "leaf"
+        if n < 4 and shade < 0.2:
+            continue
+        pixels[x, y] = INDEX[material]
     return land, leafy, bare
 
 
@@ -1025,8 +1070,8 @@ OWL_SLOT_SECONDS = 300
 OWL_VISIT_CHANCE = 0.65
 # Owls come out once civil twilight has ended.
 OWL_SUN_ALTITUDE = -6
-# Feet on the tip of the tree's left branch, clear of the temperature label.
-OWL_PERCH = (105, 11)
+# Feet on the tip of the tree's lower-left limb, clear of the temperature label.
+OWL_PERCH = (103, 19)
 OWL_FLIGHT_SPEED = 17
 OWL_LANDING_SECONDS = 0.4
 OWL_EYES = (255, 208, 40)
