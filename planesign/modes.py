@@ -38,6 +38,16 @@ class DisplayMode(Enum):
     OUTSIDE = auto()  # Animated local rural landscape
 
 
+# Modes DEFAULT_MODE cannot start in: WELCOME and IDENTIFY hand off to another mode, and
+# TRACK_A_FLIGHT stays blank until a flight number is entered in the web UI.
+NON_STARTUP_MODES = frozenset({DisplayMode.WELCOME, DisplayMode.IDENTIFY, DisplayMode.TRACK_A_FLIGHT})
+
+
+def startup_mode_names():
+    """Names of the modes the sign may show after the welcome screen, in enum order."""
+    return [mode.name for mode in DisplayMode if mode not in NON_STARTUP_MODES]
+
+
 defined_mode_handlers = {}
 
 

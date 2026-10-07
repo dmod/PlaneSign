@@ -2604,6 +2604,7 @@ function read_conf() {
                                 } else {
                                     form_step = null
                                 }
+                                form_options = data.DATATYPES[j].options || [];
                                 break
                             } else {
                                 form_type = "text";
@@ -2615,7 +2616,20 @@ function read_conf() {
                         cln.removeAttribute("style")
                         cln.childNodes[1].textContent = String(Object.keys(data)[i]).replaceAll('_', ' ') + ": ";
                         cln.childNodes[1].for = String(Object.keys(data)[i]);
-                        cln.childNodes[2].type = form_type;
+                        if (form_type == "select") {
+                            // Options come from the API (e.g. DEFAULT_MODE lists DisplayMode), so none are hardcoded here.
+                            var select = document.createElement("select");
+                            select.className = "configline";
+                            form_options.forEach(function (option_value) {
+                                var option = document.createElement("option");
+                                option.value = option_value;
+                                option.textContent = option_value.replaceAll('_', ' ');
+                                select.add(option);
+                            });
+                            cln.replaceChild(select, cln.childNodes[2]);
+                        } else {
+                            cln.childNodes[2].type = form_type;
+                        }
                         cln.childNodes[2].name = String(Object.keys(data)[i]);
                         cln.childNodes[2].id = String(Object.keys(data)[i]);
                         if (form_type == "checkbox") {

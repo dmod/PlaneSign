@@ -19,6 +19,9 @@ HIDE_STARLINK=false
 #checkbox Disable third-party internet services (planes, weather, sports, etc.); the web controls keep working
 OFFLINE_MODE=false
 
+#select Mode shown after the welcome screen (applies at next start)
+DEFAULT_MODE=PLANES_ALERT
+
 #range min 0 max 100
 DEFAULT_BRIGHTNESS=80
 

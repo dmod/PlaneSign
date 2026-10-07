@@ -22,7 +22,7 @@ import shared_config
 import utilities
 from finance import get_tickers
 from flask import Flask, jsonify, request, send_from_directory
-from modes import DisplayMode
+from modes import DisplayMode, startup_mode_names
 from PIL import Image
 from snow import SnowMode, delete_user_resort, load_user_list, populate_resort_lists, save_current_resort
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -38,6 +38,9 @@ app.register_blueprint(outside_lab.blueprint)
 
 # Requests are served on separate threads; serialize the handlers that rewrite and re-read sign.conf
 config_lock = threading.Lock()
+
+# Choices for "#select" settings in sign.conf.sample, built here so the web UI never hardcodes them.
+CONFIG_SELECT_OPTIONS = {"DEFAULT_MODE": startup_mode_names}
 
 
 @app.route("/get_config")
@@ -69,10 +72,20 @@ def get_config():
                         newdict["min"] = comment_parts[i + 1]
                     if comment_parts[i] == "max" and i + 1 < len(comment_parts):
                         newdict["max"] = comment_parts[i + 1]
+                if newdict["type"] == "select":
+                    newdict["options"] = CONFIG_SELECT_OPTIONS[parts[0]]()
                 sample["DATATYPES"].append(newdict)
 
+    options_by_key = {datatype["id"]: datatype["options"] for datatype in sample["DATATYPES"] if "options" in datatype}
     for key in sample:
-        if key in conf:
+        if key not in conf:
+            continue
+        if key in options_by_key:
+            # Match a hand-edited value case-insensitively; an unknown one keeps the sample default so the dropdown is never blank.
+            value = conf[key].strip().upper()
+            if value in options_by_key[key]:
+                sample[key] = value
+        else:
             sample[key] = conf[key]
 
     return json.dumps(sample)

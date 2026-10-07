@@ -7,7 +7,7 @@ from datetime import datetime
 def parse_args():
     parser = argparse.ArgumentParser(prog="planesign", description="Drive the PlaneSign LED matrix or OLED display.")
     parser.add_argument("--web", action="store_true", help="emulate the matrix and stream frames to web/display.html instead of driving hardware")
-    parser.add_argument("--mode", type=str.upper, metavar="MODE", help="mode to show after the welcome screen, e.g. MOON (default PLANES_ALERT)")
+    parser.add_argument("--mode", type=str.upper, metavar="MODE", help="mode to show after the welcome screen, e.g. MOON (default DEFAULT_MODE from the config)")
     parser.add_argument("--fake-time", metavar="ISO_TIME", help="start the clock at this time, e.g. 2026-12-24T18:00; without an offset it is local to the sign's location")
     parser.add_argument("--time-speed", type=float, default=1.0, metavar="FACTOR", help="run the clock this many times faster than real time (default 1)")
     parser.add_argument("--config", default="sign.conf", metavar="PATH", help="config file to read and to save settings to (default sign.conf)")
@@ -104,7 +104,7 @@ import track_a_flight
 import utilities
 import weather
 import welcome
-from modes import DisplayMode, defined_mode_handlers
+from modes import DisplayMode, defined_mode_handlers, startup_mode_names
 
 import planesign
 
@@ -213,6 +213,13 @@ if cli_args.fake_time or cli_args.time_speed != 1:
     psclock.set_clock(psclock.parse_time(cli_args.fake_time) if cli_args.fake_time else psclock.time(), cli_args.time_speed)
     logging.info(f"Clock set to {psclock.describe()}")
 
+startup_mode = cli_args.mode
+if not startup_mode:
+    startup_mode = shared_config.CONF["DEFAULT_MODE"].strip().upper()
+    if startup_mode not in startup_mode_names():
+        logging.warning(f"DEFAULT_MODE {startup_mode!r} is not a mode the sign can start in, using PLANES_ALERT")
+        startup_mode = "PLANES_ALERT"
+
 workers = [(api_server_process, 5), (plane_data_process, 10), (weather_data_process, 10), (tides_data_process, 10), (nfl_data_process, 10), (mlb_data_process, 10), (outside_data_process, 5)]
 ps = None
 try:
@@ -220,7 +227,7 @@ try:
         process.start()
     ps = planesign.PlaneSign(defined_mode_handlers)
     defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
-    shared_config.shared_mode.value = DisplayMode[cli_args.mode or "PLANES_ALERT"].value
+    shared_config.shared_mode.value = DisplayMode[startup_mode].value
     ps.sign_loop()
 finally:
     logging.info("Shutting down sign and child processes...")
