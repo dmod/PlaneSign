@@ -94,6 +94,9 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Launch configurations: `PlaneSign Debug` (hardware, `sudo: true`, works over SSH and in the devcontainer) and `PlaneSign Debug - Web Display` (`--web`, runs `uv sync` and starts nginx first).
 - The devcontainer replaces the image's `CMD`, so `postStartCommand` starts nginx. nginx needs root for the TLS key and ports 80/443: always use `sudo service nginx start`. It is safe to run when nginx is already running.
 - To drive the physical panel from the devcontainer, stop the production sign container first, then run `sudo .venv/bin/python planesign/__main__.py --mode <MODE>`.
+- Only one process may drive the panel. A second instance draws over the first, and its API cannot bind port 5055, so API and lab calls silently reach the old instance.
+	- Before starting one, check with `ps -eo pid,args | grep __main__.py` that none is running.
+	- A `sudo` run is owned by root, so stopping or killing the shell that launched it leaves the app running. Stop it with `sudo kill <PID>` of its `__main__.py` process (the child of the `sudo` wrapper), then confirm with `ps` that every `__main__.py` process is gone before starting another.
 
 ## Testing And Visual Verification
 - This project has no classic unit tests. Do not add pytest, unittest or any other automated test suite, test framework or test dependency, and do not write test files that assert on return values. Test harnesses are fine: tools that drive the real app so a person can see the result on the matrix, like the Outside lab. A harness worth keeping belongs in the app code, not in a separate test tree.

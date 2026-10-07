@@ -253,9 +253,12 @@ INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
 INDEX["peak"] = len(MATERIALS) + 2
 # One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
-MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 18), (77, 16), (80, 15), (83, 14), (86, 15), (89, 16), (92, 18), (96, 20), (100, 21), (106, 23), (127, 23))
+MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 17), (77, 15), (80, 14), (83, 13), (86, 14), (89, 15), (92, 17), (96, 20), (100, 21), (106, 23), (127, 23))
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
-MOUNTAIN_LIT_FACE = ((83, 14), (80, 15), (77, 16), (74, 18), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 16))
+MOUNTAIN_LIT_FACE = ((83, 13), (80, 14), (77, 15), (74, 17), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 15))
+# The mountain is darkened in linear light so it stands out from the bright horizon behind it;
+# its sunlit face is then lifted back toward the horizon color.
+MOUNTAIN_SHADE, MOUNTAIN_LIT = 0.3, 0.16
 TREE_X, TREE_CANOPY_Y = 111, 15
 # Small conifers flanking the hut: (trunk x, base row, height); the apex is at row base - height.
 CONIFERS = ((4, 28, 12), (38, 25, 7))
@@ -498,11 +501,12 @@ MOON_PIXELS = tuple((x, y, math.sqrt(9 - y * y)) for y in range(-3, 4) for x in 
 
 @lru_cache(maxsize=96)
 def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
+    mountain = mix(palette.far, (0, 0, 0), MOUNTAIN_SHADE)
     table = [0, 0, 0]
     for name in MATERIALS:
-        table.extend(getattr(palette, name))
+        table.extend(mountain if name == "far" else getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
-    table.extend(mix(palette.far, palette.horizon, 0.16))
+    table.extend(mix(mountain, palette.horizon, MOUNTAIN_LIT))
     table.extend([0] * (768 - len(table)))
 
     def colorize(mask):
@@ -529,7 +533,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
             for x in range(WIDTH):
                 material = LAND.getpixel((x, y))
                 if material in (INDEX["far"], INDEX["peak"]) and y < summit + 2 + grain(x, y, 4) % 2:
-                    d.point((x, y), fill=palette.snowcap if material == INDEX["peak"] else mix(palette.snowcap, palette.far, 0.35))
+                    d.point((x, y), fill=palette.snowcap if material == INDEX["peak"] else mix(palette.snowcap, mountain, 0.35))
     return land, foliage, wood
 
 
