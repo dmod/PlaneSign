@@ -15,6 +15,7 @@ import mlb
 import network
 import nfl
 import outside
+import outside_lab
 import planes
 import psclock
 import shared_config
@@ -32,6 +33,8 @@ FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4, 5}
 FREE_SKETCH_BRUSH_SHAPES = {"square", "plus", "x", "circle"}
 
 app = Flask(__name__)
+# Outside lab at /outside/lab; intentionally not linked from the web UI.
+app.register_blueprint(outside_lab.blueprint)
 
 # Requests are served on separate threads; serialize the handlers that rewrite and re-read sign.conf
 config_lock = threading.Lock()
@@ -139,6 +142,8 @@ def debug_clock():
 
     logging.info(f"Clock set to {psclock.describe()}")
     shared_config.shared_forced_sign_update.set()
+    # Outside's astronomy worker recomputes the sky for the new time right away instead of within a second.
+    shared_config.shared_outside_time_update.set()
     return jsonify(clock_status())
 
 

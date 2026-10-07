@@ -33,6 +33,7 @@ SKY_PRELOAD_SECONDS = 26 * 3600
 SKY_HISTORY_SECONDS = 4 * 3600
 SKY_REFRESH_MARGIN_SECONDS = 1800
 SKY_FIELDS = ("sun_altitude", "sun_azimuth", "moon_altitude", "moon_azimuth", "moon_phase")
+LAB_IDLE_SECONDS = 15 * 60
 OFFSET_TRANSITION_SECONDS = 0.15
 
 
@@ -118,9 +119,56 @@ def weather_snapshot(payload, real_now: float, *, forecast_time: float | None = 
     return OutsideWeather("UNAVAILABLE", observed_at=observed)
 
 
+def lab_time() -> float | None:
+    """The Outside lab's time, or None when Outside follows the sign clock."""
+    base, anchor, speed = shared_config.shared_outside_lab_clock[:]
+    return None if base == 0 else base + (time.time() - anchor) * speed
+
+
+def outside_time() -> float:
+    """Outside's moment before the forecast offset: the lab's time while one is set, else the sign clock."""
+    lab = lab_time()
+    return psclock.time() if lab is None else lab
+
+
+def lab_active(data_dict) -> bool:
+    return lab_time() is not None or data_dict.get("outside_lab_weather") is not None
+
+
+def bump_lab_version():
+    with shared_config.shared_outside_lab_version.get_lock():
+        shared_config.shared_outside_lab_version.value += 1
+
+
+def clear_lab(data_dict, reason: str):
+    """Return Outside to the sign clock and live weather."""
+    with shared_config.shared_outside_lab_clock.get_lock():
+        shared_config.shared_outside_lab_clock[:] = [0.0, 0.0, 1.0]
+    data_dict["outside_lab_weather"] = None
+    bump_lab_version()
+    shared_config.shared_outside_time_update.set()
+    logger.info("Outside lab: back to live time and weather (%s)", reason)
+
+
+def lab_weather(override, forecast_time: float | None) -> OutsideWeather:
+    # Reported as live (or forecast while the slider is ahead) so the scene renders exactly as real weather would.
+    return OutsideWeather(
+        "FORECAST" if forecast_time is not None else "LIVE",
+        code=override["code"],
+        clouds=override.get("clouds"),
+        wind=override.get("wind"),
+        rain=override.get("rain"),
+        snow=override.get("snow"),
+        temperature=override.get("temperature"),
+        visibility=override.get("visibility"),
+        observed_at=time.time(),
+        forecast_at=forecast_time,
+    )
+
+
 def outside_moment(tz, offset_minutes: float) -> datetime:
     # Add elapsed seconds before converting to local time, including across DST.
-    return datetime.fromtimestamp(psclock.time() + offset_minutes * 60, tz)
+    return datetime.fromtimestamp(outside_time() + offset_minutes * 60, tz)
 
 
 def local_season(moment: datetime, latitude: float) -> str:
@@ -160,8 +208,12 @@ def sky_snapshot(sky, timestamp: float, latitude: float, longitude: float):
     return values
 
 
-def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False) -> OutsideEnvironment:
-    observed = OutsideWeather("OFFLINE") if weather_offline else weather_snapshot(weather, time.time(), forecast_time=moment.timestamp() if offset_minutes else None)
+def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_override=None) -> OutsideEnvironment:
+    forecast_time = moment.timestamp() if offset_minutes else None
+    if weather_override is not None:
+        observed = lab_weather(weather_override, forecast_time)
+    else:
+        observed = OutsideWeather("OFFLINE") if weather_offline else weather_snapshot(weather, time.time(), forecast_time=forecast_time)
     season = local_season(moment, latitude)
     if not isinstance(sky, dict):
         return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date())
@@ -226,6 +278,11 @@ def get_outside_data_worker(data_dict):
     try:
         while not shared_config.shutdown_in_progress():
             shared_config.shared_outside_time_update.clear()
+            if lab_active(data_dict):
+                if shared_config.shared_mode.value != DisplayMode.OUTSIDE.value:
+                    clear_lab(data_dict, "the sign left Outside")
+                elif time.monotonic() - shared_config.shared_outside_lab_activity.value > LAB_IDLE_SECONDS:
+                    clear_lab(data_dict, f"no lab activity for {LAB_IDLE_SECONDS // 60} minutes")
             if toggle.changed():
                 retry_at = 0
             if time.monotonic() < retry_at:
@@ -241,7 +298,7 @@ def get_outside_data_worker(data_dict):
                     ephemeris = datasources.load_ephemeris()
                 if timescale is None:
                     timescale = datasources.timescale()
-                now = psclock.time()
+                now = outside_time()
                 if not sky_covers(sky, now, now + 24 * 3600 + SKY_REFRESH_MARGIN_SECONDS, latitude, longitude):
                     sky = calculate_sky_timeline(ephemeris, timescale, now, latitude, longitude)
                     data_dict["outside_sky"] = sky
@@ -268,11 +325,21 @@ def outside_status():
     tz = location_timezone(latitude, longitude)
     offset_minutes = shared_config.shared_outside_offset_minutes.value
     moment = outside_moment(tz, offset_minutes)
-    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline")
+    override = shared_config.data_dict.get("outside_lab_weather")
+    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline", weather_override=override)
+    lab_now = lab_time()
+    _, _, lab_speed = shared_config.shared_outside_lab_clock[:]
+    active = lab_now is not None or override is not None
     return {
         "offset_minutes": offset_minutes,
         "now": datetime.fromtimestamp(moment.timestamp() - offset_minutes * 60, tz).isoformat(),
         "selected_time": moment.isoformat(),
+        "lab": {
+            "time": datetime.fromtimestamp(lab_now, tz).isoformat() if lab_now is not None else None,
+            "speed": lab_speed if lab_now is not None else None,
+            "weather": override,
+            "expires_in": max(0, round(LAB_IDLE_SECONDS - (time.monotonic() - shared_config.shared_outside_lab_activity.value))) if active else None,
+        },
         "timezone": getattr(tz, "key", "UTC"),
         "military_time": shared_config.CONF["MILITARY_TIME"].lower() == "true",
         "season": environment.season,
@@ -306,17 +373,19 @@ def outside(sign):
     transition_from = rendered_offset
     transition_started = started
     text_styles: tuple[bool | None, bool | None, bool | None] = (None, None, None)
+    seen_lab_version = None
     while shared_config.shared_mode.value == DisplayMode.OUTSIDE.value:
         frame_time = time.perf_counter()
         elapsed = frame_time - started
         offset_minutes = shared_config.shared_outside_offset_minutes.value
+        lab_version = shared_config.shared_outside_lab_version.value
         fraction = min(1, (frame_time - transition_started) / OFFSET_TRANSITION_SECONDS)
         rendered_offset = transition_from + (target_offset - transition_from) * fraction
         if offset_minutes != target_offset:
             transition_from = rendered_offset
             target_offset = offset_minutes
             transition_started = frame_time
-        if int(elapsed) != last_snapshot or environment is None or environment.sky_status == "LOADING":
+        if int(elapsed) != last_snapshot or environment is None or environment.sky_status == "LOADING" or lab_version != seen_lab_version:
             latitude = float(shared_config.CONF["SENSOR_LAT"])
             longitude = float(shared_config.CONF["SENSOR_LON"])
             tz = location_timezone(latitude, longitude)
@@ -324,9 +393,11 @@ def outside(sign):
             sky = shared_config.data_dict.get("outside_sky")
             weather = shared_config.data_dict.get("weather")
             weather_offline = shared_config.data_dict.get("weather_status") == "offline"
+            weather_override = shared_config.data_dict.get("outside_lab_weather")
+            seen_lab_version = lab_version
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
-        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline)
+        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_override=weather_override)
         status = environment.weather.status, environment.sky_status
         if status != last_status:
             if status[0] in ("LIVE", "FORECAST") and status[1] == "READY":

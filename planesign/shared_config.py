@@ -29,6 +29,13 @@ shared_snow_mode = Value("i", 1)
 
 shared_outside_offset_minutes = Value("i", 0)
 shared_outside_time_update = Event()
+# Outside lab overrides (outside_lab.py). Lab time is [base, real_anchor, speed], read like clock_state;
+# a zero base means Outside follows the sign clock. The lab's weather override lives in data_dict.
+shared_outside_lab_clock = Array("d", [0.0, 0.0, 1.0])
+# time.monotonic() of the last lab action; the overrides expire after outside.LAB_IDLE_SECONDS.
+shared_outside_lab_activity = Value("d", 0.0)
+# Bumped on every lab change so the Outside loop picks it up on the next frame.
+shared_outside_lab_version = Value("i", 0)
 
 free_sketch_pixels = Array("B", 128 * 32 * 3)
 

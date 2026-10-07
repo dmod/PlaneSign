@@ -1872,16 +1872,7 @@ def holiday_features(environment: "OutsideEnvironment") -> frozenset[str]:
     day = environment.local_date
     if day is None:
         return frozenset()
-    features = set()
-    if day.month == 12 and day.day <= CHRISTMAS_LAST_DAY:
-        features.add("christmas_lights")
-    if (day.month, day.day) == (12, 24):
-        features.add("santa")
-    if (day.month, day.day) in ((12, 31), (1, 1), (7, 4)):
-        features.add("fireworks")
-    if (day.month, day.day) == (7, 4):
-        features.add("flag")
-    return frozenset(features)
+    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(day.month == month and first <= day.day <= last for month, first, last in spans))
 
 
 def holiday_darkness(environment: "OutsideEnvironment") -> float:
@@ -1892,6 +1883,14 @@ def holiday_darkness(environment: "OutsideEnvironment") -> float:
 
 # Christmas lights stay up from December 1 through the day after Christmas.
 CHRISTMAS_LAST_DAY = 26
+# Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day) spans).
+# The Outside lab builds its holiday shortcuts from this table.
+HOLIDAYS = {
+    "christmas_lights": ("Christmas lights", ((12, 1, CHRISTMAS_LAST_DAY),)),
+    "santa": ("Santa", ((12, 24, 24),)),
+    "fireworks": ("Fireworks", ((12, 31, 31), (1, 1, 1), (7, 4, 4))),
+    "flag": ("Flag", ((7, 4, 4),)),
+}
 CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
 TOPPER_GOLD = (255, 206, 60)
 TOPPER_CORE = (255, 250, 214)

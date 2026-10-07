@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outside lab</title>
+<style>
+    :root { color-scheme: dark; }
+    body { background: #101215; color: #dde1e6; font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; max-width: 980px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 22px 0 8px; color: #9fb3c8; text-transform: uppercase; letter-spacing: .05em; }
+    p.note, .note { color: #8a939c; }
+    p.note { margin: 0 0 12px; }
+    button { background: #1f252c; color: #dde1e6; border: 1px solid #38424d; border-radius: 6px; padding: 7px 11px; margin: 0 6px 6px 0; cursor: pointer; font: inherit; }
+    button:hover { border-color: #6ea8ff; }
+    button.live { background: #233a24; border-color: #4e8a50; }
+    button.primary { background: #1e3350; border-color: #4f7fc0; }
+    input, select { background: #171b20; color: #dde1e6; border: 1px solid #38424d; border-radius: 5px; padding: 6px; font: inherit; }
+    label { display: inline-flex; flex-direction: column; gap: 3px; margin: 0 10px 10px 0; color: #9aa4ae; font-size: 12px; }
+    label input { width: 86px; }
+    #status { background: #171b20; border: 1px solid #2c343d; border-radius: 8px; padding: 10px 12px; position: sticky; top: 0; z-index: 2; }
+    #status .row { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+    #status b { color: #fff; font-weight: 600; }
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; background: #2a3138; color: #aab4be; }
+    .badge.on { background: #5a3d12; color: #ffd28a; }
+    #error { color: #ff8a80; min-height: 18px; margin-top: 4px; }
+    .holiday { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+    .holiday span { min-width: 260px; }
+    .holiday button { margin: 0; }
+    #offset { width: 100%; max-width: 520px; }
+    #preview { display: none; margin-top: 12px; border: 1px solid #2c343d; border-radius: 8px; overflow: hidden; }
+    #preview iframe { border: 0; width: 1060px; height: 300px; transform-origin: 0 0; display: block; }
+</style>
+</head>
+<body>
+<h1>Outside lab</h1>
+<p class="note">Set Outside's time and weather by hand; the sign switches to Outside and redraws on the next frame.
+Only Outside is affected: the sign clock and other modes keep real time.
+Everything returns to live when the sign leaves Outside, after <span id="idle">15</span> minutes without a lab action, or with Back to live.</p>
+
+<div id="status">
+    <div class="row">
+        <span>Showing <b id="s_time">…</b></span>
+        <span>Season <b id="s_season">…</b></span>
+        <span>Sun <b id="s_sun">…</b></span>
+        <span>Astronomy <b id="s_sky">…</b></span>
+    </div>
+    <div class="row">
+        <span>Weather <b id="s_weather">…</b></span>
+        <span>Holidays <b id="s_holidays">…</b></span>
+    </div>
+    <div class="row" style="margin-top:6px">
+        <span class="badge" id="b_time">live time</span>
+        <span class="badge" id="b_weather">live weather</span>
+        <span class="badge" id="b_expires"></span>
+        <span class="note">Sign clock: <span id="s_clock">…</span></span>
+    </div>
+    <div style="margin-top:8px"><button class="live" onclick="call('/outside/lab/reset')">Back to live</button></div>
+    <div id="error"></div>
+</div>
+
+<div id="preview"><iframe id="preview_frame" title="Emulator preview"></iframe></div>
+
+<h2>Time</h2>
+<div>
+    <input type="datetime-local" id="at">
+    <button class="primary" onclick="setAt()">Set time</button>
+    <button onclick="call('/outside/lab/time', {reset: 1})">Live time</button>
+</div>
+<div style="margin-top:6px">Speed:
+    <button onclick="call('/outside/lab/time', {speed: 1})">×1</button>
+    <button onclick="call('/outside/lab/time', {speed: 10})">×10</button>
+    <button onclick="call('/outside/lab/time', {speed: 60})">×60</button>
+    <button onclick="call('/outside/lab/time', {speed: 300})">×300</button>
+</div>
+<div id="seasons" style="margin-top:6px">Season (keeps time of day): </div>
+<div id="sun_events" style="margin-top:6px">On the shown date: </div>
+<div style="margin-top:10px">
+    Forecast offset: <b id="offset_label">+0 h</b><br>
+    <input type="range" id="offset" min="0" max="1440" step="15" value="0">
+</div>
+
+<h2>Holidays</h2>
+<div id="holidays"></div>
+
+<h2>Weather</h2>
+<div id="presets"></div>
+<div style="margin-top:8px">
+    <label>Condition<select id="w_code"></select></label>
+    <label>Clouds %<input id="w_clouds" type="number" min="0" max="100"></label>
+    <label>Wind mph<input id="w_wind" type="number" min="0" step="1"></label>
+    <label>Rain mm/h<input id="w_rain" type="number" min="0" step="0.1"></label>
+    <label>Snow mm/h<input id="w_snow" type="number" min="0" step="0.1"></label>
+    <label>Temp °F<input id="w_temp" type="number" step="1"></label>
+    <label>Visibility m<input id="w_visibility" type="number" min="0" step="100"></label>
+</div>
+<div>
+    <button class="primary" onclick="applyWeather()">Apply weather</button>
+    <button onclick="call('/outside/lab/weather', {reset: 1})">Live weather</button>
+    <span class="note">A blank field is an unknown reading, as when the live feed omits it.</span>
+</div>
+
+<script>
+// Works directly on the API port (/outside/lab) and through nginx (/api/outside/lab).
+const API = location.pathname.replace(/\/outside\/lab\/?$/, '');
+const FIELDS = ['clouds', 'wind', 'rain', 'snow', 'temp', 'visibility'];
+// Weather presets: OpenWeather condition id plus readings in the units of the form.
+const PRESETS = [
+    ['Clear', {code: 800, clouds: 0, wind: 5, rain: 0, snow: 0, temp: 72, visibility: 10000}],
+    ['Partly cloudy', {code: 802, clouds: 40, wind: 8, rain: 0, snow: 0, temp: 70, visibility: 10000}],
+    ['Mostly cloudy', {code: 803, clouds: 75, wind: 9, rain: 0, snow: 0, temp: 66, visibility: 10000}],
+    ['Overcast', {code: 804, clouds: 100, wind: 10, rain: 0, snow: 0, temp: 60, visibility: 10000}],
+    ['Drizzle', {code: 300, clouds: 90, wind: 6, rain: 0.3, snow: 0, temp: 58, visibility: 8000}],
+    ['Rain', {code: 501, clouds: 95, wind: 12, rain: 3, snow: 0, temp: 55, visibility: 6000}],
+    ['Heavy rain', {code: 502, clouds: 100, wind: 18, rain: 10, snow: 0, temp: 55, visibility: 3000}],
+    ['Light thunderstorm', {code: 210, clouds: 80, wind: 14, rain: 1, snow: 0, temp: 76, visibility: 8000}],
+    ['Thunderstorm', {code: 211, clouds: 95, wind: 20, rain: 5, snow: 0, temp: 75, visibility: 5000}],
+    ['Heavy thunderstorm', {code: 212, clouds: 100, wind: 26, rain: 12, snow: 0, temp: 74, visibility: 3000}],
+    ['Light snow', {code: 600, clouds: 90, wind: 5, rain: 0, snow: 0.5, temp: 28, visibility: 5000}],
+    ['Heavy snow', {code: 602, clouds: 100, wind: 12, rain: 0, snow: 4, temp: 24, visibility: 1000}],
+    ['Sleet', {code: 611, clouds: 100, wind: 10, rain: 1, snow: 0.5, temp: 33, visibility: 4000}],
+    ['Fog', {code: 741, clouds: 70, wind: 2, rain: 0, snow: 0, temp: 50, visibility: 300}],
+    ['Windy', {code: 801, clouds: 15, wind: 28, rain: 0, snow: 0, temp: 65, visibility: 10000}],
+    ['Freezing and clear', {code: 800, clouds: 0, wind: 4, rain: 0, snow: 0, temp: 20, visibility: 10000}],
+    ['Warm, calm evening', {code: 800, clouds: 5, wind: 3, rain: 0, snow: 0, temp: 80, visibility: 10000}],
+];
+let built = false;
+let filledWeather = false;
+let holidayKey = '';
+let offsetTimer = null;
+
+function el(id) { return document.getElementById(id); }
+
+function button(label, onclick) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.onclick = onclick;
+    return b;
+}
+
+async function call(path, params) {
+    try {
+        const response = await fetch(API + path + (params ? '?' + new URLSearchParams(params) : ''));
+        const data = await response.json();
+        if (!response.ok) {
+            el('error').textContent = data.error || response.statusText;
+            return;
+        }
+        el('error').textContent = '';
+        render(data);
+    } catch (error) {
+        el('error').textContent = 'The sign did not answer: ' + error;
+    }
+}
+
+function setAt() {
+    if (el('at').value) call('/outside/lab/time', {at: el('at').value});
+}
+
+function fillWeather(values) {
+    el('w_code').value = values.code;
+    for (const name of FIELDS) el('w_' + name).value = values[name] ?? '';
+}
+
+function applyWeather() {
+    const params = {code: el('w_code').value};
+    for (const name of FIELDS) params[name] = el('w_' + name).value;
+    call('/outside/lab/weather', params);
+}
+
+function hours(minutes) { return '+' + (minutes / 60) + ' h'; }
+
+function build(options) {
+    el('idle').textContent = options.idle_minutes;
+    for (const season of options.seasons) {
+        el('seasons').append(button(season[0].toUpperCase() + season.slice(1), () => call('/outside/lab/time', {season})));
+    }
+    for (const event of options.sun_events) {
+        const label = event.lead_minutes ? `${event.label} −${event.lead_minutes} min` : event.label;
+        el('sun_events').append(button(label, () => call('/outside/lab/time', {event: event.name})));
+    }
+    for (const [label, values] of PRESETS) {
+        el('presets').append(button(label, () => { fillWeather(values); applyWeather(); }));
+    }
+    for (const {code, description} of options.weather_codes) {
+        el('w_code').append(new Option(`${code} ${description}`, code));
+    }
+    fillWeather(PRESETS[0][1]);
+    el('offset').oninput = () => {
+        el('offset_label').textContent = hours(el('offset').value);
+        clearTimeout(offsetTimer);
+        offsetTimer = setTimeout(() => call('/outside/lab/offset', {minutes: el('offset').value}), 120);
+    };
+    // With --web, show the emulated matrix; nginx serves display.html next to /api.
+    if (options.emulated && API === '/api') {
+        el('preview_frame').src = '/display.html' + (options.ws_port === 5056 ? '' : '?ws_port=' + options.ws_port);
+        el('preview').style.display = 'block';
+        const fit = () => {
+            const scale = Math.min(1, el('preview').clientWidth / 1060);
+            el('preview_frame').style.transform = `scale(${scale})`;
+            el('preview').style.height = (300 * scale) + 'px';
+        };
+        window.addEventListener('resize', fit);
+        fit();
+    }
+    built = true;
+}
+
+function renderHolidays(holidays) {
+    const key = JSON.stringify(holidays);
+    if (key === holidayKey) return;
+    holidayKey = key;
+    const box = el('holidays');
+    box.replaceChildren();
+    for (const holiday of holidays) {
+        const row = document.createElement('div');
+        row.className = 'holiday';
+        const name = document.createElement('span');
+        name.textContent = holiday.label;
+        row.append(name);
+        for (const time of holiday.times) row.append(button(time.label, () => call('/outside/lab/time', {at: time.at})));
+        box.append(row);
+    }
+}
+
+function render(state) {
+    if (!built) build(state.options);
+    renderHolidays(state.options.holidays);
+    el('s_time').textContent = state.selected_time.slice(0, 16).replace('T', ' ') + (state.offset_minutes ? ` (${hours(state.offset_minutes)})` : '');
+    el('s_season').textContent = state.season;
+    el('s_sun').textContent = state.sun_altitude == null ? '—' : state.sun_altitude.toFixed(1) + '°';
+    el('s_sky').textContent = state.astronomy;
+    const parts = [
+        state.condition ?? 'unknown',
+        state.temperature_f == null ? null : Math.round(state.temperature_f) + '°F',
+        state.cloud_cover == null ? null : Math.round(state.cloud_cover * 100) + '% cloud',
+        state.wind_mph == null ? null : Math.round(state.wind_mph) + ' mph',
+    ];
+    el('s_weather').textContent = `${parts.filter(Boolean).join(', ')} [${state.weather}]`;
+    el('s_holidays').textContent = state.holidays.length ? state.holidays.join(', ') : 'none';
+    el('s_clock').textContent = state.sign_clock;
+    const lab = state.lab;
+    el('b_time').textContent = lab.time ? `lab time ×${lab.speed}` : 'live time';
+    el('b_time').classList.toggle('on', !!lab.time);
+    el('b_weather').textContent = lab.weather ? 'lab weather' : 'live weather';
+    el('b_weather').classList.toggle('on', !!lab.weather);
+    el('b_expires').style.display = lab.expires_in == null ? 'none' : '';
+    if (lab.expires_in != null) el('b_expires').textContent = `resets in ${Math.floor(lab.expires_in / 60)}:${String(lab.expires_in % 60).padStart(2, '0')}`;
+    if (document.activeElement !== el('offset')) {
+        el('offset').value = state.offset_minutes;
+        el('offset_label').textContent = hours(state.offset_minutes);
+    }
+    if (document.activeElement !== el('at')) el('at').value = (lab.time ?? state.now).slice(0, 16);
+    // Show an override that was already set (for example from another browser) once, on load.
+    if (lab.weather && !filledWeather) {
+        const o = lab.weather;
+        fillWeather({code: o.code, clouds: o.clouds == null ? null : Math.round(o.clouds * 100), wind: o.wind, rain: o.rain, snow: o.snow, temp: o.temperature, visibility: o.visibility});
+    }
+    filledWeather = true;
+}
+
+async function poll() {
+    await call('/outside/lab/state');
+    setTimeout(poll, 2000);
+}
+poll();
+</script>
+</body>
+</html>
