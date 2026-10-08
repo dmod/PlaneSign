@@ -82,6 +82,7 @@ import finance
 import firework
 import fish
 import free_sketch
+import halloween
 import horse_race
 import identify
 import lightning

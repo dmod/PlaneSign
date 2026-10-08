@@ -36,6 +36,7 @@ class DisplayMode(Enum):
     NFL = auto()  # Live NFL scoreboard and field position
     MLB = auto()  # Live MLB scoreboard and base runners
     OUTSIDE = auto()  # Animated local rural landscape
+    HALLOWEEN = auto()  # Flickering Jack-o'-lantern display
 
 
 # Modes DEFAULT_MODE cannot start in: WELCOME and IDENTIFY hand off to another mode, and

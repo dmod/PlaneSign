@@ -14,7 +14,7 @@ __all__ = ["RGBMatrix", "RGBMatrixOptions", "graphics"]
 
 logger = logging.getLogger(__name__)
 
-ART_THRESHOLDS = {DisplayMode.AQUARIUM.value: 96, DisplayMode.PLANTS.value: 96, DisplayMode.CCA.value: 96, DisplayMode.HORSE_RACE.value: 48, DisplayMode.OUTSIDE.value: 48}
+ART_THRESHOLDS = {DisplayMode.AQUARIUM.value: 96, DisplayMode.PLANTS.value: 96, DisplayMode.HALLOWEEN.value: 96, DisplayMode.CCA.value: 96, DisplayMode.HORSE_RACE.value: 48, DisplayMode.OUTSIDE.value: 48}
 
 
 def monochrome_image(image: Image.Image, *, threshold: int | None = None) -> Image.Image:
