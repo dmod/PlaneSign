@@ -10,6 +10,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 WIDTH = 128
 HEIGHT = 32
 PUMPKIN_COLORS = ((184, 59, 12), (205, 76, 9), (165, 48, 18), (219, 91, 12), (183, 96, 42), (199, 80, 24), (172, 64, 16), (188, 106, 18))
+PUMPKIN_WIDTH_RANGE = (13, 29)
 FACE_ASSETS = {
     "eyes": ("eyes_angry", "eyes_round", "eyes_wink", "eyes_star"),
     "nose": ("nose_triangle", "nose_heart", "nose_round"),
@@ -53,27 +54,23 @@ def draw_background():
 
 
 def create_pumpkins():
-    count = random.randint(5, 7)
     gap = 1
-    available = WIDTH - gap * (count + 1)
-    raw_widths = [random.uniform(16, 27) for _ in range(count)]
-    slot_widths = [max(13, round(width * available / sum(raw_widths))) for width in raw_widths]
-
-    while sum(slot_widths) > available:
-        widest = slot_widths.index(max(slot_widths))
-        slot_widths[widest] -= 1
-    while sum(slot_widths) < available:
-        narrowest = slot_widths.index(min(slot_widths))
-        slot_widths[narrowest] += 1
+    min_width, max_width = PUMPKIN_WIDTH_RANGE
+    widths = []
+    remaining = WIDTH
+    while remaining >= min_width + gap:
+        width = random.randint(min_width, min(max_width, remaining - gap))
+        widths.append(width)
+        remaining -= width + gap
 
     shape_styles = ("round", "tall", "squat", "pear")
     # Add/remove names here to tune how often each small stem silhouette appears.
     stem_styles = ("stub", "curved", "forked", "twisted", "bent", "curled", "wide")
     pumpkins = []
-    x = gap
-    for slot_width in slot_widths:
+    occupied_width = sum(widths) + gap * (len(widths) - 1)
+    x = (WIDTH - occupied_width) // 2
+    for body_width in widths:
         shape = random.choice(shape_styles)
-        body_width = max(11, round(slot_width * random.uniform(0.84, 0.98)))
         if shape == "tall":
             aspect = random.uniform(1.18, 1.42)
         elif shape == "squat":
@@ -88,7 +85,7 @@ def create_pumpkins():
         mouth = random.choice(FACE_ASSETS["mouth"])
         nose = random.choice((*FACE_ASSETS["nose"], None, None))
         pumpkins.append({
-            "x": x + (slot_width - body_width) // 2,
+            "x": x,
             "y": bottom - height,
             "width": body_width,
             "bottom": bottom,
@@ -102,7 +99,7 @@ def create_pumpkins():
             "nose": nose,
             "mouth": mouth,
         })
-        x += slot_width + gap
+        x += body_width + gap
 
     return sorted(pumpkins, key=lambda pumpkin: pumpkin["bottom"])
 
