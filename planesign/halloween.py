@@ -1,6 +1,7 @@
 import math
 import random
 import time
+from pathlib import Path
 
 import shared_config
 from modes import DisplayMode, planesign_mode_handler
@@ -11,10 +12,15 @@ WIDTH = 128
 HEIGHT = 32
 PUMPKIN_COLORS = ((184, 59, 12), (205, 76, 9), (165, 48, 18), (219, 91, 12), (183, 96, 42), (199, 80, 24), (172, 64, 16), (188, 106, 18))
 PUMPKIN_WIDTH_RANGE = (13, 29)
+FACE_ASSET_DIR = Path(shared_config.icons_dir) / "halloween"
+IMAGE_EXTENSIONS = Image.registered_extensions()
 FACE_ASSETS = {
-    "eyes": ("eyes_angry", "eyes_round", "eyes_wink", "eyes_star"),
-    "nose": ("nose_triangle", "nose_heart", "nose_round"),
-    "mouth": ("mouth_grin", "mouth_fangs", "mouth_o", "mouth_stitched"),
+    feature: tuple(
+        path.name
+        for path in sorted((FACE_ASSET_DIR / feature).iterdir())
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+    )
+    for feature in ("eyes", "mouth", "nose")
 }
 # These intervals control how quickly each candle changes its flicker and emits sparks.
 FLAME_CHANGE_INTERVAL = (0.08, 0.18)
@@ -23,11 +29,11 @@ FLAME_SPARK_INTERVAL = (0.45, 1.2)
 
 def load_face_assets():
     assets = {}
-    for feature, names in FACE_ASSETS.items():
+    for feature, filenames in FACE_ASSETS.items():
         assets[feature] = {}
-        for name in names:
-            with Image.open(f"{shared_config.icons_dir}/halloween/{name}.png") as image:
-                assets[feature][name] = image.convert("RGBA")
+        for filename in filenames:
+            with Image.open(FACE_ASSET_DIR / feature / filename) as image:
+                assets[feature][filename] = image.convert("RGBA")
     return assets
 
 
