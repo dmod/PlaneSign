@@ -12,6 +12,7 @@ WIDTH = 128
 HEIGHT = 32
 PUMPKIN_COLORS = ((184, 59, 12), (205, 76, 9), (165, 48, 18), (219, 91, 12), (183, 96, 42), (199, 80, 24), (172, 64, 16), (188, 106, 18))
 PUMPKIN_WIDTH_RANGE = (13, 29)
+MIN_DRAWABLE_EYE_PIXELS = 3
 FACE_ASSET_DIR = Path(shared_config.icons_dir) / "halloween"
 IMAGE_EXTENSIONS = Image.registered_extensions()
 FACE_ASSETS = {
@@ -59,7 +60,7 @@ def draw_background():
     return image
 
 
-def create_pumpkins():
+def create_pumpkins(assets):
     gap = 1
     min_width, max_width = PUMPKIN_WIDTH_RANGE
     widths = []
@@ -89,10 +90,9 @@ def create_pumpkins():
             aspect = random.uniform(0.98, 1.16)
         height = max(15, min(25, round(body_width * aspect)))
         bottom = random.randint(29, 31)
-        eyes = random.choice(FACE_ASSETS["eyes"])
         mouth = random.choice(FACE_ASSETS["mouth"])
         nose = random.choice((*FACE_ASSETS["nose"], None, None))
-        pumpkins.append({
+        pumpkin = {
             "x": x,
             "y": bottom - height,
             "width": body_width,
@@ -103,10 +103,13 @@ def create_pumpkins():
             "stem": random.choice(stem_styles),
             "stem_height": random.randint(1, 4),
             "stem_lean": random.choice((-1, 0, 1)),
-            "eyes": eyes,
+            "mouth_flip_left_right": random.choice((False, True)),
+            "mouth_flip_top_bottom": random.choice((False, True)),
             "nose": nose,
             "mouth": mouth,
-        })
+        }
+        pumpkin["eyes"] = choose_drawable_eyes(pumpkin, assets)
+        pumpkins.append(pumpkin)
         x += body_width + gap
 
     return sorted(pumpkins, key=lambda pumpkin: pumpkin["bottom"])
@@ -234,8 +237,7 @@ def fitted_feature(asset, max_width, max_height):
     return feature
 
 
-def face_mask(pumpkin, assets):
-    mask = Image.new("L", (WIDTH, HEIGHT), 0)
+def positioned_face_feature(pumpkin, asset, vertical_position, feature_height):
     x, y = pumpkin["x"], pumpkin["y"]
     width = pumpkin["width"]
     body_top = y + 3
@@ -243,17 +245,43 @@ def face_mask(pumpkin, assets):
     inset = max(1, round(width * 0.12))
     face_width = max(1, width - 2 * inset)
     available_height = max(3, body_height - 2)
+    max_height = max(1, round(available_height * feature_height))
+    feature = fitted_feature(asset, face_width, max_height)
+    feature_x = x + (width - feature.width) // 2
+    feature_y = body_top + round(body_height * vertical_position)
+    feature_y = min(max(body_top + 1, feature_y), pumpkin["bottom"] - feature.height - 1)
+    return feature, feature_x, feature_y
+
+
+def choose_drawable_eyes(pumpkin, assets):
+    body_mask = pumpkin_body_mask(pumpkin)
+    candidates = list(FACE_ASSETS["eyes"])
+    random.shuffle(candidates)
+    for asset_name in candidates:
+        feature, x, y = positioned_face_feature(pumpkin, assets["eyes"][asset_name], 0.16, 0.27)
+        body_region = body_mask.crop((x, y, x + feature.width, y + feature.height))
+        visible_pixels = ImageChops.multiply(feature.getchannel("A"), body_region)
+        if sum(pixel > 0 for pixel in visible_pixels.getdata()) >= MIN_DRAWABLE_EYE_PIXELS:
+            return asset_name
+    raise ValueError(f"No Halloween eye asset has at least {MIN_DRAWABLE_EYE_PIXELS} drawable pixels for pumpkin width {pumpkin['width']}")
+
+
+def face_mask(pumpkin, assets):
+    mask = Image.new("L", (WIDTH, HEIGHT), 0)
     features = [("eyes", "eyes", 0.16, 0.27), ("mouth", "mouth", 0.64, 0.27)]
     if pumpkin["nose"] is not None:
         features.insert(1, ("nose", "nose", 0.46, 0.14))
 
     for name, category, vertical_position, feature_height in features:
-        max_height = max(1, round(available_height * feature_height))
         asset_name = pumpkin[name]
-        feature = fitted_feature(assets[category][asset_name], face_width, max_height)
-        feature_x = x + (width - feature.width) // 2
-        feature_y = body_top + round(body_height * vertical_position)
-        feature_y = min(max(body_top + 1, feature_y), pumpkin["bottom"] - feature.height - 1)
+        feature, feature_x, feature_y = positioned_face_feature(
+            pumpkin, assets[category][asset_name], vertical_position, feature_height
+        )
+        if name == "mouth":
+            if pumpkin["mouth_flip_left_right"]:
+                feature = feature.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            if pumpkin["mouth_flip_top_bottom"]:
+                feature = feature.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         mask.paste(feature.getchannel("A"), (feature_x, feature_y))
     return ImageChops.multiply(mask, pumpkin_body_mask(pumpkin))
 
@@ -402,7 +430,7 @@ def render_frame(background, pumpkins, flames, face_layers, now):
 def halloween_mode(sign):
     background = draw_background()
     assets = load_face_assets()
-    pumpkins = create_pumpkins()
+    pumpkins = create_pumpkins(assets)
     face_layers = prepare_face_layers(pumpkins, assets)
     flames = [new_flame() for _ in pumpkins]
     next_scene = time.perf_counter() + random.uniform(20.0, 35.0)
@@ -410,7 +438,7 @@ def halloween_mode(sign):
     while shared_config.shared_mode.value == DisplayMode.HALLOWEEN.value:
         now = time.perf_counter()
         if now >= next_scene:
-            pumpkins = create_pumpkins()
+            pumpkins = create_pumpkins(assets)
             face_layers = prepare_face_layers(pumpkins, assets)
             flames = [new_flame() for _ in pumpkins]
             next_scene = now + random.uniform(20.0, 35.0)
