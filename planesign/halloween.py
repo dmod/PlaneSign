@@ -6,6 +6,8 @@ from pathlib import Path
 import shared_config
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
+import psclock
+import utilities
 
 
 WIDTH = 128
@@ -36,6 +38,8 @@ SPIDER_BODY_COLOR = (25, 25, 25)
 SPIDER_EYE_COLOR = (255, 0, 0)
 BACKGROUND_STAR_COUNT = 30
 BACKGROUND_STAR_COLORS = ((83, 101, 137), (117, 112, 117), (111, 121, 148))
+AURORA_PURPLE = (105, 34, 150)
+AURORA_LAVENDER = (174, 88, 204)
 
 
 def load_face_assets():
@@ -96,8 +100,39 @@ def draw_background_tree(draw, x, base_y, height, lean, color, width=1):
         draw.line((tip_x, tip_y, tip_x + direction, tip_y - max(1, round(height * 0.12))), fill=color)
 
 
-def draw_background(stars, now):
+def is_halloween_aurora_time(local_time):
+    return (
+        (local_time.month == 10 and local_time.day == 31)
+        or (local_time.month == 11 and local_time.day == 1 and local_time.hour < 6)
+    )
+
+
+def draw_aurora(image, elapsed):
+    pixels = image.load()
+    for x in range(WIDTH):
+        wave = (
+            7.5
+            + 2.3 * math.sin(x * 0.075 + elapsed * 0.24)
+            + 1.2 * math.sin(x * 0.16 - elapsed * 0.17)
+        )
+        curtain = 0.5 + 0.5 * math.sin(x * 0.105 + elapsed * 0.72)
+        for y in range(2, 21):
+            distance = abs(y - wave)
+            if distance >= 5:
+                continue
+            edge = 1 - distance / 5
+            shimmer = 0.58 + 0.42 * math.sin(x * 0.19 + y * 0.37 + elapsed * 1.1)
+            strength = edge * curtain * shimmer * 0.72
+            color_mix = max(0.0, min(1.0, 0.5 + 0.5 * math.sin(x * 0.045 + elapsed * 0.28)))
+            color = tuple(round(a + (b - a) * color_mix) for a, b in zip(AURORA_PURPLE, AURORA_LAVENDER))
+            base = pixels[x, y]
+            pixels[x, y] = tuple(round(channel + (aurora - channel) * strength) for channel, aurora in zip(base, color))
+
+
+def draw_background(stars, now, aurora=False):
     image = Image.new("RGB", (WIDTH, HEIGHT), (2, 3, 12))
+    if aurora:
+        draw_aurora(image, now)
     draw = ImageDraw.Draw(image)
 
     for star in stars:
@@ -566,6 +601,7 @@ def halloween_mode(sign):
 
     while shared_config.shared_mode.value == DisplayMode.HALLOWEEN.value:
         now = time.perf_counter()
+        local_time = utilities.convert_unix_to_local_time(psclock.time())
         if now >= next_scene and (spider is None or now >= spider["end"]):
             pumpkins = create_pumpkins(assets)
             face_layers = prepare_face_layers(pumpkins, assets)
@@ -573,7 +609,7 @@ def halloween_mode(sign):
             next_scene = now + random.uniform(20.0, 35.0)
             spider = schedule_spider(now, next_scene)
 
-        background = draw_background(stars, now)
+        background = draw_background(stars, now, is_halloween_aurora_time(local_time))
         frame = render_frame(background, pumpkins, flames, face_layers, now)
         draw_spider(frame, spider, spider_image, right_eye, now)
         sign.canvas.SetImage(frame, 0, 0)
