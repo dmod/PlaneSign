@@ -34,6 +34,8 @@ SPIDER_ASCENT_SECONDS = 2.2
 SPIDER_TARGET_Y = HEIGHT // 2
 SPIDER_BODY_COLOR = (25, 25, 25)
 SPIDER_EYE_COLOR = (255, 0, 0)
+BACKGROUND_STAR_COUNT = 30
+BACKGROUND_STAR_COLORS = ((83, 101, 137), (117, 112, 117), (111, 121, 148))
 
 
 def load_face_assets():
@@ -56,16 +58,64 @@ def load_spider_asset():
     return spider, right_eye
 
 
-def draw_background():
+def create_background_stars():
+    stars = []
+    positions = set()
+    while len(stars) < BACKGROUND_STAR_COUNT:
+        x = random.randrange(2, WIDTH - 2)
+        y = random.randrange(1, 20)
+        if (x, y) in positions:
+            continue
+        positions.add((x, y))
+        stars.append({
+            "x": x,
+            "y": y,
+            "phase": random.uniform(0, math.tau),
+            "speed": random.uniform(0.55, 1.1),
+            "sparkle_speed": random.uniform(1.4, 2.4),
+            "color": random.choice(BACKGROUND_STAR_COLORS),
+        })
+    return tuple(stars)
+
+
+def draw_background_tree(draw, x, base_y, height, lean, color, width=1):
+    top_x = x + lean
+    top_y = base_y - height
+    draw.line((x, base_y, x, base_y - height // 2, top_x, top_y), fill=color, width=width)
+    for branch_height, reach, direction in (
+        (0.28, 0.34, -1),
+        (0.43, 0.42, 1),
+        (0.58, 0.3, -1),
+        (0.72, 0.36, 1),
+    ):
+        branch_y = base_y - round(height * branch_height)
+        branch_x = x + round(lean * branch_height)
+        tip_x = branch_x + direction * round(height * reach)
+        tip_y = branch_y - round(height * 0.18)
+        draw.line((branch_x, branch_y, tip_x, tip_y), fill=color)
+        draw.line((tip_x, tip_y, tip_x + direction, tip_y - max(1, round(height * 0.12))), fill=color)
+
+
+def draw_background(stars, now):
     image = Image.new("RGB", (WIDTH, HEIGHT), (2, 3, 12))
     draw = ImageDraw.Draw(image)
 
-    stars = random.Random(51031)
-    for _ in range(23):
-        x = stars.randrange(WIDTH)
-        y = stars.randrange(2, 18)
-        color = stars.choice(((20, 25, 39), (27, 30, 43), (34, 31, 37)))
-        draw.point((x, y), fill=color)
+    for star in stars:
+        swell = 0.5 + 0.5 * math.sin(now * star["speed"] + star["phase"])
+        sparkle = 0.85 + 0.15 * (0.5 + 0.5 * math.sin(now * star["sparkle_speed"] + star["phase"] * 0.37))
+        shimmer = 0.08 + 0.92 * swell * swell * sparkle
+        color = tuple(round(channel * shimmer) for channel in star["color"])
+        draw.point((star["x"], star["y"]), fill=color)
+
+    for tree in (
+        (17, 29, 13, -1, (9, 12, 22)),
+        (37, 29, 16, 1, (10, 13, 23)),
+        (56, 29, 12, -1, (8, 11, 20)),
+        (76, 29, 14, 1, (9, 12, 21)),
+        (96, 29, 17, -1, (10, 13, 23)),
+        (111, 29, 13, 1, (8, 11, 20)),
+    ):
+        draw_background_tree(draw, *tree)
 
     # Crooked branches and a low, uneven horizon keep the scene silhouetted.
     for x, direction in ((0, 1), (127, -1)):
@@ -505,7 +555,7 @@ def render_frame(background, pumpkins, flames, face_layers, now):
 
 @planesign_mode_handler(DisplayMode.HALLOWEEN)
 def halloween_mode(sign):
-    background = draw_background()
+    stars = create_background_stars()
     assets = load_face_assets()
     spider_image, right_eye = load_spider_asset()
     pumpkins = create_pumpkins(assets)
@@ -523,6 +573,7 @@ def halloween_mode(sign):
             next_scene = now + random.uniform(20.0, 35.0)
             spider = schedule_spider(now, next_scene)
 
+        background = draw_background(stars, now)
         frame = render_frame(background, pumpkins, flames, face_layers, now)
         draw_spider(frame, spider, spider_image, right_eye, now)
         sign.canvas.SetImage(frame, 0, 0)
