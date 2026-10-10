@@ -69,7 +69,7 @@ def create_pumpkins():
         widths.append(width)
         remaining -= width + gap
 
-    shape_styles = ("round", "tall", "squat", "pear")
+    shape_styles = ("round", "tall", "squat", "apple", "pear")
     # Add/remove names here to tune how often each small stem silhouette appears.
     stem_styles = ("stub", "curved", "forked", "twisted", "bent", "curled", "wide")
     pumpkins = []
@@ -81,8 +81,10 @@ def create_pumpkins():
             aspect = random.uniform(1.18, 1.42)
         elif shape == "squat":
             aspect = random.uniform(0.72, 0.88)
-        elif shape == "pear":
+        elif shape == "apple":
             aspect = random.uniform(1.02, 1.26)
+        elif shape == "pear":
+            aspect = random.uniform(1.28, 1.5)
         else:
             aspect = random.uniform(0.98, 1.16)
         height = max(15, min(25, round(body_width * aspect)))
@@ -127,8 +129,11 @@ def pumpkin_outline(pumpkin):
         radius = 1 + 0.035 * lobe - 0.012 * math.cos(2 * lobe_count * angle)
         x_shape = radius
         y_shape = radius
-        if shape == "pear":
+        if shape == "apple":
             x_shape *= 1 - 0.18 * math.sin(angle)
+        elif shape == "pear":
+            vertical = math.sin(angle)
+            x_shape *= 0.78 * (1 + 0.55 * vertical - 0.1 * vertical**2)
         elif shape == "tall":
             x_shape *= 1 - 0.05 * math.sin(angle)
         points.append((
