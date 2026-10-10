@@ -23,9 +23,17 @@ FACE_ASSETS = {
     )
     for feature in ("eyes", "mouth", "nose")
 }
-# These intervals control how quickly each candle changes its flicker and emits sparks.
+
 FLAME_CHANGE_INTERVAL = (0.08, 0.18)
 FLAME_SPARK_INTERVAL = (0.45, 1.2)
+SPIDER_CHANCE = 0.05
+SPIDER_DESCENT_SECONDS = 2.4
+SPIDER_WINK_SECONDS = 0.3
+SPIDER_HANG_SECONDS = 2.5
+SPIDER_ASCENT_SECONDS = 2.2
+SPIDER_TARGET_Y = HEIGHT // 2
+SPIDER_BODY_COLOR = (25, 25, 25)
+SPIDER_EYE_COLOR = (255, 0, 0)
 
 
 def load_face_assets():
@@ -36,6 +44,16 @@ def load_face_assets():
             with Image.open(FACE_ASSET_DIR / feature / filename) as image:
                 assets[feature][filename] = image.convert("RGBA")
     return assets
+
+
+def load_spider_asset():
+    with Image.open(FACE_ASSET_DIR / "spider.png") as image:
+        spider = image.convert("RGBA")
+
+    right_eye = (spider.width // 2 + 1, spider.height - 1)
+    if spider.getpixel(right_eye)[:3] != SPIDER_EYE_COLOR:
+        raise ValueError(f"Expected a red right-eye pixel at {right_eye} in {FACE_ASSET_DIR / 'spider.png'}")
+    return spider, right_eye
 
 
 def draw_background():
@@ -358,6 +376,65 @@ def color_layer(mask, color, opacity):
     return layer
 
 
+def schedule_spider(now, scene_change_at):
+    if random.random() >= SPIDER_CHANCE:
+        return None
+
+    duration = sum((
+        SPIDER_DESCENT_SECONDS,
+        SPIDER_WINK_SECONDS,
+        SPIDER_HANG_SECONDS,
+        SPIDER_ASCENT_SECONDS,
+    ))
+    earliest_start = now + 2
+    latest_start = scene_change_at - duration - 1
+    if latest_start <= earliest_start:
+        return None
+    start = random.uniform(earliest_start, latest_start)
+    return {
+        "start": start,
+        "descent_end": start + SPIDER_DESCENT_SECONDS,
+        "wink_end": start + SPIDER_DESCENT_SECONDS + SPIDER_WINK_SECONDS,
+        "ascent_start": start + SPIDER_DESCENT_SECONDS + SPIDER_WINK_SECONDS + SPIDER_HANG_SECONDS,
+        "end": start + duration,
+    }
+
+
+def draw_spider(frame, spider, spider_image, right_eye, now):
+    if spider is None or now < spider["start"] or now >= spider["end"]:
+        return
+
+    elapsed = now - spider["start"]
+    if elapsed < SPIDER_DESCENT_SECONDS:
+        progress = elapsed / SPIDER_DESCENT_SECONDS
+        eased = progress * progress * (3 - 2 * progress)
+        target_top = SPIDER_TARGET_Y - spider_image.height // 2
+        image_top = round(-spider_image.height + (target_top + spider_image.height) * eased)
+    elif now < spider["ascent_start"]:
+        image_top = SPIDER_TARGET_Y - spider_image.height // 2
+    else:
+        progress = (now - spider["ascent_start"]) / SPIDER_ASCENT_SECONDS
+        eased = progress * progress * (3 - 2 * progress)
+        target_top = SPIDER_TARGET_Y - spider_image.height // 2
+        image_top = round(target_top - (target_top + spider_image.height) * eased)
+
+    center_x = WIDTH // 2
+    draw = ImageDraw.Draw(frame)
+    if image_top > 0:
+        draw.line((center_x, 0, center_x, image_top), fill=(72, 73, 80))
+
+    image = spider_image.copy()
+    if spider["descent_end"] <= now < spider["wink_end"]:
+        progress = (now - spider["descent_end"]) / SPIDER_WINK_SECONDS
+        closure = 1 - abs(2 * progress - 1)
+        closure = closure * closure * (3 - 2 * closure)
+        eye_color = tuple(round(open_value + (closed_value - open_value) * closure)
+                          for open_value, closed_value in zip(SPIDER_EYE_COLOR, SPIDER_BODY_COLOR))
+        image.putpixel(right_eye, (*eye_color, 255))
+
+    frame.paste(image, (center_x - spider_image.width // 2, image_top), image)
+
+
 def render_frame(background, pumpkins, flames, face_layers, now):
     frame = background.copy()
     for pumpkin in pumpkins:
@@ -430,20 +507,25 @@ def render_frame(background, pumpkins, flames, face_layers, now):
 def halloween_mode(sign):
     background = draw_background()
     assets = load_face_assets()
+    spider_image, right_eye = load_spider_asset()
     pumpkins = create_pumpkins(assets)
     face_layers = prepare_face_layers(pumpkins, assets)
     flames = [new_flame() for _ in pumpkins]
     next_scene = time.perf_counter() + random.uniform(20.0, 35.0)
+    spider = schedule_spider(time.perf_counter(), next_scene)
 
     while shared_config.shared_mode.value == DisplayMode.HALLOWEEN.value:
         now = time.perf_counter()
-        if now >= next_scene:
+        if now >= next_scene and (spider is None or now >= spider["end"]):
             pumpkins = create_pumpkins(assets)
             face_layers = prepare_face_layers(pumpkins, assets)
             flames = [new_flame() for _ in pumpkins]
             next_scene = now + random.uniform(20.0, 35.0)
+            spider = schedule_spider(now, next_scene)
 
-        sign.canvas.SetImage(render_frame(background, pumpkins, flames, face_layers, now), 0, 0)
+        frame = render_frame(background, pumpkins, flames, face_layers, now)
+        draw_spider(frame, spider, spider_image, right_eye, now)
+        sign.canvas.SetImage(frame, 0, 0)
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
         if sign.wait_loop(0.05):
