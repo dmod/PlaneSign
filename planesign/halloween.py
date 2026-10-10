@@ -40,6 +40,8 @@ BACKGROUND_STAR_COUNT = 30
 BACKGROUND_STAR_COLORS = ((83, 101, 137), (117, 112, 117), (111, 121, 148))
 AURORA_PURPLE = (105, 34, 150)
 AURORA_LAVENDER = (174, 88, 204)
+LIGHTNING_FLASH_COLOR = (188, 190, 225)
+LIGHTNING_GLOW_COLOR = (116, 119, 165)
 
 
 def load_face_assets():
@@ -129,7 +131,72 @@ def draw_aurora(image, elapsed):
             pixels[x, y] = tuple(round(channel + (aurora - channel) * strength) for channel, aurora in zip(base, color))
 
 
-def draw_background(stars, now, aurora=False):
+def new_background_lightning(now):
+    return {
+        "next_strike": now + random.uniform(30, 300),
+        "start": None,
+        "channel": (),
+        "branches": (),
+    }
+
+
+def lightning_intensity(lightning, now):
+    if now >= lightning["next_strike"]:
+        lightning["start"] = lightning["next_strike"]
+        lightning["next_strike"] = now + random.uniform(12, 26)
+
+        x = random.randint(20, WIDTH - 21)
+        channel = [(x, 0)]
+        for y in (4, 8, 12, 16, 20, 24):
+            x = max(3, min(WIDTH - 4, x + random.randint(-5, 5)))
+            channel.append((x, y))
+        lightning["channel"] = tuple(channel)
+        lightning["branches"] = tuple(
+            ((x, y), (max(2, min(WIDTH - 3, x + direction * random.randint(3, 8))), y + random.randint(2, 5)))
+            for x, y in channel[2:-1:2]
+            for direction in (random.choice((-1, 1)),)
+        )
+
+    if lightning["start"] is None:
+        return 0.0
+
+    age = now - lightning["start"]
+    intensity = 0.0
+    for offset, strength in ((0.0, 1.0), (0.13, 0.62), (0.3, 0.85)):
+        since = age - offset
+        if since >= 0:
+            level = strength if since < 0.055 else strength * math.exp(-(since - 0.055) / 0.095)
+            intensity = max(intensity, level)
+    return intensity if age <= 0.75 else 0.0
+
+
+def draw_background_lightning(image, lightning, intensity):
+    if intensity <= 0:
+        return
+
+    pixels = image.load()
+    for y in range(HEIGHT - 4):
+        vertical_falloff = 0.72 + 0.28 * y / HEIGHT
+        strength = min(0.82, intensity * vertical_falloff * 0.78)
+        for x in range(WIDTH):
+            color = pixels[x, y]
+            pixels[x, y] = tuple(
+                round(channel + (flash - channel) * strength)
+                for channel, flash in zip(color, LIGHTNING_FLASH_COLOR)
+            )
+
+    bolt_strength = min(1.0, intensity * 1.35)
+    bolt_color = tuple(
+        round(glow + (flash - glow) * bolt_strength)
+        for glow, flash in zip(LIGHTNING_GLOW_COLOR, LIGHTNING_FLASH_COLOR)
+    )
+    draw = ImageDraw.Draw(image)
+    draw.line(lightning["channel"], fill=bolt_color)
+    for branch in lightning["branches"]:
+        draw.line(branch, fill=bolt_color)
+
+
+def draw_background(stars, now, aurora=False, lightning=None):
     image = Image.new("RGB", (WIDTH, HEIGHT), (2, 3, 12))
     if aurora:
         draw_aurora(image, now)
@@ -141,6 +208,10 @@ def draw_background(stars, now, aurora=False):
         shimmer = 0.08 + 0.92 * swell * swell * sparkle
         color = tuple(round(channel * shimmer) for channel in star["color"])
         draw.point((star["x"], star["y"]), fill=color)
+
+    if lightning is not None:
+        intensity = lightning_intensity(lightning, now)
+        draw_background_lightning(image, lightning, intensity)
 
     for tree in (
         (17, 29, 13, -1, (9, 12, 22)),
@@ -598,10 +669,17 @@ def halloween_mode(sign):
     flames = [new_flame() for _ in pumpkins]
     next_scene = time.perf_counter() + random.uniform(20.0, 35.0)
     spider = schedule_spider(time.perf_counter(), next_scene)
+    lightning_enabled = bool(shared_config.shared_halloween_lightning.value)
+    lightning = new_background_lightning(time.perf_counter()) if lightning_enabled else None
 
     while shared_config.shared_mode.value == DisplayMode.HALLOWEEN.value:
         now = time.perf_counter()
         local_time = utilities.convert_unix_to_local_time(psclock.time())
+        lightning_enabled = bool(shared_config.shared_halloween_lightning.value)
+        if lightning_enabled and lightning is None:
+            lightning = new_background_lightning(now)
+        elif not lightning_enabled:
+            lightning = None
         if now >= next_scene and (spider is None or now >= spider["end"]):
             pumpkins = create_pumpkins(assets)
             face_layers = prepare_face_layers(pumpkins, assets)
@@ -609,7 +687,7 @@ def halloween_mode(sign):
             next_scene = now + random.uniform(20.0, 35.0)
             spider = schedule_spider(now, next_scene)
 
-        background = draw_background(stars, now, is_halloween_aurora_time(local_time))
+        background = draw_background(stars, now, is_halloween_aurora_time(local_time), lightning)
         frame = render_frame(background, pumpkins, flames, face_layers, now)
         draw_spider(frame, spider, spider_image, right_eye, now)
         sign.canvas.SetImage(frame, 0, 0)

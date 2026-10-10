@@ -70,6 +70,7 @@ function set_current_mode_button(mode) {
     set_mode_button_active(mode, true);
     global_current_mode = mode;
     sync_outside_controls(mode);
+    sync_halloween_controls(mode);
 }
 
 function clear_current_mode_button() {
@@ -78,6 +79,7 @@ function clear_current_mode_button() {
     }
     global_current_mode = null;
     sync_outside_controls(null);
+    sync_halloween_controls(null);
 }
 
 function sync_outside_controls(mode) {
@@ -89,6 +91,26 @@ function sync_outside_controls(mode) {
     if (mode === 'OUTSIDE') {
         update_outside_status();
     }
+}
+
+function sync_halloween_controls(mode) {
+    var halloweenDiv = document.getElementById('halloween_div');
+    if (!halloweenDiv) {
+        return;
+    }
+
+    halloweenDiv.hidden = mode !== 'HALLOWEEN';
+    if (mode === 'HALLOWEEN') {
+        call_endpoint('/halloween_lightning', function (enabled) {
+            if (global_current_mode === 'HALLOWEEN') {
+                document.getElementById('halloween_lightning_toggle').checked = enabled === '1';
+            }
+        });
+    }
+}
+
+function set_halloween_lightning(enabled) {
+    call_endpoint('/halloween_lightning/' + (enabled ? 1 : 0));
 }
 
 function update_outside_time_label(minutes) {

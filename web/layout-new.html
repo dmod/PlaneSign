@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="layout-new.css?v=halloween-1">
+  <link rel="stylesheet" href="layout-new.css?v=halloween-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=halloween-1"></script>
+  <script src="index.js?v=halloween-2"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -288,6 +288,13 @@
             </div>
             <div class="command-mode-item">
               <button id="HALLOWEEN" class="mode_button" onclick="set_mode(this.id)">Halloween</button>
+              <div id="halloween_div" class="halloween_controls" hidden>
+                <label class="halloween_lightning_switch">
+                  <span>Background lightning</span>
+                  <input id="halloween_lightning_toggle" type="checkbox" checked onchange="set_halloween_lightning(this.checked)" role="switch">
+                  <span class="halloween_lightning_slider" aria-hidden="true"></span>
+                </label>
+              </div>
             </div>
             <div class="command-mode-item">
               <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>

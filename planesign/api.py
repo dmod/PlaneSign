@@ -713,6 +713,17 @@ def set_lightning_mode(mode):
     return ""
 
 
+@app.route("/halloween_lightning", defaults={"enabled": None})
+@app.route("/halloween_lightning/<int(signed=True):enabled>")
+def halloween_lightning(enabled):
+    if enabled is None:
+        return str(shared_config.shared_halloween_lightning.value)
+    if enabled not in (0, 1):
+        return jsonify({"ok": False, "error": "Expected 0 or 1"}), 400
+    shared_config.shared_halloween_lightning.value = enabled
+    return ""
+
+
 @app.route("/mandelbrot_color/<mode>")
 def set_mandelbrot_color(mode):
     shared_config.shared_mandelbrot_color.value = int(mode)

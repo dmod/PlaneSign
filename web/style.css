@@ -389,6 +389,59 @@ legend {
   margin: 0 auto 8px;
 }
 
+.halloween_controls {
+  margin: 8px 0 12px;
+}
+
+.halloween_lightning_switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.halloween_lightning_switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.halloween_lightning_slider {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 42px;
+  border-radius: 12px;
+  background: #777;
+  transition: background-color 0.2s;
+}
+
+.halloween_lightning_slider::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+  transition: transform 0.2s;
+}
+
+.halloween_lightning_switch input:checked + .halloween_lightning_slider {
+  background: #6d3d91;
+}
+
+.halloween_lightning_switch input:checked + .halloween_lightning_slider::before {
+  transform: translateX(18px);
+}
+
+.halloween_lightning_switch input:focus-visible + .halloween_lightning_slider {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 #satellite_div,
 #cgol_div,
 #track-a-flight_div,

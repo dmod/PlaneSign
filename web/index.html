@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=halloween-1">
+  <link rel="stylesheet" href="style.css?v=halloween-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=halloween-1"></script>
+  <script src="index.js?v=halloween-2"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -257,6 +257,13 @@
       <button id="AQUARIUM" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
       <button id="PLANTS" class="mode_button" onclick="set_mode(this.id)">Plants</button>
       <button id="HALLOWEEN" class="mode_button" onclick="set_mode(this.id)">Halloween</button>
+      <div id="halloween_div" class="halloween_controls" hidden>
+        <label class="halloween_lightning_switch">
+          <span>Background lightning</span>
+          <input id="halloween_lightning_toggle" type="checkbox" checked onchange="set_halloween_lightning(this.checked)" role="switch">
+          <span class="halloween_lightning_slider" aria-hidden="true"></span>
+        </label>
+      </div>
       <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>
       <div id="outside_div" hidden>
         <div class="outside_timeline">
