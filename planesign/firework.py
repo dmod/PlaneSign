@@ -20,12 +20,16 @@ WILLOW_FW = 1
 TRACER_FW = 2
 CRACKLER_FW = 3
 
+# Launches are rolled once per frame, so this sets how often fireworks go up.
+FRAME_INTERVAL = 1 / 60
+
 
 @planesign_mode_handler(DisplayMode.FIREWORKS)
 def fireworks(sign):
     sign.canvas.Clear()
 
     fireworks = []
+    next_frame = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.FIREWORKS.value:
         if len(fireworks) == 0 or (len(fireworks) < 10 and random.random() < 0.2):
             if random.random() < 0.6:
@@ -44,7 +48,9 @@ def fireworks(sign):
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
-        sign.wait_loop(0.01)
+        # Keep a steady schedule, but never catch up by more than one frame after a stall.
+        next_frame = max(next_frame + FRAME_INTERVAL, time.perf_counter() - FRAME_INTERVAL)
+        sign.wait_loop(max(0.0, next_frame - time.perf_counter()))
 
 
 class Particle:

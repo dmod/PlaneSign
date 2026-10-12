@@ -1,4 +1,5 @@
 import random
+import time
 
 import numpy as np
 import PIL.Image as Image
@@ -6,6 +7,9 @@ import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+
+# Flake speeds are pixels per frame, so this sets how fast the snow falls.
+FRAME_INTERVAL = 1 / 120
 
 
 class SnowFlake:
@@ -31,27 +35,20 @@ class SnowFlake:
             num = random.choice([2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 21, 22])
         else:
             num = random.randint(1, 22)
-        self.sprite = Image.open(f"{shared_config.icons_dir}/santa/snowflake{num}.png").convert("RGBA")
-        w, _ = self.sprite.size
+        sprite = Image.open(f"{shared_config.icons_dir}/santa/snowflake{num}.png").convert("RGBA")
+        w, _ = sprite.size
         self.speed = (random.random() * 0.03 + 0.075 - w / 1200) / 1.5
         self.sat = random.random() * 0.8
 
-    def draw(self, image):
-        sprite = self.sprite
+        # The tint only depends on values chosen here, so apply it once per flake instead of every frame.
         r, g, b = utilities.hsv_2_rgb(0.56, self.sat, 1 - 0.3 * self.layer)
-
         rgba = np.array(sprite)
         mask = (rgba[:, :, 0] == 255) & (rgba[:, :, 1] == 255) & (rgba[:, :, 2] == 255) & (rgba[:, :, 3] == 255)
         rgba[mask] = [r, g, b, 255]
-        sprite = Image.fromarray(rgba)
+        self.sprite = Image.fromarray(rgba)
 
-        # w,h = sprite.size
-        # for i in range(w):
-        #    for j in range(h):
-        #        if sprite.getpixel((i,j))==(255,255,255,255):
-        #            sprite.putpixel( (i, j), (r, g, b, 255) )
-
-        image.paste(sprite, (int(self.x), int(self.y)), sprite)
+    def draw(self, image):
+        image.paste(self.sprite, (int(self.x), int(self.y)), self.sprite)
 
         self.y += self.speed
         if self.y > 31:
@@ -68,6 +65,7 @@ def snowfall(sign):
     for i in range(30):
         flakes.append(SnowFlake())
 
+    next_frame = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.SNOWFALL.value:
         background = Image.new("RGB", (128, 32), (0, 0, 0))
         for f in flakes:
@@ -82,3 +80,7 @@ def snowfall(sign):
         sign.canvas.SetImage(background, 0, 0)
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
         sign.canvas.Clear()
+        # Keep a steady schedule, but never catch up by more than one frame after a stall.
+        next_frame = max(next_frame + FRAME_INTERVAL, time.perf_counter() - FRAME_INTERVAL)
+        if sign.wait_loop(max(0.0, next_frame - time.perf_counter())):
+            return

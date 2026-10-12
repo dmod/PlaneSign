@@ -1,8 +1,12 @@
 import random
+import time
 
 import shared_config
 from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
+
+# The ball and paddles move a fixed step per frame, so this sets the game speed.
+FRAME_INTERVAL = 1 / 120
 
 
 @planesign_mode_handler(DisplayMode.PONG)
@@ -32,15 +36,13 @@ def pong(sign):
         for height in range(starting_y_value_2, starting_y_value_2 + 6):
             sign.canvas.SetPixel(width, height, 20, 20, 255)
 
+    next_frame = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.PONG.value:
         framecount += 1
         sign.canvas.Clear()
 
         setyval = shared_config.shared_pong_player1.value
         setyval2 = shared_config.shared_pong_player2.value
-
-        if framecount % 20 == 0 and sign.wait_loop(0):
-            return
 
         # starting_y_value = shared_pong_player1.value
         # starting_y_value_2 = shared_pong_player2.value
@@ -159,3 +161,7 @@ def pong(sign):
                 sign.canvas.SetPixel(width, height, 255, 255, 255)
 
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+        # Keep a steady schedule, but never catch up by more than one frame after a stall.
+        next_frame = max(next_frame + FRAME_INTERVAL, time.perf_counter() - FRAME_INTERVAL)
+        if sign.wait_loop(max(0.0, next_frame - time.perf_counter())):
+            return

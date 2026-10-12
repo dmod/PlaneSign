@@ -65,6 +65,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Origin is top-left. X: 0–127, Y: 0–31.
 - Use `graphics.DrawText(canvas, font, x, y, color, text)` where `y` is the text baseline, and `graphics.Color(r, g, b)` for colors.
 - Call `self.matrix.SwapOnVSync(self.canvas)` to display a frame, and `self.wait_loop(seconds)` to hold it; `wait_loop` returns `True` if a forced update interrupted the wait.
+- The panel refresh rate is uncapped and varies with heat, power and library options, so `SwapOnVSync` does not set a frame rate. Pace frame-stepped animation against a running deadline (see `pong.py`), and call `wait_loop` every frame so brightness, forced updates and shutdown are handled.
 - Budget layouts in real matrix pixels with the loaded font widths. Keep everything inside 128x32, with clear gaps between regions, and check the longest labels, not just typical values.
 - Keep graphs proportionate to the key readings. Show units and the displayed time range, and mark the current time on time-series graphs.
 - Display clock times in the timezone of the configured sensor location and honor `MILITARY_TIME`. Keep the layout stable across 12/24-hour formats and date changes.
