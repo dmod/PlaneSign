@@ -2333,19 +2333,19 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
 @lru_cache(maxsize=1)
 def overlay_font() -> bitmap_graphics.Font:
     font = bitmap_graphics.Font()
-    font.LoadFont(os.path.join(shared_config.font_dir, "4x6.bdf"))
+    font.LoadFont(os.path.join(shared_config.font_dir, "5x7.bdf"))
     return font
 
 
 @lru_cache(maxsize=128)
 def overlay_text_mask(text: str) -> Image.Image:
-    canvas = Canvas(len(text) * 4, 5)
-    bitmap_graphics.DrawText(canvas, overlay_font(), 0, 5, bitmap_graphics.Color(255, 255, 255), text)
+    canvas = Canvas(len(text) * 5, 6)
+    bitmap_graphics.DrawText(canvas, overlay_font(), 0, 6, bitmap_graphics.Color(255, 255, 255), text)
     mask = canvas._image.convert("L")
     bounds = mask.getbbox()
     if bounds is None:
         raise ValueError("Outside overlay text must contain visible glyphs")
-    return mask.crop((bounds[0], 0, bounds[2], 5))
+    return mask.crop((bounds[0], 0, bounds[2], 6))
 
 
 def overlay_relative_luminance(background: Image.Image, mask: Image.Image) -> float:
