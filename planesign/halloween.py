@@ -28,7 +28,7 @@ FACE_ASSETS = {
 
 FLAME_CHANGE_INTERVAL = (0.08, 0.18)
 FLAME_SPARK_INTERVAL = (0.45, 1.2)
-SPIDER_CHANCE = 0.05
+SPIDER_CHANCE = 0.01
 SPIDER_DESCENT_SECONDS = 2.4
 SPIDER_WINK_SECONDS = 0.3
 SPIDER_HANG_SECONDS = 2.5
@@ -133,7 +133,7 @@ def draw_aurora(image, elapsed):
 
 def new_background_lightning(now):
     return {
-        "next_strike": now + random.uniform(30, 300),
+        "next_strike": now + random.uniform(60, 600),
         "start": None,
         "channel": (),
         "branches": (),
