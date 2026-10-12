@@ -82,6 +82,9 @@ def get_country_code(rawname, date):
         else:
             code = lookup_country_code(country) or "UNKNOWN"
 
+        if code == "UNKNOWN" and (paren := re.search(r'\((.*?)\)',country)):
+            code = lookup_country_code(paren.group(1)) or "UNKNOWN"
+
         if code != "UNKNOWN":
             fullcode += f"{code}/"
 
