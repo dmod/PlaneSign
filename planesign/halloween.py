@@ -3,12 +3,11 @@ import random
 import time
 from pathlib import Path
 
+import psclock
 import shared_config
+import utilities
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
-import psclock
-import utilities
-
 
 WIDTH = 128
 HEIGHT = 32

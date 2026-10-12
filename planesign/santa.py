@@ -1,16 +1,15 @@
-import logging
 import math
 import random
 import time
 from datetime import UTC, datetime, timedelta
 
 import network
-import PIL.Image as Image
 import psclock
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+from PIL import Image
+from rgbmatrix import graphics
 
 
 class SleighParticle:
@@ -111,12 +110,10 @@ def assign_role(i, now):
         r = 1  # napping
     else:
         r = (now.day + now.hour + (now.minute // 15) + hash(str(i)) % 6) % 6
-        if i == 1 or i == 2:  # Dancer, Prancer Bias
-            if (now.hour + (now.minute // 15) + hash(str(i)) % 6) % 3 == 1:
-                r = 4
-        if i == 0 or i == 4 or i == 7:  # Dasher, Comet, Blitzen Bias
-            if (now.hour + (now.minute // 15) + hash(str(i)) % 6) % 3 == 1:
-                r = 5
+        if i in (1, 2) and (now.hour + (now.minute // 15) + hash(str(i)) % 6) % 3 == 1:  # Dancer, Prancer Bias
+            r = 4
+        if i in (0, 4, 7) and (now.hour + (now.minute // 15) + hash(str(i)) % 6) % 3 == 1:  # Dasher, Comet, Blitzen Bias
+            r = 5
 
     # 2-snacking
     # 3-frolicking
@@ -295,8 +292,7 @@ def santa(sign):
     totlandtime = 0
     with open("datafiles/santapath.txt", "r", encoding="utf8") as f:
         lines = f.readlines()
-        nline = 0
-        for line in lines:
+        for nline, line in enumerate(lines):
             parts = line.split("\t")
             t = int(parts[2])
             ccode = parts[1]
@@ -306,7 +302,6 @@ def santa(sign):
             santapath_names.append(fullname)
             if nline != 0 and santapath_codes[nline - 1] != "NORTH" and santapath_codes[nline - 1] != "OCEAN":
                 totlandtime += santapath_times[nline] - santapath_times[nline - 1]
-            nline += 1
 
     santasheet = Image.open(f"{shared_config.icons_dir}/santa/sleigh.png").convert("RGB")
     frameheight = 16
@@ -482,7 +477,7 @@ def santa(sign):
                 if timestamp > deltasec:
                     break
                 if ind != 0 and santapath_codes[ind - 1] != "NORTH" and santapath_codes[ind - 1] != "OCEAN":
-                    currlandtime += santapath_times[ind] - santapath_times[ind - 1]
+                    currlandtime += timestamp - santapath_times[ind - 1]
 
             if ind != 0 and santapath_codes[ind - 1] != "NORTH" and santapath_codes[ind - 1] != "OCEAN":
                 currlandtime += deltasec - santapath_times[ind - 1]
@@ -553,7 +548,7 @@ def santa(sign):
                     currvel *= (math.tanh((deltasec - 60) / 20) + 1) / 2
                 elif (santaend - now).total_seconds() < 200:
                     currvel *= (math.tanh(((santaend - now).total_seconds() - 60) / 20) + 1) / 2
-                currvelstr = "{0:.0f}".format(currvel)
+                currvelstr = f"{currvel:.0f}"
                 graphics.DrawText(sign.canvas, sign.font57, 102, 19, graphics.Color(20, 160, 60), "Vel:")
                 graphics.DrawText(sign.canvas, sign.font57, round(110 - len(currvelstr) * 2.5), 27, graphics.Color(20, 160, 60), currvelstr)
 
@@ -581,7 +576,7 @@ def santa(sign):
             else:
                 sign.canvas.SetImage(globe, 100, 12)
 
-                currmiles = "{0:.0f}".format(totaldist * deltasec / santapath_times[-2])
+                currmiles = f"{totaldist * deltasec / santapath_times[-2]:.0f}"
                 graphics.DrawText(sign.canvas, sign.font46, 34, 20, graphics.Color(160, 160, 20), "Miles Traveled:")
                 graphics.DrawText(sign.canvas, sign.font46, round(63.5 - len(currmiles) * 2), 27, graphics.Color(160, 160, 20), currmiles)
 

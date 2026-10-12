@@ -292,8 +292,8 @@ class Dust:
 
     def draw(self, pix, camera):
         fade = max(0.0, 1.0 - self.age / self.life)
-        x = int(round(HUD_W + (self.u - camera) * PX_PER_UNIT))
-        _put(pix, x, int(round(self.y)), _scale_color(DUST_COLOR, 0.25 + 0.55 * fade))
+        x = round(HUD_W + (self.u - camera) * PX_PER_UNIT)
+        _put(pix, x, round(self.y), _scale_color(DUST_COLOR, 0.25 + 0.55 * fade))
 
 
 class Confetti:
@@ -315,7 +315,7 @@ class Confetti:
     def draw(self, pix, t):
         # tumbling paper flickers as it turns edge on
         if math.sin(t * self.flip + self.phase) > -0.35:
-            _put(pix, int(round(self.x)), int(round(self.y)), self.color)
+            _put(pix, round(self.x), round(self.y), self.color)
 
 
 class WinnerFlag:
@@ -365,8 +365,8 @@ class WinnerFlag:
         for column in range(FLAG_LEN + 1):
             offset, phase = self._wave(column, elapsed, strength)
             half = (FLAG_H / 2.0) * (1.0 - column / FLAG_LEN)
-            top_y = int(round(center + offset - half))
-            bottom_y = int(round(center + offset + half))
+            top_y = round(center + offset - half)
+            bottom_y = round(center + offset + half)
             spans.append((offset, top_y, bottom_y))
 
             shade = 0.72 + 0.28 * (0.5 + 0.5 * math.cos(phase))
@@ -381,7 +381,7 @@ class WinnerFlag:
         for dx, dy, _ in self.digit:
             column = FLAG_DIGIT_DX + dx
             offset, span_top, span_bottom = spans[column]
-            y = int(round(digit_top + offset + dy))
+            y = round(digit_top + offset + dy)
             if span_top < y < span_bottom:
                 _put(pix, FLAG_FABRIC_X + column, y, self.ink)
 
@@ -399,8 +399,8 @@ def _draw_winner_flip(image, coat, hidden, flip_t):
 
     rotated = sprite.rotate(360.0 * flip_t, resample=Image.NEAREST, expand=True)
     hop = FLIP_JUMP_HEIGHT * 4.0 * flip_t * (1.0 - flip_t)
-    paste_x = int(round(BANNER_HORSE_X + WINNER_W / 2.0 - rotated.width / 2.0))
-    paste_y = int(round(BANNER_HORSE_Y + WINNER_H / 2.0 - rotated.height / 2.0 - hop))
+    paste_x = round(BANNER_HORSE_X + WINNER_W / 2.0 - rotated.width / 2.0)
+    paste_y = round(BANNER_HORSE_Y + WINNER_H / 2.0 - rotated.height / 2.0 - hop)
     image.paste(rotated, (paste_x, paste_y), rotated)
 
 
@@ -477,7 +477,7 @@ class Horse:
         return HUD_W + (self.progress - camera) * PX_PER_UNIT
 
     def draw(self, pix, sprite, bob, nose_x, dim=1.0):
-        left = int(round(nose_x)) - NOSE_DX
+        left = round(nose_x) - NOSE_DX
         top = self.feet_y - (SPRITE_H - 1) + bob
         for dx, dy, code in sprite:
             color = self.colors[code]
@@ -566,7 +566,7 @@ class Race:
         start = math.floor(left_u / dash_spacing) * dash_spacing
         u = start
         while u < right_u:
-            x = int(round(HUD_W + (u - camera) * PX_PER_UNIT))
+            x = round(HUD_W + (u - camera) * PX_PER_UNIT)
             for lane in range(1, NUM_HORSES):
                 y = lane * LANE_H - 1
                 for offset in range(3):
@@ -578,7 +578,7 @@ class Race:
         self.draw_finish_line(pix)
 
     def draw_line_marker(self, pix, u, color, dashed=False):
-        x = int(round(HUD_W + (u - self.camera) * PX_PER_UNIT))
+        x = round(HUD_W + (u - self.camera) * PX_PER_UNIT)
         if x < HUD_W or x >= WIDTH:
             return
         for y in range(HEIGHT):
@@ -587,7 +587,7 @@ class Race:
             _put(pix, x, y, color)
 
     def draw_finish_line(self, pix):
-        x = int(round(HUD_W + (RACE_LENGTH - self.camera) * PX_PER_UNIT))
+        x = round(HUD_W + (RACE_LENGTH - self.camera) * PX_PER_UNIT)
         if x < HUD_W - 2 or x >= WIDTH + 2:
             return
         # Waving checkered flag: the checker pattern crawls so it reads as fabric

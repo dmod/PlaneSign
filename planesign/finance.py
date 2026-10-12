@@ -202,7 +202,7 @@ def get_crypto(symbol):
 
         coinid = 0
         try:
-            coinid = [x for x in data["data"] if x["symbol"] == symbol][0]["id"]
+            coinid = next(x for x in data["data"] if x["symbol"] == symbol)["id"]
         except Exception:
             coinid = 0
         if coinid == 0:
@@ -412,10 +412,8 @@ Open Price={self.open_price}"
 
                 for trade in trades:
                     p = trade["p"]
-                    if p > self.high_price:
-                        self.high_price = p
-                    if p < self.low_price:
-                        self.low_price = p
+                    self.high_price = max(self.high_price, p)
+                    self.low_price = min(self.low_price, p)
             finally:
                 self.lock.release()
 
@@ -552,8 +550,7 @@ Open Price={self.open_price}"
                 else:
                     count_after_decimal_curr = 0
 
-                if count_after_decimal > count_after_decimal_curr:
-                    count_after_decimal = count_after_decimal_curr
+                count_after_decimal = min(count_after_decimal, count_after_decimal_curr)
 
                 tot_length = count_before_decimal + count_after_decimal + 1
                 if tot_length > 8:

@@ -3,7 +3,7 @@ import random
 import PIL
 import shared_config
 from modes import DisplayMode, planesign_mode_handler
-from PIL import Image, ImageDraw
+from PIL import Image
 
 tankxmin = -100
 tankxmax = 227
@@ -31,18 +31,18 @@ def aquarium(sign):
 
     tank = Tank(sign)
 
-    clown = Fish(tank, "Clownfish", 2, 0.01)
-    hippo = Fish(tank, "Hippotang", 2, 0.01)
-    queentrigger = Fish(tank, "Queentrigger", 1, 0.005)
-    grouper = Fish(tank, "Coralgrouper", 1, 0.005)
-    anthias = Fish(tank, "Anthias", 2, 0.02)
-    puffer = Fish(tank, "Pufferfish", 1.5, 0.005)
-    regal = Fish(tank, "Regalangel", 1, 0.005)
-    bicolor = Fish(tank, "Bicolorpseudochromis", 3, 0.01)
-    flame = Fish(tank, "Flameangel", 1.5, 0.01)
-    cardinal = Fish(tank, "Cardinal", 1.5, 0.01)
-    copper = Fish(tank, "Copperbanded", 1.5, 0.01)
-    wrasse = Fish(tank, "Wrasse", 3, 0.01)
+    Fish(tank, "Clownfish", 2, 0.01)
+    Fish(tank, "Hippotang", 2, 0.01)
+    Fish(tank, "Queentrigger", 1, 0.005)
+    Fish(tank, "Coralgrouper", 1, 0.005)
+    Fish(tank, "Anthias", 2, 0.02)
+    Fish(tank, "Pufferfish", 1.5, 0.005)
+    Fish(tank, "Regalangel", 1, 0.005)
+    Fish(tank, "Bicolorpseudochromis", 3, 0.01)
+    Fish(tank, "Flameangel", 1.5, 0.01)
+    Fish(tank, "Cardinal", 1.5, 0.01)
+    Fish(tank, "Copperbanded", 1.5, 0.01)
+    Fish(tank, "Wrasse", 3, 0.01)
 
     while shared_config.shared_mode.value == DisplayMode.AQUARIUM.value:
         tank.swim()
@@ -77,7 +77,7 @@ class Tank:
 
 
 class Fish:
-    def __init__(self, tank, name, maxspeed, turnprob, dir=random.randint(0, 3)):
+    def __init__(self, tank, name, maxspeed, turnprob, dir=None):
         self.name = name
         (self.x, self.y, self.z) = randomloc()
         self.maxspeed = maxspeed
@@ -88,7 +88,7 @@ class Fish:
         self.turnprob = turnprob  # 0 to 1
 
         self.sprite = None
-        self.dir = dir  # 0 front, 1 left, 2 back, 3 right
+        self.dir = random.randint(0, 3) if dir is None else dir  # 0 front, 1 left, 2 back, 3 right
 
         self.sprite_right = Image.open(f"{shared_config.icons_dir}/aquarium/{name}_right.png").convert("RGBA").transpose(PIL.Image.FLIP_LEFT_RIGHT)
         self.sprite_left = Image.open(f"{shared_config.icons_dir}/aquarium/{name}_right.png").convert("RGBA")
@@ -205,7 +205,5 @@ class Fish:
         elif self.y < tankymin:
             self.y = tankymin
 
-        if self.z > tankzmax:
-            self.z = tankzmax
-        if self.z < tankzmin:
-            self.z = tankzmin
+        self.z = min(self.z, tankzmax)
+        self.z = max(self.z, tankzmin)

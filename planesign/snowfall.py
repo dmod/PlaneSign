@@ -2,11 +2,10 @@ import random
 import time
 
 import numpy as np
-import PIL.Image as Image
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+from PIL import Image
 
 # Flake speeds are pixels per frame, so this sets how fast the snow falls.
 FRAME_INTERVAL = 1 / 120

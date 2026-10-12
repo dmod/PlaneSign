@@ -99,8 +99,7 @@ def write_config():
 
         with config_lock:
             with open(shared_config.config_path, "w", encoding="utf-8") as f:
-                for i in range(len(keys)):
-                    f.write(keys[i] + "=" + vals[i] + "\n")
+                f.writelines(keys[i] + "=" + vals[i] + "\n" for i in range(len(keys)))
                 f.flush()
                 os.fsync(f.fileno())
 
@@ -866,7 +865,7 @@ def get_device_info():
 
     # IP address
     try:
-        result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5, check=False)
         addrs = result.stdout.strip().split()
         info["ip_address"] = addrs[0] if addrs else "N/A"
     except Exception:

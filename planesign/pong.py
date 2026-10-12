@@ -27,7 +27,7 @@ def pong(sign):
     starting_y_value_2 = shared_config.shared_pong_player2.value
 
     # player 1 paddle
-    for width in range(0, 3):
+    for width in range(3):
         for height in range(starting_y_value, starting_y_value + 6):
             sign.canvas.SetPixel(width, height, 255, 20, 20)
 
@@ -147,7 +147,7 @@ def pong(sign):
             yball += yvel
 
         # player 1 paddle
-        for width in range(0, 3):
+        for width in range(3):
             for height in range(starting_y_value, starting_y_value + 6):
                 sign.canvas.SetPixel(width, height, 255, 20, 20)
 

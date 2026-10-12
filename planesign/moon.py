@@ -465,7 +465,7 @@ def moon(sign):
             keytimes, y = almanac.find_discrete(t, t + timedelta(days=30), almanac.moon_phases(eph))
             nextfulldate = keytimes[y == 2][0].astimezone(shared_config.local_timezone).strftime("%m/%d")
 
-            phaseangle = "({0:.0f}°)".format(phase)
+            phaseangle = f"({phase:.0f}°)"
 
             moondir = utilities.direction_lookup(moonaz.degrees)
 
@@ -495,13 +495,13 @@ def moon(sign):
         graphics.DrawText(sign.canvas, sign.font57, 77, 14, graphics.Color(20, 160, 60), moondir)
 
         graphics.DrawText(sign.canvas, sign.font57, 57, 22, graphics.Color(160, 160, 200), "Alt:")
-        graphics.DrawText(sign.canvas, sign.font57, 77, 22, graphics.Color(160, 160, 200), "{0:.0f}°".format(moonalt.degrees))
+        graphics.DrawText(sign.canvas, sign.font57, 77, 22, graphics.Color(160, 160, 200), f"{moonalt.degrees:.0f}°")
 
         graphics.DrawText(sign.canvas, sign.font57, 56, 30, graphics.Color(20, 20, 210), "Il:")
         if percent >= 99.95:
             graphics.DrawText(sign.canvas, sign.font57, 72, 30, graphics.Color(20, 20, 210), "100%")
         else:
-            graphics.DrawText(sign.canvas, sign.font57, 72, 30, graphics.Color(20, 20, 210), "{0:.1f}%".format(percent))
+            graphics.DrawText(sign.canvas, sign.font57, 72, 30, graphics.Color(20, 20, 210), f"{percent:.1f}%")
 
         # Perigee/Apogee indicator scale
         graphics.DrawLine(sign.canvas, scalestart, scaley, scalestart + scalemax, scaley, scalecolor)
@@ -510,7 +510,7 @@ def moon(sign):
 
         graphics.DrawText(sign.canvas, sign.font46, scalestart - 5, scaley + 3, graphics.Color(142, 140, 68), "P")
         graphics.DrawText(sign.canvas, sign.font46, scalestart + scalemax + 3, scaley + 3, graphics.Color(142, 140, 68), "A")
-        graphics.DrawText(sign.canvas, sign.font46, 12, scaley - 4, graphics.Color(142, 140, 68), "{0:.0f}km".format(centermoondist.km))  # 110, 90, 0
+        graphics.DrawText(sign.canvas, sign.font46, 12, scaley - 4, graphics.Color(142, 140, 68), f"{centermoondist.km:.0f}km")  # 110, 90, 0
 
         if blink_tic < 20:
             # Blinking moon for perigee/apogee indicator

@@ -521,7 +521,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
     wood = colorize(BARE_TREE if bare else TREE_WOOD)
     if snow:
         d = ImageDraw.Draw(land)
-        for x in range(0, 128):
+        for x in range(128):
             if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["hut"], INDEX["door"]):
                 d.point((x, 26), fill=palette.grass)
         d.line((19, 19, 27, 15, 28, 15, 36, 19), fill=palette.trim)

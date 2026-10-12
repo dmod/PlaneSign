@@ -282,9 +282,9 @@ def show_a_plane(sign, plane_to_show, scroll):
             graphics.DrawText(sign.canvas, sign.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
             graphics.DrawText(sign.canvas, sign.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show.aircraft_code)
 
-            graphics.DrawText(sign.canvas, sign.font57, 78, 8, graphics.Color(60, 60, 160), "Dst: {0:.1f}".format(interpol_distance[i]))
-            graphics.DrawText(sign.canvas, sign.font57, 78, 19, graphics.Color(160, 160, 200), "Alt: {0:.0f}".format(interpol_alt[i]))
-            graphics.DrawText(sign.canvas, sign.font57, 78, 30, graphics.Color(20, 160, 60), "Vel: {0:.0f}".format(interpol_speed[i]))
+            graphics.DrawText(sign.canvas, sign.font57, 78, 8, graphics.Color(60, 60, 160), f"Dst: {interpol_distance[i]:.1f}")
+            graphics.DrawText(sign.canvas, sign.font57, 78, 19, graphics.Color(160, 160, 200), f"Alt: {interpol_alt[i]:.0f}")
+            graphics.DrawText(sign.canvas, sign.font57, 78, 30, graphics.Color(20, 160, 60), f"Vel: {interpol_speed[i]:.0f}")
 
             sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 

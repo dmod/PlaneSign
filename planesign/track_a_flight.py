@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta, timezone
+from datetime import UTC, timedelta
 from zoneinfo import ZoneInfo
 
 import network
@@ -29,7 +29,7 @@ def get_airport_timezone(iata_code, position):
         airport_timezones[iata_code] = timezone_at(lat=position[0], lng=position[1])
 
     tz_name = airport_timezones[iata_code]
-    return ZoneInfo(tz_name) if tz_name else timezone.utc
+    return ZoneInfo(tz_name) if tz_name else UTC
 
 
 def as_float(value):
@@ -157,7 +157,7 @@ def track_a_flight(sign):
             ground_speed_mph = (as_float(flight.ground_speed) or 0) * KNOTS_TO_MPH
 
             if ground_speed_mph > 50:
-                now = psclock.now(tz=timezone.utc)
+                now = psclock.now(tz=UTC)
                 distance_travelled = max(origin_distance_to_destination - current_position_to_destination, 0)
                 start_time = now - timedelta(hours=distance_travelled / ground_speed_mph)
                 end_time = now + timedelta(hours=current_position_to_destination / ground_speed_mph)

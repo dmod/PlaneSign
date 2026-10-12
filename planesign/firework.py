@@ -6,7 +6,6 @@ import numpy as np
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 
 TRAIL_PARTICLE = 0
 RING_PARTICLE = 1
@@ -74,45 +73,22 @@ class Particle:
     def update(self):
         time_alive = time.perf_counter() - self.spawn_time
 
-        if self.ptype == TRAIL_PARTICLE:
-            tempr = int(round(self.r0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1)))
+        if self.ptype == TRAIL_PARTICLE or self.ptype == TRACER_PARTICLE:
+            tempr = round(self.r0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1))
             if tempr < 0:
                 self.r = 0
             elif tempr > 255:
                 self.r = 255
             else:
                 self.r = tempr
-            tempg = int(round(self.g0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1)))
+            tempg = round(self.g0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1))
             if tempg < 0:
                 self.g = 0
             elif tempg > 255:
                 self.g = 255
             else:
                 self.g = tempg
-            tempb = int(round(self.b0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1)))
-            if tempb < 0:
-                self.b = 0
-            elif tempb > 255:
-                self.b = 255
-            else:
-                self.b = tempb
-
-        elif self.ptype == TRACER_PARTICLE:
-            tempr = int(round(self.r0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1)))
-            if tempr < 0:
-                self.r = 0
-            elif tempr > 255:
-                self.r = 255
-            else:
-                self.r = tempr
-            tempg = int(round(self.g0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1)))
-            if tempg < 0:
-                self.g = 0
-            elif tempg > 255:
-                self.g = 255
-            else:
-                self.g = tempg
-            tempb = int(round(self.b0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1)))
+            tempb = round(self.b0 * (math.sin(self.speed * time_alive) ** 2) * (math.tanh(-time_alive) + 1))
             if tempb < 0:
                 self.b = 0
             elif tempb > 255:
@@ -123,21 +99,21 @@ class Particle:
         elif self.ptype == RING_PARTICLE:
             self.x = self.x0 + math.cos(self.angle) * self.speed * time_alive
             self.y = self.y0 + math.sin(self.angle) * self.speed * time_alive
-            tempr = int(round(self.r0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2))
+            tempr = round(self.r0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2)
             if tempr < 0:
                 self.r = 0
             elif tempr > 255:
                 self.r = 255
             else:
                 self.r = tempr
-            tempg = int(round(self.g0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2))
+            tempg = round(self.g0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2)
             if tempg < 0:
                 self.g = 0
             elif tempg > 255:
                 self.g = 255
             else:
                 self.g = tempg
-            tempb = int(round(self.b0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2))
+            tempb = round(self.b0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2)
             if tempb < 0:
                 self.b = 0
             elif tempb > 255:
@@ -150,21 +126,21 @@ class Particle:
                 Particle(self.list, TRACER_PARTICLE, self.x, self.y, (self.r, self.g, self.b), 3 + random.random() * 2, 3 + random.random() * 2)
             self.x = self.x0 + math.cos(self.angle) * self.speed * (time_alive**0.5)
             self.y = self.y0 + math.sin(self.angle) * self.speed * time_alive + 1 * (time_alive**2)
-            tempr = int(round(self.r0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2))
+            tempr = round(self.r0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2)
             if tempr < 0:
                 self.r = 0
             elif tempr > 255:
                 self.r = 255
             else:
                 self.r = tempr
-            tempg = int(round(self.g0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2))
+            tempg = round(self.g0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2)
             if tempg < 0:
                 self.g = 0
             elif tempg > 255:
                 self.g = 255
             else:
                 self.g = tempg
-            tempb = int(round(self.b0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2))
+            tempb = round(self.b0 * (math.tanh(-time_alive + self.lifetime + 0.05) + 1) / 2)
             if tempb < 0:
                 self.b = 0
             elif tempb > 255:

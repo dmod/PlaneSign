@@ -1,15 +1,15 @@
+import itertools
 import logging
 import math
 import time
 from bisect import bisect_left
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import network
 from modes import DisplayMode, planesign_mode_handler
-
 
 STATIONS_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json"
 PREDICTIONS_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
@@ -102,7 +102,7 @@ def parse_predictions(payload, events=False):
     records = {}
     try:
         for record in payload["predictions"]:
-            timestamp = datetime.strptime(record["t"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc).timestamp()
+            timestamp = datetime.strptime(record["t"], "%Y-%m-%d %H:%M").replace(tzinfo=UTC).timestamp()
             height = float(record["v"])
             if not math.isfinite(height):
                 raise ValueError("Non-finite tide height")
@@ -186,7 +186,7 @@ def noaa_json(session, url, params, now):
 
 def tide_ranges(events):
     ranges = []
-    for (start, first, kind), (end, second, next_kind) in zip(events, events[1:]):
+    for (start, first, kind), (end, second, next_kind) in itertools.pairwise(events):
         if kind == next_kind or not CYCLE_MIN_SECONDS <= end - start <= CYCLE_MAX_SECONDS:
             continue
         ranges.append(((start + end) / 2, abs(second - first)))
@@ -251,7 +251,7 @@ def spring_neap_factor(payload, now):
 
 
 def fetch_cycles(session, station_id, now):
-    today = datetime.fromtimestamp(now, timezone.utc)
+    today = datetime.fromtimestamp(now, UTC)
     params = {
         "product": "predictions",
         "application": "PlaneSign",
@@ -272,7 +272,7 @@ def fetch_cycles(session, station_id, now):
 
 
 def fetch_predictions(session, station_id, now):
-    today = datetime.fromtimestamp(now, timezone.utc)
+    today = datetime.fromtimestamp(now, UTC)
     params = {"product": "predictions", "application": "PlaneSign", "station": station_id, "datum": "MLLW", "time_zone": "gmt", "units": "english", "format": "json", "begin_date": (today - timedelta(days=1)).strftime("%Y%m%d"), "end_date": (today + timedelta(days=2)).strftime("%Y%m%d")}
     samples = parse_predictions(noaa_json(session, PREDICTIONS_URL, {**params, "interval": "6"}, now))
     events = parse_predictions(noaa_json(session, PREDICTIONS_URL, {**params, "interval": "hilo"}, now), events=True)
@@ -504,7 +504,7 @@ def tide_trend(payload, now):
 
 
 def event_label(event, now, timezone_name, military_time):
-    timestamp, height, kind = event
+    timestamp, _height, kind = event
     local_zone = ZoneInfo(timezone_name)
     local_event = datetime.fromtimestamp(timestamp, local_zone)
     if military_time:

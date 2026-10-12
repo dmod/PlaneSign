@@ -1,13 +1,10 @@
-import logging
 import math
 import random
 import time
 
 import shared_config
-import utilities
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageEnhance, ImageFilter
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 
 
 class Sprite:
@@ -69,9 +66,8 @@ class Plant(Sprite):
 
     def draw(self, im):
         # Change frames if we need to before drawing
-        if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.growthInterval):
-            if self.currFrame < self.maxFrames - 1:
-                self.currFrame = self.currFrame + 1
+        if self.lastFrameChange is not None and (time.perf_counter() >= self.lastFrameChange + self.growthInterval) and self.currFrame < self.maxFrames - 1:
+            self.currFrame = self.currFrame + 1
 
         super().draw(im)
 
@@ -229,9 +225,8 @@ def handle_critters(critters):
     for critter in critters:
         if critter.despawnFlag:
             critters.remove(critter)
-        elif not critter.leaveFlag:
-            if critter.summonTime is not None and now >= critter.summonTime + critter.lifeTime:
-                critter.leave()
+        elif not critter.leaveFlag and critter.summonTime is not None and now >= critter.summonTime + critter.lifeTime:
+            critter.leave()
 
     num_critters = len(critters)
 

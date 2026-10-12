@@ -142,7 +142,7 @@ def draw_daily_forcast(sign, day, xloc):
     icon, status = utilities.weather_icon_decode(code, status)
 
     image = Image.open(f"{shared_config.icons_dir}/weather/{icon}.png")
-    iw, ih = image.size
+    iw, _ih = image.size
     sign.canvas.SetImage(image.convert("RGB"), xloc + 25 - round(iw / 2), 9)
 
     graphics.DrawText(sign.canvas, sign.font57, xloc, 14, graphics.Color(47, 158, 19), local_time.strftime("%a"))

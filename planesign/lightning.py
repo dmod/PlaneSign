@@ -1,4 +1,3 @@
-import _thread as thread
 import base64
 import json
 import logging
@@ -9,17 +8,16 @@ import re
 import ssl
 import threading
 import time
-from multiprocessing import Manager, Process, Value
+from multiprocessing import Manager, Value
 
 import network
 import numpy as np
-import PIL.Image as Image
-import PIL.ImageDraw as ImageDraw
 import requests
 import shared_config
 import utilities
 import websocket
 from modes import DisplayMode, planesign_mode_handler
+from PIL import Image, ImageDraw
 from rgbmatrix import graphics
 
 USAlong = -96
@@ -174,13 +172,13 @@ class LightningManager:
         with open(countyfile, "r") as f:
             try:
                 countydata = json.load(f)
-            except:
+            except Exception:
                 countydata = None
 
         with open(usafile, "r") as f:
             try:
                 usadata = json.load(f)
-            except:
+            except Exception:
                 usadata = None
 
         if usadata == None or countydata == None:
@@ -354,10 +352,10 @@ class LightningManager:
         g.append(c)
         h = 256
         o = h
-        for b in range(1, len(d)):
-            a = ord(d[b])
+        for i in range(1, len(d)):
+            a = ord(d[i])
             if h > a:
-                a = d[b]
+                a = d[i]
             elif a in e:
                 a = e[a]
             else:
@@ -452,7 +450,7 @@ class LightningManager:
                         if '"' not in heartbeatkey:
                             try:
                                 heartbeatkey = int(heartbeatkey)
-                            except:
+                            except ValueError:
                                 heartbeatkey = re.sub(r"\w*(ws|server)\w*", self.ws_server, heartbeatkey, flags=re.IGNORECASE)
                         else:
                             heartbeatkey = re.sub(r"\"", "", heartbeatkey)
@@ -554,7 +552,6 @@ class LightningManager:
         # print(self.strikes)
         x = []
         y = []
-        c = np.empty((0, 3), int)
 
         strikescopy = sorted(self.strikes, key=lambda k: k["dist"])
         closest = strikescopy
@@ -599,8 +596,6 @@ class LightningManager:
                 break
 
         lightningmap = None
-        center_x_merc = None
-        center_y_merc = None
 
         zoomind = shared_config.shared_lightning_zoomind.value
 
@@ -677,9 +672,9 @@ class LightningManager:
         graphics.DrawText(self.sign.canvas, self.sign.font46, 1, 6, graphics.Color(20, 20, 210), "Closest")
         if closest1:
             r, g, b = get_lightning_color(closest1["time"], now, False)
-            closest1_dist_str = "{0:.1f}".format(closest1["dist"])
+            closest1_dist_str = "{:.1f}".format(closest1["dist"])
             if len(closest1_dist_str) > 4:
-                closest1_dist_str = "{0:.0f}".format(closest1["dist"])
+                closest1_dist_str = "{:.0f}".format(closest1["dist"])
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 14, graphics.Color(r, g, b), closest1_dist_str)
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2 + len(closest1_dist_str) * 5, 14, graphics.Color(110, 170, 45), utilities.direction_lookup((closest1["lat"], closest1["lon"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(0, 14, closest1["radius"], self.sign)
@@ -688,9 +683,9 @@ class LightningManager:
 
         if closest2:
             r, g, b = get_lightning_color(closest2["time"], now, False)
-            closest2_dist_str = "{0:.1f}".format(closest2["dist"])
+            closest2_dist_str = "{:.1f}".format(closest2["dist"])
             if len(closest2_dist_str) > 4:
-                closest2_dist_str = "{0:.0f}".format(closest2["dist"])
+                closest2_dist_str = "{:.0f}".format(closest2["dist"])
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 22, graphics.Color(r, g, b), closest2_dist_str)
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2 + len(closest2_dist_str) * 5, 22, graphics.Color(110, 170, 45), utilities.direction_lookup((closest2["lat"], closest2["lon"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(0, 22, closest2["radius"], self.sign)
@@ -699,9 +694,9 @@ class LightningManager:
 
         if closest3:
             r, g, b = get_lightning_color(closest3["time"], now, False)
-            closest3_dist_str = "{0:.1f}".format(closest3["dist"])
+            closest3_dist_str = "{:.1f}".format(closest3["dist"])
             if len(closest3_dist_str) > 4:
-                closest3_dist_str = "{0:.0f}".format(closest3["dist"])
+                closest3_dist_str = "{:.0f}".format(closest3["dist"])
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2, 30, graphics.Color(r, g, b), closest3_dist_str)
             graphics.DrawText(self.sign.canvas, self.sign.font57, 2 + len(closest3_dist_str) * 5, 30, graphics.Color(110, 170, 45), utilities.direction_lookup((closest3["lat"], closest3["lon"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))))
             draw_power(0, 30, closest3["radius"], self.sign)
@@ -710,11 +705,11 @@ class LightningManager:
 
         graphics.DrawText(self.sign.canvas, self.sign.font46, 34, 6, graphics.Color(20, 20, 210), "Recent")
         if recent:
-            recent_dist_str = "{0:.1f}".format(recent[0]["dist"])
+            recent_dist_str = "{:.1f}".format(recent[0]["dist"])
             if len(recent_dist_str) > 6:
                 recent_dist_str = f"{round(recent[0]['dist'] / 1000)}k"
             elif len(recent_dist_str) > 4:
-                recent_dist_str = "{0:.0f}".format(recent[0]["dist"])
+                recent_dist_str = "{:.0f}".format(recent[0]["dist"])
             # 180,180,40
             graphics.DrawText(self.sign.canvas, self.sign.font57, 34, 14, graphics.Color(180, 180, 40), recent_dist_str)
             graphics.DrawText(self.sign.canvas, self.sign.font57, 34 + len(recent_dist_str) * 5, 14, graphics.Color(110, 170, 45), utilities.direction_lookup((recent[0]["lat"], recent[0]["lon"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))))

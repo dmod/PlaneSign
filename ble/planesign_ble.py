@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from typing import ClassVar
 
 import dbus
 import dbus.mainloop.glib
@@ -609,7 +610,7 @@ class SafeCommandCharacteristic(CachedValueCharacteristic):
     COMMAND_CHRC_UUID = "99945678-1234-5678-1234-56789abcdef2"
 
     # List of safe, read-only commands
-    ALLOWED_COMMANDS = {"date": ["/bin/date"], "uptime": ["/usr/bin/uptime"], "temp": ["/usr/bin/vcgencmd", "measure_temp"], "hostname": ["/bin/hostname"], "disk": ["/bin/df", "-h", "/"], "memory": ["/usr/bin/free", "-h"], "reboot": ["sudo", "-n", "/usr/sbin/reboot"]}
+    ALLOWED_COMMANDS: ClassVar[dict[str, list[str]]] = {"date": ["/bin/date"], "uptime": ["/usr/bin/uptime"], "temp": ["/usr/bin/vcgencmd", "measure_temp"], "hostname": ["/bin/hostname"], "disk": ["/bin/df", "-h", "/"], "memory": ["/usr/bin/free", "-h"], "reboot": ["sudo", "-n", "/usr/sbin/reboot"]}
 
     # The value is the last command result, so there is nothing to recompute on its own.
     CACHE_TTL_SECONDS = float("inf")
@@ -689,7 +690,7 @@ class PlanesignIdentifyCharacteristic(CachedValueCharacteristic):
 
 class DockerContainerControlCharacteristic(CachedValueCharacteristic):
     DOCKER_CONTAINER_CONTROL_UUID = "29352a73-3108-4ecc-9440-57b5a8a5c027"
-    ALLOWED_COMMANDS = {"start", "stop"}
+    ALLOWED_COMMANDS: ClassVar[set[str]] = {"start", "stop"}
     # The container is the thing users most often check, so keep the status warm and push
     # changes instead of making every read pay for two `docker` invocations.
     REFRESH_INTERVAL_SECONDS = 30

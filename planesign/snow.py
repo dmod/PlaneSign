@@ -332,7 +332,6 @@ def load_user_list():
             release_lock(userresorts_filename)
 
     shared_config.data_dict["user_resorts"] = resort_list
-    return
 
 
 def save_current_resort():
@@ -367,14 +366,12 @@ def delete_user_resort(uuid):
                 logging.debug(f"Deleting resort uuid: {uuid}")
                 resort_list.remove(uuid)
                 file.seek(0)
-                for res in resort_list:
-                    file.write(res + "\n")
+                file.writelines(res + "\n" for res in resort_list)
                 file.truncate()
     except Exception as e:
         logging.error(f"Error deleting uuid {uuid} from {userresorts_filename}: {e}")
     finally:
         release_lock(userresorts_filename)
-    return
 
 
 def populate_resort_lists():
@@ -1075,7 +1072,7 @@ def snow_forecast(sign):
 
     last_rotate = time.perf_counter()
     while shared_config.shared_mode.value == DisplayMode.SNOW.value:
-        if "displayed_resort" in shared_config.data_dict and shared_config.data_dict["displayed_resort"]:
+        if shared_config.data_dict.get("displayed_resort"):
             current_resort = shared_config.data_dict["displayed_resort"]
         else:
             current_resort = None

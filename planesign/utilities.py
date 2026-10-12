@@ -132,7 +132,7 @@ def random_rgb_255_sum():
 
 
 def detect_usb_audio_device():
-    result = subprocess.run(["aplay", "-l"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, check=False)
     lines = result.stdout.splitlines()
     for line in lines:
         if "USB Audio" in line and "card" in line and "device" in line:
@@ -167,7 +167,7 @@ def mp3_playback_command(path: str, loop: bool = False) -> list[str]:
 def find_usb_volume_control(card_num):
     """Return the name of the best available playback volume control on a card, or None."""
     try:
-        result = subprocess.run(["amixer", "-c", card_num, "controls"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(["amixer", "-c", card_num, "controls"], capture_output=True, text=True, check=False)
         if result.returncode != 0:
             logging.error(f"Failed to get controls for card {card_num}: {result.stderr}")
             return None
@@ -191,7 +191,7 @@ def get_usb_audio_volume():
 
     try:
         # -M uses the mapped (perceptual) scale so it round-trips with set_usb_audio_volume
-        result = subprocess.run(["amixer", "-M", "-c", shared_config.audio_card, "sget", shared_config.audio_mixer_control], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(["amixer", "-M", "-c", shared_config.audio_card, "sget", shared_config.audio_mixer_control], capture_output=True, text=True, check=False)
         if result.returncode != 0:
             logging.error(f"Failed to read volume: {result.stderr}")
             return None
@@ -219,7 +219,7 @@ def set_usb_audio_volume(percent):
     percent = max(0, min(100, int(percent)))
 
     try:
-        result = subprocess.run(["amixer", "-M", "-c", shared_config.audio_card, "set", shared_config.audio_mixer_control, f"{percent}%", "unmute"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(["amixer", "-M", "-c", shared_config.audio_card, "set", shared_config.audio_mixer_control, f"{percent}%", "unmute"], capture_output=True, text=True, check=False)
         if result.returncode != 0:
             logging.error(f"Failed to set volume: {result.stderr}")
             return False
@@ -441,7 +441,7 @@ class TextScroller:
             bdffont = self.sign.font46
             self.fontw = 4
         else:
-            self.fontname == "5x7"
+            self.fontname = "5x7"
             bdffont = self.sign.font57
             self.fontw = 5
 
@@ -878,9 +878,9 @@ def getFavicon(website, headers=None):
         name1 = item1.url.split("/")[-1].split(".")[0]
         name2 = item2.url.split("/")[-1].split(".")[0]
         # Prioritize files starting with "favico"
-        if (name1.startswith(f) or name1.startswith(i)) and not (name2.startswith(f) or name2.startswith(i)):
+        if name1.startswith((f, i)) and not name2.startswith((f, i)):
             return -1
-        elif not (name1.startswith(f) or name1.startswith(i)) and (name2.startswith(f) or name2.startswith(i)):
+        elif not name1.startswith((f, i)) and name2.startswith((f, i)):
             return 1
         else:
             # Deprioritize the "default" favicon (favicon library just guesses
@@ -903,8 +903,8 @@ def getFavicon(website, headers=None):
                     # Prioritize ".ico" files
                     format1 = item1.url.split("/")[-1].split(".")
                     format2 = item2.url.split("/")[-1].split(".")
-                    isIco1 = True if (item1.format == "ico" or (len(format1) > 1 and format1[1].startswith("ico"))) else False
-                    isIco2 = True if (item2.format == "ico" or (len(format2) > 1 and format2[1].startswith("ico"))) else False
+                    isIco1 = item1.format == "ico" or (len(format1) > 1 and format1[1].startswith("ico"))
+                    isIco2 = item2.format == "ico" or (len(format2) > 1 and format2[1].startswith("ico"))
                     if isIco1 and not isIco2:
                         return -1
                     elif not isIco1 and isIco2:
@@ -1079,12 +1079,9 @@ def random_rgb(rmin=0, rmax=255, gmin=0, gmax=255, bmin=0, bmax=255):
     gmax %= 256
     bmin %= 256
     bmax %= 256
-    if rmax < rmin:
-        rmin = rmax
-    if gmax < gmin:
-        gmin = gmax
-    if bmax < bmin:
-        bmin = bmax
+    rmin = min(rmin, rmax)
+    gmin = min(gmin, gmax)
+    bmin = min(bmin, bmax)
     r = random.randrange(rmin, rmax + 1)
     g = random.randrange(gmin, gmax + 1)
     b = random.randrange(bmin, bmax + 1)
@@ -1190,12 +1187,9 @@ def next_color_random_walk_const_sum(r, g, b, step=1, rmin=0, rmax=255, gmin=0, 
 
     step %= 100
 
-    if rmax < rmin:
-        rmin = rmax
-    if gmax < gmin:
-        gmin = gmax
-    if bmax < bmin:
-        bmin = bmax
+    rmin = min(rmin, rmax)
+    gmin = min(gmin, gmax)
+    bmin = min(bmin, bmax)
 
     dr = 256
     dg = 256
@@ -1236,12 +1230,9 @@ def next_color_random_walk_uniform_step(r, g, b, step=1, rmin=0, rmax=255, gmin=
 
     step %= 100
 
-    if rmax < rmin:
-        rmin = rmax
-    if gmax < gmin:
-        gmin = gmax
-    if bmax < bmin:
-        bmin = bmax
+    rmin = min(rmin, rmax)
+    gmin = min(gmin, gmax)
+    bmin = min(bmin, bmax)
 
     dr = 256
     dg = 256
@@ -1273,12 +1264,9 @@ def next_color_random_walk_nonuniform_step(r, g, b, step=1, rmin=0, rmax=255, gm
 
     step %= 100
 
-    if rmax < rmin:
-        rmin = rmax
-    if gmax < gmin:
-        gmin = gmax
-    if bmax < bmin:
-        bmin = bmax
+    rmin = min(rmin, rmax)
+    gmin = min(gmin, gmax)
+    bmin = min(bmin, bmax)
 
     dr = 256
     dg = 256
@@ -1351,12 +1339,12 @@ def interpolate(num1, num2):
         num1 = num2
 
     if num2 > num1:
-        thing = float((num2 - num1)) / NUM_STEPS
+        thing = float(num2 - num1) / NUM_STEPS
         interpolated = [num1]
         for _ in range(NUM_STEPS):
             interpolated.append(interpolated[-1] + thing)
     else:
-        thing = float((num1 - num2)) / NUM_STEPS
+        thing = float(num1 - num2) / NUM_STEPS
         interpolated = [num1]
         for _ in range(NUM_STEPS):
             interpolated.append(interpolated[-1] - thing)
@@ -1790,9 +1778,7 @@ def stamp_sprite_on_buffer(pixel_buffer, sprite, cx, cy):
 def validate_sketch_filename(filename):
     if not filename or not re.match(r"^[a-zA-Z0-9_\-]+\.png$", filename):
         return False
-    if ".." in filename or "/" in filename or "\\" in filename:
-        return False
-    return True
+    return not (".." in filename or "/" in filename or "\\" in filename)
 
 
 @planesign_mode_handler(DisplayMode.SIGN_OFF)
