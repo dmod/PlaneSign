@@ -354,6 +354,9 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
         palette = replace(palette, grass=mix(palette.grass, (181, 199, 195), daylight * 0.35), water=mix(palette.water, (131, 168, 180), daylight * 0.25))
     if snow > 0:
         palette = replace(palette, field=mix(palette.field, (207, 218, 226), daylight * 0.85 + 0.1), foreground=mix(palette.foreground, (151, 180, 199), daylight * 0.8 + 0.1), grass=mix(palette.grass, (236, 235, 226), daylight * 0.75))
+    if HALLOWEEN in holiday_features(environment):
+        eerie = holiday_darkness(environment)
+        palette = replace(palette, top=mix(palette.top, HALLOWEEN_SKY_TOP, eerie * 0.55), middle=mix(palette.middle, HALLOWEEN_SKY_MIDDLE, eerie * 0.45))
     dim = cloud_cover(environment) * (WEATHER_DIM_PRECIPITATION if rain or snow else WEATHER_DIM_CLOUDS)
     return graded_palette(Palette(*(mix(getattr(palette, name), (45, 60, 75), dim) for name in MATERIALS)))
 
@@ -839,7 +842,9 @@ def wildlife_visit(slot: int, seed: int):
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
-    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside."""
+    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside. Nothing comes out on Halloween."""
+    if HALLOWEEN in holiday_features(environment):
+        return
     d = ImageDraw.Draw(image)
     rain, snow = precipitation(environment)
     slot, age = divmod(elapsed, 100)
@@ -990,8 +995,9 @@ def dog_outing(slot: int, seed: int) -> DogOuting | None:
 
 
 def dog_allowed(environment: "OutsideEnvironment") -> bool:
+    """Dry daylight only, and the dog stays in on Halloween."""
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0
+    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0 and HALLOWEEN not in holiday_features(environment)
 
 
 def dog_outings_between(seed: int, first: float, last: float):
@@ -1141,7 +1147,7 @@ def owl_glances(window: int, seed: int):
 
 def owl_allowed(environment: "OutsideEnvironment") -> bool:
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25
+    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment)
 
 
 def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
@@ -1292,12 +1298,13 @@ def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: fl
 
 
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
-    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond."""
+    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond. The ghost owns Halloween's sky."""
     w = environment.weather
     rain, snow = precipitation(environment)
     return (
         environment.sun_altitude is not None
         and environment.sun_altitude > EAGLE_SUN_ALTITUDE
+        and HALLOWEEN not in holiday_features(environment)
         and w.code in (800, 801, 802, 803)
         and cloud_cover(environment) <= 0.75
         and rain == 0
@@ -1455,7 +1462,7 @@ def firefly_activity(environment: "OutsideEnvironment") -> float:
     """0..1: warm, calm, dry summer evenings only, from dusk until a couple of hours after nightfall."""
     w = environment.weather
     altitude = environment.sun_altitude
-    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None:
+    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None or HALLOWEEN in holiday_features(environment):
         return 0.0
     rain, snow = precipitation(environment)
     if rain > 0 or snow > 0 or (w.wind or 0) >= FIREFLY_MAX_WIND or w.temperature < FIREFLY_MIN_TEMPERATURE:
@@ -1562,9 +1569,9 @@ def leaf_gust(slot: int, seed: int) -> tuple[LeafDrift, ...]:
 
 
 def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[int, int, int, float, float]]:
-    """(x, y, pose, tint, opacity) for dry autumn leaves or spring blossom petals."""
+    """(x, y, pose, tint, opacity) for dry autumn leaves or spring blossom petals; the tree holds its leaves on Halloween."""
     weather = environment.weather
-    if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None:
+    if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None or HALLOWEEN in holiday_features(environment):
         return []
     rain, snow = precipitation(environment)
     if rain > 0 or snow > 0:
@@ -1905,6 +1912,7 @@ HOLIDAYS = {
     "santa": ("Santa", ((12, 24, 24),)),
     "fireworks": ("Fireworks", ((12, 31, 31), (1, 1, 1), (7, 4, 4))),
     "flag": ("Flag", ((7, 4, 4),)),
+    "halloween": ("Halloween", ((10, 31, 31),)),
 }
 CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
 TOPPER_GOLD = (255, 206, 60)
@@ -2257,6 +2265,620 @@ def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float)
             d.point(pixels, fill=lit(FLAG_COLORS[char], shade))
 
 
+HALLOWEEN = "halloween"
+# The night sky turns a bruised violet as dusk deepens.
+HALLOWEEN_SKY_TOP = (34, 10, 54)
+HALLOWEEN_SKY_MIDDLE = (60, 26, 78)
+# Ground mist: two noise layers drifting in opposite directions, (tile, px/s, weight).
+HALLOWEEN_MIST_TOP = 15
+HALLOWEEN_MIST_DEPTH = 9
+HALLOWEEN_MIST_BREATH = 1.5
+# The first row the mist can reach at the top of its breath.
+HALLOWEEN_MIST_ROW = math.floor(HALLOWEEN_MIST_TOP - HALLOWEEN_MIST_BREATH)
+HALLOWEEN_MIST_ROWS = np.arange(HALLOWEEN_MIST_ROW, HEIGHT, dtype=np.float32)[:, None]
+# Tiles are doubled horizontally so a scrolled window is a plain slice.
+HALLOWEEN_MIST_LAYERS = tuple((np.tile(periodic_noise(cell_x, cell_y, salt)[HALLOWEEN_MIST_ROW:], 2).astype(np.float32), speed, weight) for cell_x, cell_y, salt, speed, weight in ((32, 5, 61, 1.7, 0.6), (16, 3, 62, -2.6, 0.4)))
+HALLOWEEN_MIST_DAY = (178, 188, 198)
+HALLOWEEN_MIST_NIGHT = (98, 136, 126)
+# Carved pumpkins facing the viewer: s stem, p rind, r rib shadow; e eyes and nose and m mouth glow with the candle inside.
+JACK_SPRITES = {
+    "big": ("....s....", "..prprp..", ".ppppppp.", "ppepppepp", "peepepeep", "pmmmmmmmp", "ppmpmpmpp", ".ppppppp."),
+    "small": ("...s...", ".prprp.", "pepppep", "pppeppp", "pmmmmmp", ".pmpmp."),
+}
+# (center column, bottom row, size): two sit in the meadow and one beside the tree, clear of the hut and the cobweb.
+JACK_O_LANTERNS = ((87, 31, "big"), (95, 31, "small"), (104, 31, "big"))
+PUMPKIN_RIND = (240, 132, 26)
+PUMPKIN_RIB = (170, 78, 16)
+PUMPKIN_STEM = (84, 104, 40)
+PUMPKIN_CARVED = (46, 16, 6)
+CANDLE_FLAME = (255, 204, 70)
+CANDLE_GLOW = (255, 136, 32)
+# Now and then an end pumpkin rolls away along the ground, wraps around the screen and settles back upright in its
+# spot: pumpkin index -> direction (-1 rolls left).
+JACK_ROLLERS = {0: -1, 2: 1}
+JACK_ROLL_SLOT_SECONDS = 60
+JACK_ROLL_CHANCE = 0.5
+# Average speed in px/s; each roll eases out of its spot and back into it.
+JACK_ROLL_SPEED = 18
+JACK_ROLL_STEPS = 16
+# The candle gutters while the pumpkin tumbles.
+JACK_ROLL_FLAME = 0.6
+# The yard lamp burns all Halloween evening on a dying bulb: dim against daylight, it buzzes unsteadily the whole
+# time and, during some slots, keeps cutting out at LAMP_FLICKER_RATE Hz.
+LAMP_HALLOWEEN_DAYLIGHT = 0.3
+LAMP_FLICKER_SLOT_SECONDS = 2.5
+LAMP_FLICKER_CHANCE = 0.5
+LAMP_FLICKER_RATE = 14
+LAMP_DROPOUT_CHANCE = (0.08, 0.45)
+LAMP_DROPOUT_LEVEL = 0.12
+GHOST_SLOT_SECONDS = 20
+GHOST_CHANCE = 0.95
+# Peak speed (px/s) of a swoop; the ghost eases into and out of each one.
+GHOST_PEAK_SPEED = (60, 85)
+GHOST_HOVER_SECONDS = (1.6, 3.2)
+GHOST_BOO_SECONDS = 0.8
+GHOST_COLUMNS = (8, 120)
+# Anchor rows keep the 7 px sprite below the corner labels and above the ground.
+GHOST_ROWS = (10, 21)
+GHOST_TRAIL = 4
+GHOST_TRAIL_SPACING = 0.04
+GHOST_OPACITY = 0.88
+GHOST_WHITE = (236, 246, 255)
+GHOST_EYES = (12, 6, 24)
+GHOST_GLOW = (120, 255, 190)
+# Facing right, anchored on the center pixel: w sheet, k eyes and mouth. Each pose has two tail frames.
+GHOST_BODIES = {
+    "hover": ("..www..", ".wwwww.", ".wkwkw.", ".wwwww.", "wwwkwww", ".wwwww."),
+    "fly": ("...www.", "..wwwww", "..wwkwk", ".wwwwww", "wwwwwkw", "wwwww.."),
+    "boo": ("..www..", "wwwwwww", "wwkwkww", ".wwwww.", ".wkkkw.", ".wwkww."),
+}
+GHOST_TAILS = {"hover": ("ww.w.ww", ".w.w.w."), "fly": ("w.w....", ".w.w..."), "boo": ("ww.w.ww", ".w.w.w.")}
+# A cobweb strung between the tree's right limb, its low spur, the trunk and the ground: radials run clockwise from
+# the hub to anchors under the spur, the spur tip, the open air, the ground (three), the trunk and the limb.
+COBWEB_HUB = (119, 24)
+COBWEB_RADIALS = ((119, 20), (123, 20), (126, 23), (124, 28), (119, 28), (114, 28), (112, 25), (115, 20))
+# Radials start this far out, leaving the open free zone around the hub that keeps it from reading as a blob.
+COBWEB_FREE_ZONE = 2
+# One ring at this radius; at 1 px a smaller ring merges into the radials and more rings fill the web in solid.
+COBWEB_RING = 4
+# Guy lines tie the radial that ends in the air to the spur tip and to the ground.
+COBWEB_GUYS = (((126, 23), (121, 19)), ((126, 23), (127, 28)))
+COBWEB_SILK = (212, 220, 232)
+COBWEB_OPACITY = {"radial": 0.8, "ring": 0.65, "guy": 0.6}
+COBWEB_NIGHT_FADE = 0.25
+COBWEB_DEW = (240, 248, 255)
+COBWEB_DEW_DROPS = 5
+# The web's resident, waiting on the ring below and right of the hub: l legs, b body.
+COBWEB_SPIDER = ("l.l", ".b.", "l.l")
+SHADOW_SLOT_SECONDS = 45
+SHADOW_CHANCE = 0.85
+# Where the figure lurks, (center column, feet row): between the conifer and the lamp, past the fence's end, and on
+# the pond's far shore. It glides only between neighbouring spots right of the hut, so it never crosses in front of it.
+SHADOW_SPOTS = ((9, 26), (46, 27), (61, 25), (76, 25))
+SHADOW_GLIDES = {1: (2,), 2: (1, 3), 3: (2,)}
+SHADOW_GLIDE_SPEED = 2.5
+SHADOW_FADE_SECONDS = 2.0
+SHADOW_LOOK_SECONDS = (1.6, 2.8)
+SHADOW_EYE_FADE_SECONDS = 0.25
+SHADOW_COLOR = (12, 8, 16)
+SHADOW_OPACITY = 0.9
+SHADOW_HEM_OPACITY = 0.55
+SHADOW_EYES = (255, 34, 20)
+# A hooded figure seen from behind, and turned to look back: s shadow, r eyes. Its ragged hem has two frames.
+SHADOW_BODIES = {
+    "away": ("..s..", ".sss.", ".sss.", ".sss.", "sssss", "sssss", "sssss", "sssss", "sssss", "sssss"),
+    "toward": ("..s..", ".sss.", ".rsr.", ".sss.", "sssss", "sssss", "sssss", "sssss", "sssss", "sssss"),
+}
+SHADOW_HEMS = ("s.s.s", ".s.s.")
+SPIDER_SLOT_SECONDS = 40
+SPIDER_CHANCE = 0.8
+# The silk hangs from above the frame into the open sky between the hut and the mountain.
+SPIDER_COLUMNS = (46, 56)
+# Rows of the abdomen's top while hanging; the legs then end above the hills.
+SPIDER_REST_ROWS = (9, 12)
+SPIDER_DROP_SECONDS = 0.6
+SPIDER_HANG_SECONDS = (12, 22)
+SPIDER_CLIMB_SPEED = 5
+SPIDER_LUNGE_SECONDS = 0.7
+SPIDER_LUNGE_DEPTH = 4
+SPIDER_COLORS = {"b": (82, 70, 102), "l": (126, 114, 148), "c": (98, 86, 118), "h": (230, 28, 28), "r": (255, 36, 24), "f": (186, 182, 196)}
+SPIDER_SILK = (200, 206, 220)
+# A black widow hanging head down, anchored where the silk meets the abdomen: l legs, b abdomen, h hourglass,
+# c head, r eyes, f fangs.
+SPIDER_SPRITES = {
+    "spread": ("l.....bbb.....l", ".l...bbbbb...l.", "..l.bbhhhbb.l..", "...lbbbhbbbl...", "llllbbhhhbbllll", "....l.bbb.l....", "...l.lcccl.l...", "..l.l.rcr.l.l..", ".l..l.f.f.l..l.", "l...l.....l...l"),
+    "flex": ("......bbb......", "l....bbbbb....l", ".l..bbhhhbb..l.", "..llbbbhbbbll..", "....bbhhhbb....", "lllll.bbb.lllll", "....llcccll....", "...l..rcr..l...", "..l...f.f...l..", ".l...........l."),
+    "climb": ("..l...bbb...l..", "...l.bbbbb.l...", "....bbhhhbb....", "..llbbbhbbbll..", ".l..bbhhhbb..l.", "l..l..bbb..l..l", "..l..lcccl..l..", ".l..l.rcr.l..l.", "....l.f.f.l....", "...l.......l..."),
+}
+SPIDER_HEIGHT = len(SPIDER_SPRITES["spread"])
+
+
+def sprite_overlay(groups) -> Image.Image:
+    """An RGBA layer from groups of (points as an (n, 2) array of x, y, color, opacity); later groups cover earlier ones."""
+    layer = np.zeros((HEIGHT, WIDTH, 4), dtype=np.uint8)
+    for points, color, opacity in groups:
+        points = points[(points[:, 0] >= 0) & (points[:, 0] < WIDTH) & (points[:, 1] >= 0) & (points[:, 1] < HEIGHT)]
+        layer[points[:, 1], points[:, 0]] = (*color, round(255 * min(1.0, opacity)))
+    return Image.fromarray(layer, "RGBA")
+
+
+def paste_overlay(image: Image.Image, groups):
+    overlay = sprite_overlay(groups)
+    image.paste(overlay, (0, 0), overlay)
+
+
+def draw_halloween_mist(image: Image.Image, night: float, elapsed: float) -> Image.Image:
+    """A low bank of mist creeping across the valley floor, pale by day and ghostly green after dark."""
+    density = 0
+    for tile, speed, weight in HALLOWEEN_MIST_LAYERS:
+        offset = elapsed * speed % CLOUD_TILE
+        start = math.floor(offset)
+        window = tile[:, start : start + WIDTH + 1]
+        density = density + weight * (window[:, :-1] + (window[:, 1:] - window[:, :-1]) * (offset - start))
+    # The bank breathes up and down; its top edge stays ragged where the noise thins out.
+    depth = np.clip((HALLOWEEN_MIST_ROWS - HALLOWEEN_MIST_TOP - HALLOWEEN_MIST_BREATH * math.sin(elapsed * 0.3)) / HALLOWEEN_MIST_DEPTH, 0, 1)
+    thickness = np.clip((density * (0.5 + 0.5 * depth) - 0.25) / 0.4, 0, 1)
+    alpha = thickness * thickness * (3 - 2 * thickness) * depth * (0.36 + 0.08 * night)
+    pixels = np.array(image)
+    band = pixels[HALLOWEEN_MIST_ROW:].astype(np.float32)
+    band += (np.array(mix(HALLOWEEN_MIST_DAY, HALLOWEEN_MIST_NIGHT, night), dtype=np.float32) - band) * alpha[..., None]
+    pixels[HALLOWEEN_MIST_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def jack_center(index: int) -> tuple[float, float]:
+    """The middle of a pumpkin's sprite at its spot; it rolls about this point."""
+    cx, bottom, size = JACK_O_LANTERNS[index]
+    rows = JACK_SPRITES[size]
+    return cx - len(rows[0]) // 2 + (len(rows[0]) - 1) / 2, bottom - (len(rows) - 1) / 2
+
+
+@lru_cache(maxsize=len(JACK_SPRITES))
+def jack_rotations(size: str) -> tuple[tuple[tuple[int, int, str], ...], ...]:
+    """Per rotation step (counterclockwise), the sprite's pixels as integer offsets from the pixel at or just above
+    and left of its middle. Each screen pixel samples the sprite through the inverse rotation, so no pixel is lost
+    when an even side puts the middle between pixels."""
+    rows = JACK_SPRITES[size]
+    width, height = len(rows[0]), len(rows)
+    middle_x, middle_y = (width - 1) / 2, (height - 1) / 2
+    reach = math.ceil(math.hypot(width, height) / 2) + 1
+    frames = []
+    for step in range(JACK_ROLL_STEPS):
+        angle = math.tau * step / JACK_ROLL_STEPS
+        cos, sin = math.cos(angle), math.sin(angle)
+        pixels = []
+        for j in range(-reach, reach + 1):
+            for i in range(-reach, reach + 1):
+                # Screen y points down, so a counterclockwise turn on screen maps back through the transpose.
+                dx, dy = i - middle_x % 1, j - middle_y % 1
+                column, row = math.floor(cos * dx - sin * dy + middle_x + 0.5), math.floor(sin * dx + cos * dy + middle_y + 0.5)
+                if 0 <= column < width and 0 <= row < height and rows[row][column] != ".":
+                    pixels.append((i, j, rows[row][column]))
+        frames.append(tuple(pixels))
+    return tuple(frames)
+
+
+@lru_cache(maxsize=8)
+def jack_roll(slot: int, seed: int) -> tuple[int, float, float] | None:
+    """(pumpkin index, start, duration) of the roll in this slot, if any. Never spans two slots."""
+    rng = random.Random(seed * 4073 + slot * 60013 + 67)
+    if rng.random() > JACK_ROLL_CHANCE:
+        return None
+    duration = WIDTH / JACK_ROLL_SPEED
+    return rng.choice(tuple(JACK_ROLLERS)), slot * JACK_ROLL_SLOT_SECONDS + rng.uniform(1, JACK_ROLL_SLOT_SECONDS - duration - 1), duration
+
+
+def jack_roll_state(elapsed: float, seed: int) -> tuple[int, float, int] | None:
+    """(pumpkin index, horizontal travel so far, rotation step) while a pumpkin rolls, else None."""
+    roll = jack_roll(math.floor(elapsed / JACK_ROLL_SLOT_SECONDS), seed)
+    if roll is None or not roll[1] <= elapsed < roll[1] + roll[2]:
+        return None
+    index, start, duration = roll
+    progress = (elapsed - start) / duration
+    travel = WIDTH * (progress - math.sin(math.tau * progress) / math.tau)
+    # A whole number of turns over the trip, so it comes to rest upright.
+    width = len(JACK_SPRITES[JACK_O_LANTERNS[index][2]][0])
+    turns = max(1, round(WIDTH / (math.pi * width)))
+    step = round(travel / WIDTH * turns * JACK_ROLL_STEPS) * -JACK_ROLLERS[index] % JACK_ROLL_STEPS
+    return index, JACK_ROLLERS[index] * travel, step
+
+
+def jack_pixels(index: int, roll) -> list[tuple[int, int, str]]:
+    """A pumpkin's pixels where it is now, wrapping around the screen's sides while it rolls."""
+    cx, cy = jack_center(index)
+    step, travel = 0, 0.0
+    if roll is not None and roll[0] == index:
+        travel, step = roll[1], roll[2]
+    anchor_x, anchor_y = math.floor(cx) + math.floor(travel + 0.5), math.floor(cy)
+    return [((anchor_x + i) % WIDTH, anchor_y + j, char) for i, j, char in jack_rotations(JACK_O_LANTERNS[index][2])[step] if 0 <= anchor_y + j < HEIGHT]
+
+
+def candle_glow_mask(cx: float, face_y: float, reach: float) -> np.ndarray:
+    # Horizontal distance wraps, so a pumpkin rolling off one side lights the other.
+    dx = (FIREWORK_X - cx + WIDTH / 2) % WIDTH - WIDTH / 2
+    return np.exp(-(dx**2 + ((FIREWORK_Y - face_y) * 1.4) ** 2) / (2 * reach**2)) * 0.6
+
+
+def jack_glow(index: int, roll) -> np.ndarray:
+    """How strongly a pumpkin's candle lights the pixels around it (zero on the pumpkin itself)."""
+    cx, cy = jack_center(index)
+    size = JACK_O_LANTERNS[index][2]
+    mask = candle_glow_mask(cx + (roll[1] if roll is not None and roll[0] == index else 0), cy, 4.2 if size == "big" else 3.4)
+    for x, y, _ in jack_pixels(index, roll):
+        mask[y, x] = 0
+    return mask
+
+
+JACK_GLOW = np.stack([jack_glow(index, None) for index in range(len(JACK_O_LANTERNS))])
+# Candlelight only reaches the rows from here down.
+JACK_GLOW_ROW = int(np.flatnonzero((JACK_GLOW > 0.004).any(axis=(0, 2)))[0])
+JACK_GLOW = JACK_GLOW[:, JACK_GLOW_ROW:]
+
+
+def candle_flicker(index: int, elapsed: float, roll=None) -> float:
+    """0..1 candle brightness: a restless flame that now and then gutters."""
+    level = 0.82 + 0.1 * math.sin(elapsed * 11.3 + index * 1.9) + 0.08 * math.sin(elapsed * 17.9 + index * 4.3)
+    if roll is not None and roll[0] == index:
+        level *= JACK_ROLL_FLAME
+    return level * 0.55 if unit_hash(index, math.floor(elapsed * 5), 71) < 0.08 else level
+
+
+def draw_jack_o_lanterns(image: Image.Image, palette: Palette, night: float, elapsed: float, roll):
+    d = ImageDraw.Draw(image)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+
+    def lit(color: Color) -> Color:
+        return tuple(round(value * illumination) for value in color)
+
+    # A rolling pumpkin passes behind the ones still sitting in their spots.
+    order = sorted(range(len(JACK_O_LANTERNS)), key=lambda index: roll is None or roll[0] != index)
+    for index in order:
+        flame = candle_flicker(index, elapsed, roll)
+        # By day the carved face reads dark with a faint candle; after dark it blazes and warms the rind from inside.
+        face = mix(PUMPKIN_CARVED, CANDLE_FLAME, flame * (0.2 + 0.8 * night))
+        warmth = 0.35 * night * flame
+        colors = {"p": mix(lit(PUMPKIN_RIND), CANDLE_GLOW, warmth), "r": mix(lit(PUMPKIN_RIB), CANDLE_GLOW, warmth * 0.6), "s": lit(PUMPKIN_STEM), "e": face, "m": face}
+        for x, y, char in jack_pixels(index, roll):
+            d.point((x, y), fill=colors[char])
+
+
+def draw_jack_o_lantern_glow(image: Image.Image, night: float, elapsed: float, roll) -> Image.Image:
+    """After dark each candle throws a flickering orange glow onto the ground, the mist and anything passing by."""
+    if night <= 0:
+        return image
+    masks = JACK_GLOW
+    if roll is not None:
+        masks = masks.copy()
+        masks[roll[0]] = jack_glow(roll[0], roll)[JACK_GLOW_ROW:]
+    flames = np.array([candle_flicker(index, elapsed, roll) for index in range(len(JACK_O_LANTERNS))], dtype=np.float32)
+    light = np.clip(np.tensordot(flames, masks, axes=1) * night, 0, 0.6)
+    pixels = np.array(image)
+    band = pixels[JACK_GLOW_ROW:].astype(np.float32)
+    band += (np.array(CANDLE_GLOW, dtype=np.float32) - band) * light[..., None]
+    pixels[JACK_GLOW_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def halloween_lamp(night: float, elapsed: float, seed: int) -> float:
+    hum = 0.84 + 0.09 * math.sin(elapsed * 23.7) + 0.07 * math.sin(elapsed * 37.1 + 1.3)
+    stormy = unit_hash(seed, math.floor(elapsed / LAMP_FLICKER_SLOT_SECONDS), 91) < LAMP_FLICKER_CHANCE
+    if unit_hash(seed, math.floor(elapsed * LAMP_FLICKER_RATE), 93) < LAMP_DROPOUT_CHANCE[stormy]:
+        hum *= LAMP_DROPOUT_LEVEL
+    return (LAMP_HALLOWEEN_DAYLIGHT + (1 - LAMP_HALLOWEEN_DAYLIGHT) * night) * hum
+
+
+@dataclass(frozen=True, eq=False)
+class GhostVisit:
+    start: float
+    arrive: float
+    leave: float
+    end: float
+    swoop_in: tuple[np.ndarray, np.ndarray]
+    swoop_out: tuple[np.ndarray, np.ndarray]
+    hover: tuple[float, float]
+    boo: bool
+
+
+def ghost_path(points: list[tuple[float, float]]) -> tuple[np.ndarray, np.ndarray]:
+    """A Catmull-Rom curve through the points, sampled as (points, cumulative distance)."""
+    padded = [points[0], *points, points[-1]]
+    samples = []
+    for p0, p1, p2, p3 in zip(padded, padded[1:], padded[2:], padded[3:]):
+        for step in range(12):
+            t = step / 12
+            samples.append(tuple(0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t**3) for a, b, c, d in zip(p0, p1, p2, p3)))
+    samples.append(points[-1])
+    xy = np.array(samples)
+    return xy, np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))))
+
+
+@lru_cache(maxsize=8)
+def ghost_visit(slot: int, seed: int) -> GhostVisit | None:
+    """Swoop in along a looping path, hover (sometimes ending in a boo), then zoom away. Never spans two slots."""
+    rng = random.Random(seed * 5167 + slot * 77003 + 41)
+    if rng.random() > GHOST_CHANCE:
+        return None
+
+    def waypoint():
+        return rng.uniform(*GHOST_COLUMNS), rng.uniform(*GHOST_ROWS)
+
+    def edge():
+        return rng.choice((-5, WIDTH + 4)), rng.uniform(9, 16)
+
+    hover = (rng.uniform(28, 100), rng.uniform(14, 19))
+    swoop_in = ghost_path([edge(), *(waypoint() for _ in range(rng.randint(1, 3))), hover])
+    swoop_out = ghost_path([hover, *(waypoint() for _ in range(rng.randint(1, 3))), edge()])
+    peak = rng.uniform(*GHOST_PEAK_SPEED)
+    hold = rng.uniform(*GHOST_HOVER_SECONDS)
+    # An eased swoop peaks at twice its average speed.
+    fly_in, fly_out = 2 * float(swoop_in[1][-1]) / peak, 2 * float(swoop_out[1][-1]) / peak
+    room = GHOST_SLOT_SECONDS - 1 - hold
+    if fly_in + fly_out > room:
+        fly_in, fly_out = fly_in * room / (fly_in + fly_out), fly_out * room / (fly_in + fly_out)
+    start = slot * GHOST_SLOT_SECONDS + rng.uniform(0, room - fly_in - fly_out)
+    return GhostVisit(start, start + fly_in, start + fly_in + hold, start + fly_in + hold + fly_out, swoop_in, swoop_out, hover, rng.random() < 0.5)
+
+
+def ghost_along(path: tuple[np.ndarray, np.ndarray], progress: float) -> tuple[float, float]:
+    xy, distance = path
+    s = distance[-1] * (progress - math.sin(math.tau * progress) / math.tau)
+    return float(np.interp(s, distance, xy[:, 0])), float(np.interp(s, distance, xy[:, 1]))
+
+
+def ghost_state(elapsed: float, seed: int):
+    """Return (x, y, facing, pose, speed) or None while no ghost is about."""
+    visit = ghost_visit(math.floor(elapsed / GHOST_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if visit.arrive <= elapsed < visit.leave:
+        held = elapsed - visit.arrive
+        x, y = visit.hover[0] + 0.8 * math.sin(held * 2.1), visit.hover[1] + 1.2 * math.sin(held * 2.9)
+        if visit.boo and elapsed >= visit.leave - GHOST_BOO_SECONDS:
+            # Boo! It rears up and shudders.
+            return x + (1 if math.sin(held * 45) > 0 else 0), y - 1, 1, "boo", 0.0
+        return x, y, 1, "hover", 0.0
+    path, first, last = (visit.swoop_in, visit.start, visit.arrive) if elapsed < visit.arrive else (visit.swoop_out, visit.leave, visit.end)
+    x, y = ghost_along(path, (elapsed - first) / (last - first))
+    px, py = ghost_along(path, max(0.0, (elapsed - 0.02 - first) / (last - first)))
+    speed = math.hypot(x - px, y - py) / 0.02
+    return x, y, 1 if x >= px else -1, "fly" if speed > 12 else "hover", speed
+
+
+@lru_cache(maxsize=16)
+def ghost_pixels(pose: str, frame: int, facing: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Offsets from the anchor of the sheet, the eyes and mouth, and the 1 px halo around the sprite."""
+    rows = (*GHOST_BODIES[pose], GHOST_TAILS[pose][frame])
+    cells = {((column - 3) * facing, row - 3): char for row, line in enumerate(rows) for column, char in enumerate(line) if char != "."}
+    halo = {(x + dx, y + dy) for x, y in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))} - cells.keys()
+    return tuple(np.array(sorted(points), dtype=int).reshape(-1, 2) for points in ([p for p, c in cells.items() if c == "w"], [p for p, c in cells.items() if c == "k"], halo))
+
+
+GHOST_TRAIL_COLOR = mix(GHOST_WHITE, GHOST_GLOW, 0.5)
+
+
+def draw_ghost(image: Image.Image, night: float, elapsed: float, seed: int):
+    ghost = ghost_state(elapsed, seed)
+    if ghost is None:
+        return
+    x, y, facing, pose, speed = ghost
+    frame = math.floor(elapsed * 6) % 2
+    groups = []
+    if pose == "fly":
+        # Afterimages smear out behind it while it zooms.
+        for back in range(GHOST_TRAIL, 0, -1):
+            past = ghost_state(elapsed - back * GHOST_TRAIL_SPACING, seed)
+            if past is not None:
+                fade = 0.38 * (1 - back / (GHOST_TRAIL + 1)) * min(1, speed / 60)
+                groups.append((ghost_pixels(past[3], frame, past[2])[0] + (round(past[0]), round(past[1])), GHOST_TRAIL_COLOR, fade))
+    sheet, eyes, halo = (offsets + (round(x), round(y)) for offsets in ghost_pixels(pose, frame, facing))
+    if night > 0:
+        groups.append((halo, GHOST_GLOW, 0.3 * night))
+    groups += [(sheet, GHOST_WHITE, GHOST_OPACITY), (eyes, GHOST_EYES, 0.95)]
+    paste_overlay(image, groups)
+
+
+@dataclass(frozen=True)
+class ShadowVisit:
+    start: float
+    leave: float
+    settle: float
+    end: float
+    origin: tuple[int, int]
+    target: tuple[int, int]
+    looks: tuple[tuple[float, float], ...]
+
+
+@lru_cache(maxsize=8)
+def shadow_visit(slot: int, seed: int) -> ShadowVisit | None:
+    """Fade in at a lurking spot, maybe glide to a neighbouring one, look back now and then, fade away. Never spans two slots."""
+    rng = random.Random(seed * 8231 + slot * 91873 + 59)
+    if rng.random() > SHADOW_CHANCE:
+        return None
+    index = rng.randrange(len(SHADOW_SPOTS))
+    glides = SHADOW_GLIDES.get(index, ())
+    target_index = rng.choice(glides) if glides and rng.random() < 0.6 else index
+    origin, target = SHADOW_SPOTS[index], SHADOW_SPOTS[target_index]
+    first = rng.uniform(6, 12)
+    glide = abs(target[0] - origin[0]) / SHADOW_GLIDE_SPEED
+    second = rng.uniform(5, 10) if target_index != index else 0
+    total = SHADOW_FADE_SECONDS * 2 + first + glide + second
+    start = slot * SHADOW_SLOT_SECONDS + rng.uniform(0.5, SHADOW_SLOT_SECONDS - total - 0.5)
+    leave = start + SHADOW_FADE_SECONDS + first
+    settle = leave + glide
+    looks = []
+    # It only looks back while standing still and fully there.
+    for begin, length in ((start + SHADOW_FADE_SECONDS, first), (settle, second)):
+        if length > 4 and (not looks or rng.random() < 0.6):
+            look = rng.uniform(*SHADOW_LOOK_SECONDS)
+            at = begin + rng.uniform(0.8, length - look - 0.8)
+            looks.append((at, at + look))
+    return ShadowVisit(start, leave, settle, start + total, origin, target, tuple(looks))
+
+
+def shadow_state(elapsed: float, seed: int):
+    """Return (x, feet row, opacity, eye level 0..1) or None while nothing lurks."""
+    visit = shadow_visit(math.floor(elapsed / SHADOW_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    opacity = min(1.0, (elapsed - visit.start) / SHADOW_FADE_SECONDS, (visit.end - elapsed) / SHADOW_FADE_SECONDS)
+    progress = 0.0 if elapsed < visit.leave else 1.0 if elapsed >= visit.settle else (elapsed - visit.leave) / (visit.settle - visit.leave)
+    progress = progress * progress * (3 - 2 * progress)
+    x = visit.origin[0] + (visit.target[0] - visit.origin[0]) * progress
+    y = visit.origin[1] + (visit.target[1] - visit.origin[1]) * progress
+    eyes = max((min(1.0, (elapsed - first) / SHADOW_EYE_FADE_SECONDS, (last - elapsed) / SHADOW_EYE_FADE_SECONDS) for first, last in visit.looks if first <= elapsed < last), default=0.0)
+    return x, y, opacity, eyes
+
+
+@lru_cache(maxsize=4)
+def shadow_pixels(pose: str, frame: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Offsets from the feet of the body, the hem and the eyes."""
+    rows = (*SHADOW_BODIES[pose], SHADOW_HEMS[frame])
+    cells = {(column - 2, row - len(rows) + 1): char for row, line in enumerate(rows) for column, char in enumerate(line) if char != "."}
+    hem = {point for point in cells if point[1] == 0}
+    return tuple(np.array(sorted(points), dtype=int).reshape(-1, 2) for points in ([p for p, c in cells.items() if c == "s" and p not in hem], sorted(hem), [p for p, c in cells.items() if c == "r"]))
+
+
+def draw_shadow_figure(image: Image.Image, shadow, elapsed: float):
+    """The figure itself, among the scenery; its eyes are drawn later so no light tints them."""
+    if shadow is None:
+        return
+    x, y, opacity, eyes = shadow
+    body, hem, _ = shadow_pixels("toward" if eyes > 0 else "away", math.floor(elapsed * 3) % 2)
+    feet = (round(x), round(y))
+    paste_overlay(image, [(body + feet, SHADOW_COLOR, SHADOW_OPACITY * opacity), (hem + feet, SHADOW_COLOR, SHADOW_HEM_OPACITY * opacity)])
+
+
+def draw_shadow_eyes(image: Image.Image, shadow, night: float, elapsed: float):
+    if shadow is None or shadow[3] <= 0:
+        return
+    x, y, _, eyes = shadow
+    pupils = shadow_pixels("toward", math.floor(elapsed * 3) % 2)[2] + (round(x), round(y))
+    glow = np.array(sorted({(px + dx, py + dy) for px, py in pupils.tolist() for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1))} - set(map(tuple, pupils.tolist()))), dtype=int).reshape(-1, 2)
+    # A slow, menacing pulse.
+    pulse = 0.85 + 0.15 * math.sin(elapsed * 5)
+    paste_overlay(image, [(glow, SHADOW_EYES, 0.35 * eyes * (0.4 + 0.6 * night) * pulse), (pupils, SHADOW_EYES, eyes * pulse)])
+
+
+@dataclass(frozen=True)
+class SpiderVisit:
+    start: float
+    landed: float
+    climb: float
+    end: float
+    x: int
+    rest: float
+    lunge: float
+
+
+@lru_cache(maxsize=8)
+def spider_visit(slot: int, seed: int) -> SpiderVisit | None:
+    """Drop on a silk line, bounce, dangle and twitch, lunge once, then climb back out. Never spans two slots."""
+    rng = random.Random(seed * 2903 + slot * 31337 + 53)
+    if rng.random() > SPIDER_CHANCE:
+        return None
+    x, rest, hang = rng.randint(*SPIDER_COLUMNS), rng.uniform(*SPIDER_REST_ROWS), rng.uniform(*SPIDER_HANG_SECONDS)
+    climb_seconds = (rest + SPIDER_HEIGHT) / SPIDER_CLIMB_SPEED
+    start = slot * SPIDER_SLOT_SECONDS + rng.uniform(1, SPIDER_SLOT_SECONDS - SPIDER_DROP_SECONDS - hang - climb_seconds - 1)
+    landed = start + SPIDER_DROP_SECONDS
+    return SpiderVisit(start, landed, landed + hang, landed + hang + climb_seconds, x, rest, landed + rng.uniform(3, hang - 2))
+
+
+def spider_state(elapsed: float, seed: int):
+    """Return (silk column, x, abdomen top row, pose) or None while the spider is away."""
+    visit = spider_visit(math.floor(elapsed / SPIDER_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if elapsed < visit.landed:
+        progress = (elapsed - visit.start) / SPIDER_DROP_SECONDS
+        return visit.x, visit.x, -SPIDER_HEIGHT + (visit.rest + SPIDER_HEIGHT) * progress * progress, "flex"
+    if elapsed >= visit.climb:
+        return visit.x, visit.x, visit.rest - (elapsed - visit.climb) * SPIDER_CLIMB_SPEED, ("climb", "spread")[math.floor(elapsed * 6) % 2]
+    since = elapsed - visit.landed
+    # The silk stretches and recoils after the drop; then the spider sways and breathes on it.
+    y = visit.rest + 2.5 * math.exp(-since / 0.45) * math.sin(since * 11) + 0.5 * math.sin(since * 0.9)
+    x = visit.x + 0.7 * math.sin(since * 0.55)
+    lunge = elapsed - visit.lunge
+    if 0 <= lunge < SPIDER_LUNGE_SECONDS:
+        y += SPIDER_LUNGE_DEPTH * (lunge / 0.12 if lunge < 0.12 else 1 - (lunge - 0.12) / (SPIDER_LUNGE_SECONDS - 0.12))
+        return visit.x, x, y, "spread"
+    twitching = unit_hash(seed, math.floor(elapsed * 3), 7) < 0.3
+    return visit.x, x, y, "flex" if twitching and math.floor(elapsed * 10) % 2 else "spread"
+
+
+def cobweb_geometry() -> dict[str, np.ndarray]:
+    """Pixels of the radials, the ring and the guy lines; each pixel belongs to its most visible thread."""
+    hx, hy = COBWEB_HUB
+
+    def along(end: tuple[int, int], radius: float) -> tuple[int, int]:
+        reach = math.hypot(end[0] - hx, end[1] - hy)
+        return round(hx + (end[0] - hx) * radius / reach), round(hy + (end[1] - hy) * radius / reach)
+
+    ring = [along(end, COBWEB_RING) for end in COBWEB_RADIALS]
+    threads = {
+        "radial": [COBWEB_HUB, *(pixel for end in COBWEB_RADIALS for pixel in trace([along(end, COBWEB_FREE_ZONE), end]))],
+        "ring": trace([*ring, ring[0]]),
+        "guy": [pixel for guy in COBWEB_GUYS for pixel in trace(list(guy))],
+    }
+    taken: set[tuple[int, int]] = set()
+    geometry = {}
+    for name, pixels in threads.items():
+        unique = [pixel for pixel in dict.fromkeys(pixels) if pixel not in taken]
+        taken.update(unique)
+        geometry[name] = np.array(unique, dtype=int).reshape(-1, 2)
+    return geometry
+
+
+COBWEB = cobweb_geometry()
+COBWEB_SPIDER_AT = (COBWEB_HUB[0] + 2, COBWEB_HUB[1] + 3)
+COBWEB_SPIDER_PIXELS = tuple(
+    (np.array([(column - 1 + COBWEB_SPIDER_AT[0], row - 1 + COBWEB_SPIDER_AT[1]) for row, line in enumerate(COBWEB_SPIDER) for column, c in enumerate(line) if c == char], dtype=int).reshape(-1, 2), SPIDER_COLORS[char])
+    for char in "lb"
+)
+
+
+def draw_cobweb(image: Image.Image, night: float, elapsed: float, seed: int):
+    """The web catches the light by day and fades a little after dark; dew drops glint on the ring."""
+    fade = 1 - COBWEB_NIGHT_FADE * night
+    groups = [(COBWEB[name], COBWEB_SILK, opacity * fade) for name, opacity in COBWEB_OPACITY.items()]
+    ring = COBWEB["ring"]
+    for drop in range(COBWEB_DEW_DROPS):
+        # Each drop twinkles briefly at a fixed spot, at its own pace.
+        cycle, moment = divmod(elapsed + drop * 1.3, 2.6 + drop * 0.4)
+        if moment < 0.5:
+            index = int(unit_hash(seed, drop, int(cycle), 97) * len(ring))
+            groups.append((ring[index : index + 1], COBWEB_DEW, 0.9 * math.sin(math.pi * moment / 0.5) * fade))
+    groups += [(pixels, color, 1.0) for pixels, color in COBWEB_SPIDER_PIXELS]
+    paste_overlay(image, groups)
+
+
+@lru_cache(maxsize=len(SPIDER_SPRITES))
+def spider_pixels(pose: str) -> tuple[tuple[np.ndarray, Color], ...]:
+    """Offsets from the silk's attachment point per color, then the eye glow around the eyes, off the sprite."""
+    rows = SPIDER_SPRITES[pose]
+    cells = {(column - 7, row): char for row, line in enumerate(rows) for column, char in enumerate(line) if char != "."}
+    eyes = [point for point, char in cells.items() if char == "r"]
+    glow = {(x + dx, y + dy) for x, y in eyes for dx, dy in ((-1, 0), (1, 0), (0, 1))} - cells.keys()
+    parts = tuple((np.array(sorted(p for p, c in cells.items() if c == char), dtype=int).reshape(-1, 2), color) for char, color in SPIDER_COLORS.items())
+    return (*parts, (np.array(sorted(glow), dtype=int).reshape(-1, 2), SPIDER_COLORS["r"]))
+
+
+def draw_spider(image: Image.Image, night: float, elapsed: float, seed: int):
+    spider = spider_state(elapsed, seed)
+    if spider is None:
+        return
+    silk, x, y, pose = spider
+    anchor = (round(x), round(y))
+    groups = []
+    if anchor[1] > 0:
+        groups.append((np.array(trace([(silk, 0), (anchor[0], anchor[1] - 1)]), dtype=int).reshape(-1, 2), SPIDER_SILK, 0.45))
+    *parts, (glow, red) = spider_pixels(pose)
+    groups += [(offsets + anchor, color, 1.0) for offsets, color in parts]
+    if night > 0:
+        # Its eyes glow red in the dark.
+        groups.append((glow + anchor, red, 0.3 * night))
+    paste_overlay(image, groups)
+
+
 def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> Image.Image:
     palette = scene_palette(environment)
     image = Image.new("RGB", (WIDTH, HEIGHT))
@@ -2299,6 +2921,14 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = round((elapsed * 0.22 + index * 49) % 168) - 40
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
+    halloween = HALLOWEEN in holidays
+    shadow = shadow_state(elapsed, seed) if halloween else None
+    roll = jack_roll_state(elapsed, seed) if halloween else None
+    if halloween:
+        image = draw_halloween_mist(image, night, elapsed)
+        # The lurking figure stands farther back than the pumpkins, which roll in front of it.
+        draw_shadow_figure(image, shadow, elapsed)
+        draw_jack_o_lanterns(image, palette, night, elapsed, roll)
     wind = environment.weather.wind or 0
     if "flag" in holidays:
         draw_flag(image, palette, wind, elapsed)
@@ -2318,6 +2948,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image.paste(wood, (0, 0), wood)
     # The owl perches on the fixed branch, in front of the swaying foliage.
     draw_owl(image, palette, owl_state(environment, elapsed, seed))
+    if halloween:
+        draw_cobweb(image, night, elapsed, seed)
+        draw_spider(image, night, elapsed, seed)
     if rain > 0:
         draw_rain(image, rain, wind, elapsed)
     if snow > 0:
@@ -2327,9 +2960,13 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = int((x0 + min(wind, 25) * elapsed * 0.035 + math.sin(elapsed * 0.7 + phase) * 2) % 128)
             if 0 <= y < HEIGHT:
                 d.point((x, y), fill=mix(image.getpixel((x, y)), (234, 235, 225), 0.65 + (phase % 5) * 0.025))
-    lamp = lamp_level(environment)
+    lamp = halloween_lamp(night, elapsed, seed) if halloween else lamp_level(environment)
     if lamp > 0:
         image = draw_lamp_light(image, lamp)
+    if halloween:
+        image = draw_jack_o_lantern_glow(image, night, elapsed, roll)
+        draw_shadow_eyes(image, shadow, night, elapsed)
+        draw_ghost(image, night, elapsed, seed)
     # Christmas lights shine on top of the lamp's wash so they stay saturated.
     if "christmas_lights" in holidays:
         image = draw_christmas_lights(image, environment, elapsed)
