@@ -49,6 +49,13 @@ var free_sketch_undo_stack = [];
 var free_sketch_max_undo = 20;
 var free_sketch_recent_colors = [];
 var free_sketch_max_recent_colors = 6;
+var flagquiz_player_id = null;
+var flagquiz_round_id = null;
+var flagquiz_latest_state = null;
+var flagquiz_poll_in_progress = false;
+var flagquiz_answer_in_progress = false;
+var flagquiz_suggestion_timer = null;
+var flagquiz_selected_code = null;
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
@@ -244,6 +251,9 @@ async function update_outside_status() {
 
 window.onload = function () {
     update_sign_status();
+    document.getElementById("game_player_name").value = get_saved_game_player_name();
+    setInterval(poll_flagquiz_state, 1000);
+    document.addEventListener("visibilitychange", poll_flagquiz_state);
     update_brightness_slider();
     update_volume_slider();
     set_version();
@@ -591,6 +601,277 @@ function post_json_endpoint(endpoint, data, callback) {
         .catch(function (err) {
             console.error(endpoint + " failed:", err);
         });
+}
+
+function flagquiz_error(message) {
+    var error = document.getElementById("flagquiz_error");
+    if (error) {
+        error.textContent = message || "";
+    }
+}
+
+function get_game_player_id() {
+    if (flagquiz_player_id) {
+        return flagquiz_player_id;
+    }
+
+    try {
+        flagquiz_player_id = localStorage.getItem("planesign_game_player_id");
+    } catch (error) {
+        console.error("Could not read the saved game player identity", error);
+    }
+    if (flagquiz_player_id) {
+        return flagquiz_player_id;
+    }
+
+    var bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    var hex = Array.from(bytes, function (value) { return value.toString(16).padStart(2, "0"); }).join("");
+    flagquiz_player_id = hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+    try {
+        localStorage.setItem("planesign_game_player_id", flagquiz_player_id);
+    } catch (error) {
+        console.error("Could not save the game player identity", error);
+    }
+    return flagquiz_player_id;
+}
+
+function get_saved_game_player_name() {
+    try {
+        return localStorage.getItem("planesign_game_player_name") || "";
+    } catch (error) {
+        console.error("Could not read the saved game player name", error);
+        return "";
+    }
+}
+
+async function flagquiz_request(endpoint, data) {
+    var options = data === undefined ? {} : {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+    };
+    var response = await fetch("api" + endpoint, options);
+    var body = await response.json().catch(function () { return null; });
+    if (!response.ok || !body || body.ok !== true) {
+        throw new Error((body && body.error) || ("HTTP " + response.status));
+    }
+    return body;
+}
+
+function start_flagquiz(difficulty) {
+    flagquiz_error("");
+    flagquiz_request("/games/flagquiz/start", {
+        difficulty: difficulty,
+        player_id: get_game_player_id()
+    }).then(function () {
+        set_current_mode_button("FLAGQUIZ");
+        document.getElementById("flagquiz_div").hidden = false;
+        document.getElementById("flagquiz_game").hidden = false;
+        flagquiz_round_id = null;
+        poll_flagquiz_state();
+    }).catch(function (error) {
+        flagquiz_error(error.message);
+    });
+}
+
+function rename_game_player() {
+    var name = document.getElementById("game_player_name").value.trim();
+    flagquiz_error("");
+    flagquiz_request("/games/player", {
+        player_id: get_game_player_id(),
+        name: name
+    }).then(function (response) {
+        try {
+            localStorage.setItem("planesign_game_player_name", response.player.name);
+        } catch (error) {
+            console.error("Could not save the game player name", error);
+        }
+        document.getElementById("game_player_name").value = response.player.name;
+        poll_flagquiz_state();
+    }).catch(function (error) {
+        flagquiz_error(error.message);
+    });
+}
+
+function poll_flagquiz_state() {
+    var panel = document.getElementById("flagquiz_div");
+    if (global_current_mode !== "FLAGQUIZ" || !panel || panel.hidden || document.visibilityState !== "visible" || flagquiz_poll_in_progress) {
+        return;
+    }
+
+    flagquiz_poll_in_progress = true;
+    var playerId = get_game_player_id();
+    var name = get_saved_game_player_name();
+    var endpoint = "/games/flagquiz/state?player_id=" + encodeURIComponent(playerId);
+    if (name) {
+        endpoint += "&name=" + encodeURIComponent(name);
+    }
+    flagquiz_request(endpoint)
+        .then(function (state) {
+            flagquiz_error("");
+            flagquiz_latest_state = state;
+            if (state.player && state.player.name) {
+                try {
+                    localStorage.setItem("planesign_game_player_name", state.player.name);
+                } catch (error) {
+                    console.error("Could not save the game player name", error);
+                }
+                var nameInput = document.getElementById("game_player_name");
+                if (document.activeElement !== nameInput) {
+                    nameInput.value = state.player.name;
+                }
+            }
+            render_flagquiz_state(state);
+        })
+        .catch(function (error) {
+            flagquiz_error(error.message);
+        })
+        .finally(function () {
+            flagquiz_poll_in_progress = false;
+        });
+}
+
+function render_flagquiz_state(state) {
+    var game = document.getElementById("flagquiz_game");
+    game.hidden = !state.difficulty;
+    if (!state.difficulty) {
+        document.getElementById("flagquiz_question_progress").textContent = "Choose a difficulty to begin.";
+        return;
+    }
+
+    var current = state.current;
+    var progress = state.complete
+        ? "Complete · " + state.total + " questions"
+        : "Question " + state.question_number + " / " + state.total + " · " + state.seconds_left + "s";
+    document.getElementById("flagquiz_question_progress").textContent = progress;
+    var flag = document.getElementById("flagquiz_flag");
+    flag.hidden = !current;
+    if (current) {
+        var imagePath = "api/games/flagquiz/flag/" + encodeURIComponent(current.code);
+        if (flag.getAttribute("src") !== imagePath) {
+            flag.src = imagePath;
+        }
+    }
+
+    var feedback = document.getElementById("flagquiz_feedback");
+    if (state.your_answer) {
+        feedback.textContent = state.your_answer.correct ? "Your answer is correct!" : "Your answer is incorrect.";
+    } else if (state.last_result) {
+        var results = state.last_result.answers.map(function (answer) {
+            return answer.name + (answer.correct ? " got it right" : " missed it");
+        });
+        feedback.textContent = "Question " + state.last_result.question_number + ": " + state.last_result.correct_name +
+            (results.length ? " · " + results.join(" · ") : "");
+    } else {
+        feedback.textContent = state.complete ? "Quiz complete!" : "";
+    }
+
+    var answers = document.getElementById("flagquiz_answers");
+    var expert = document.getElementById("flagquiz_expert");
+    var isExpert = state.difficulty === "expert";
+    answers.hidden = isExpert;
+    expert.hidden = !isExpert;
+    if (flagquiz_round_id !== state.round_id) {
+        flagquiz_round_id = state.round_id;
+        flagquiz_selected_code = null;
+        document.getElementById("flagquiz_expert_input").value = "";
+        document.getElementById("flagquiz_expert_submit").disabled = true;
+        document.getElementById("flagquiz_suggestions").replaceChildren();
+    }
+
+    answers.replaceChildren();
+    if (current && !isExpert) {
+        state.current.options.forEach(function (option) {
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "flagquiz_answer_button";
+            button.textContent = option.key + ". " + option.name;
+            button.disabled = Boolean(state.your_answer) || flagquiz_answer_in_progress;
+            button.addEventListener("click", function () {
+                submit_flagquiz_answer(option.key);
+            });
+            answers.appendChild(button);
+        });
+    }
+
+    var expertSubmit = document.getElementById("flagquiz_expert_submit");
+    expertSubmit.disabled = !current || Boolean(state.your_answer) || !flagquiz_selected_code || flagquiz_answer_in_progress;
+    document.getElementById("flagquiz_expert_input").disabled = !current || Boolean(state.your_answer);
+
+    var scoreboard = document.getElementById("flagquiz_scoreboard");
+    scoreboard.replaceChildren();
+    state.players.forEach(function (player) {
+        var item = document.createElement("li");
+        item.textContent = player.name + " — " + player.score + (player.active ? " (active)" : " (away)");
+        scoreboard.appendChild(item);
+    });
+}
+
+function submit_flagquiz_answer(answer) {
+    var state = flagquiz_latest_state;
+    if (!state || !state.round_id || state.your_answer || flagquiz_answer_in_progress) {
+        return;
+    }
+    flagquiz_answer_in_progress = true;
+    render_flagquiz_state(state);
+    flagquiz_request("/games/flagquiz/answer", {
+        player_id: get_game_player_id(),
+        round_id: state.round_id,
+        answer: answer
+    }).then(function (result) {
+        document.getElementById("flagquiz_feedback").textContent = result.correct ? "Your answer is correct!" : "Your answer is incorrect.";
+        poll_flagquiz_state();
+    }).catch(function (error) {
+        flagquiz_error(error.message);
+        poll_flagquiz_state();
+    }).finally(function () {
+        flagquiz_answer_in_progress = false;
+    });
+}
+
+function get_flagquiz_suggestions(query) {
+    clearTimeout(flagquiz_suggestion_timer);
+    flagquiz_selected_code = null;
+    document.getElementById("flagquiz_expert_submit").disabled = true;
+    var list = document.getElementById("flagquiz_suggestions");
+    list.replaceChildren();
+    if (query.trim().length < 1 || !flagquiz_latest_state || flagquiz_latest_state.your_answer) {
+        return;
+    }
+
+    flagquiz_suggestion_timer = setTimeout(function () {
+        flagquiz_request("/games/flagquiz/suggestions?q=" + encodeURIComponent(query))
+            .then(function (response) {
+                if (document.getElementById("flagquiz_expert_input").value !== query) {
+                    return;
+                }
+                response.results.forEach(function (country) {
+                    var option = document.createElement("button");
+                    option.type = "button";
+                    option.className = "flagquiz_suggestion";
+                    option.textContent = country.name;
+                    option.addEventListener("click", function () {
+                        flagquiz_selected_code = country.code;
+                        document.getElementById("flagquiz_expert_input").value = country.name;
+                        list.replaceChildren();
+                        document.getElementById("flagquiz_expert_submit").disabled = false;
+                    });
+                    list.appendChild(option);
+                });
+            })
+            .catch(function (error) {
+                flagquiz_error(error.message);
+            });
+    }, 180);
+}
+
+function submit_flagquiz_expert() {
+    if (flagquiz_selected_code) {
+        submit_flagquiz_answer(flagquiz_selected_code);
+    }
 }
 
 function setup_free_sketch() {
@@ -2423,6 +2704,9 @@ function set_mode(mode) {
     }
     if (mode !== 'PONG') {
         document.getElementById('pong_div').hidden = true;
+    }
+    if (mode !== 'FLAGQUIZ') {
+        document.getElementById('flagquiz_div').hidden = true;
     }
     if (mode !== 'SNOW') {
         document.getElementById('snow_div').hidden = true;

@@ -37,6 +37,7 @@ class DisplayMode(Enum):
     MLB = auto()  # Live MLB scoreboard and base runners
     OUTSIDE = auto()  # Animated local rural landscape
     HALLOWEEN = auto()  # Flickering Jack-o'-lantern display
+    FLAGQUIZ = auto()  # Multiplayer flag quiz
 
 
 # Modes DEFAULT_MODE cannot start in: WELCOME and IDENTIFY hand off to another mode, and

@@ -6,6 +6,7 @@ from modes import DisplayMode
 
 shared_mode = Value("i", DisplayMode.WELCOME.value)
 shared_prev_mode = Value("i", DisplayMode.PLANES_ALERT.value)
+shared_games_lock = None
 
 # Mode to fall back to once the transient IDENTIFY flash finishes.
 shared_identify_return_mode = Value("i", DisplayMode.PLANES_ALERT.value)

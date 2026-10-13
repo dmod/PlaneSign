@@ -80,6 +80,7 @@ import countdown
 import custom_message
 import finance
 import firework
+import flagquiz
 import fish
 import free_sketch
 import halloween
@@ -110,6 +111,7 @@ from modes import DisplayMode, defined_mode_handlers, startup_mode_names
 import planesign
 
 manager = Manager()
+shared_config.shared_games_lock = manager.RLock()
 shared_config.data_dict = manager.dict()
 shared_config.arg_dict = manager.dict()
 shared_config.CONF = manager.dict()

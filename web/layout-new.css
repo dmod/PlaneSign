@@ -726,6 +726,141 @@ input::placeholder {
   min-height: 140px;
 }
 
+.flagquiz_controls {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(47, 143, 91, 0.24);
+  border-radius: 10px;
+  background: rgba(248, 250, 246, 0.9);
+  text-align: left;
+}
+
+.flagquiz_difficulties,
+.flagquiz_name_control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.flagquiz_difficulties button,
+.flagquiz_name_control button,
+.flagquiz_expert > button {
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid rgba(31, 41, 51, 0.16);
+  border-radius: 8px;
+  background: #fffdf8;
+  cursor: pointer;
+}
+
+.flagquiz_name_label,
+.flagquiz_expert label {
+  display: block;
+  margin-top: 10px;
+}
+
+.flagquiz_name_control input,
+.flagquiz_autocomplete input {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(31, 41, 51, 0.2);
+  border-radius: 6px;
+}
+
+.flagquiz_error {
+  color: #a21b1b;
+}
+
+.flagquiz_game {
+  margin-top: 12px;
+  border-top: 1px solid rgba(31, 41, 51, 0.14);
+  padding-top: 8px;
+}
+
+.flagquiz_progress,
+.flagquiz_feedback {
+  margin: 8px 0;
+  color: var(--cc-ink);
+  font-weight: 700;
+}
+
+.flagquiz_flag {
+  display: block;
+  max-width: 180px;
+  max-height: 100px;
+  margin: 8px auto;
+  object-fit: contain;
+}
+
+.flagquiz_answers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.flagquiz_answer_button,
+#flagquiz_expert_submit {
+  min-height: 40px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.flagquiz_answer_button:disabled,
+#flagquiz_expert_submit:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.flagquiz_expert[hidden],
+#flagquiz_answers[hidden] {
+  display: none;
+}
+
+.flagquiz_autocomplete {
+  position: relative;
+}
+
+.flagquiz_autocomplete input {
+  width: 100%;
+}
+
+.flagquiz_suggestions {
+  position: absolute;
+  z-index: 5;
+  width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #fffdf8;
+  border: 1px solid rgba(31, 41, 51, 0.2);
+  border-radius: 6px;
+}
+
+.flagquiz_suggestion {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-bottom: 1px solid rgba(31, 41, 51, 0.1);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flagquiz_suggestion:hover,
+.flagquiz_suggestion:focus {
+  background: rgba(47, 143, 91, 0.1);
+}
+
+.flagquiz_scoreboard {
+  padding-left: 28px;
+}
+
+.flagquiz_scoreboard li {
+  margin: 4px 0;
+}
+
 .pong_slider {
   width: 110px;
   height: 10px;

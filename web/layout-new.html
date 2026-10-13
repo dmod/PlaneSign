@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="layout-new.css?v=halloween-2">
+  <link rel="stylesheet" href="layout-new.css?v=games-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=halloween-2"></script>
+  <script src="index.js?v=games-1"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -202,6 +202,52 @@
         </section>
 
         <section class="command-group-panel">
+          <div class="command-group-header">Games</div>
+          <div class="command-group-grid">
+            <div class="command-mode-item">
+              <button id="PONG" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
+              <div id="pong_div" hidden>
+                <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
+                <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
+              </div>
+            </div>
+            <div class="command-mode-item">
+              <button id="FLAGQUIZ" class="mode_button" onclick="set_mode(this.id); document.getElementById('flagquiz_div').hidden = false">Flag Quiz</button>
+              <div id="flagquiz_div" class="flagquiz_controls" hidden>
+                <p>Choose a difficulty to start or restart the shared quiz.</p>
+                <div class="flagquiz_difficulties">
+                  <button type="button" onclick="start_flagquiz('easy')">Easy · 3 choices</button>
+                  <button type="button" onclick="start_flagquiz('hard')">Hard · 4 choices</button>
+                  <button type="button" onclick="start_flagquiz('expert')">Expert</button>
+                </div>
+                <label class="flagquiz_name_label" for="game_player_name">Your game name</label>
+                <div class="flagquiz_name_control">
+                  <input id="game_player_name" maxlength="24" autocomplete="nickname">
+                  <button type="button" onclick="rename_game_player()">Update name</button>
+                </div>
+                <p id="flagquiz_error" class="flagquiz_error" role="alert"></p>
+                <section id="flagquiz_game" class="flagquiz_game" hidden>
+                  <p id="flagquiz_question_progress" class="flagquiz_progress" role="status"></p>
+                  <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
+                  <p id="flagquiz_feedback" class="flagquiz_feedback" role="status"></p>
+                  <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
+                  <div id="flagquiz_expert" class="flagquiz_expert" hidden>
+                    <label for="flagquiz_expert_input">Country name</label>
+                    <div class="flagquiz_autocomplete">
+                      <input id="flagquiz_expert_input" type="text" autocomplete="off" oninput="get_flagquiz_suggestions(this.value)">
+                      <div id="flagquiz_suggestions" class="flagquiz_suggestions"></div>
+                    </div>
+                    <button id="flagquiz_expert_submit" type="button" onclick="submit_flagquiz_expert()" disabled>Submit answer</button>
+                  </div>
+                  <h4>Players</h4>
+                  <ol id="flagquiz_scoreboard" class="flagquiz_scoreboard"></ol>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="command-group-panel">
           <div class="command-group-header">Fun</div>
           <div class="command-group-grid">
             <div class="command-mode-item">
@@ -268,13 +314,6 @@
                 </select>
                 <br>
                 <input id="mandelbrot_slider" type="range" min="0.1" max="3" step="0.1" value="3">
-              </div>
-            </div>
-            <div class="command-mode-item">
-              <button id="PONG" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
-              <div id="pong_div" hidden>
-                <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
-                <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
               </div>
             </div>
             <div class="command-mode-item">
