@@ -1435,18 +1435,28 @@ def show_time(sign):
 OFFLINE_RETRY_SECONDS = 30
 
 
-def draw_offline(sign, title):
-    """Draw the screen for a mode whose internet service is unreachable, either disabled by offline mode or down."""
+def draw_status(sign, title, message, color=(230, 140, 30)):
+    """Draw a mode title above a short status word (at most 14 characters), e.g. OFFLINE or LOADING."""
     sign.canvas.Clear()
     title = title.upper()[:25]
+    message = message.upper()[:14]
     graphics.DrawText(sign.canvas, sign.font57, int(get_centered_text_x_offset_value(5, title)), 11, graphics.Color(110, 110, 150), title)
-    graphics.DrawText(sign.canvas, sign.fontreallybig, int(get_centered_text_x_offset_value(9, "OFFLINE")), 27, graphics.Color(230, 140, 30), "OFFLINE")
+    graphics.DrawText(sign.canvas, sign.fontreallybig, int(get_centered_text_x_offset_value(9, message)), 27, graphics.Color(*color), message)
+
+
+def show_status(sign, title, message, seconds, color=(230, 140, 30)):
+    draw_status(sign, title, message, color)
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+    return sign.wait_loop(seconds)
+
+
+def draw_offline(sign, title):
+    """Draw the screen for a mode whose internet service is unreachable, either disabled by offline mode or down."""
+    draw_status(sign, title, "OFFLINE")
 
 
 def show_offline(sign, title, seconds=OFFLINE_RETRY_SECONDS):
-    draw_offline(sign, title)
-    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-    return sign.wait_loop(seconds)
+    return show_status(sign, title, "OFFLINE", seconds)
 
 
 def weather_icon_decode(code, status, isNight=False):

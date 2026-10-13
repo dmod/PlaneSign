@@ -13,15 +13,22 @@ from rgbmatrix import graphics
 @planesign_mode_handler(DisplayMode.WEATHER)
 def show_weather(sign):
     polltime = None
+    forecast = None
 
     while shared_config.shared_mode.value == DisplayMode.WEATHER.value:
-        if shared_config.data_dict.get("weather_status") == "offline":
+        status = shared_config.data_dict.get("weather_status")
+        if status == "offline":
             polltime = None
             if utilities.show_offline(sign, "WEATHER", 1):
                 return
             continue
 
-        sign.canvas.Clear()
+        if status == "no_key":
+            polltime = None
+            forecast = None
+            if utilities.show_status(sign, "WEATHER", "NO API KEY", 1):
+                return
+            continue
 
         day_0_xoffset = 2
         day_1_xoffset = 45
@@ -35,29 +42,19 @@ def show_weather(sign):
             start_index_day = 1
 
         if polltime is None or time.perf_counter() - polltime > 30:
-            polltime = time.perf_counter()
-
-            weather = shared_config.data_dict.get("weather")
-            if not weather:
-                breakout = sign.wait_loop(0.2)
-                if breakout:
+            loaded = load_forecast(shared_config.data_dict.get("weather"), start_index_day)
+            if loaded:
+                forecast = loaded
+                polltime = time.perf_counter()
+            elif forecast is None:
+                message = "UNAVAILABLE" if status == "error" else "LOADING"
+                if utilities.show_status(sign, "WEATHER", message, 1):
                     return
                 continue
 
-            current = weather.get("current")
-            daily = weather.get("daily")
-            if not current or not isinstance(daily, list) or len(daily) < start_index_day + 3:
-                breakout = sign.wait_loop(0.2)
-                if breakout:
-                    return
-                continue
+        day0, day1, day2, sunrise_time, sunset_time = forecast
 
-            day0 = daily[start_index_day]
-            day1 = daily[start_index_day + 1]
-            day2 = daily[start_index_day + 2]
-
-            sunrise_time = utilities.convert_unix_to_local_time(current["sunrise"])
-            sunset_time = utilities.convert_unix_to_local_time(current["sunset"])
+        sign.canvas.Clear()
 
         draw_daily_forcast(sign, day0, day_0_xoffset)
         draw_daily_forcast(sign, day1, day_1_xoffset)
@@ -90,20 +87,45 @@ def show_weather(sign):
             return
 
 
+def load_forecast(weather, start_index_day):
+    """Return (day0, day1, day2, sunrise, sunset) from the OpenWeather payload, or None if it is missing or incomplete."""
+    if not weather:
+        return None
+
+    current = weather.get("current")
+    daily = weather.get("daily")
+    if not current or not isinstance(daily, list) or len(daily) < start_index_day + 3:
+        return None
+
+    return (
+        daily[start_index_day],
+        daily[start_index_day + 1],
+        daily[start_index_day + 2],
+        utilities.convert_unix_to_local_time(current["sunrise"]),
+        utilities.convert_unix_to_local_time(current["sunset"]),
+    )
+
+
 def get_weather_data_worker(data_dict):
     import signal
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    # Check if API key is configured
-    if not shared_config.CONF.get("OPENWEATHER_API_KEY"):
-        logging.error("OpenWeather API key is not configured. Weather data will not be available.")
-        shared_config.shared_shutdown_event.wait()
-        return
-
     shutdown_flag = False
+    logged_missing_key = False
 
     while not shutdown_flag:
+        # Re-checked every pass so a key saved from the web UI is picked up without a restart
+        if not shared_config.CONF.get("OPENWEATHER_API_KEY"):
+            if not logged_missing_key:
+                logging.error("OpenWeather API key is not configured. Weather data will not be available.")
+                logged_missing_key = True
+            data_dict.pop("weather", None)
+            data_dict["weather_status"] = "no_key"
+            shutdown_flag = network.wait(30)
+            continue
+        logged_missing_key = False
+
         try:
             weather_data = network.get("OpenWeather", f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial", timeout=20)
             weather_json = weather_data.json()
