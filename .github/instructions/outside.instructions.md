@@ -30,6 +30,7 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
 
 ## Corner Labels
 - The clock, temperature and notice choose black or light text from the luminance under their glyphs, with hysteresis, so clouds do not make them flicker. `draw_outside_frame` takes the previous styles and returns the next ones; carry them between frames. Labels have no outline or box, and they keep their style while a lightning flash is active.
+- Field stars and shooting stars skip a clearing around the clock and temperature, sized from the rendered labels each frame and passed into `render_outside_frame`. The clearing hides stars only; the sky gradient, clouds and everything else still draw there.
 
 ## LED Color Tuning
 - The palette grade and frame grade (`PALETTE_*`, `FRAME_*`, `WEATHER_DIM_*`) were tuned on the physical panel against washout. Retune them together and judge on the panel; browser previews do not reproduce LED washout.

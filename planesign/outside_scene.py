@@ -28,6 +28,8 @@ OVERLAY_LINEAR_LUT = [round(255 * (value / 255 / 12.92 if value <= 10 else ((val
 OVERLAY_POLARITY_LUMINANCE = math.sqrt(0.05 * 1.05) - 0.05
 OVERLAY_POLARITY_HYSTERESIS = 0.01
 OVERLAY_GAP = 5
+# Stars stay this many pixels clear of the clock and temperature glyphs, so a twinkle never reads as part of a digit.
+LABEL_STAR_MARGIN = 2
 # Notices too wide for the space between the corner labels pause, then scroll.
 NOTICE_SCROLL_SPEED = 12
 NOTICE_SCROLL_PAUSE = 1.5
@@ -730,7 +732,14 @@ def shooting_star(slot: int, seed: int) -> ShootingStar | None:
     return ShootingStar(start, duration, (x, y), velocity, rng.uniform(0.75, 1.0))
 
 
-def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int):
+Box = tuple[int, int, int, int]
+
+
+def in_boxes(x: int, y: int, boxes: tuple[Box, ...]) -> bool:
+    return any(left <= x <= right and top <= y <= bottom for left, top, right, bottom in boxes)
+
+
+def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int, clearings: tuple[Box, ...] = ()):
     star = shooting_star(math.floor(elapsed / SHOOTING_STAR_SLOT_SECONDS), seed)
     if star is None or not star.start <= elapsed < star.start + star.duration:
         return
@@ -747,7 +756,7 @@ def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, se
         back = trail * index / samples
         x = round(head_x - star.velocity[0] / speed * back)
         y = round(head_y - star.velocity[1] / speed * back)
-        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and not in_boxes(x, y, clearings):
             fade = (1 - back / SHOOTING_STAR_TRAIL) ** 1.6
             strengths[(x, y)] = max(strengths.get((x, y), 0), fade)
     d = ImageDraw.Draw(image)
@@ -755,14 +764,16 @@ def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, se
         d.point((x, y), fill=mix(image.getpixel((x, y)), SHOOTING_STAR_COLOR, min(1, visibility * envelope * fade)))
 
 
-def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None, seed: int = 0) -> np.ndarray:
-    """Draw the sky and return the mask of cloud pixels."""
+def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> np.ndarray:
+    """Draw the sky and return the mask of cloud pixels. Stars skip `star_clearings`; the sky color does not."""
     d = ImageDraw.Draw(image)
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
     cover = cloud_cover(environment)
     visibility = night * (1 - cover * 0.92) * (1 - moonlight(environment) * 0.25)
     for x, y, phase in STARS:
+        if star_clearings and in_boxes(x, y, star_clearings):
+            continue
         swell = 0.5 + 0.5 * math.sin(elapsed * (0.65 + phase / 160) + phase)
         sparkle = 0.85 + 0.15 * (0.5 + 0.5 * math.sin(elapsed * (1.8 + phase / 110) + phase * 0.37))
         shimmer = 0.04 + 0.96 * swell * swell * sparkle
@@ -775,7 +786,7 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), color, strength))
     if visibility > 0:
-        draw_shooting_star(image, elapsed, visibility, seed)
+        draw_shooting_star(image, elapsed, visibility, seed, star_clearings)
     glows = []
     if altitude is not None and altitude > SET_ALTITUDE:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
@@ -2246,7 +2257,7 @@ def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float)
             d.point(pixels, fill=lit(FLAG_COLORS[char], shade))
 
 
-def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0) -> Image.Image:
+def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> Image.Image:
     palette = scene_palette(environment)
     image = Image.new("RGB", (WIDTH, HEIGHT))
     d = ImageDraw.Draw(image)
@@ -2255,7 +2266,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         color = mix(palette.top, palette.middle, t / 0.55) if t < 0.55 else mix(palette.middle, palette.horizon, (t - 0.55) / 0.45)
         d.line((0, y, 127, y), fill=color)
     lightning = lightning_at(environment, elapsed, seed)
-    clouds = draw_sky(image, environment, palette, elapsed, lightning, seed)
+    clouds = draw_sky(image, environment, palette, elapsed, lightning, seed, star_clearings)
     holidays = holiday_features(environment)
     # Fireworks and Santa fly in the distance, in front of the clouds but behind the land.
     night = holiday_darkness(environment)
@@ -2424,10 +2435,13 @@ def draw_notice(image: Image.Image, text: str, left: int, right: int, elapsed: f
 
 
 def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, ...] = (None, None, None)) -> tuple[bool | None, bool | None, bool | None]:
-    image = render_outside_frame(environment, elapsed, seed)
     clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
+    clock_width, temperature_width = overlay_text_mask(clock).width, overlay_text_mask(temperature_text).width
+    label_bottom = overlay_text_mask(clock).height - 1 + LABEL_STAR_MARGIN
+    star_clearings = ((0, 0, clock_width - 1 + LABEL_STAR_MARGIN, label_bottom), (WIDTH - temperature_width - LABEL_STAR_MARGIN, 0, WIDTH - 1, label_bottom))
+    image = render_outside_frame(environment, elapsed, seed, star_clearings)
     previous_clock, previous_temperature, previous_notice = (*previous_text_styles, None, None, None)[:3]
     # Lightning flashes last a few frames; keep the labels' black/white style steady through them.
     flashing = lightning_at(environment, elapsed, seed) is not None
