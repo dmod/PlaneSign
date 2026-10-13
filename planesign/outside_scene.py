@@ -254,6 +254,7 @@ MATERIALS = tuple(field.name for field in fields(Palette))
 INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
 INDEX["peak"] = len(MATERIALS) + 2
+INDEX["chimney"] = len(MATERIALS) + 3
 # One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
 MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 17), (77, 15), (80, 14), (83, 13), (86, 14), (89, 15), (92, 17), (96, 20), (100, 21), (106, 23), (127, 23))
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
@@ -267,6 +268,10 @@ CONIFERS = ((4, 28, 12), (38, 25, 7))
 HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
 HUT_DOOR = (26, 21, 29, 25)
 HUT_KNOB = (28, 23)
+# A small stone chimney on the right roof slope: body box, cap row, and the flue mouth the smoke leaves from.
+CHIMNEY = (31, 14, 32, 17)
+CHIMNEY_CAP = (31, 13, 32, 13)
+CHIMNEY_FLUE = (31.5, 12.5)
 LAMP_POST_X = 14
 LAMP_LENS = (17, 17)
 LAMP_GROUND_Y = 26
@@ -401,6 +406,8 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         d.line((19 + inset, y, 36 - inset, y), fill=INDEX["trunk"])
     d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
     d.line((19, 20, 36, 20), fill=INDEX["trunk"])
+    d.rectangle(CHIMNEY, fill=INDEX["chimney"])
+    d.rectangle(CHIMNEY_CAP, fill=INDEX["roof"])
     d.rectangle(HUT_DOOR, fill=INDEX["door"])
     d.point(HUT_KNOB, fill=INDEX["trim"])
     # Yard lamp: a post with an arm reaching toward the hut and a hood that shines down.
@@ -476,6 +483,9 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
 
 
 LAND, LEAFY_TREE, BARE_TREE = geometry()
+CHIMNEY_MASK = Image.new("L", (WIDTH, HEIGHT), 0)
+ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY, fill=255)
+ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY_CAP, fill=255)
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
 # The Big Dipper (Ursa Major) right of the mountain, projected from the real stars at 0.7 px per degree in its
@@ -512,6 +522,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
         table.extend(mountain if name == "far" else getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
     table.extend(mix(mountain, palette.horizon, MOUNTAIN_LIT))
+    table.extend(mix(palette.roof, palette.trim, 0.3))
     table.extend([0] * (768 - len(table)))
 
     def colorize(mask):
@@ -529,7 +540,11 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
         for x in range(128):
             if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["hut"], INDEX["door"]):
                 d.point((x, 26), fill=palette.grass)
+        chimney = land.copy()
         d.line((19, 19, 27, 15, 28, 15, 36, 19), fill=palette.trim)
+        # The roof's snow stops at the chimney, which carries its own cap of snow.
+        land.paste(chimney, (0, 0), CHIMNEY_MASK)
+        d.line((CHIMNEY_CAP[0], CHIMNEY_CAP[1] - 1, CHIMNEY_CAP[2], CHIMNEY_CAP[1] - 1), fill=palette.trim)
         d.line((3, 27, 40, 27), fill=palette.grass)
     if snowcap:
         d = ImageDraw.Draw(land)
@@ -1036,6 +1051,80 @@ def dog_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     elif step.target == DOG_DOORWAY:
         reveal = 1 - progress
     return door, (x, y, step.facing, pose, reveal)
+
+
+# The fireplace is lit below this temperature (°F); colder days burn a thicker plume.
+SMOKE_MAX_TEMPERATURE = 45
+SMOKE_INTERVAL = 0.3
+SMOKE_LIFETIME = 5.0
+# Buoyant rise (px/s at the flue) decays over SMOKE_RISE_SECONDS.
+SMOKE_RISE = 2.4
+SMOKE_RISE_SECONDS = 3.0
+# The clock label (as wide as "12:59PM") sits right above the chimney on rows 0-5, so smoke
+# thins out over SMOKE_CEILING_FADE rows and is gone by SMOKE_CEILING.
+SMOKE_CEILING = 7
+SMOKE_CEILING_FADE = 3
+# Wind carries puffs right, like the flag, rain and snow, at this many px/s per mph; it also
+# flattens the plume and shreds it sooner.
+SMOKE_WIND_DRIFT = 0.3
+SMOKE_OPACITY = 0.7
+SMOKE_COLOR = (214, 214, 220)
+
+
+def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[float, float, float, float, float]]:
+    """(x, y, x radius, y radius, opacity) for chimney smoke, oldest first; none unless a known temperature is cold enough."""
+    temperature = environment.weather.temperature
+    if temperature is None or temperature >= SMOKE_MAX_TEMPERATURE:
+        return []
+    wind = min(30, environment.weather.wind or 0)
+    strength = 0.6 + 0.4 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25)
+    life = SMOKE_LIFETIME / (1 + wind / 40)
+    rise = SMOKE_RISE / (1 + wind / 10)
+    drift = wind * SMOKE_WIND_DRIFT
+    newest = math.floor(elapsed / SMOKE_INTERVAL)
+    puffs = []
+    for n in range(newest - math.ceil(life / SMOKE_INTERVAL), newest + 1):
+        age = elapsed - n * SMOKE_INTERVAL
+        if not 0 <= age < life:
+            continue
+        phase = grain(n % 9973, 17, seed) / 97 * math.tau
+        up = rise * SMOKE_RISE_SECONDS * (1 - math.exp(-age / SMOKE_RISE_SECONDS))
+        # Puffs pick up the wind's speed within a fraction of a second of leaving the flue.
+        across = drift * (age - 0.4 * (1 - math.exp(-age / 0.4)))
+        # A faint meander keeps a calm plume alive without leaning it; gusts add turbulence.
+        wobble = math.sin(age * 1.7 + phase) * (0.25 + wind / 40) * min(1, age)
+        x = CHIMNEY_FLUE[0] + across + wobble
+        y = CHIMNEY_FLUE[1] - up + math.cos(age * 2.3 + phase) * wind / 60 * min(1, age)
+        opacity = SMOKE_OPACITY * strength * min(1, age / 0.2) * (1 - age / life) ** 1.3
+        radius = 0.5 + 0.22 * age
+        # Wind spreads successive puffs apart; stretching each along the wind keeps the plume continuous.
+        puffs.append((x, y, radius + 0.4 * drift * SMOKE_INTERVAL * min(1, age / 0.5), radius, opacity))
+    return puffs
+
+
+def draw_smoke(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int) -> Image.Image:
+    puffs = smoke_puffs(environment, elapsed, seed)
+    if not puffs:
+        return image
+    left = max(0, math.floor(min(x - 2 * rx for x, _, rx, _, _ in puffs)))
+    right = min(WIDTH, math.ceil(max(x + 2 * rx for x, _, rx, _, _ in puffs)) + 1)
+    top = max(0, math.floor(min(y - 2 * ry for _, y, _, ry, _ in puffs)))
+    bottom = min(HEIGHT, math.ceil(max(y + 2 * ry for _, y, _, ry, _ in puffs)) + 1)
+    if left >= right or top >= bottom:
+        return image
+    x, y, rx, ry, opacity = (np.array(values, dtype=np.float32)[:, None, None] for values in zip(*puffs))
+    columns = np.arange(left, right, dtype=np.float32)[None, None, :]
+    rows = np.arange(top, bottom, dtype=np.float32)[None, :, None]
+    # Pixel centers sit at +0.5, so a puff glides smoothly between pixels.
+    density = opacity * np.exp(-(((columns + 0.5 - x) / rx) ** 2 + ((rows + 0.5 - y) / ry) ** 2) / 2)
+    density = density * np.clip((rows + 0.5 - SMOKE_CEILING) / SMOKE_CEILING_FADE, 0, 1)
+    cover = 1 - np.prod(1 - np.clip(density, 0, 1), axis=0)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    color = np.array(mix(palette.horizon, SMOKE_COLOR, 0.35 + 0.4 * illumination), dtype=np.float32) * (0.45 + 0.55 * illumination)
+    pixels = np.array(image, dtype=np.float32)
+    region = pixels[top:bottom, left:right]
+    pixels[top:bottom, left:right] = region + (color - region) * cover[..., None]
+    return Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
 
 
 def draw_hut_and_dog(image: Image.Image, palette: Palette, door: float, dog, elapsed: float):
@@ -1920,8 +2009,8 @@ TOPPER_CORE = (255, 250, 214)
 
 
 def christmas_bulbs() -> tuple[tuple[int, int], ...]:
-    """Bulbs strung along the hut's gable and wound around each conifer."""
-    bulbs = trace(list(HUT_ROOF))[::2]
+    """Bulbs strung along the hut's gable (passing behind the chimney) and wound around each conifer."""
+    bulbs = [point for point in trace(list(HUT_ROOF))[::2] if not CHIMNEY_MASK.getpixel(point)]
     foliage = (INDEX["leaf"], INDEX["leaf_dark"])
     for cx, base, height in CONIFERS:
         top = base - height
@@ -2936,6 +3025,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_wildlife(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
+    image = draw_smoke(image, palette, environment, elapsed, seed)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
