@@ -24,6 +24,7 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
 ## Inputs
 - Weather is a snapshot of the existing OpenWeather worker, never a second feed. Missing readings stay unknown, not zero. An unknown reading suppresses the effects that need it; leaves, for example, need a known wind.
 - Freshness uses real time, judged by the source's `current.dt`. Forecasts use the hourly interval `[dt, dt + 3600)`. Never fall back to current weather for a missing or expired forecast, and never show unavailable or expired temperature as a current reading.
+- The weather worker pauses outside weather modes, so Outside often starts with an old payload. Until the worker's refresh lands, the reading is `PENDING`: the old readings still shape the scene, but the temperature shows `--°F` and the notice is `WX...`/`FCST...`. `CACHED` is only for a refresh that was tried and failed.
 - Outside's moment is `outside.outside_time()` (the sign clock, or lab time) plus the forecast offset. Add seconds before converting to sensor-local time, so +24 h stays exact across DST.
 - The astronomy worker precomputes one-minute samples with vectorized Skyfield calls, and the frame loop interpolates them. Never call Skyfield in the frame loop, and copy the table from shared state about once per second, not every frame.
 - Holiday decorations come from the `HOLIDAYS` table, keyed on the displayed local date. The same table drives `holiday_features` and the lab's holiday shortcuts.

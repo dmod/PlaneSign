@@ -16,6 +16,8 @@ shared_pong_player2 = Value("i", 0)
 shared_current_brightness = Value("i", 80)
 shared_color_mode = Value("i", 0)
 shared_forced_sign_update = Event()
+# Set when a plane mode starts, so the paused FR24 worker (planes.get_plane_data_worker) fetches right away.
+shared_plane_data_wake = Event()
 
 shared_satellite_mode = Value("i", 1)
 

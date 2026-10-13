@@ -3038,10 +3038,12 @@ def outside_notice(environment: "OutsideEnvironment") -> str:
     if environment.offset_minutes:
         if weather.status in ("FORECAST", "FORECAST_CACHED") and weather.code in WEATHER_DESCRIPTIONS:
             notices.append(WEATHER_DESCRIPTIONS[weather.code].upper() + ("~" if weather.status == "FORECAST_CACHED" else ""))
+        elif weather.status == "PENDING":
+            notices.append("FCST...")
         elif weather.status != "OFFLINE":
             notices.append("FCST?")
     elif weather.status not in ("LIVE", "OFFLINE"):
-        notices.append("WX~" if weather.status == "CACHED" else "WX?")
+        notices.append({"CACHED": "WX~", "PENDING": "WX..."}.get(weather.status, "WX?"))
     if environment.sky_status not in ("READY", "OFFLINE"):
         notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")
     return " ".join(notices)

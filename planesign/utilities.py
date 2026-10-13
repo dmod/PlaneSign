@@ -1404,6 +1404,23 @@ def only_show_time(sign):
             return
 
 
+def weather_is_fresh():
+    """True while the shared OpenWeather payload is younger than one poll interval (weather.WEATHER_STALE_SECONDS)."""
+    return time.time() < shared_config.data_dict.get("weather_fresh_until", 0)
+
+
+def fresh_weather():
+    """The shared OpenWeather payload, or None when it is missing, stale or the service is unreachable."""
+    if shared_config.data_dict.get("weather_status") == "offline" or not weather_is_fresh():
+        return None
+    return shared_config.data_dict.get("weather")
+
+
+def weather_refresh_pending():
+    """True when the payload went stale while no weather mode was showing, and the worker has not tried to refresh it yet."""
+    return shared_config.data_dict.get("weather_status") == "ready" and shared_config.data_dict.get("weather") is not None and not weather_is_fresh()
+
+
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == "true":
         print_time = convert_unix_to_local_time(psclock.time()).strftime("%H:%M")
@@ -1411,9 +1428,9 @@ def show_time(sign):
         print_time = convert_unix_to_local_time(psclock.time()).strftime("%-I:%M%p")
 
     xloc = 86
-    weather = shared_config.data_dict.get("weather")
-    # An unreachable weather service shows "--" whether it is down or disabled by offline mode.
-    current = weather.get("current") if weather and shared_config.data_dict.get("weather_status") != "offline" else None
+    weather = fresh_weather()
+    # Unreachable, missing or stale weather all show "--": the clock has no way to mark an old reading.
+    current = weather.get("current") if weather else None
     if current and "temp" in current:
         tempval = round(current["temp"])
         if tempval < 0 or tempval > 99:

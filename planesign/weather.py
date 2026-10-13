@@ -7,7 +7,18 @@ import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image
+from planes import PLANE_DATA_MODES
 from rgbmatrix import graphics
+
+WEATHER_POLL_SECONDS = 900
+# Readings count as current for one poll interval plus a margin for a refresh in flight; after that the
+# clock shows "--" and the forecast reloads until the next fetch lands.
+WEATHER_STALE_SECONDS = WEATHER_POLL_SECONDS + 60
+
+# The modes that show the shared OpenWeather data. The plane modes show the clock and its temperature
+# whenever they have no plane. Santa, NFL and MLB fetch their own weather.
+WEATHER_DATA_MODES = frozenset({DisplayMode.WEATHER, DisplayMode.OUTSIDE, DisplayMode.TIME_ONLY}) | PLANE_DATA_MODES
+WEATHER_DATA_MODE_VALUES = frozenset(mode.value for mode in WEATHER_DATA_MODES)
 
 
 @planesign_mode_handler(DisplayMode.WEATHER)
@@ -42,11 +53,10 @@ def show_weather(sign):
             start_index_day = 1
 
         if polltime is None or time.perf_counter() - polltime > 30:
-            loaded = load_forecast(shared_config.data_dict.get("weather"), start_index_day)
-            if loaded:
-                forecast = loaded
+            forecast = load_forecast(utilities.fresh_weather(), start_index_day)
+            if forecast:
                 polltime = time.perf_counter()
-            elif forecast is None:
+            else:
                 message = "UNAVAILABLE" if status == "error" else "LOADING"
                 if utilities.show_status(sign, "WEATHER", message, 1):
                     return
@@ -106,54 +116,73 @@ def load_forecast(weather, start_index_day):
     )
 
 
+def weather_data_wanted():
+    return shared_config.shared_mode.value in WEATHER_DATA_MODE_VALUES
+
+
+def refresh_weather(data_dict):
+    """Fetch the OpenWeather forecast once and return the seconds until the next attempt."""
+    try:
+        weather_data = network.get("OpenWeather", f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial", timeout=20)
+        weather_json = weather_data.json()
+
+        current = weather_json.get("current")
+        daily = weather_json.get("daily")
+        if current and isinstance(daily, list) and len(daily) >= 3:
+            data_dict["weather"] = weather_json
+            data_dict["weather_fresh_until"] = time.time() + WEATHER_STALE_SECONDS
+            data_dict["weather_status"] = "ready"
+            logging.info(f"At: {utilities.convert_unix_to_local_time(current['dt'])} Temp: {current['temp']}")
+            return WEATHER_POLL_SECONDS
+        cod = weather_json.get("cod", weather_data.status_code)
+        message = weather_json.get("message", "missing expected weather fields")
+        logging.error(f"OpenWeather response invalid (cod={cod}): {message}")
+        data_dict["weather_status"] = "error"
+        return 30
+    except Exception as e:
+        if network.is_offline_error(e):
+            network.log_unreachable("OpenWeather", e)
+            data_dict["weather_status"] = "offline"
+            return 60
+        logging.exception("Error getting weather data...", exc_info=e)
+        data_dict["weather_status"] = "error"
+        return 15
+
+
 def get_weather_data_worker(data_dict):
     import signal
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    shutdown_flag = False
+    toggle = network.OfflineToggle()
+    next_attempt = 0.0
     logged_missing_key = False
+    deferred = False
 
-    while not shutdown_flag:
-        # Re-checked every pass so a key saved from the web UI is picked up without a restart
-        if not shared_config.CONF.get("OPENWEATHER_API_KEY"):
-            if not logged_missing_key:
-                logging.error("OpenWeather API key is not configured. Weather data will not be available.")
-                logged_missing_key = True
-            data_dict.pop("weather", None)
-            data_dict["weather_status"] = "no_key"
-            shutdown_flag = network.wait(30)
-            continue
-        logged_missing_key = False
-
-        try:
-            weather_data = network.get("OpenWeather", f"https://api.openweathermap.org/data/3.0/onecall?lat={shared_config.CONF['SENSOR_LAT']}&lon={shared_config.CONF['SENSOR_LON']}&appid={shared_config.CONF['OPENWEATHER_API_KEY']}&units=imperial", timeout=20)
-            weather_json = weather_data.json()
-
-            current = weather_json.get("current")
-            daily = weather_json.get("daily")
-            if current and isinstance(daily, list) and len(daily) >= 3:
-                data_dict["weather"] = weather_json
-                data_dict["weather_status"] = "ready"
-                logging.info(f"At: {utilities.convert_unix_to_local_time(current['dt'])} Temp: {current['temp']}")
-                timeout = 900
+    while not shared_config.shutdown_in_progress():
+        if toggle.changed():
+            next_attempt = 0.0
+        # A due refresh waits for a mode that shows weather; until then consumers treat the payload as stale.
+        if time.monotonic() >= next_attempt:
+            if not weather_data_wanted():
+                if not deferred:
+                    logging.info(f"Weather refresh due; deferring it while {DisplayMode(shared_config.shared_mode.value).name} is showing")
+                    deferred = True
             else:
-                cod = weather_json.get("cod", weather_data.status_code)
-                message = weather_json.get("message", "missing expected weather fields")
-                logging.error(f"OpenWeather response invalid (cod={cod}): {message}")
-                data_dict["weather_status"] = "error"
-                timeout = 30
-        except Exception as e:
-            if network.is_offline_error(e):
-                network.log_unreachable("OpenWeather", e)
-                data_dict["weather_status"] = "offline"
-                timeout = 60
-            else:
-                logging.exception("Error getting weather data...", exc_info=e)
-                data_dict["weather_status"] = "error"
-                timeout = 15
-
-        shutdown_flag = network.wait(timeout)
+                deferred = False
+                # Re-checked on every attempt so a key saved from the web UI is picked up without a restart
+                if not shared_config.CONF.get("OPENWEATHER_API_KEY"):
+                    if not logged_missing_key:
+                        logging.error("OpenWeather API key is not configured. Weather data will not be available.")
+                        logged_missing_key = True
+                    data_dict.pop("weather", None)
+                    data_dict.pop("weather_fresh_until", None)
+                    data_dict["weather_status"] = "no_key"
+                    next_attempt = time.monotonic() + 30
+                else:
+                    logged_missing_key = False
+                    next_attempt = time.monotonic() + refresh_weather(data_dict)
+        shared_config.shared_shutdown_event.wait(1)
 
 
 def draw_daily_forcast(sign, day, xloc):

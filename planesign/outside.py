@@ -5,7 +5,7 @@ import math
 import random
 import signal
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
@@ -208,12 +208,15 @@ def sky_snapshot(sky, timestamp: float, latitude: float, longitude: float):
     return values
 
 
-def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_override=None) -> OutsideEnvironment:
+def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_pending: bool = False, weather_override=None) -> OutsideEnvironment:
     forecast_time = moment.timestamp() if offset_minutes else None
     if weather_override is not None:
         observed = lab_weather(weather_override, forecast_time)
     else:
         observed = OutsideWeather("OFFLINE") if weather_offline else weather_snapshot(weather, time.time(), forecast_time=forecast_time)
+        # Old readings still shape the scene until the worker's refresh lands, but are not shown as a temperature.
+        if weather_pending and observed.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED"):
+            observed = replace(observed, status="PENDING")
     season = local_season(moment, latitude)
     if not isinstance(sky, dict):
         return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date())
@@ -326,7 +329,7 @@ def outside_status():
     offset_minutes = shared_config.shared_outside_offset_minutes.value
     moment = outside_moment(tz, offset_minutes)
     override = shared_config.data_dict.get("outside_lab_weather")
-    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline", weather_override=override)
+    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline", weather_pending=utilities.weather_refresh_pending(), weather_override=override)
     lab_now = lab_time()
     _, _, lab_speed = shared_config.shared_outside_lab_clock[:]
     active = lab_now is not None or override is not None
@@ -393,14 +396,17 @@ def outside(sign):
             sky = shared_config.data_dict.get("outside_sky")
             weather = shared_config.data_dict.get("weather")
             weather_offline = shared_config.data_dict.get("weather_status") == "offline"
+            weather_pending = utilities.weather_refresh_pending()
             weather_override = shared_config.data_dict.get("outside_lab_weather")
             seen_lab_version = lab_version
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
-        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_override=weather_override)
+        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override)
         status = environment.weather.status, environment.sky_status
         if status != last_status:
-            if status[0] in ("LIVE", "FORECAST") and status[1] == "READY":
+            if status[0] == "PENDING" and status[1] == "READY":
+                logger.info("Outside: weather refresh pending, local astronomy ready")
+            elif status[0] in ("LIVE", "FORECAST") and status[1] == "READY":
                 logger.info("Outside: %s weather and local astronomy ready", status[0].lower())
             else:
                 logger.warning("Outside: weather %s, astronomy %s", *status)
