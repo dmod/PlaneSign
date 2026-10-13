@@ -1,7 +1,7 @@
 """Outside lab: set Outside mode's time and weather by hand and see the result on the sign at once.
 
-Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx). It is deliberately not
-linked from the web UI. Every lab action switches the sign to Outside. The overrides only affect
+Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
+button in the web UI's Outside controls. Every lab action switches the sign to Outside. The overrides only affect
 Outside: the sign clock and every other mode keep real time and weather. They clear when the sign
 leaves Outside, after outside.LAB_IDLE_SECONDS without a lab action, on "Back to live", or on restart.
 """
@@ -149,8 +149,6 @@ def state():
             "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
             "holidays": holiday_shortcuts(displayed_moment(tz).year),
             "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
-            "emulated": shared_config.emulated_display,
-            "ws_port": shared_config.ws_port,
         },
     }
 

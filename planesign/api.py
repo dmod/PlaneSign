@@ -33,7 +33,7 @@ FREE_SKETCH_BRUSH_SIZES = {1, 2, 3, 4, 5}
 FREE_SKETCH_BRUSH_SHAPES = {"square", "plus", "x", "circle"}
 
 app = Flask(__name__)
-# Outside lab at /outside/lab; intentionally not linked from the web UI.
+# Outside lab at /outside/lab; opened from the "Outside lab" button in the web UI's Outside controls.
 app.register_blueprint(outside_lab.blueprint)
 
 # Requests are served on separate threads; serialize the handlers that rewrite and re-read sign.conf

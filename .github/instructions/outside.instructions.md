@@ -39,7 +39,7 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
 - Lightning strokes hold full brightness for about 60 ms, so a 20 fps frame always catches them.
 
 ## Outside Lab (`outside_lab.py`)
-- The lab is served at `/outside/lab` (`http://<sign>/api/outside/lab` through nginx). It works with `--web` and on the physical panel, with no flag. Never link it from `web/`.
+- The lab is served at `/outside/lab` (`http://<sign>/api/outside/lab` through nginx). It works with `--web` and on the physical panel, with no flag. Its only link from `web/` is the "Outside lab" button in Outside's controls, which opens it in a new tab; keep that button in both layouts.
 - Every lab action switches the sign to Outside. Overrides affect Outside only:
   - Lab time is `shared_outside_lab_clock`, read through `outside.outside_time()`; it never touches `psclock`.
   - Lab weather is `data_dict["outside_lab_weather"]`, reported as `LIVE` (or `FORECAST` while the offset is ahead), so the scene renders exactly as it would for real weather.
