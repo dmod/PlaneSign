@@ -492,21 +492,26 @@ TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value 
 # autumn-evening pose (bowl upright, handle to the left), turned 20 degrees to level the handle:
 # (x, y, peak brightness from magnitude, color). Dubhe and Merak, the pointers, form the bowl's right edge.
 BIG_DIPPER = (
-    (83, 7, 0.98, (232, 240, 255)),  # Alkaid
-    (87, 6, 0.87, (232, 240, 255)),  # Mizar
-    (90, 6, 1.0, (232, 240, 255)),  # Alioth
-    (94, 7, 0.55, (232, 240, 255)),  # Megrez
-    (95, 10, 0.81, (232, 240, 255)),  # Phecda
-    (101, 9, 0.83, (232, 240, 255)),  # Merak
-    (101, 5, 1.0, (255, 222, 180)),  # Dubhe
+    (81, 5, 0.98, (232, 240, 255)),  # Alkaid
+    (85, 4, 0.87, (232, 240, 255)),  # Mizar
+    (88, 4, 1.0, (232, 240, 255)),  # Alioth
+    (92, 5, 0.55, (232, 240, 255)),  # Megrez
+    (93, 8, 0.81, (232, 240, 255)),  # Phecda
+    (99, 7, 0.83, (232, 240, 255)),  # Merak
+    (99, 3, 1.0, (255, 222, 180)),  # Dubhe
 )
 # Random field stars keep a 3 px berth around the constellation so its shape reads cleanly.
 DIPPER_BOUNDS = (min(s[0] for s in BIG_DIPPER) - 3, min(s[1] for s in BIG_DIPPER) - 3, max(s[0] for s in BIG_DIPPER) + 3, max(s[1] for s in BIG_DIPPER) + 3)
+# Haze near the horizon hides faint stars, so field stars stay more than this many pixels from any land.
+STAR_HORIZON_CLEARANCE = 4
+LAND_ROWS, LAND_COLUMNS = np.nonzero(np.asarray(LAND))
 STARS = tuple(
     (x, y, grain(x, y, 5))
     for y in range(1, 21)
     for x in range(2, 126)
-    if grain(x, y, 9) < 2 and not (DIPPER_BOUNDS[0] <= x <= DIPPER_BOUNDS[2] and DIPPER_BOUNDS[1] <= y <= DIPPER_BOUNDS[3])
+    if grain(x, y, 9) < 2
+    and not (DIPPER_BOUNDS[0] <= x <= DIPPER_BOUNDS[2] and DIPPER_BOUNDS[1] <= y <= DIPPER_BOUNDS[3])
+    and np.min(np.hypot(LAND_COLUMNS - x, LAND_ROWS - y)) > STAR_HORIZON_CLEARANCE
 )
 STAR_COLORS = ((232, 244, 255), (255, 239, 207), (225, 231, 255))
 RIPPLES = ((60, 27, 15, 0), (55, 28, 9, 2.3), (68, 29, 7, 4.5))
