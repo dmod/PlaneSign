@@ -20,7 +20,7 @@ HEIGHT = 32
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
 FLAG_IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "flags")
 DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0}
-LOADING_FLAG_HEIGHT = 20
+LOADING_FLAG_HEIGHT = 10
 
 
 class FlagQuizConflict(ValueError):
@@ -342,21 +342,25 @@ def _flag_image(code):
 def _loading_flag_rows():
     countries = load_countries()
     rows = []
-    for _ in range(2):
+    for row_index in range(3):
         flags = []
         width = 0
+        phase = 0
         while width < WIDTH * 2:
             country = random.choice(countries)
-            flag = _flag_image(country["code"]).copy()
-            flag.thumbnail((60, LOADING_FLAG_HEIGHT), Image.Resampling.LANCZOS)
+            source = _flag_image(country["code"])
+            flag_width = round(source.width * LOADING_FLAG_HEIGHT / source.height)
+            flag = source.resize((flag_width, LOADING_FLAG_HEIGHT), Image.Resampling.LANCZOS)
             flags.append(flag)
-            width += flag.width + 2
+            if row_index == 1 and not phase:
+                phase = flag.width // 2
+            width += flag.width
         row = Image.new("RGB", (width, LOADING_FLAG_HEIGHT), (0, 0, 0))
         x = 0
         for flag in flags:
             row.paste(flag, (x, 0))
-            x += flag.width + 2
-        rows.append(ImageEnhance.Brightness(row).enhance(0.28))
+            x += flag.width
+        rows.append((ImageEnhance.Brightness(row).enhance(0.28), phase))
     return tuple(rows)
 
 
@@ -367,11 +371,12 @@ def _winner_flag_codes():
 
 def _draw_scrolling_flags(sign, elapsed):
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-    for row_index, row in enumerate(_loading_flag_rows()):
-        offset = int(elapsed * (2.0 + row_index * 0.9)) % row.width
-        y = row_index * 12
-        first_width = min(WIDTH, row.width - offset)
-        image.paste(row.crop((offset, 0, offset + first_width, row.height)), (0, y))
+    offset = int(elapsed * 2.0)
+    for row_index, (row, phase) in enumerate(_loading_flag_rows()):
+        row_offset = (offset + phase) % row.width
+        y = 1 + row_index * LOADING_FLAG_HEIGHT
+        first_width = min(WIDTH, row.width - row_offset)
+        image.paste(row.crop((row_offset, 0, row_offset + first_width, row.height)), (0, y))
         if first_width < WIDTH:
             image.paste(row.crop((0, 0, WIDTH - first_width, row.height)), (first_width, y))
     sign.canvas.SetImage(image, 0, 0)
@@ -500,7 +505,10 @@ def _draw_question(sign, state, elapsed=0.0):
     graphics.DrawText(sign.canvas, sign.font46, header_x, 29, graphics.Color(200, 220, 255), header)
 
     options = current["options"]
-    baselines = (11, 20, 29) if len(options) == 3 else (8, 16, 24, 32)
+    spacing = 8 if len(options) == 3 else 7
+    block_height = 5 + (len(options) - 1) * spacing
+    first_baseline = (HEIGHT - block_height) // 2 + 5
+    baselines = tuple(first_baseline + index * spacing for index in range(len(options)))
     for option, baseline in zip(options, baselines):
         label = _fit_option(f"{option['key']}. {option['name']}")
         graphics.DrawText(sign.canvas, sign.font46, 48, baseline, graphics.Color(255, 255, 255), label)
