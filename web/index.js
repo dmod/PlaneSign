@@ -55,7 +55,7 @@ var flagquiz_latest_state = null;
 var flagquiz_poll_in_progress = false;
 var flagquiz_answer_in_progress = false;
 var flagquiz_suggestion_timer = null;
-var flagquiz_selected_code = null;
+var flagquiz_seen_answer_pulses = new Set();
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
@@ -760,11 +760,17 @@ function render_flagquiz_state(state) {
     if (state.your_answer) {
         feedback.textContent = state.your_answer.correct ? "Your answer is correct!" : "Your answer is incorrect.";
     } else if (state.last_result) {
-        var results = state.last_result.answers.map(function (answer) {
-            return answer.name + (answer.correct ? " got it right" : " missed it");
+        var personalResult = state.last_result.answers.find(function (answer) {
+            return answer.id === get_game_player_id();
         });
-        feedback.textContent = "Question " + state.last_result.question_number + ": " + state.last_result.correct_name +
-            (results.length ? " · " + results.join(" · ") : "");
+        var wasCorrect = Boolean(personalResult && personalResult.correct);
+        feedback.textContent = "Question " + state.last_result.question_number + ": " + state.last_result.correct_name + " ";
+        var resultMark = document.createElement("span");
+        resultMark.className = wasCorrect ? "flagquiz_result_correct" : "flagquiz_result_incorrect";
+        resultMark.textContent = wasCorrect ? "✓" : "✕";
+        resultMark.setAttribute("role", "img");
+        resultMark.setAttribute("aria-label", wasCorrect ? "You got it right" : "You got it wrong");
+        feedback.appendChild(resultMark);
     } else {
         feedback.textContent = state.complete ? "Quiz complete!" : "";
     }
@@ -774,55 +780,86 @@ function render_flagquiz_state(state) {
     var isExpert = state.difficulty === "expert";
     answers.hidden = isExpert;
     expert.hidden = !isExpert;
-    if (flagquiz_round_id !== state.round_id) {
+    var sameRound = flagquiz_round_id === state.round_id;
+    if (!sameRound) {
         flagquiz_round_id = state.round_id;
-        flagquiz_selected_code = null;
         document.getElementById("flagquiz_expert_input").value = "";
-        document.getElementById("flagquiz_expert_submit").disabled = true;
         document.getElementById("flagquiz_suggestions").replaceChildren();
     }
 
-    answers.replaceChildren();
-    if (current && !isExpert) {
-        state.current.options.forEach(function (option) {
-            var button = document.createElement("button");
-            button.type = "button";
-            button.className = "flagquiz_answer_button";
-            button.textContent = option.key + ". " + option.name;
-            button.disabled = Boolean(state.your_answer) || flagquiz_answer_in_progress;
-            button.addEventListener("click", function () {
-                submit_flagquiz_answer(option.key);
+    if (!sameRound || !flagquiz_answer_in_progress) {
+        answers.replaceChildren();
+        if (current && !isExpert) {
+            state.current.options.forEach(function (option) {
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = "flagquiz_answer_button";
+                button.textContent = option.key + ". " + option.name;
+                button.disabled = Boolean(state.your_answer) || flagquiz_answer_in_progress;
+                button.addEventListener("click", function () {
+                    submit_flagquiz_answer(option.key, button);
+                });
+                answers.appendChild(button);
             });
-            answers.appendChild(button);
+        }
+    } else {
+        answers.querySelectorAll("button").forEach(function (button) {
+            button.disabled = true;
         });
     }
 
-    var expertSubmit = document.getElementById("flagquiz_expert_submit");
-    expertSubmit.disabled = !current || Boolean(state.your_answer) || !flagquiz_selected_code || flagquiz_answer_in_progress;
-    document.getElementById("flagquiz_expert_input").disabled = !current || Boolean(state.your_answer);
+    document.getElementById("flagquiz_expert_input").disabled = !current || Boolean(state.your_answer) || flagquiz_answer_in_progress;
+    var pulses = {};
+    function collectAnswerPulses(roundId, roundAnswers) {
+        if (!roundId || !Array.isArray(roundAnswers)) {
+            return;
+        }
+        roundAnswers.forEach(function (answer) {
+            if (!answer.id) {
+                return;
+            }
+            var pulseKey = roundId + ":" + answer.id;
+            if (!flagquiz_seen_answer_pulses.has(pulseKey)) {
+                flagquiz_seen_answer_pulses.add(pulseKey);
+                pulses[answer.id] = answer.correct ? "flagquiz_score_pulse_correct" : "flagquiz_score_pulse_incorrect";
+            }
+        });
+    }
+    collectAnswerPulses(state.round_id, state.round_answers);
+    if (state.last_result) {
+        collectAnswerPulses(state.last_result.round_id, state.last_result.answers);
+    }
 
     var scoreboard = document.getElementById("flagquiz_scoreboard");
     scoreboard.replaceChildren();
     state.players.forEach(function (player) {
         var item = document.createElement("li");
+        if (pulses[player.id]) {
+            item.classList.add(pulses[player.id]);
+        }
         item.textContent = player.name + " — " + player.score + (player.active ? " (active)" : " (away)");
         scoreboard.appendChild(item);
     });
 }
 
-function submit_flagquiz_answer(answer) {
+function submit_flagquiz_answer(answer, clickedButton) {
     var state = flagquiz_latest_state;
     if (!state || !state.round_id || state.your_answer || flagquiz_answer_in_progress) {
         return;
     }
     flagquiz_answer_in_progress = true;
-    render_flagquiz_state(state);
+    document.querySelectorAll("#flagquiz_answers button, #flagquiz_suggestions button").forEach(function (button) {
+        button.disabled = true;
+    });
+    document.getElementById("flagquiz_expert_input").disabled = true;
     flagquiz_request("/games/flagquiz/answer", {
         player_id: get_game_player_id(),
         round_id: state.round_id,
         answer: answer
     }).then(function (result) {
-        document.getElementById("flagquiz_feedback").textContent = result.correct ? "Your answer is correct!" : "Your answer is incorrect.";
+        if (clickedButton) {
+            clickedButton.classList.add(result.correct ? "flagquiz_answer_flash_correct" : "flagquiz_answer_flash_incorrect");
+        }
         poll_flagquiz_state();
     }).catch(function (error) {
         flagquiz_error(error.message);
@@ -834,11 +871,9 @@ function submit_flagquiz_answer(answer) {
 
 function get_flagquiz_suggestions(query) {
     clearTimeout(flagquiz_suggestion_timer);
-    flagquiz_selected_code = null;
-    document.getElementById("flagquiz_expert_submit").disabled = true;
     var list = document.getElementById("flagquiz_suggestions");
     list.replaceChildren();
-    if (query.trim().length < 1 || !flagquiz_latest_state || flagquiz_latest_state.your_answer) {
+    if (query.trim().length < 1 || !flagquiz_latest_state || flagquiz_latest_state.your_answer || flagquiz_answer_in_progress) {
         return;
     }
 
@@ -854,10 +889,8 @@ function get_flagquiz_suggestions(query) {
                     option.className = "flagquiz_suggestion";
                     option.textContent = country.name;
                     option.addEventListener("click", function () {
-                        flagquiz_selected_code = country.code;
                         document.getElementById("flagquiz_expert_input").value = country.name;
-                        list.replaceChildren();
-                        document.getElementById("flagquiz_expert_submit").disabled = false;
+                        submit_flagquiz_answer(country.code, option);
                     });
                     list.appendChild(option);
                 });
@@ -866,12 +899,6 @@ function get_flagquiz_suggestions(query) {
                 flagquiz_error(error.message);
             });
     }, 180);
-}
-
-function submit_flagquiz_expert() {
-    if (flagquiz_selected_code) {
-        submit_flagquiz_answer(flagquiz_selected_code);
-    }
 }
 
 function setup_free_sketch() {

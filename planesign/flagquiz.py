@@ -14,6 +14,7 @@ from PIL import Image
 from rgbmatrix import graphics
 
 ROUND_SECONDS = 10
+EXPERT_ROUND_SECONDS = 20
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
 FLAG_IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "flags")
 DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0}
@@ -108,6 +109,10 @@ def _make_question(code, difficulty, pool):
     }
 
 
+def _round_seconds(difficulty):
+    return EXPERT_ROUND_SECONDS if difficulty == "expert" else ROUND_SECONDS
+
+
 def start_game(difficulty, player_id):
     difficulty = difficulty.casefold() if isinstance(difficulty, str) else difficulty
     pool = _country_pool(difficulty)
@@ -128,7 +133,7 @@ def start_game(difficulty, player_id):
         "question_codes": question_codes,
         "index": 0,
         "round_id": uuid.uuid4().hex,
-        "deadline": now + ROUND_SECONDS,
+        "deadline": now + _round_seconds(difficulty),
         "current": _make_question(question_codes[0], difficulty, pool),
         "answers": {},
         "scores": scores,
@@ -141,16 +146,27 @@ def start_game(difficulty, player_id):
     return {"ok": True, "difficulty": difficulty, "total": len(question_codes)}
 
 
-def _advance(state, now):
+def _advance(state, now, players, active_ids, timed_out):
     current = state["current"]
+    result_player_ids = state["scores"] if timed_out else active_ids
+    result_answers = []
+    for player_id in result_player_ids:
+        answer = state["answers"].get(player_id)
+        player = players.get(player_id, {})
+        result_answers.append({
+            "id": player_id,
+            "name": player.get("name", "Player"),
+            "correct": bool(answer and answer["correct"]),
+            "answered": answer is not None,
+        })
+    result_answers.sort(key=lambda answer: (answer["name"].casefold(), answer["id"]))
     state["last_result"] = {
         "question_number": state["index"] + 1,
+        "round_id": state["round_id"],
         "code": current["code"],
         "correct_name": current["name"],
-        "answers": [
-            {"name": answer["name"], "correct": answer["correct"]}
-            for answer in state["answers"].values()
-        ],
+        "timed_out": timed_out,
+        "answers": result_answers,
     }
     state["index"] += 1
     state["answers"] = {}
@@ -161,7 +177,7 @@ def _advance(state, now):
         return
 
     state["round_id"] = uuid.uuid4().hex
-    state["deadline"] = now + ROUND_SECONDS
+    state["deadline"] = now + _round_seconds(state["difficulty"])
     state["current"] = _make_question(state["question_codes"][state["index"]], state["difficulty"], _country_pool(state["difficulty"]))
 
 
@@ -175,7 +191,7 @@ def _advance_if_ready(state, players, now):
     timed_out = now >= state["deadline"]
     all_active_answered = bool(active_ids) and all(player_id in state["answers"] for player_id in active_ids)
     if timed_out or all_active_answered:
-        _advance(state, now)
+        _advance(state, now, players, active_ids, timed_out)
         return True
     return False
 
@@ -216,6 +232,10 @@ def _public_status(state, player_id, players, now):
         "complete": current is None,
         "current": current_public,
         "your_answer": answers.get(player_id),
+        "round_answers": [
+            {"id": answer_id, "correct": answer["correct"]}
+            for answer_id, answer in answers.items()
+        ],
         "last_result": state["last_result"],
         "players": _player_summary(players, scores, now),
     }
@@ -253,6 +273,7 @@ def submit_answer(player_id, round_id, answer):
         state = dict(state)
         state["scores"] = dict(state["scores"])
         state["answers"] = dict(state["answers"])
+        state["scores"].setdefault(player["id"], 0)
         _advance_if_ready(state, players, now)
         if round_id != state["round_id"]:
             shared_config.data_dict["flagquiz_state"] = state
@@ -272,7 +293,11 @@ def submit_answer(player_id, round_id, answer):
                 raise ValueError("Select one of the displayed answers")
             correct = option["code"] == current["code"]
 
-        state["answers"][player["id"]] = {"name": player["name"], "correct": correct}
+        state["answers"][player["id"]] = {
+            "name": player["name"],
+            "correct": correct,
+            "answer": answer,
+        }
         if correct:
             state["scores"][player["id"]] += 1
         _advance_if_ready(state, players, now)
