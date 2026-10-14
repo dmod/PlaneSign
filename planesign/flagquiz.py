@@ -10,14 +10,17 @@ from functools import lru_cache
 import games
 import shared_config
 from modes import DisplayMode, planesign_mode_handler
-from PIL import Image
+from PIL import Image, ImageDraw, ImageEnhance
 from rgbmatrix import graphics
 
 ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
+WIDTH = 128
+HEIGHT = 32
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
 FLAG_IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "flags")
 DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0}
+LOADING_FLAG_HEIGHT = 20
 
 
 class FlagQuizConflict(ValueError):
@@ -318,12 +321,14 @@ def get_sign_state():
         players = dict(shared_config.data_dict.get("game_players", {}))
         if _advance_if_ready(state, players, now):
             shared_config.data_dict["flagquiz_state"] = state
+        scoreboard = _player_summary(players, state["scores"], now)
         return {
             "difficulty": state["difficulty"],
             "question_number": min(state["index"] + 1, len(state["question_codes"])),
             "total": len(state["question_codes"]),
             "current": state["current"],
             "complete": state["current"] is None,
+            "winner": scoreboard[0] if state["current"] is None and scoreboard else None,
         }
 
 
@@ -333,53 +338,189 @@ def _flag_image(code):
         return image.convert("RGB")
 
 
-def _fit_option(text, sign):
-    if len(text) <= 15:
-        return sign.font57, text
-    if len(text) <= 19:
-        return sign.font46, text
+@lru_cache(maxsize=1)
+def _loading_flag_rows():
+    countries = load_countries()
+    rows = []
+    for _ in range(2):
+        flags = []
+        width = 0
+        while width < WIDTH * 2:
+            country = random.choice(countries)
+            flag = _flag_image(country["code"]).copy()
+            flag.thumbnail((60, LOADING_FLAG_HEIGHT), Image.Resampling.LANCZOS)
+            flags.append(flag)
+            width += flag.width + 2
+        row = Image.new("RGB", (width, LOADING_FLAG_HEIGHT), (0, 0, 0))
+        x = 0
+        for flag in flags:
+            row.paste(flag, (x, 0))
+            x += flag.width + 2
+        rows.append(ImageEnhance.Brightness(row).enhance(0.28))
+    return tuple(rows)
 
+
+@lru_cache(maxsize=1)
+def _winner_flag_codes():
+    return tuple(country["code"] for country in load_countries())
+
+
+def _draw_scrolling_flags(sign, elapsed):
+    image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
+    for row_index, row in enumerate(_loading_flag_rows()):
+        offset = int(elapsed * (2.0 + row_index * 0.9)) % row.width
+        y = row_index * 12
+        first_width = min(WIDTH, row.width - offset)
+        image.paste(row.crop((offset, 0, offset + first_width, row.height)), (0, y))
+        if first_width < WIDTH:
+            image.paste(row.crop((0, 0, WIDTH - first_width, row.height)), (first_width, y))
+    sign.canvas.SetImage(image, 0, 0)
+
+
+def _draw_outlined_text(sign, font, text, x, baseline, color):
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx or dy:
+                graphics.DrawText(sign.canvas, font, x + dx, baseline + dy, graphics.Color(0, 0, 0), text)
+    graphics.DrawText(sign.canvas, font, x, baseline, color, text)
+
+
+def _draw_loading(sign, elapsed):
+    _draw_scrolling_flags(sign, elapsed)
+    text = "CHOOSE LEVEL"
+    x = (WIDTH - len(text) * 6) // 2
+    _draw_outlined_text(sign, sign.fontbig, text, x, 19, graphics.Color(46, 210, 255))
+
+
+def _scaled_color(color, factor):
+    return tuple(max(0, min(255, int(channel * factor))) for channel in color)
+
+
+def _draw_fireworks(draw, elapsed):
+    colors = ((100, 180, 255), (255, 100, 70), (255, 220, 80))
+    positions = ((24, 15), (104, 15), (64, 17))
+    for index, (x, burst_y) in enumerate(positions):
+        age = (elapsed + index * 0.92) % 2.8
+        color = colors[index]
+        if age < 0.8:
+            rocket_y = round(HEIGHT - 1 - (HEIGHT - burst_y - 1) * age / 0.8)
+            draw.point((x, rocket_y), fill=color)
+            if rocket_y < HEIGHT - 1:
+                draw.point((x, rocket_y + 1), fill=_scaled_color(color, 0.5))
+        elif age < 1.8:
+            progress = age - 0.8
+            radius = 1.0 + progress * 8.0
+            brightness = 1.0 - progress * 0.72
+            spark_color = _scaled_color(color, brightness)
+            for ray in range(8):
+                angle = math.tau * ray / 8
+                end_x = round(x + math.cos(angle) * radius)
+                end_y = round(burst_y + math.sin(angle) * radius * 0.55)
+                draw.line((x, burst_y, end_x, end_y), fill=spark_color)
+                if progress > 0.4:
+                    draw.point((round(x + math.cos(angle) * (radius + 2)), round(burst_y + math.sin(angle) * (radius + 2) * 0.55)), fill=_scaled_color(color, 0.45))
+
+
+@lru_cache(maxsize=256)
+def _resized_winner_flag(code):
+    image = _flag_image(code).resize((16, 10), Image.Resampling.LANCZOS)
+    return image
+
+
+def _draw_raising_flag(draw, elapsed):
+    pole_x = 3
+    draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=(150, 150, 165))
+    draw.point((pole_x - 1, 0), fill=(245, 205, 75))
+    draw.point((pole_x + 1, 0), fill=(245, 205, 75))
+
+    flag_codes = _winner_flag_codes()
+    flag_index = int(elapsed / 2.5) % len(flag_codes)
+    flag = _resized_winner_flag(flag_codes[flag_index])
+    rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
+    top = HEIGHT - flag.height - rise
+    for x in range(flag.width):
+        wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
+        for y in range(flag.height):
+            draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
+
+
+def _draw_victory(sign, state, elapsed):
+    image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    _draw_fireworks(draw, elapsed)
+    _draw_raising_flag(draw, elapsed)
+    sign.canvas.SetImage(image, 0, 0)
+
+    title = "QUIZ CHAMPION!"
+    title_x = (WIDTH - len(title) * 5) // 2
+    title_color = graphics.Color(46, 210, 255) if int(elapsed * 3) % 2 == 0 else graphics.Color(255, 220, 80)
+    _draw_outlined_text(sign, sign.font57, title, title_x, 9, title_color)
+
+    winner = state.get("winner")
+    name = winner["name"] if winner else "Everyone wins!"
+    message = name + " WINS!"
+    message_x = (WIDTH - len(message) * 4) // 2
+    message_color = graphics.Color(255, 240, 150) if int(elapsed * 3) % 2 == 0 else graphics.Color(130, 255, 150)
+    _draw_outlined_text(sign, sign.font46, message, message_x, 28, message_color)
+
+
+def _fit_option(text, max_chars=20):
+    if len(text) <= max_chars:
+        return text
     words = text.split()
-    while words and len(" ".join(words) + "...") > 19:
+    while words and len(" ".join(words)) + 3 > max_chars:
         words.pop()
-    return sign.font46, (" ".join(words) + "...") if words else text[:16] + "..."
+    return " ".join(words) + "..." if words else text[:max_chars - 3] + "..."
 
 
-def _draw_question(sign, state):
+def _draw_question(sign, state, elapsed=0.0):
     sign.canvas.Clear()
     if state["current"] is None:
-        message = "QUIZ COMPLETE" if state["complete"] else "CHOOSE LEVEL"
-        graphics.DrawText(sign.canvas, sign.font57, 34, 20, graphics.Color(255, 255, 255), message)
-        if state["total"]:
-            progress = f"{state['question_number']}/{state['total']}"
-            graphics.DrawText(sign.canvas, sign.font46, 52, 30, graphics.Color(170, 220, 255), progress)
+        if state["complete"]:
+            _draw_victory(sign, state, elapsed)
+        else:
+            _draw_loading(sign, elapsed)
         return
 
     current = state["current"]
     difficulty_mark = {"easy": "E", "hard": "H", "expert": "X"}[state["difficulty"]]
     header = f"{difficulty_mark} {state['question_number']}/{state['total']}"
-    graphics.DrawText(sign.canvas, sign.font46, 52, 5, graphics.Color(200, 220, 255), header)
 
     flag = _flag_image(current["code"]).copy()
     if state["difficulty"] == "expert":
         flag.thumbnail((46, 28), Image.Resampling.LANCZOS)
-        sign.canvas.SetImage(flag, (128 - flag.width) // 2, 4 + (27 - flag.height) // 2)
+        sign.canvas.SetImage(flag, (WIDTH - flag.width) // 2, (HEIGHT - flag.height) // 2)
+        header_x = (40 - len(header) * 4) // 2
+        graphics.DrawText(sign.canvas, sign.font46, header_x, 18, graphics.Color(200, 220, 255), header)
         return
 
-    flag.thumbnail((42, 24), Image.Resampling.LANCZOS)
-    sign.canvas.SetImage(flag, (45 - flag.width) // 2, 8 + (24 - flag.height) // 2)
+    flag.thumbnail((42, 20), Image.Resampling.LANCZOS)
+    sign.canvas.SetImage(flag, (44 - flag.width) // 2, 1)
+    header_x = (44 - len(header) * 4) // 2
+    graphics.DrawText(sign.canvas, sign.font46, header_x, 29, graphics.Color(200, 220, 255), header)
+
     options = current["options"]
-    baselines = (12, 21, 30) if len(options) == 3 else (11, 18, 25, 32)
+    baselines = (11, 20, 29) if len(options) == 3 else (8, 16, 24, 32)
     for option, baseline in zip(options, baselines):
-        label = f"{option['key']}. {option['name']}"
-        font, label = _fit_option(label, sign)
-        graphics.DrawText(sign.canvas, font, 52, baseline, graphics.Color(255, 255, 255), label)
+        label = _fit_option(f"{option['key']}. {option['name']}")
+        graphics.DrawText(sign.canvas, sign.font46, 48, baseline, graphics.Color(255, 255, 255), label)
 
 
 @planesign_mode_handler(DisplayMode.FLAGQUIZ)
 def flagquiz(sign):
+    start_time = time.perf_counter()
+    celebration_start = None
     while shared_config.shared_mode.value == DisplayMode.FLAGQUIZ.value:
-        _draw_question(sign, get_sign_state())
+        now = time.perf_counter()
+        state = get_sign_state()
+        if state["complete"] and state["difficulty"] is not None:
+            if celebration_start is None:
+                celebration_start = now
+            elapsed = now - celebration_start
+        else:
+            celebration_start = None
+            elapsed = now - start_time
+        _draw_question(sign, state, elapsed)
         sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        if sign.wait_loop(0.2):
+        if sign.wait_loop(0.08):
             return
