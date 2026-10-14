@@ -16,7 +16,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS
+from outside_scene import HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -127,8 +127,7 @@ def find_sun_event(name: str, sky, start: float, end: float) -> float | None:
 
 def holiday_shortcuts(year: int):
     shortcuts = []
-    for month, day in sorted({(month, first) for _, spans in HOLIDAYS.values() for month, first, _ in spans}):
-        moment = date(year, month, day)
+    for moment in sorted({holiday_span_start(span, year) for _, spans in HOLIDAYS.values() for span in spans}):
         environment = outside.OutsideEnvironment("", outside.OutsideWeather("LIVE"), "READY", local_date=moment)
         labels = [HOLIDAYS[feature][0] for feature in HOLIDAYS if feature in outside.holiday_features(environment)]
         shortcuts.append({

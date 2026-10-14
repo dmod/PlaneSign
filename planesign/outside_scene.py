@@ -4,7 +4,7 @@ import math
 import os
 import random
 from dataclasses import dataclass, fields, replace
-from datetime import datetime
+from datetime import date, datetime
 from functools import lru_cache
 from itertools import pairwise
 from typing import TYPE_CHECKING
@@ -862,16 +862,19 @@ def wildlife_visit(slot: int, seed: int):
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
-    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside. Nothing comes out on Halloween."""
-    if HALLOWEEN in holiday_features(environment):
+    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside. Nothing comes out on
+    Halloween; on Thanksgiving turkeys and geese take their places."""
+    holidays = holiday_features(environment)
+    if HALLOWEEN in holidays:
         return
+    thanksgiving = THANKSGIVING in holidays
     d = ImageDraw.Draw(image)
     rain, snow = precipitation(environment)
     slot, age = divmod(elapsed, 100)
     present, species, start, duration, target, pair = wildlife_visit(int(slot), seed)
     visit = slot * 100 + start
     dog_nearby = dog_allowed(environment) and next(dog_outings_between(seed, visit, visit + duration), None) is not None
-    if present and start <= age < start + duration and rain < 3 and snow < 2 and not dog_nearby:
+    if present and start <= age < start + duration and rain < 3 and snow < 2 and not dog_nearby and not thanksgiving:
         visit_age = age - start
         arrival = max(0, min(1, visit_age / 18))
         departure = max(0, min(1, (visit_age - duration + 18) / 18))
@@ -912,6 +915,9 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 d.point((px(-1), 30), fill=palette.trim)
     sun_altitude = environment.sun_altitude
     if sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1:
+        if thanksgiving:
+            draw_geese(image, palette, environment, elapsed, seed)
+            return
         flock_age = (elapsed + seed % 30) % 85
         flock_start = elapsed - flock_age
         # Small birds keep clear of the sky while an eagle is hunting.
@@ -1077,12 +1083,14 @@ SMOKE_COLOR = (214, 214, 220)
 
 
 def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[float, float, float, float, float]]:
-    """(x, y, x radius, y radius, opacity) for chimney smoke, oldest first; none unless a known temperature is cold enough."""
+    """(x, y, x radius, y radius, opacity) for chimney smoke, oldest first; none unless a known temperature is cold enough,
+    except that the fire burns all Thanksgiving whatever the weather."""
     temperature = environment.weather.temperature
-    if temperature is None or temperature >= SMOKE_MAX_TEMPERATURE:
+    cold = temperature is not None and temperature < SMOKE_MAX_TEMPERATURE
+    if not cold and THANKSGIVING not in holiday_features(environment):
         return []
     wind = min(30, environment.weather.wind or 0)
-    strength = 0.6 + 0.4 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25)
+    strength = 0.6 + 0.4 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25) if cold else 0.6
     life = SMOKE_LIFETIME / (1 + wind / 40)
     rise = SMOKE_RISE / (1 + wind / 10)
     drift = wind * SMOKE_WIND_DRIFT
@@ -1983,12 +1991,23 @@ def draw_lightning(image: Image.Image, event: LightningEvent, age: float):
         light(channel, LIGHTNING_GLOW, min(1, intensity * 2.2))
 
 
+def holiday_span_matches(day: date, span: tuple[int, ...]) -> bool:
+    month, first, last, *weekday = span
+    return day.month == month and first <= day.day <= last and (not weekday or day.weekday() == weekday[0])
+
+
+def holiday_span_start(span: tuple[int, ...], year: int) -> date:
+    """The first day of `year` that a HOLIDAYS span covers."""
+    month, first, last, *_ = span
+    return next(day for day in (date(year, month, number) for number in range(first, last + 1)) if holiday_span_matches(day, span))
+
+
 def holiday_features(environment: "OutsideEnvironment") -> frozenset[str]:
     """Holiday easter eggs for the displayed local date."""
     day = environment.local_date
     if day is None:
         return frozenset()
-    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(day.month == month and first <= day.day <= last for month, first, last in spans))
+    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(holiday_span_matches(day, span) for span in spans))
 
 
 def holiday_darkness(environment: "OutsideEnvironment") -> float:
@@ -1999,14 +2018,18 @@ def holiday_darkness(environment: "OutsideEnvironment") -> float:
 
 # Christmas lights stay up from December 1 through the day after Christmas.
 CHRISTMAS_LAST_DAY = 26
-# Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day) spans).
-# The Outside lab builds its holiday shortcuts from this table.
+# US Thanksgiving, the fourth Thursday of November, always falls on November 22-28 (weekday 3 is Thursday).
+THANKSGIVING_SPAN = (11, 22, 28, 3)
+# Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day[, weekday])
+# spans). A span with a weekday covers only that weekday within its days. The Outside lab builds its holiday shortcuts
+# from this table.
 HOLIDAYS = {
     "christmas_lights": ("Christmas lights", ((12, 1, CHRISTMAS_LAST_DAY),)),
     "santa": ("Santa", ((12, 24, 24),)),
     "fireworks": ("Fireworks", ((12, 31, 31), (1, 1, 1), (7, 4, 4))),
     "flag": ("Flag", ((7, 4, 4),)),
     "halloween": ("Halloween", ((10, 31, 31),)),
+    "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
 }
 CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
 TOPPER_GOLD = (255, 206, 60)
@@ -3002,6 +3025,468 @@ def draw_spider(image: Image.Image, night: float, elapsed: float, seed: int):
     paste_overlay(image, groups)
 
 
+THANKSGIVING = "thanksgiving"
+# A harvest display stands in the meadow between the pond and the maple, where Halloween's pumpkins sit:
+# (sprite, left column, bottom row), back to front. A corn shock (c tassels, s/S stalks striped by column, t/T twine),
+# a straw bale (H top, B straw, w twine) carrying a pumpkin and a lantern (m frame, L glass), and a big pumpkin
+# (p rind, o ribs, g stem).
+HARVEST_DISPLAY = (
+    (("..c...c..", "c..c.c..c", ".c.cSc.c.", "..cSsSc..", "...sSs...", "...tTt...", "...SsS...", "..sSsSs..", "..sSsSs..", ".SsSsSsS.", ".SsSsSsS.", "sSsSsSsSs"), 82, 30),
+    (("HHHHHHHHH", "BBwBBBwBB", "BBwBBBwBB", "BBwBBBwBB"), 91, 31),
+    (("..g..", ".pop.", "popop", ".ppp."), 92, 27),
+    ((".m.", "mLm", "mLm", "mmm"), 97, 27),
+    (("...g...", ".poppo.", "popopop", "popopop", ".ppppp."), 101, 31),
+)
+HARVEST_COLORS = {
+    "c": (232, 206, 128), "s": (196, 160, 86), "S": (142, 110, 58), "t": (120, 70, 40), "T": (90, 52, 30),
+    "H": (230, 196, 110), "B": (192, 150, 70), "w": (140, 100, 50),
+    "p": PUMPKIN_RIND, "o": PUMPKIN_RIB, "g": PUMPKIN_STEM, "m": (52, 46, 44),
+}
+# The lantern's glass by day, before the candle inside outshines it after dark.
+LANTERN_DAY_GLASS = (150, 128, 84)
+# Lantern candles flicker with the jack-o'-lantern flame model under this candle index.
+LANTERN_CANDLE = 0
+LANTERN_GLOW_REACH = 5.0
+
+
+def harvest_pixels() -> tuple[tuple[str, np.ndarray], ...]:
+    cells: dict[tuple[int, int], str] = {}
+    for rows, left, bottom in HARVEST_DISPLAY:
+        for row, line in enumerate(rows):
+            for column, char in enumerate(line):
+                if char != ".":
+                    cells[left + column, bottom - len(rows) + 1 + row] = char
+    return tuple((char, np.array(sorted(point for point, c in cells.items() if c == char), dtype=int).reshape(-1, 2)) for char in dict.fromkeys(cells.values()))
+
+
+HARVEST_PIXELS = harvest_pixels()
+LANTERN_GLASS = next(points for char, points in HARVEST_PIXELS if char == "L")
+
+
+def lantern_glow() -> tuple[int, np.ndarray]:
+    """(first row, mask) of how strongly the lantern's candle lights the pixels around it, leaving the glass itself."""
+    cx, cy = LANTERN_GLASS.mean(axis=0)
+    mask = candle_glow_mask(float(cx), float(cy), LANTERN_GLOW_REACH)
+    mask[LANTERN_GLASS[:, 1], LANTERN_GLASS[:, 0]] = 0
+    top = int(np.flatnonzero((mask > 0.004).any(axis=1))[0])
+    return top, mask[top:]
+
+
+LANTERN_GLOW_ROW, LANTERN_GLOW = lantern_glow()
+
+
+def draw_harvest_display(image: Image.Image, palette: Palette, night: float, elapsed: float):
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    flame = candle_flicker(LANTERN_CANDLE, elapsed)
+    groups = []
+    for char, points in HARVEST_PIXELS:
+        if char == "L":
+            color = mix(tuple(round(value * illumination) for value in LANTERN_DAY_GLASS), CANDLE_FLAME, flame * (0.25 + 0.75 * night))
+        else:
+            color = tuple(round(value * illumination) for value in HARVEST_COLORS[char])
+        groups.append((points, color, 1.0))
+    paste_overlay(image, groups)
+
+
+def draw_lantern_glow(image: Image.Image, night: float, elapsed: float) -> Image.Image:
+    """After dark the lantern throws a flickering warm pool over the bale, the pumpkins and anything passing by."""
+    if night <= 0:
+        return image
+    light = LANTERN_GLOW * (candle_flicker(LANTERN_CANDLE, elapsed) * night)
+    pixels = np.array(image)
+    band = pixels[LANTERN_GLOW_ROW:].astype(np.float32)
+    band += (np.array(CANDLE_GLOW, dtype=np.float32) - band) * light[..., None]
+    pixels[LANTERN_GLOW_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+# On Thanksgiving a tom turkey has the run of the meadow all day and night, and by day small flocks of hens wander
+# through. Together they take the place of the deer, foxes and rabbits.
+TURKEY_SPEED = 4.5
+TURKEY_FEET_ROWS = (29, 31)
+TURKEY_STRUT_SECONDS = (6, 12)
+# While foraging, each bird picks what to do next every TURKEY_BEHAVIOR_SECONDS.
+TURKEY_BEHAVIOR_SECONDS = 1.3
+TURKEY_PECK_CHANCE = 0.55
+TURKEY_TURN_CHANCE = 0.2
+TURKEY_PECK_RATE = 3
+# A strutting tom gobbles every TURKEY_GOBBLE_PERIOD seconds.
+TURKEY_GOBBLE_PERIOD = 2.8
+TURKEY_GOBBLE_SECONDS = 0.5
+# The tom plans one slot at a time. Each slot starts and ends at a spot drawn from that slot alone, so any moment
+# is a pure function of `elapsed` without replaying earlier slots.
+TOM_SLOT_SECONDS = 60
+TOM_COLUMNS = (42, 122)
+# New activities stop starting this long before the slot ends, leaving time for the longest one plus the trip to the
+# next slot's spot.
+TOM_RESERVE_SECONDS = 26
+# Chances of each activity when he picks the next one; the rest are short wanders.
+TOM_ZOOMIES_CHANCE = 0.4
+TOM_STRUT_CHANCE = 0.2
+TOM_FORAGE_CHANCE = 0.25
+TOM_FORAGE_SECONDS = (3, 8)
+TOM_WANDER = (8, 25)
+# Zoomies: a few zigzag dashes, wings flapping, then a moment to catch his breath.
+TOM_RUN_SPEED = (26, 36)
+TOM_RUN_LEGS = (2, 4)
+TOM_RUN_DASH = (18, 45)
+TOM_RUN_STRIDE = 2.5
+TOM_RUN_REST = (0.6, 1.5)
+# By day small flocks of hens wander through, entering on one side and leaving on the other.
+TURKEY_SLOT_SECONDS = 150
+TURKEY_VISIT_CHANCE = 0.7
+# The lead hen stops to forage in the open meadow in front of the pond, clear of the pilgrims and the harvest display.
+TURKEY_STOP_COLUMNS = (44, 62)
+TURKEY_FORAGE_SECONDS = (8, 16)
+# Each hen trails the one ahead by this many pixels and seconds, so the flock bunches up and strings out as it goes.
+TURKEY_GAP = (7, 11)
+TURKEY_LAG = (0.8, 2.0)
+TURKEY_HENS = (2, 4)
+# Facing right and standing on the bottom row: b body, i bronze sheen, t tail, h bare head, k beak, r wattle, l legs,
+# W barred wing feathers. The tom faces the viewer to strut, his fan spread behind him: k buff tips, d dark band,
+# T chestnut feathers.
+TURKEY_SPRITES = {
+    "tom": {
+        "stand": (".....h..", ".....hk.", ".....r..", "..bbbr..", "tbbibbb.", "tbibibb.", ".bbbbb..", "..l..l.."),
+        "step": (".....h..", ".....hk.", ".....r..", "..bbbr..", "tbbibbb.", "tbibibb.", ".bbbbb..", "...ll..."),
+        "peck": ("........", "........", "........", "..bbb...", "tbbibbr.", "tbibibbr", ".bbbbb.h", "..l..l.k"),
+        "strut": ("...kkkkkkk...", ".kkTTTTTTTkk.", "kTTdddddddTTk", "kTdTTThTTTdTk", "kTdTbbhbbTdTk", ".kdbbbrbbbdk.", "...bbbrbbb...", "....bbbbb....", "....l...l...."),
+        "gobble": ("...kkkkkkk...", ".kkTTTTTTTkk.", "kTTdddhdddTTk", "kTdTTThTTTdTk", "kTdTbbrbbTdTk", ".kdbbbrbbbdk.", "...bbbrbbb...", "....bbbbb....", "....l...l...."),
+        # Running flat out with his neck stretched forward, wings beating up and down.
+        "run_up": ("..W.W...", "..WiW...", "...ii.hk", "tbbbbbh.", "tbibibr.", ".bbbbb..", "l....l.."),
+        "run_down": ("........", "........", "......hk", "tbbbbbh.", "tWiWibr.", "WiWbbb..", "..ll...."),
+    },
+    "hen": {
+        "stand": ("....h..", "....hk.", "...bb..", "tbbbb..", "tbibbb.", ".bbbb..", "..l.l.."),
+        "step": ("....h..", "....hk.", "...bb..", "tbbbb..", "tbibbb.", ".bbbb..", "...ll.."),
+        "peck": (".......", ".......", ".......", "tbbbb..", "tbibbb.", ".bbbbbh", "..l.l.k"),
+    },
+}
+TURKEY_COLORS = {
+    "tom": {"b": (56, 44, 38), "i": (118, 98, 64), "t": (110, 76, 50), "h": (176, 204, 232), "k": (226, 196, 140), "r": (222, 36, 36), "l": (214, 120, 84), "d": (40, 30, 26), "T": (150, 100, 60), "W": (196, 186, 166)},
+    "hen": {"b": (98, 74, 52), "i": (140, 112, 74), "t": (110, 80, 54), "h": (150, 170, 190), "k": (210, 186, 140), "r": (170, 80, 80), "l": (200, 120, 90)},
+}
+# The wattle flushes bright while he gobbles.
+TURKEY_GOBBLE_WATTLE = (255, 40, 52)
+
+
+@dataclass(frozen=True)
+class TomStep:
+    start: float
+    end: float
+    # "walk", "run", "forage", "strut" or "stand".
+    action: str
+    origin: tuple[float, float]
+    target: tuple[float, float]
+    facing: int
+
+
+def tom_spot(slot: int, seed: int) -> tuple[float, int]:
+    """Where the tom is (x, feet row) as slot `slot` begins."""
+    rng = random.Random(seed * 8513 + slot * 27277 + 61)
+    return rng.uniform(*TOM_COLUMNS), rng.randint(*TURKEY_FEET_ROWS)
+
+
+@lru_cache(maxsize=8)
+def tom_plan(slot: int, seed: int) -> tuple[TomStep, ...]:
+    """The tom's steps from this slot's spot to the next one's, covering the whole slot."""
+    rng = random.Random(seed * 4691 + slot * 39119 + 53)
+    t = slot * TOM_SLOT_SECONDS
+    end = t + TOM_SLOT_SECONDS
+    position: tuple[float, float] = tom_spot(slot, seed)
+    facing = rng.choice((-1, 1))
+    steps: list[TomStep] = []
+
+    def hold(action: str, seconds: float):
+        nonlocal t
+        steps.append(TomStep(t, t + seconds, action, position, position, facing))
+        t += seconds
+
+    def move(target: tuple[float, float], speed: float, action: str):
+        nonlocal t, position, facing
+        if target[0] != position[0]:
+            facing = 1 if target[0] > position[0] else -1
+        seconds = max(0.1, math.dist(position, target) / speed)
+        steps.append(TomStep(t, t + seconds, action, position, target, facing))
+        t += seconds
+        position = target
+
+    def toward(reach: tuple[float, float], direction: int) -> tuple[float, int]:
+        x = position[0] + direction * rng.uniform(*reach)
+        if not TOM_COLUMNS[0] <= x <= TOM_COLUMNS[1]:
+            x = position[0] - direction * rng.uniform(*reach)
+        return max(TOM_COLUMNS[0], min(TOM_COLUMNS[1], x)), rng.randint(*TURKEY_FEET_ROWS)
+
+    while t < end - TOM_RESERVE_SECONDS:
+        roll = rng.random()
+        if roll < TOM_ZOOMIES_CHANCE:
+            direction = rng.choice((-1, 1))
+            for _ in range(rng.randint(*TOM_RUN_LEGS)):
+                move(toward(TOM_RUN_DASH, direction), rng.uniform(*TOM_RUN_SPEED), "run")
+                direction = -facing
+            hold("stand", rng.uniform(*TOM_RUN_REST))
+        elif roll < TOM_ZOOMIES_CHANCE + TOM_STRUT_CHANCE:
+            hold("strut", rng.uniform(*TURKEY_STRUT_SECONDS))
+        elif roll < TOM_ZOOMIES_CHANCE + TOM_STRUT_CHANCE + TOM_FORAGE_CHANCE:
+            hold("forage", rng.uniform(*TOM_FORAGE_SECONDS))
+        else:
+            move(toward(TOM_WANDER, rng.choice((-1, 1))), TURKEY_SPEED, "walk")
+    # Make for the next slot's spot, hurrying if time is short, and forage there until the slot ends.
+    target = tom_spot(slot + 1, seed)
+    speed = max(TURKEY_SPEED, math.dist(position, target) / (end - t - 0.5))
+    move(target, speed, "run" if speed > 3 * TURKEY_SPEED else "walk")
+    hold("forage", end - t)
+    return tuple(steps)
+
+
+def tom_state(elapsed: float, seed: int) -> tuple[float, int, int, int, str]:
+    """(x, feet row, rows lifted off the ground, facing, pose) of the resident tom."""
+    slot = math.floor(elapsed / TOM_SLOT_SECONDS)
+    plan = tom_plan(slot, seed)
+    step = next((step for step in plan if elapsed < step.end), plan[-1])
+    progress = max(0.0, min(1.0, (elapsed - step.start) / (step.end - step.start)))
+    x = step.origin[0] + (step.target[0] - step.origin[0]) * progress
+    feet = round(step.origin[1] + (step.target[1] - step.origin[1]) * progress)
+    travelled = math.dist(step.origin, step.target) * progress
+    if step.action == "run":
+        # He bounds along, lifting off the ground on every upstroke.
+        up = int(travelled / TOM_RUN_STRIDE) % 2 == 0
+        return x, feet, int(up), step.facing, "run_up" if up else "run_down"
+    if step.action == "walk":
+        return x, feet, 0, step.facing, "step" if int(travelled / 2) % 2 else "stand"
+    held = elapsed - step.start
+    if step.action == "strut":
+        return x, feet, 0, step.facing, "gobble" if held % TURKEY_GOBBLE_PERIOD > TURKEY_GOBBLE_PERIOD - TURKEY_GOBBLE_SECONDS else "strut"
+    if step.action == "forage":
+        beat = math.floor(elapsed / TURKEY_BEHAVIOR_SECONDS)
+        facing = -step.facing if unit_hash(seed, beat, 9) < TURKEY_TURN_CHANCE else step.facing
+        pecking = unit_hash(seed, beat, 11) < TURKEY_PECK_CHANCE and elapsed * TURKEY_PECK_RATE % 1 < 0.5
+        return x, feet, 0, facing, "peck" if pecking else "stand"
+    return x, feet, 0, step.facing, "stand"
+
+
+@dataclass(frozen=True)
+class TurkeyVisit:
+    slot: int
+    start: float
+    end: float
+    heading: int
+    # The lead hen's walk: (start, end, from x, to x); a leg that stays put is a stop to forage.
+    legs: tuple[tuple[float, float, float, float], ...]
+    # (gap behind the leader in px, lag behind the leader in seconds, feet row), leader first.
+    hens: tuple[tuple[float, float, int], ...]
+
+
+@lru_cache(maxsize=8)
+def turkey_visit(slot: int, seed: int) -> TurkeyVisit | None:
+    """The hens wander in from one side, forage at two spots, then wander off the other side. Never spans two slots."""
+    rng = random.Random(seed * 3571 + slot * 51787 + 23)
+    if rng.random() > TURKEY_VISIT_CHANCE:
+        return None
+    heading = rng.choice((-1, 1))
+    hens, gap, lag = [], 0.0, 0.0
+    for index in range(rng.randint(*TURKEY_HENS)):
+        if index:
+            gap, lag = gap + rng.uniform(*TURKEY_GAP), lag + rng.uniform(*TURKEY_LAG)
+        hens.append((gap, lag, rng.randint(*TURKEY_FEET_ROWS)))
+    margin = 8
+    entry = -margin if heading > 0 else WIDTH + margin
+    exit_x = WIDTH + margin + gap if heading > 0 else -margin - gap
+    stops = sorted((rng.uniform(*TURKEY_STOP_COLUMNS), rng.uniform(*TURKEY_STOP_COLUMNS)), reverse=heading < 0)
+    plan, t, x = [], 0.0, float(entry)
+    for stop in stops:
+        plan.append((t, t + abs(stop - x) / TURKEY_SPEED, x, stop))
+        t, x = plan[-1][1], stop
+        hold = rng.uniform(*TURKEY_FORAGE_SECONDS)
+        plan.append((t, t + hold, x, x))
+        t += hold
+    plan.append((t, t + abs(exit_x - x) / TURKEY_SPEED, x, exit_x))
+    duration = plan[-1][1] + lag
+    start = slot * TURKEY_SLOT_SECONDS + rng.uniform(1, TURKEY_SLOT_SECONDS - duration - 1)
+    legs = tuple((start + a, start + b, x0, x1) for a, b, x0, x1 in plan)
+    return TurkeyVisit(slot, start, start + duration, heading, legs, tuple(hens))
+
+
+def turkeys_allowed(environment: "OutsideEnvironment") -> bool:
+    """Hens visit in daylight on Thanksgiving, in anything short of a downpour or heavy snow."""
+    rain, snow = precipitation(environment)
+    return THANKSGIVING in holiday_features(environment) and environment.sun_altitude is not None and environment.sun_altitude > SET_ALTITUDE and rain < 3 and snow < 2
+
+
+def turkey_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> TurkeyVisit | None:
+    """The hens' visit under way, if any. Like the deer, they keep clear of the dog's outings and of the eagle."""
+    if not turkeys_allowed(environment):
+        return None
+    visit = turkey_visit(math.floor(elapsed / TURKEY_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if dog_allowed(environment) and next(dog_outings_between(seed, visit.start, visit.end), None) is not None:
+        return None
+    if next(eagle_visits_present(environment, seed, visit.start, visit.end), None) is not None:
+        return None
+    return visit
+
+
+def turkey_pose(visit: TurkeyVisit, index: int, elapsed: float, seed: int) -> tuple[float, int, int, str]:
+    """(x, feet row, facing, pose) of one hen in the flock."""
+    gap, lag, feet = visit.hens[index]
+    t = elapsed - lag
+    leg = next((leg for leg in visit.legs if t < leg[1]), visit.legs[-1])
+    start, end, x0, x1 = leg
+    progress = max(0.0, min(1.0, (t - start) / (end - start)))
+    x = x0 + (x1 - x0) * progress - visit.heading * gap
+    if x0 != x1 or t < visit.legs[0][0]:
+        # Strides alternate every couple of pixels walked.
+        return x, feet, visit.heading, "step" if int(abs(x - visit.legs[0][2]) / 2) % 2 else "stand"
+    beat = math.floor(t / TURKEY_BEHAVIOR_SECONDS)
+    facing = -visit.heading if unit_hash(seed, visit.slot, index, beat, 5) < TURKEY_TURN_CHANCE else visit.heading
+    if unit_hash(seed, visit.slot, index, beat, 3) < TURKEY_PECK_CHANCE and t * TURKEY_PECK_RATE % 1 < 0.5:
+        return x, feet, facing, "peck"
+    return x, feet, facing, "stand"
+
+
+def draw_standing_sprite(d: ImageDraw.ImageDraw, rows: tuple[str, ...], x: float, feet: int, facing: int, colors: dict[str, Color]):
+    """Draw a right-facing sprite (mirrored when facing left) centered on column `x`, its bottom row on row `feet`."""
+    width = len(rows[0])
+    left = round(x) - (width - 1) // 2
+    for row, line in enumerate(rows):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            px = left + (column if facing > 0 else width - 1 - column)
+            py = feet - len(rows) + 1 + row
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=colors[char])
+
+
+# A pilgrim couple stands at the pond's near shore beside the harvest display. They are nearest the viewer, so they
+# stand a little taller than the hut.
+# Facing the viewer: K black hat and shoes, G gold buckles, H hair, S skin, E eyes, W white linen (collar, cuffs,
+# coif, apron, stockings), C coat, B breeches, D dress. Each pose keeps its columns, so a gesture never shifts the body.
+PILGRIM_SPRITES = {
+    "man": {
+        "stand": ("..KKK...", "..KGK...", "KKKKKKK.", "..ESE...", "..SSS...", ".WWWWW..", "CCWWWCC.", "CCCCCCC.", "CCCGCCC.", "WCCCCCW.", "SBBBBBS.", ".BB.BB..", ".WW.WW..", "KKK.KKK."),
+        # Lifting his hat off his head with his left hand (on the viewer's right).
+        "tip": ("..KKK...", "..KGK...", "KKKKKKK.", "..HHHSW.", "..ESE.C.", "..SSS.C.", ".WWWWWC.", "CCWWWCC.", "CCCCCC..", "CCCGCC..", "WCCCCC..", "SBBBBB..", ".BB.BB..", ".WW.WW..", "KKK.KKK."),
+    },
+    "woman": {
+        "stand": ("..WWW...", ".WWWWW..", ".WESEW..", ".WSSSW..", ".WWWWW..", "DDWWWDD.", "DDDDDDD.", "WDWWWDW.", "SDWWWDS.", ".DWWWD..", "DDWWWDD.", "DDDDDDD.", ".K...K.."),
+        # Waving her left hand (on the viewer's right) above her shoulder.
+        "wave": ("..WWW..S", ".WWWWW.W", ".WESEW.D", ".WSSSWD.", ".WWWWWD.", "DDWWWDD.", "DDDDDDD.", "WDWWWD..", "SDWWWD..", ".DWWWD..", "DDWWWDD.", "DDDDDDD.", ".K...K.."),
+    },
+}
+PILGRIM_COLORS = {"K": (26, 24, 30), "G": (236, 190, 64), "H": (110, 70, 40), "S": (232, 182, 140), "E": (54, 36, 30), "W": (236, 234, 222), "C": (40, 38, 46), "B": (34, 32, 38), "D": (70, 62, 66)}
+# (kind, center column, feet row): the man just in front of his wife, beside the corn shock.
+PILGRIMS = (("woman", 78, 30), ("man", 70, 31))
+# Every PILGRIM_GESTURE_SECONDS each pilgrim may tip his hat or wave for part of the slot.
+PILGRIM_GESTURE_SECONDS = 6.0
+PILGRIM_GESTURE_CHANCE = 0.35
+PILGRIM_GESTURE_LENGTH = (1.2, 2.2)
+
+
+def pilgrims_out(environment: "OutsideEnvironment") -> bool:
+    """Out on Thanksgiving from first light until the yard lamp goes off in the evening, unless it pours or snows hard."""
+    altitude = environment.sun_altitude
+    if THANKSGIVING not in holiday_features(environment) or altitude is None:
+        return False
+    rain, snow = precipitation(environment)
+    since = environment.since_nightfall
+    return rain < 3 and snow < 2 and (altitude > NIGHT_ALTITUDE or (since is not None and 0 <= since < LAMP_SECONDS))
+
+
+def pilgrim_pose(index: int, elapsed: float, seed: int) -> str:
+    kind = PILGRIMS[index][0]
+    slot = math.floor(elapsed / PILGRIM_GESTURE_SECONDS)
+    if unit_hash(seed, slot, index, 41) >= PILGRIM_GESTURE_CHANCE:
+        return "stand"
+    length = PILGRIM_GESTURE_LENGTH[0] + (PILGRIM_GESTURE_LENGTH[1] - PILGRIM_GESTURE_LENGTH[0]) * unit_hash(seed, slot, index, 43)
+    start = (PILGRIM_GESTURE_SECONDS - length) * unit_hash(seed, slot, index, 47)
+    if not start <= elapsed - slot * PILGRIM_GESTURE_SECONDS < start + length:
+        return "stand"
+    if kind == "woman":
+        # The wave swings between raised and lowered.
+        return "wave" if math.floor((elapsed - slot * PILGRIM_GESTURE_SECONDS - start) * 3) % 2 == 0 else "stand"
+    return "tip"
+
+
+def draw_thanksgiving_figures(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """The tom, any visiting hens and the pilgrims, back to front by the row each stands on; on a shared row the pilgrims
+    stand behind the birds."""
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+
+    def lit(colors: dict[str, Color]) -> dict[str, Color]:
+        return {char: tuple(round(value * illumination) for value in color) for char, color in colors.items()}
+
+    x, feet, lift, facing, pose = tom_state(elapsed, seed)
+    tom_colors = lit(TURKEY_COLORS["tom"])
+    if pose == "gobble":
+        tom_colors["r"] = TURKEY_GOBBLE_WATTLE
+    # (feet row, layer on a shared row, sprite, x, drawn row, facing, colors)
+    figures = [(feet, 1, TURKEY_SPRITES["tom"][pose], x, feet - lift, facing, tom_colors)]
+    visit = turkey_state(environment, elapsed, seed)
+    if visit is not None:
+        hen_colors = lit(TURKEY_COLORS["hen"])
+        for index in range(len(visit.hens)):
+            x, feet, facing, pose = turkey_pose(visit, index, elapsed, seed)
+            figures.append((feet, 1, TURKEY_SPRITES["hen"][pose], x, feet, facing, hen_colors))
+    if pilgrims_out(environment):
+        pilgrim_colors = lit(PILGRIM_COLORS)
+        for index, (kind, x, feet) in enumerate(PILGRIMS):
+            figures.append((feet, 0, PILGRIM_SPRITES[kind][pilgrim_pose(index, elapsed, seed)], x, feet, 1, pilgrim_colors))
+    d = ImageDraw.Draw(image)
+    for _, _, rows, x, row, facing, colors in sorted(figures, key=lambda figure: figure[:2]):
+        draw_standing_sprite(d, rows, x, row, facing, colors)
+
+
+# On Thanksgiving a skein of geese flying in a V takes the place of the small songbird flock.
+GEESE_SLOT_SECONDS = 75
+GEESE_CHANCE = 0.55
+GEESE_SPEED = 10
+GEESE_COUNT = (5, 7)
+# The leader's row; the V's arms then stay below the corner labels and above the treeline.
+GEESE_ROW = 13
+# Each rank back along an arm trails by this many columns and spreads by this many rows.
+GEESE_RANK_SPACING = (5, 2)
+GEESE_FLAP_RATE = 4.5
+# Wingbeats ripple back along the arms, each rank this many radians behind the one ahead.
+GEESE_FLAP_LAG = 0.7
+
+
+@lru_cache(maxsize=8)
+def geese_flight(slot: int, seed: int) -> tuple[float, float, int, int] | None:
+    """(start, end, heading, count) of the skein crossing in this slot, if any. Never spans two slots."""
+    rng = random.Random(seed * 2953 + slot * 70001 + 37)
+    if rng.random() > GEESE_CHANCE:
+        return None
+    count = rng.randint(*GEESE_COUNT)
+    length = (count // 2 + 1) * GEESE_RANK_SPACING[0]
+    duration = (WIDTH + 2 * length + 4) / GEESE_SPEED
+    start = slot * GEESE_SLOT_SECONDS + rng.uniform(1, GEESE_SLOT_SECONDS - duration - 1)
+    return start, start + duration, rng.choice((-1, 1)), count
+
+
+def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    flight = geese_flight(math.floor(elapsed / GEESE_SLOT_SECONDS), seed)
+    if flight is None or not flight[0] <= elapsed < flight[1]:
+        return
+    start, end, heading, count = flight
+    if next(eagle_visits_present(environment, seed, start, end), None) is not None:
+        return
+    length = (count // 2 + 1) * GEESE_RANK_SPACING[0]
+    travel = (elapsed - start) * GEESE_SPEED - length
+    lead_x = travel if heading > 0 else WIDTH - 1 - travel
+    d = ImageDraw.Draw(image)
+    for index in range(count):
+        # Geese alternate between the two arms of the V, one rank further back each pair.
+        rank, arm = (index + 1) // 2, 1 if index % 2 else -1
+        x = round(lead_x - heading * rank * GEESE_RANK_SPACING[0])
+        y = GEESE_ROW + arm * rank * GEESE_RANK_SPACING[1]
+        wing = 1 if math.sin(elapsed * GEESE_FLAP_RATE - rank * GEESE_FLAP_LAG) > 0 else -1
+        for px, py in ((x - 1, y - wing), (x, y), (x + 1, y - wing)):
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=palette.roof)
+
+
 def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> Image.Image:
     palette = scene_palette(environment)
     image = Image.new("RGB", (WIDTH, HEIGHT))
@@ -3052,11 +3537,16 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         # The lurking figure stands farther back than the pumpkins, which roll in front of it.
         draw_shadow_figure(image, shadow, elapsed)
         draw_jack_o_lanterns(image, palette, night, elapsed, roll)
+    thanksgiving = THANKSGIVING in holidays
+    if thanksgiving:
+        draw_harvest_display(image, palette, night, elapsed)
     wind = environment.weather.wind or 0
     if "flag" in holidays:
         draw_flag(image, palette, wind, elapsed)
     draw_leaves(image, palette, environment, elapsed, seed)
     draw_wildlife(image, palette, environment, elapsed, seed)
+    if thanksgiving:
+        draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     image = draw_smoke(image, palette, environment, elapsed, seed)
@@ -3093,6 +3583,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         image = draw_jack_o_lantern_glow(image, night, elapsed, roll)
         draw_shadow_eyes(image, shadow, night, elapsed)
         draw_ghost(image, night, elapsed, seed)
+    if thanksgiving:
+        image = draw_lantern_glow(image, night, elapsed)
     # Christmas lights shine on top of the lamp's wash so they stay saturated.
     if "christmas_lights" in holidays:
         image = draw_christmas_lights(image, environment, elapsed)
