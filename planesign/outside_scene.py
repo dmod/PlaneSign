@@ -28,6 +28,9 @@ OVERLAY_LINEAR_LUT = [round(255 * (value / 255 / 12.92 if value <= 10 else ((val
 OVERLAY_POLARITY_LUMINANCE = math.sqrt(0.05 * 1.05) - 0.05
 OVERLAY_POLARITY_HYSTERESIS = 0.01
 OVERLAY_GAP = 5
+# Labels sit this many pixels in from the top and outer edges, so sky frames black text that would
+# otherwise merge into the unlit border around the panel.
+OVERLAY_MARGIN = 1
 # Stars stay this many pixels clear of the clock and temperature glyphs, so a twinkle never reads as part of a digit.
 LABEL_STAR_MARGIN = 2
 # Notices too wide for the space between the corner labels pause, then scroll.
@@ -300,7 +303,7 @@ TREE_CLUMPS = (
     (*TREE_CROWN, 6.84, 4.32),
     *((TREE_CROWN[0] + 7.38 * math.cos(angle), TREE_CROWN[1] + 4.14 * math.sin(angle), 2.61, 2.16) for angle in (-math.pi / 2 + i * 2 * math.pi / 9 for i in range(9))),
 )
-# The temperature label owns rows 0-4; leaves never start above this row.
+# The temperature label owns rows 1-6; leaves never start above this row.
 TREE_FOLIAGE_TOP = 7
 TREE_BLOSSOMS = ((-8, -3), (-2, -5), (5, 1), (4, 2), (7, -3))
 
@@ -1071,9 +1074,9 @@ SMOKE_LIFETIME = 5.0
 # Buoyant rise (px/s at the flue) decays over SMOKE_RISE_SECONDS.
 SMOKE_RISE = 2.4
 SMOKE_RISE_SECONDS = 3.0
-# The clock label (as wide as "12:59PM") sits right above the chimney on rows 0-5, so smoke
+# The clock label (as wide as "12:59PM") sits right above the chimney on rows 1-6, so smoke
 # thins out over SMOKE_CEILING_FADE rows and is gone by SMOKE_CEILING.
-SMOKE_CEILING = 7
+SMOKE_CEILING = 8
 SMOKE_CEILING_FADE = 3
 # Wind carries puffs right, like the flag, rain and snow, at this many px/s per mph; it also
 # flattens the plume and shreds it sooner.
@@ -3627,7 +3630,7 @@ def overlay_contrast_fraction(luminance: float) -> float:
 def draw_overlay(image: Image.Image, mask: Image.Image, x: int, *, previous_dark: bool | None = None, hold_style: bool = False) -> bool | None:
     if mask.getbbox() is None:
         return previous_dark
-    background = image.crop((x, 0, x + mask.width, mask.height))
+    background = image.crop((x, OVERLAY_MARGIN, x + mask.width, OVERLAY_MARGIN + mask.height))
     luminance = overlay_relative_luminance(background, mask)
     threshold = OVERLAY_POLARITY_LUMINANCE + (OVERLAY_POLARITY_HYSTERESIS if previous_dark is False else -OVERLAY_POLARITY_HYSTERESIS if previous_dark is True else 0)
     dark_text = previous_dark if hold_style and previous_dark is not None else luminance >= threshold
@@ -3638,13 +3641,13 @@ def draw_overlay(image: Image.Image, mask: Image.Image, x: int, *, previous_dark
         color = mix((205, 218, 231), (255, 255, 255), contrast)
         opacity = OVERLAY_NIGHT_OPACITY + (1 - OVERLAY_NIGHT_OPACITY) * contrast
         lettering = Image.blend(background, Image.new("RGB", background.size, color), opacity)
-    image.paste(lettering, (x, 0), mask)
+    image.paste(lettering, (x, OVERLAY_MARGIN), mask)
     return dark_text
 
 
 def draw_corner_label(image: Image.Image, text: str, *, right: bool = False, previous_dark: bool | None = None, hold_style: bool = False) -> bool | None:
     mask = overlay_text_mask(text)
-    return draw_overlay(image, mask, WIDTH - mask.width if right else 0, previous_dark=previous_dark, hold_style=hold_style)
+    return draw_overlay(image, mask, WIDTH - OVERLAY_MARGIN - mask.width if right else OVERLAY_MARGIN, previous_dark=previous_dark, hold_style=hold_style)
 
 
 def outside_notice(environment: "OutsideEnvironment") -> str:
@@ -3696,8 +3699,8 @@ def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, 
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
     clock_width, temperature_width = overlay_text_mask(clock).width, overlay_text_mask(temperature_text).width
-    label_bottom = overlay_text_mask(clock).height - 1 + LABEL_STAR_MARGIN
-    star_clearings = ((0, 0, clock_width - 1 + LABEL_STAR_MARGIN, label_bottom), (WIDTH - temperature_width - LABEL_STAR_MARGIN, 0, WIDTH - 1, label_bottom))
+    label_bottom = OVERLAY_MARGIN + overlay_text_mask(clock).height - 1 + LABEL_STAR_MARGIN
+    star_clearings = ((0, 0, OVERLAY_MARGIN + clock_width - 1 + LABEL_STAR_MARGIN, label_bottom), (WIDTH - OVERLAY_MARGIN - temperature_width - LABEL_STAR_MARGIN, 0, WIDTH - 1, label_bottom))
     image = render_outside_frame(environment, elapsed, seed, star_clearings)
     previous_clock, previous_temperature, previous_notice = (*previous_text_styles, None, None, None)[:3]
     # Lightning flashes last a few frames; keep the labels' black/white style steady through them.
@@ -3707,8 +3710,8 @@ def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, 
     notice = outside_notice(environment)
     notice_dark = None
     if notice:
-        left = overlay_text_mask(clock).width + OVERLAY_GAP
-        right = WIDTH - overlay_text_mask(temperature_text).width - OVERLAY_GAP
+        left = OVERLAY_MARGIN + overlay_text_mask(clock).width + OVERLAY_GAP
+        right = WIDTH - OVERLAY_MARGIN - overlay_text_mask(temperature_text).width - OVERLAY_GAP
         notice_dark = draw_notice(image, notice, left, right, elapsed, previous_dark=previous_notice, hold_style=flashing)
     sign.canvas.SetImage(image)
     return clock_dark, temperature_dark, notice_dark

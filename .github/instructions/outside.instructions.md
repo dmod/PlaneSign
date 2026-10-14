@@ -33,7 +33,7 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
 - On Thanksgiving the chimney smokes all day, even when the temperature is warm or unknown.
 
 ## Corner Labels
-- The clock, temperature and notice choose black or light text from the luminance under their glyphs, with hysteresis, so clouds do not make them flicker. `draw_outside_frame` takes the previous styles and returns the next ones; carry them between frames. Labels have no outline or box, and they keep their style while a lightning flash is active.
+- The clock, temperature and notice choose black or light text from the luminance under their glyphs, with hysteresis, so clouds do not make them flicker. `draw_outside_frame` takes the previous styles and returns the next ones; carry them between frames. Labels have no outline or box, and they keep their style while a lightning flash is active. They sit `OVERLAY_MARGIN` pixels in from the top and outer edges: flush black text merges into the unlit border around the panel.
 - Field stars and shooting stars skip a clearing around the clock and temperature, sized from the rendered labels each frame and passed into `render_outside_frame`. The clearing hides stars only; the sky gradient, clouds and everything else still draw there.
 
 ## LED Color Tuning
