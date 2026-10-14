@@ -1241,7 +1241,7 @@ def owl_glances(window: int, seed: int):
 
 def owl_allowed(environment: "OutsideEnvironment") -> bool:
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment)
+    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment) and not tree_ornaments_shown(environment)
 
 
 def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
@@ -2036,6 +2036,16 @@ CHRISTMAS_BULB_LIGHT = SRGB_TO_LINEAR_ARRAY[np.array([CHRISTMAS_COLORS[index % l
 CHRISTMAS_HALO = np.array([(y + dy, x + dx, index) for index, (x, y) in enumerate(CHRISTMAS_BULBS) for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (x + dx, y + dy) not in CHRISTMAS_BULBS and 0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT])
 # A star sits just above each conifer's apex.
 TREE_TOPPERS = tuple((cx, base - height - 2) for cx, base, height in CONIFERS)
+# A sparse, lopsided handful of glass balls hangs from the bare maple's twigs: (left x, top row) of each 2x2 ball,
+# just under a twig. The wood never sways, so neither do they.
+TREE_ORNAMENTS = ((100, 13), (122, 12), (116, 15), (100, 21), (118, 20))
+TREE_ORNAMENT_COLORS = ((236, 22, 34), (52, 98, 255), (255, 170, 20), (30, 206, 82), (238, 50, 170))
+# After dark the unlit glass fades toward this dim, cool gray instead of glowing like the Christmas lights.
+TREE_ORNAMENT_NIGHT = (34, 38, 56)
+# Shading across each ball, lit from the upper left: (dx, dy, brightness).
+TREE_ORNAMENT_SHADE = ((1, 0, 0.92), (0, 1, 0.78), (1, 1, 0.5))
+# Each ball catches a brief glint once per cycle, at its own moment.
+TREE_ORNAMENT_GLINT_SECONDS, TREE_ORNAMENT_GLINT_LENGTH = 7.0, 0.5
 
 
 def linear_to_srgb_array(linear: np.ndarray) -> np.ndarray:
@@ -2075,6 +2085,25 @@ def draw_christmas_lights(image: Image.Image, environment: "OutsideEnvironment",
                 point = (x + dx, y + dy)
                 d.point(point, fill=mix(image.getpixel(point), TOPPER_CORE, 0.7 * strength))
     return image
+
+
+def tree_ornaments_shown(environment: "OutsideEnvironment") -> bool:
+    """Ornaments hang only on the bare winter maple while the Christmas lights are up; the owl stays away then."""
+    return environment.season == "winter" and "christmas_lights" in holiday_features(environment)
+
+
+def draw_tree_ornaments(image: Image.Image, night: float, elapsed: float):
+    """Glass balls on the bare maple; each highlight shimmers slowly and now and then glints white."""
+    d = ImageDraw.Draw(image)
+    for index, ((x, y), color) in enumerate(zip(TREE_ORNAMENTS, TREE_ORNAMENT_COLORS)):
+        body = mix(color, TREE_ORNAMENT_NIGHT, 0.62 * night)
+        shimmer = 0.5 + 0.5 * math.sin(elapsed * (0.9 + index * 0.17) + index * 2.3)
+        moment = (elapsed + index * TREE_ORNAMENT_GLINT_SECONDS * 0.37) % TREE_ORNAMENT_GLINT_SECONDS
+        glint = math.sin(math.pi * moment / TREE_ORNAMENT_GLINT_LENGTH) if moment < TREE_ORNAMENT_GLINT_LENGTH else 0
+        for dx, dy, shade in TREE_ORNAMENT_SHADE:
+            d.point((x + dx, y + dy), fill=mix(mix(body, (0, 0, 0), 1 - shade), body, 0.3 * glint))
+        # The highlight and glint soften after dark too, so the glass only catches a little of the lights.
+        d.point((x, y), fill=mix(body, (255, 255, 255), (0.22 + 0.18 * shimmer + 0.5 * glint) * (1 - 0.45 * night)))
 
 
 SANTA_SLOT_SECONDS = 30
@@ -3041,6 +3070,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             if environment.sun_altitude is not None and environment.sun_altitude > -5:
                 d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
+    if tree_ornaments_shown(environment):
+        draw_tree_ornaments(image, night, elapsed)
     # The owl perches on the fixed branch, in front of the swaying foliage.
     draw_owl(image, palette, owl_state(environment, elapsed, seed))
     if halloween:
