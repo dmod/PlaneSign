@@ -1,7 +1,7 @@
 """Outside lab: set Outside mode's time and weather by hand and see the result on the sign at once.
 
-Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx). It is deliberately not
-linked from the web UI. Every lab action switches the sign to Outside. The overrides only affect
+Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
+button in the web UI's Outside controls. Every lab action switches the sign to Outside. The overrides only affect
 Outside: the sign clock and every other mode keep real time and weather. They clear when the sign
 leaves Outside, after outside.LAB_IDLE_SECONDS without a lab action, on "Back to live", or on restart.
 """
@@ -16,7 +16,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS
+from outside_scene import HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -127,8 +127,7 @@ def find_sun_event(name: str, sky, start: float, end: float) -> float | None:
 
 def holiday_shortcuts(year: int):
     shortcuts = []
-    for month, day in sorted({(month, first) for _, spans in HOLIDAYS.values() for month, first, _ in spans}):
-        moment = date(year, month, day)
+    for moment in sorted({holiday_span_start(span, year) for _, spans in HOLIDAYS.values() for span in spans}):
         environment = outside.OutsideEnvironment("", outside.OutsideWeather("LIVE"), "READY", local_date=moment)
         labels = [HOLIDAYS[feature][0] for feature in HOLIDAYS if feature in outside.holiday_features(environment)]
         shortcuts.append({
@@ -149,8 +148,6 @@ def state():
             "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
             "holidays": holiday_shortcuts(displayed_moment(tz).year),
             "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
-            "emulated": shared_config.emulated_display,
-            "ws_port": shared_config.ws_port,
         },
     }
 

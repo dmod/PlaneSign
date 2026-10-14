@@ -1404,6 +1404,23 @@ def only_show_time(sign):
             return
 
 
+def weather_is_fresh():
+    """True while the shared OpenWeather payload is younger than one poll interval (weather.WEATHER_STALE_SECONDS)."""
+    return time.time() < shared_config.data_dict.get("weather_fresh_until", 0)
+
+
+def fresh_weather():
+    """The shared OpenWeather payload, or None when it is missing, stale or the service is unreachable."""
+    if shared_config.data_dict.get("weather_status") == "offline" or not weather_is_fresh():
+        return None
+    return shared_config.data_dict.get("weather")
+
+
+def weather_refresh_pending():
+    """True when the payload went stale while no weather mode was showing, and the worker has not tried to refresh it yet."""
+    return shared_config.data_dict.get("weather_status") == "ready" and shared_config.data_dict.get("weather") is not None and not weather_is_fresh()
+
+
 def show_time(sign):
     if shared_config.CONF["MILITARY_TIME"].lower() == "true":
         print_time = convert_unix_to_local_time(psclock.time()).strftime("%H:%M")
@@ -1411,9 +1428,9 @@ def show_time(sign):
         print_time = convert_unix_to_local_time(psclock.time()).strftime("%-I:%M%p")
 
     xloc = 86
-    weather = shared_config.data_dict.get("weather")
-    # An unreachable weather service shows "--" whether it is down or disabled by offline mode.
-    current = weather.get("current") if weather and shared_config.data_dict.get("weather_status") != "offline" else None
+    weather = fresh_weather()
+    # Unreachable, missing or stale weather all show "--": the clock has no way to mark an old reading.
+    current = weather.get("current") if weather else None
     if current and "temp" in current:
         tempval = round(current["temp"])
         if tempval < 0 or tempval > 99:
@@ -1435,18 +1452,28 @@ def show_time(sign):
 OFFLINE_RETRY_SECONDS = 30
 
 
-def draw_offline(sign, title):
-    """Draw the screen for a mode whose internet service is unreachable, either disabled by offline mode or down."""
+def draw_status(sign, title, message, color=(230, 140, 30)):
+    """Draw a mode title above a short status word (at most 14 characters), e.g. OFFLINE or LOADING."""
     sign.canvas.Clear()
     title = title.upper()[:25]
+    message = message.upper()[:14]
     graphics.DrawText(sign.canvas, sign.font57, int(get_centered_text_x_offset_value(5, title)), 11, graphics.Color(110, 110, 150), title)
-    graphics.DrawText(sign.canvas, sign.fontreallybig, int(get_centered_text_x_offset_value(9, "OFFLINE")), 27, graphics.Color(230, 140, 30), "OFFLINE")
+    graphics.DrawText(sign.canvas, sign.fontreallybig, int(get_centered_text_x_offset_value(9, message)), 27, graphics.Color(*color), message)
+
+
+def show_status(sign, title, message, seconds, color=(230, 140, 30)):
+    draw_status(sign, title, message, color)
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+    return sign.wait_loop(seconds)
+
+
+def draw_offline(sign, title):
+    """Draw the screen for a mode whose internet service is unreachable, either disabled by offline mode or down."""
+    draw_status(sign, title, "OFFLINE")
 
 
 def show_offline(sign, title, seconds=OFFLINE_RETRY_SECONDS):
-    draw_offline(sign, title)
-    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-    return sign.wait_loop(seconds)
+    return show_status(sign, title, "OFFLINE", seconds)
 
 
 def weather_icon_decode(code, status, isNight=False):

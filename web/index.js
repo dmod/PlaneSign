@@ -157,6 +157,8 @@ function apply_outside_status(data) {
         weather = 'live weather';
     } else if (data.weather === 'CACHED') {
         weather = 'cached weather (WX~)';
+    } else if (data.weather === 'PENDING') {
+        weather = data.offset_minutes ? 'refreshing forecast (FCST...)' : 'refreshing weather (WX...)';
     } else if (data.weather === 'OFFLINE') {
         weather = 'weather offline (OFFLINE); atmosphere is illustrative';
     } else {

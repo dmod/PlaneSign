@@ -83,6 +83,12 @@ body {
   margin-bottom: 10px;
 }
 
+.outside_actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .outside_timeline p {
   font-size: 0.8rem;
   line-height: 1.5;

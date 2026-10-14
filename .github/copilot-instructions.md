@@ -80,6 +80,8 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Follow a neighboring mode's registration and lifecycle patterns. Append new `DisplayMode` members, so existing numeric IDs stay stable, and expose the mode in both `web/index.html` and `web/layout-new.html`.
 - Fetch remote data in a background worker, not in the frame loop. Use timeouts, caching and retry backoff, integrate with the existing shutdown handling, and guard every request as described in "Network And Offline Mode".
 - Render explicit loading, unavailable and expired-data states. Mark cached data while it is still usable; never show missing data as zero or stale data as current.
+- The FR24 worker only polls while a mode in `planes.PLANE_DATA_MODES` is showing, and plane handlers call `planes.request_plane_data()` on entry to wake it. A new mode that reads the plane data needs both.
+- The OpenWeather worker defers a due poll until a mode in `weather.WEATHER_DATA_MODES` is showing, so the shared payload can be hours old. Read it through `utilities.fresh_weather()` (or check `weather_refresh_pending()`), never straight from `data_dict["weather"]`, and add any new mode that shows it to that set.
 
 ## Docker / Deployment
 - The container runs with `--network host` (no port mapping; host interfaces such as `wlan0` are directly accessible). Install and update with `docker_install_and_update.sh`. nginx (`docker_nginx_planesign.conf`) serves `web/` on 80/443 and proxies `/api/` to 5055. Image and installer details are in `.github/instructions/docker.instructions.md`.

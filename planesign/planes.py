@@ -16,6 +16,13 @@ FR24_PARAMS = {"faa": "1", "satellite": "1", "mlat": "1", "flarm": "1", "adsb": 
 FR24_WORLD_BOUNDS = "85,-85,-180,180"
 FR24_RETRY_DELAY = 2
 FR24_FEED_ATTEMPTS = 3
+FR24_POLL_INTERVAL = 7
+
+# The only modes that read the worker's plane data; the worker sends no FR24 requests while any other mode shows.
+# TRACK_A_FLIGHT makes its own requests and is not listed.
+PLANE_DATA_MODES = frozenset({DisplayMode.PLANES_ALERT, DisplayMode.PLANES_CLOSEST, DisplayMode.PLANES_HIGHEST, DisplayMode.PLANES_FASTEST, DisplayMode.PLANES_SLOWEST})
+PLANE_DATA_MODE_VALUES = frozenset(mode.value for mode in PLANE_DATA_MODES)
+PLANE_DATA_KEYS = ("closest", "highest", "fastest", "slowest")
 
 # The FR24 feed can only be filtered by ICAO callsign, so IATA flight numbers (what people
 # normally type) are translated to their ICAO equivalent with adsbdb first.
@@ -179,8 +186,18 @@ def planes_offline():
     return shared_config.data_dict.get("planes_status") == "offline"
 
 
+def plane_data_wanted():
+    return shared_config.shared_mode.value in PLANE_DATA_MODE_VALUES
+
+
+def request_plane_data():
+    """Wake the FR24 worker if it is paused, so a plane mode gets fresh data without waiting for a poll."""
+    shared_config.shared_plane_data_wake.set()
+
+
 @planesign_mode_handler(DisplayMode.PLANES_ALERT)
 def show_closest_plane_if_in_alert_radius(sign):
+    request_plane_data()
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == DisplayMode.PLANES_ALERT.value:
         # The default display stays a plain clock while FR24 is unreachable, never a stale plane.
@@ -194,6 +211,7 @@ def show_closest_plane_if_in_alert_radius(sign):
 
 
 def always_show_plane(sign, mode, key):
+    request_plane_data()
     scroll = utilities.TextScroller(sign, 2, 21, (200, 10, 10), boxdim=(70, 7), space=3, scrollspeed=10, holdtime=2)
     while shared_config.shared_mode.value == mode.value:
         if planes_offline():
@@ -302,71 +320,93 @@ def show_a_plane(sign, plane_to_show, scroll):
         sign.wait_loop(0.5)
 
 
+def clear_plane_data(data_dict):
+    """Drop cached planes and status, so a plane mode shows its loading state instead of stale planes."""
+    for key in PLANE_DATA_KEYS:
+        data_dict[key] = None
+    data_dict.pop("planes_status", None)
+
+
+def refresh_plane_data(data_dict, bounds):
+    try:
+        try:
+            flights = get_flights(bounds)
+            data_dict["planes_status"] = "ready"
+        except Exception as error:
+            if network.is_offline_error(error):
+                network.log_unreachable("FlightRadar24", error)
+                data_dict["planes_status"] = "offline"
+            else:
+                logging.exception("Error requesting FR24 flight data")
+                data_dict["planes_status"] = "error"
+            flights = None
+
+        closest = None
+        highest = None
+        fastest = None
+        slowest = None
+
+        if flights:
+            for flight in flights:
+                # Filter out planes on the ground
+                if flight.on_ground:
+                    continue
+
+                # Not included in the API, we calculate this on the fly
+                flight.distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (flight.latitude, flight.longitude))
+
+                if closest is None or (flight.distance < closest.distance and flight.altitude < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"])):
+                    closest = flight
+
+                # The rest of these are for fun, filter out the unknown planes
+                if not flight.origin_airport_iata:
+                    continue
+
+                if highest is None or flight.altitude > highest.altitude:
+                    highest = flight
+
+                if fastest is None or flight.ground_speed > fastest.ground_speed:
+                    fastest = flight
+
+                if slowest is None or flight.ground_speed < slowest.ground_speed:
+                    slowest = flight
+
+            logging.info(f"{closest.distance:.2f} miles away: {closest.callsign}/{closest.registration} {closest.origin_airport_iata}->{closest.destination_airport_iata}")
+
+            data_dict["closest"] = closest
+            data_dict["highest"] = highest
+            data_dict["fastest"] = fastest
+            data_dict["slowest"] = slowest
+        elif data_dict.get("planes_status") == "ready":
+            logging.warning("No flights found")
+    except Exception:
+        logging.exception("Error getting FR24 data...")
+
+
 def get_plane_data_worker(data_dict):
     import signal
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     bounds = f"{float(shared_config.CONF['SENSOR_LAT']) + 2},{float(shared_config.CONF['SENSOR_LAT']) - 2},{float(shared_config.CONF['SENSOR_LON']) - 2},{float(shared_config.CONF['SENSOR_LON']) + 2}"
+    wake = shared_config.shared_plane_data_wake
+    polling = False
 
-    shutdown_flag = False
+    while not shared_config.shutdown_in_progress():
+        # Clear before reading the mode: a plane mode that starts after this either is seen by the
+        # check below or leaves the event set, so the paused wait returns at once.
+        wake.clear()
+        if not plane_data_wanted():
+            if polling:
+                logging.info(f"Pausing FR24 requests while {DisplayMode(shared_config.shared_mode.value).name} is showing")
+                clear_plane_data(data_dict)
+                polling = False
+            wake.wait(1)
+            continue
 
-    while not shutdown_flag:
-        try:
-            if shared_config.shared_mode.value == DisplayMode.SIGN_OFF.value:
-                logging.info("Sign off, skipping FR24 request...")
-            else:
-                try:
-                    flights = get_flights(bounds)
-                    data_dict["planes_status"] = "ready"
-                except Exception as error:
-                    if network.is_offline_error(error):
-                        network.log_unreachable("FlightRadar24", error)
-                        data_dict["planes_status"] = "offline"
-                    else:
-                        logging.exception("Error requesting FR24 flight data")
-                        data_dict["planes_status"] = "error"
-                    flights = None
-
-                closest = None
-                highest = None
-                fastest = None
-                slowest = None
-
-                if flights:
-                    for flight in flights:
-                        # Filter out planes on the ground
-                        if flight.on_ground:
-                            continue
-
-                        # Not included in the API, we calculate this on the fly
-                        flight.distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (flight.latitude, flight.longitude))
-
-                        if closest is None or (flight.distance < closest.distance and flight.altitude < float(shared_config.CONF["CLOSEST_HEIGHT_LIMIT"])):
-                            closest = flight
-
-                        # The rest of these are for fun, filter out the unknown planes
-                        if not flight.origin_airport_iata:
-                            continue
-
-                        if highest is None or flight.altitude > highest.altitude:
-                            highest = flight
-
-                        if fastest is None or flight.ground_speed > fastest.ground_speed:
-                            fastest = flight
-
-                        if slowest is None or flight.ground_speed < slowest.ground_speed:
-                            slowest = flight
-
-                    logging.info(f"{closest.distance:.2f} miles away: {closest.callsign}/{closest.registration} {closest.origin_airport_iata}->{closest.destination_airport_iata}")
-
-                    data_dict["closest"] = closest
-                    data_dict["highest"] = highest
-                    data_dict["fastest"] = fastest
-                    data_dict["slowest"] = slowest
-                elif data_dict.get("planes_status") == "ready":
-                    logging.warning("No flights found")
-        except Exception:
-            logging.exception("Error getting FR24 data...")
-
-        shutdown_flag = network.wait(7)
+        if not polling:
+            logging.info(f"Requesting FR24 data for {DisplayMode(shared_config.shared_mode.value).name}")
+            polling = True
+        refresh_plane_data(data_dict, bounds)
+        if network.wait(FR24_POLL_INTERVAL):
+            break

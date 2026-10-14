@@ -4,7 +4,7 @@ import math
 import os
 import random
 from dataclasses import dataclass, fields, replace
-from datetime import datetime
+from datetime import date, datetime
 from functools import lru_cache
 from itertools import pairwise
 from typing import TYPE_CHECKING
@@ -28,6 +28,8 @@ OVERLAY_LINEAR_LUT = [round(255 * (value / 255 / 12.92 if value <= 10 else ((val
 OVERLAY_POLARITY_LUMINANCE = math.sqrt(0.05 * 1.05) - 0.05
 OVERLAY_POLARITY_HYSTERESIS = 0.01
 OVERLAY_GAP = 5
+# Stars stay this many pixels clear of the clock and temperature glyphs, so a twinkle never reads as part of a digit.
+LABEL_STAR_MARGIN = 2
 # Notices too wide for the space between the corner labels pause, then scroll.
 NOTICE_SCROLL_SPEED = 12
 NOTICE_SCROLL_PAUSE = 1.5
@@ -252,6 +254,7 @@ MATERIALS = tuple(field.name for field in fields(Palette))
 INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
 INDEX["peak"] = len(MATERIALS) + 2
+INDEX["chimney"] = len(MATERIALS) + 3
 # One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
 MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 17), (77, 15), (80, 14), (83, 13), (86, 14), (89, 15), (92, 17), (96, 20), (100, 21), (106, 23), (127, 23))
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
@@ -265,6 +268,10 @@ CONIFERS = ((4, 28, 12), (38, 25, 7))
 HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
 HUT_DOOR = (26, 21, 29, 25)
 HUT_KNOB = (28, 23)
+# A small stone chimney on the right roof slope: body box, cap row, and the flue mouth the smoke leaves from.
+CHIMNEY = (31, 14, 32, 17)
+CHIMNEY_CAP = (31, 13, 32, 13)
+CHIMNEY_FLUE = (31.5, 12.5)
 LAMP_POST_X = 14
 LAMP_LENS = (17, 17)
 LAMP_GROUND_Y = 26
@@ -352,6 +359,9 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
         palette = replace(palette, grass=mix(palette.grass, (181, 199, 195), daylight * 0.35), water=mix(palette.water, (131, 168, 180), daylight * 0.25))
     if snow > 0:
         palette = replace(palette, field=mix(palette.field, (207, 218, 226), daylight * 0.85 + 0.1), foreground=mix(palette.foreground, (151, 180, 199), daylight * 0.8 + 0.1), grass=mix(palette.grass, (236, 235, 226), daylight * 0.75))
+    if HALLOWEEN in holiday_features(environment):
+        eerie = holiday_darkness(environment)
+        palette = replace(palette, top=mix(palette.top, HALLOWEEN_SKY_TOP, eerie * 0.55), middle=mix(palette.middle, HALLOWEEN_SKY_MIDDLE, eerie * 0.45))
     dim = cloud_cover(environment) * (WEATHER_DIM_PRECIPITATION if rain or snow else WEATHER_DIM_CLOUDS)
     return graded_palette(Palette(*(mix(getattr(palette, name), (45, 60, 75), dim) for name in MATERIALS)))
 
@@ -396,6 +406,8 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         d.line((19 + inset, y, 36 - inset, y), fill=INDEX["trunk"])
     d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
     d.line((19, 20, 36, 20), fill=INDEX["trunk"])
+    d.rectangle(CHIMNEY, fill=INDEX["chimney"])
+    d.rectangle(CHIMNEY_CAP, fill=INDEX["roof"])
     d.rectangle(HUT_DOOR, fill=INDEX["door"])
     d.point(HUT_KNOB, fill=INDEX["trim"])
     # Yard lamp: a post with an arm reaching toward the hut and a hood that shines down.
@@ -471,27 +483,35 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
 
 
 LAND, LEAFY_TREE, BARE_TREE = geometry()
+CHIMNEY_MASK = Image.new("L", (WIDTH, HEIGHT), 0)
+ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY, fill=255)
+ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY_CAP, fill=255)
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
 # The Big Dipper (Ursa Major) right of the mountain, projected from the real stars at 0.7 px per degree in its
 # autumn-evening pose (bowl upright, handle to the left), turned 20 degrees to level the handle:
 # (x, y, peak brightness from magnitude, color). Dubhe and Merak, the pointers, form the bowl's right edge.
 BIG_DIPPER = (
-    (83, 7, 0.98, (232, 240, 255)),  # Alkaid
-    (87, 6, 0.87, (232, 240, 255)),  # Mizar
-    (90, 6, 1.0, (232, 240, 255)),  # Alioth
-    (94, 7, 0.55, (232, 240, 255)),  # Megrez
-    (95, 10, 0.81, (232, 240, 255)),  # Phecda
-    (101, 9, 0.83, (232, 240, 255)),  # Merak
-    (101, 5, 1.0, (255, 222, 180)),  # Dubhe
+    (81, 5, 0.98, (232, 240, 255)),  # Alkaid
+    (85, 4, 0.87, (232, 240, 255)),  # Mizar
+    (88, 4, 1.0, (232, 240, 255)),  # Alioth
+    (92, 5, 0.55, (232, 240, 255)),  # Megrez
+    (93, 8, 0.81, (232, 240, 255)),  # Phecda
+    (99, 7, 0.83, (232, 240, 255)),  # Merak
+    (99, 3, 1.0, (255, 222, 180)),  # Dubhe
 )
 # Random field stars keep a 3 px berth around the constellation so its shape reads cleanly.
 DIPPER_BOUNDS = (min(s[0] for s in BIG_DIPPER) - 3, min(s[1] for s in BIG_DIPPER) - 3, max(s[0] for s in BIG_DIPPER) + 3, max(s[1] for s in BIG_DIPPER) + 3)
+# Haze near the horizon hides faint stars, so field stars stay more than this many pixels from any land.
+STAR_HORIZON_CLEARANCE = 4
+LAND_ROWS, LAND_COLUMNS = np.nonzero(np.asarray(LAND))
 STARS = tuple(
     (x, y, grain(x, y, 5))
     for y in range(1, 21)
     for x in range(2, 126)
-    if grain(x, y, 9) < 2 and not (DIPPER_BOUNDS[0] <= x <= DIPPER_BOUNDS[2] and DIPPER_BOUNDS[1] <= y <= DIPPER_BOUNDS[3])
+    if grain(x, y, 9) < 2
+    and not (DIPPER_BOUNDS[0] <= x <= DIPPER_BOUNDS[2] and DIPPER_BOUNDS[1] <= y <= DIPPER_BOUNDS[3])
+    and np.min(np.hypot(LAND_COLUMNS - x, LAND_ROWS - y)) > STAR_HORIZON_CLEARANCE
 )
 STAR_COLORS = ((232, 244, 255), (255, 239, 207), (225, 231, 255))
 RIPPLES = ((60, 27, 15, 0), (55, 28, 9, 2.3), (68, 29, 7, 4.5))
@@ -507,6 +527,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
         table.extend(mountain if name == "far" else getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
     table.extend(mix(mountain, palette.horizon, MOUNTAIN_LIT))
+    table.extend(mix(palette.roof, palette.trim, 0.3))
     table.extend([0] * (768 - len(table)))
 
     def colorize(mask):
@@ -524,7 +545,11 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
         for x in range(128):
             if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["hut"], INDEX["door"]):
                 d.point((x, 26), fill=palette.grass)
+        chimney = land.copy()
         d.line((19, 19, 27, 15, 28, 15, 36, 19), fill=palette.trim)
+        # The roof's snow stops at the chimney, which carries its own cap of snow.
+        land.paste(chimney, (0, 0), CHIMNEY_MASK)
+        d.line((CHIMNEY_CAP[0], CHIMNEY_CAP[1] - 1, CHIMNEY_CAP[2], CHIMNEY_CAP[1] - 1), fill=palette.trim)
         d.line((3, 27, 40, 27), fill=palette.grass)
     if snowcap:
         d = ImageDraw.Draw(land)
@@ -730,7 +755,14 @@ def shooting_star(slot: int, seed: int) -> ShootingStar | None:
     return ShootingStar(start, duration, (x, y), velocity, rng.uniform(0.75, 1.0))
 
 
-def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int):
+Box = tuple[int, int, int, int]
+
+
+def in_boxes(x: int, y: int, boxes: tuple[Box, ...]) -> bool:
+    return any(left <= x <= right and top <= y <= bottom for left, top, right, bottom in boxes)
+
+
+def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int, clearings: tuple[Box, ...] = ()):
     star = shooting_star(math.floor(elapsed / SHOOTING_STAR_SLOT_SECONDS), seed)
     if star is None or not star.start <= elapsed < star.start + star.duration:
         return
@@ -747,7 +779,7 @@ def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, se
         back = trail * index / samples
         x = round(head_x - star.velocity[0] / speed * back)
         y = round(head_y - star.velocity[1] / speed * back)
-        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and not in_boxes(x, y, clearings):
             fade = (1 - back / SHOOTING_STAR_TRAIL) ** 1.6
             strengths[(x, y)] = max(strengths.get((x, y), 0), fade)
     d = ImageDraw.Draw(image)
@@ -755,14 +787,16 @@ def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, se
         d.point((x, y), fill=mix(image.getpixel((x, y)), SHOOTING_STAR_COLOR, min(1, visibility * envelope * fade)))
 
 
-def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None, seed: int = 0) -> np.ndarray:
-    """Draw the sky and return the mask of cloud pixels."""
+def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> np.ndarray:
+    """Draw the sky and return the mask of cloud pixels. Stars skip `star_clearings`; the sky color does not."""
     d = ImageDraw.Draw(image)
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
     cover = cloud_cover(environment)
     visibility = night * (1 - cover * 0.92) * (1 - moonlight(environment) * 0.25)
     for x, y, phase in STARS:
+        if star_clearings and in_boxes(x, y, star_clearings):
+            continue
         swell = 0.5 + 0.5 * math.sin(elapsed * (0.65 + phase / 160) + phase)
         sparkle = 0.85 + 0.15 * (0.5 + 0.5 * math.sin(elapsed * (1.8 + phase / 110) + phase * 0.37))
         shimmer = 0.04 + 0.96 * swell * swell * sparkle
@@ -775,7 +809,7 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), color, strength))
     if visibility > 0:
-        draw_shooting_star(image, elapsed, visibility, seed)
+        draw_shooting_star(image, elapsed, visibility, seed, star_clearings)
     glows = []
     if altitude is not None and altitude > SET_ALTITUDE:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
@@ -828,14 +862,19 @@ def wildlife_visit(slot: int, seed: int):
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
-    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside."""
+    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside. Nothing comes out on
+    Halloween; on Thanksgiving turkeys and geese take their places."""
+    holidays = holiday_features(environment)
+    if HALLOWEEN in holidays:
+        return
+    thanksgiving = THANKSGIVING in holidays
     d = ImageDraw.Draw(image)
     rain, snow = precipitation(environment)
     slot, age = divmod(elapsed, 100)
     present, species, start, duration, target, pair = wildlife_visit(int(slot), seed)
     visit = slot * 100 + start
     dog_nearby = dog_allowed(environment) and next(dog_outings_between(seed, visit, visit + duration), None) is not None
-    if present and start <= age < start + duration and rain < 3 and snow < 2 and not dog_nearby:
+    if present and start <= age < start + duration and rain < 3 and snow < 2 and not dog_nearby and not thanksgiving:
         visit_age = age - start
         arrival = max(0, min(1, visit_age / 18))
         departure = max(0, min(1, (visit_age - duration + 18) / 18))
@@ -876,6 +915,9 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 d.point((px(-1), 30), fill=palette.trim)
     sun_altitude = environment.sun_altitude
     if sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1:
+        if thanksgiving:
+            draw_geese(image, palette, environment, elapsed, seed)
+            return
         flock_age = (elapsed + seed % 30) % 85
         flock_start = elapsed - flock_age
         # Small birds keep clear of the sky while an eagle is hunting.
@@ -979,8 +1021,9 @@ def dog_outing(slot: int, seed: int) -> DogOuting | None:
 
 
 def dog_allowed(environment: "OutsideEnvironment") -> bool:
+    """Dry daylight only, and the dog stays in on Halloween."""
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0
+    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0 and HALLOWEEN not in holiday_features(environment)
 
 
 def dog_outings_between(seed: int, first: float, last: float):
@@ -1019,6 +1062,82 @@ def dog_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     elif step.target == DOG_DOORWAY:
         reveal = 1 - progress
     return door, (x, y, step.facing, pose, reveal)
+
+
+# The fireplace is lit below this temperature (°F); colder days burn a thicker plume.
+SMOKE_MAX_TEMPERATURE = 45
+SMOKE_INTERVAL = 0.3
+SMOKE_LIFETIME = 5.0
+# Buoyant rise (px/s at the flue) decays over SMOKE_RISE_SECONDS.
+SMOKE_RISE = 2.4
+SMOKE_RISE_SECONDS = 3.0
+# The clock label (as wide as "12:59PM") sits right above the chimney on rows 0-5, so smoke
+# thins out over SMOKE_CEILING_FADE rows and is gone by SMOKE_CEILING.
+SMOKE_CEILING = 7
+SMOKE_CEILING_FADE = 3
+# Wind carries puffs right, like the flag, rain and snow, at this many px/s per mph; it also
+# flattens the plume and shreds it sooner.
+SMOKE_WIND_DRIFT = 0.3
+SMOKE_OPACITY = 0.7
+SMOKE_COLOR = (214, 214, 220)
+
+
+def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[float, float, float, float, float]]:
+    """(x, y, x radius, y radius, opacity) for chimney smoke, oldest first; none unless a known temperature is cold enough,
+    except that the fire burns all Thanksgiving whatever the weather."""
+    temperature = environment.weather.temperature
+    cold = temperature is not None and temperature < SMOKE_MAX_TEMPERATURE
+    if not cold and THANKSGIVING not in holiday_features(environment):
+        return []
+    wind = min(30, environment.weather.wind or 0)
+    strength = 0.6 + 0.4 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25) if cold else 0.6
+    life = SMOKE_LIFETIME / (1 + wind / 40)
+    rise = SMOKE_RISE / (1 + wind / 10)
+    drift = wind * SMOKE_WIND_DRIFT
+    newest = math.floor(elapsed / SMOKE_INTERVAL)
+    puffs = []
+    for n in range(newest - math.ceil(life / SMOKE_INTERVAL), newest + 1):
+        age = elapsed - n * SMOKE_INTERVAL
+        if not 0 <= age < life:
+            continue
+        phase = grain(n % 9973, 17, seed) / 97 * math.tau
+        up = rise * SMOKE_RISE_SECONDS * (1 - math.exp(-age / SMOKE_RISE_SECONDS))
+        # Puffs pick up the wind's speed within a fraction of a second of leaving the flue.
+        across = drift * (age - 0.4 * (1 - math.exp(-age / 0.4)))
+        # A faint meander keeps a calm plume alive without leaning it; gusts add turbulence.
+        wobble = math.sin(age * 1.7 + phase) * (0.25 + wind / 40) * min(1, age)
+        x = CHIMNEY_FLUE[0] + across + wobble
+        y = CHIMNEY_FLUE[1] - up + math.cos(age * 2.3 + phase) * wind / 60 * min(1, age)
+        opacity = SMOKE_OPACITY * strength * min(1, age / 0.2) * (1 - age / life) ** 1.3
+        radius = 0.5 + 0.22 * age
+        # Wind spreads successive puffs apart; stretching each along the wind keeps the plume continuous.
+        puffs.append((x, y, radius + 0.4 * drift * SMOKE_INTERVAL * min(1, age / 0.5), radius, opacity))
+    return puffs
+
+
+def draw_smoke(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int) -> Image.Image:
+    puffs = smoke_puffs(environment, elapsed, seed)
+    if not puffs:
+        return image
+    left = max(0, math.floor(min(x - 2 * rx for x, _, rx, _, _ in puffs)))
+    right = min(WIDTH, math.ceil(max(x + 2 * rx for x, _, rx, _, _ in puffs)) + 1)
+    top = max(0, math.floor(min(y - 2 * ry for _, y, _, ry, _ in puffs)))
+    bottom = min(HEIGHT, math.ceil(max(y + 2 * ry for _, y, _, ry, _ in puffs)) + 1)
+    if left >= right or top >= bottom:
+        return image
+    x, y, rx, ry, opacity = (np.array(values, dtype=np.float32)[:, None, None] for values in zip(*puffs))
+    columns = np.arange(left, right, dtype=np.float32)[None, None, :]
+    rows = np.arange(top, bottom, dtype=np.float32)[None, :, None]
+    # Pixel centers sit at +0.5, so a puff glides smoothly between pixels.
+    density = opacity * np.exp(-(((columns + 0.5 - x) / rx) ** 2 + ((rows + 0.5 - y) / ry) ** 2) / 2)
+    density = density * np.clip((rows + 0.5 - SMOKE_CEILING) / SMOKE_CEILING_FADE, 0, 1)
+    cover = 1 - np.prod(1 - np.clip(density, 0, 1), axis=0)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    color = np.array(mix(palette.horizon, SMOKE_COLOR, 0.35 + 0.4 * illumination), dtype=np.float32) * (0.45 + 0.55 * illumination)
+    pixels = np.array(image, dtype=np.float32)
+    region = pixels[top:bottom, left:right]
+    pixels[top:bottom, left:right] = region + (color - region) * cover[..., None]
+    return Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
 
 
 def draw_hut_and_dog(image: Image.Image, palette: Palette, door: float, dog, elapsed: float):
@@ -1130,7 +1249,7 @@ def owl_glances(window: int, seed: int):
 
 def owl_allowed(environment: "OutsideEnvironment") -> bool:
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25
+    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment) and not tree_ornaments_shown(environment)
 
 
 def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
@@ -1281,12 +1400,13 @@ def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: fl
 
 
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
-    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond."""
+    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond. The ghost owns Halloween's sky."""
     w = environment.weather
     rain, snow = precipitation(environment)
     return (
         environment.sun_altitude is not None
         and environment.sun_altitude > EAGLE_SUN_ALTITUDE
+        and HALLOWEEN not in holiday_features(environment)
         and w.code in (800, 801, 802, 803)
         and cloud_cover(environment) <= 0.75
         and rain == 0
@@ -1444,7 +1564,7 @@ def firefly_activity(environment: "OutsideEnvironment") -> float:
     """0..1: warm, calm, dry summer evenings only, from dusk until a couple of hours after nightfall."""
     w = environment.weather
     altitude = environment.sun_altitude
-    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None:
+    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None or HALLOWEEN in holiday_features(environment):
         return 0.0
     rain, snow = precipitation(environment)
     if rain > 0 or snow > 0 or (w.wind or 0) >= FIREFLY_MAX_WIND or w.temperature < FIREFLY_MIN_TEMPERATURE:
@@ -1551,9 +1671,9 @@ def leaf_gust(slot: int, seed: int) -> tuple[LeafDrift, ...]:
 
 
 def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[int, int, int, float, float]]:
-    """(x, y, pose, tint, opacity) for dry autumn leaves or spring blossom petals."""
+    """(x, y, pose, tint, opacity) for dry autumn leaves or spring blossom petals; the tree holds its leaves on Halloween."""
     weather = environment.weather
-    if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None:
+    if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None or HALLOWEEN in holiday_features(environment):
         return []
     rain, snow = precipitation(environment)
     if rain > 0 or snow > 0:
@@ -1871,12 +1991,23 @@ def draw_lightning(image: Image.Image, event: LightningEvent, age: float):
         light(channel, LIGHTNING_GLOW, min(1, intensity * 2.2))
 
 
+def holiday_span_matches(day: date, span: tuple[int, ...]) -> bool:
+    month, first, last, *weekday = span
+    return day.month == month and first <= day.day <= last and (not weekday or day.weekday() == weekday[0])
+
+
+def holiday_span_start(span: tuple[int, ...], year: int) -> date:
+    """The first day of `year` that a HOLIDAYS span covers."""
+    month, first, last, *_ = span
+    return next(day for day in (date(year, month, number) for number in range(first, last + 1)) if holiday_span_matches(day, span))
+
+
 def holiday_features(environment: "OutsideEnvironment") -> frozenset[str]:
     """Holiday easter eggs for the displayed local date."""
     day = environment.local_date
     if day is None:
         return frozenset()
-    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(day.month == month and first <= day.day <= last for month, first, last in spans))
+    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(holiday_span_matches(day, span) for span in spans))
 
 
 def holiday_darkness(environment: "OutsideEnvironment") -> float:
@@ -1887,13 +2018,18 @@ def holiday_darkness(environment: "OutsideEnvironment") -> float:
 
 # Christmas lights stay up from December 1 through the day after Christmas.
 CHRISTMAS_LAST_DAY = 26
-# Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day) spans).
-# The Outside lab builds its holiday shortcuts from this table.
+# US Thanksgiving, the fourth Thursday of November, always falls on November 22-28 (weekday 3 is Thursday).
+THANKSGIVING_SPAN = (11, 22, 28, 3)
+# Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day[, weekday])
+# spans). A span with a weekday covers only that weekday within its days. The Outside lab builds its holiday shortcuts
+# from this table.
 HOLIDAYS = {
     "christmas_lights": ("Christmas lights", ((12, 1, CHRISTMAS_LAST_DAY),)),
     "santa": ("Santa", ((12, 24, 24),)),
     "fireworks": ("Fireworks", ((12, 31, 31), (1, 1, 1), (7, 4, 4))),
     "flag": ("Flag", ((7, 4, 4),)),
+    "halloween": ("Halloween", ((10, 31, 31),)),
+    "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
 }
 CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
 TOPPER_GOLD = (255, 206, 60)
@@ -1901,8 +2037,8 @@ TOPPER_CORE = (255, 250, 214)
 
 
 def christmas_bulbs() -> tuple[tuple[int, int], ...]:
-    """Bulbs strung along the hut's gable and wound around each conifer."""
-    bulbs = trace(list(HUT_ROOF))[::2]
+    """Bulbs strung along the hut's gable (passing behind the chimney) and wound around each conifer."""
+    bulbs = [point for point in trace(list(HUT_ROOF))[::2] if not CHIMNEY_MASK.getpixel(point)]
     foliage = (INDEX["leaf"], INDEX["leaf_dark"])
     for cx, base, height in CONIFERS:
         top = base - height
@@ -1923,6 +2059,16 @@ CHRISTMAS_BULB_LIGHT = SRGB_TO_LINEAR_ARRAY[np.array([CHRISTMAS_COLORS[index % l
 CHRISTMAS_HALO = np.array([(y + dy, x + dx, index) for index, (x, y) in enumerate(CHRISTMAS_BULBS) for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (x + dx, y + dy) not in CHRISTMAS_BULBS and 0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT])
 # A star sits just above each conifer's apex.
 TREE_TOPPERS = tuple((cx, base - height - 2) for cx, base, height in CONIFERS)
+# A sparse, lopsided handful of glass balls hangs from the bare maple's twigs: (left x, top row) of each 2x2 ball,
+# just under a twig. The wood never sways, so neither do they.
+TREE_ORNAMENTS = ((100, 13), (122, 12), (116, 15), (100, 21), (118, 20))
+TREE_ORNAMENT_COLORS = ((236, 22, 34), (52, 98, 255), (255, 170, 20), (30, 206, 82), (238, 50, 170))
+# After dark the unlit glass fades toward this dim, cool gray instead of glowing like the Christmas lights.
+TREE_ORNAMENT_NIGHT = (34, 38, 56)
+# Shading across each ball, lit from the upper left: (dx, dy, brightness).
+TREE_ORNAMENT_SHADE = ((1, 0, 0.92), (0, 1, 0.78), (1, 1, 0.5))
+# Each ball catches a brief glint once per cycle, at its own moment.
+TREE_ORNAMENT_GLINT_SECONDS, TREE_ORNAMENT_GLINT_LENGTH = 7.0, 0.5
 
 
 def linear_to_srgb_array(linear: np.ndarray) -> np.ndarray:
@@ -1962,6 +2108,25 @@ def draw_christmas_lights(image: Image.Image, environment: "OutsideEnvironment",
                 point = (x + dx, y + dy)
                 d.point(point, fill=mix(image.getpixel(point), TOPPER_CORE, 0.7 * strength))
     return image
+
+
+def tree_ornaments_shown(environment: "OutsideEnvironment") -> bool:
+    """Ornaments hang only on the bare winter maple while the Christmas lights are up; the owl stays away then."""
+    return environment.season == "winter" and "christmas_lights" in holiday_features(environment)
+
+
+def draw_tree_ornaments(image: Image.Image, night: float, elapsed: float):
+    """Glass balls on the bare maple; each highlight shimmers slowly and now and then glints white."""
+    d = ImageDraw.Draw(image)
+    for index, ((x, y), color) in enumerate(zip(TREE_ORNAMENTS, TREE_ORNAMENT_COLORS)):
+        body = mix(color, TREE_ORNAMENT_NIGHT, 0.62 * night)
+        shimmer = 0.5 + 0.5 * math.sin(elapsed * (0.9 + index * 0.17) + index * 2.3)
+        moment = (elapsed + index * TREE_ORNAMENT_GLINT_SECONDS * 0.37) % TREE_ORNAMENT_GLINT_SECONDS
+        glint = math.sin(math.pi * moment / TREE_ORNAMENT_GLINT_LENGTH) if moment < TREE_ORNAMENT_GLINT_LENGTH else 0
+        for dx, dy, shade in TREE_ORNAMENT_SHADE:
+            d.point((x + dx, y + dy), fill=mix(mix(body, (0, 0, 0), 1 - shade), body, 0.3 * glint))
+        # The highlight and glint soften after dark too, so the glass only catches a little of the lights.
+        d.point((x, y), fill=mix(body, (255, 255, 255), (0.22 + 0.18 * shimmer + 0.5 * glint) * (1 - 0.45 * night)))
 
 
 SANTA_SLOT_SECONDS = 30
@@ -2246,7 +2411,1083 @@ def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float)
             d.point(pixels, fill=lit(FLAG_COLORS[char], shade))
 
 
-def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0) -> Image.Image:
+HALLOWEEN = "halloween"
+# The night sky turns a bruised violet as dusk deepens.
+HALLOWEEN_SKY_TOP = (34, 10, 54)
+HALLOWEEN_SKY_MIDDLE = (60, 26, 78)
+# Ground mist: two noise layers drifting in opposite directions, (tile, px/s, weight).
+HALLOWEEN_MIST_TOP = 15
+HALLOWEEN_MIST_DEPTH = 9
+HALLOWEEN_MIST_BREATH = 1.5
+# The first row the mist can reach at the top of its breath.
+HALLOWEEN_MIST_ROW = math.floor(HALLOWEEN_MIST_TOP - HALLOWEEN_MIST_BREATH)
+HALLOWEEN_MIST_ROWS = np.arange(HALLOWEEN_MIST_ROW, HEIGHT, dtype=np.float32)[:, None]
+# Tiles are doubled horizontally so a scrolled window is a plain slice.
+HALLOWEEN_MIST_LAYERS = tuple((np.tile(periodic_noise(cell_x, cell_y, salt)[HALLOWEEN_MIST_ROW:], 2).astype(np.float32), speed, weight) for cell_x, cell_y, salt, speed, weight in ((32, 5, 61, 1.7, 0.6), (16, 3, 62, -2.6, 0.4)))
+HALLOWEEN_MIST_DAY = (178, 188, 198)
+HALLOWEEN_MIST_NIGHT = (98, 136, 126)
+# Carved pumpkins facing the viewer: s stem, p rind, r rib shadow; e eyes and nose and m mouth glow with the candle inside.
+JACK_SPRITES = {
+    "big": ("....s....", "..prprp..", ".ppppppp.", "ppepppepp", "peepepeep", "pmmmmmmmp", "ppmpmpmpp", ".ppppppp."),
+    "small": ("...s...", ".prprp.", "pepppep", "pppeppp", "pmmmmmp", ".pmpmp."),
+}
+# (center column, bottom row, size): two sit in the meadow and one beside the tree, clear of the hut and the cobweb.
+JACK_O_LANTERNS = ((87, 31, "big"), (95, 31, "small"), (104, 31, "big"))
+PUMPKIN_RIND = (240, 132, 26)
+PUMPKIN_RIB = (170, 78, 16)
+PUMPKIN_STEM = (84, 104, 40)
+PUMPKIN_CARVED = (46, 16, 6)
+CANDLE_FLAME = (255, 204, 70)
+CANDLE_GLOW = (255, 136, 32)
+# Now and then an end pumpkin rolls away along the ground, wraps around the screen and settles back upright in its
+# spot: pumpkin index -> direction (-1 rolls left).
+JACK_ROLLERS = {0: -1, 2: 1}
+JACK_ROLL_SLOT_SECONDS = 60
+JACK_ROLL_CHANCE = 0.5
+# Average speed in px/s; each roll eases out of its spot and back into it.
+JACK_ROLL_SPEED = 18
+JACK_ROLL_STEPS = 16
+# The candle gutters while the pumpkin tumbles.
+JACK_ROLL_FLAME = 0.6
+# The yard lamp burns all Halloween evening on a dying bulb: dim against daylight, it buzzes unsteadily the whole
+# time and, during some slots, keeps cutting out at LAMP_FLICKER_RATE Hz.
+LAMP_HALLOWEEN_DAYLIGHT = 0.3
+LAMP_FLICKER_SLOT_SECONDS = 2.5
+LAMP_FLICKER_CHANCE = 0.5
+LAMP_FLICKER_RATE = 14
+LAMP_DROPOUT_CHANCE = (0.08, 0.45)
+LAMP_DROPOUT_LEVEL = 0.12
+GHOST_SLOT_SECONDS = 20
+GHOST_CHANCE = 0.95
+# Peak speed (px/s) of a swoop; the ghost eases into and out of each one.
+GHOST_PEAK_SPEED = (60, 85)
+GHOST_HOVER_SECONDS = (1.6, 3.2)
+GHOST_BOO_SECONDS = 0.8
+GHOST_COLUMNS = (8, 120)
+# Anchor rows keep the 7 px sprite below the corner labels and above the ground.
+GHOST_ROWS = (10, 21)
+GHOST_TRAIL = 4
+GHOST_TRAIL_SPACING = 0.04
+GHOST_OPACITY = 0.88
+GHOST_WHITE = (236, 246, 255)
+GHOST_EYES = (12, 6, 24)
+GHOST_GLOW = (120, 255, 190)
+# Facing right, anchored on the center pixel: w sheet, k eyes and mouth. Each pose has two tail frames.
+GHOST_BODIES = {
+    "hover": ("..www..", ".wwwww.", ".wkwkw.", ".wwwww.", "wwwkwww", ".wwwww."),
+    "fly": ("...www.", "..wwwww", "..wwkwk", ".wwwwww", "wwwwwkw", "wwwww.."),
+    "boo": ("..www..", "wwwwwww", "wwkwkww", ".wwwww.", ".wkkkw.", ".wwkww."),
+}
+GHOST_TAILS = {"hover": ("ww.w.ww", ".w.w.w."), "fly": ("w.w....", ".w.w..."), "boo": ("ww.w.ww", ".w.w.w.")}
+# A cobweb strung between the tree's right limb, its low spur, the trunk and the ground: radials run clockwise from
+# the hub to anchors under the spur, the spur tip, the open air, the ground (three), the trunk and the limb.
+COBWEB_HUB = (119, 24)
+COBWEB_RADIALS = ((119, 20), (123, 20), (126, 23), (124, 28), (119, 28), (114, 28), (112, 25), (115, 20))
+# Radials start this far out, leaving the open free zone around the hub that keeps it from reading as a blob.
+COBWEB_FREE_ZONE = 2
+# One ring at this radius; at 1 px a smaller ring merges into the radials and more rings fill the web in solid.
+COBWEB_RING = 4
+# Guy lines tie the radial that ends in the air to the spur tip and to the ground.
+COBWEB_GUYS = (((126, 23), (121, 19)), ((126, 23), (127, 28)))
+COBWEB_SILK = (212, 220, 232)
+COBWEB_OPACITY = {"radial": 0.8, "ring": 0.65, "guy": 0.6}
+COBWEB_NIGHT_FADE = 0.25
+COBWEB_DEW = (240, 248, 255)
+COBWEB_DEW_DROPS = 5
+# The web's resident, waiting on the ring below and right of the hub: l legs, b body.
+COBWEB_SPIDER = ("l.l", ".b.", "l.l")
+SHADOW_SLOT_SECONDS = 45
+SHADOW_CHANCE = 0.85
+# Where the figure lurks, (center column, feet row): between the conifer and the lamp, past the fence's end, and on
+# the pond's far shore. It glides only between neighbouring spots right of the hut, so it never crosses in front of it.
+SHADOW_SPOTS = ((9, 26), (46, 27), (61, 25), (76, 25))
+SHADOW_GLIDES = {1: (2,), 2: (1, 3), 3: (2,)}
+SHADOW_GLIDE_SPEED = 2.5
+SHADOW_FADE_SECONDS = 2.0
+SHADOW_LOOK_SECONDS = (1.6, 2.8)
+SHADOW_EYE_FADE_SECONDS = 0.25
+SHADOW_COLOR = (12, 8, 16)
+SHADOW_OPACITY = 0.9
+SHADOW_HEM_OPACITY = 0.55
+SHADOW_EYES = (255, 34, 20)
+# A hooded figure seen from behind, and turned to look back: s shadow, r eyes. Its ragged hem has two frames.
+SHADOW_BODIES = {
+    "away": ("..s..", ".sss.", ".sss.", ".sss.", "sssss", "sssss", "sssss", "sssss", "sssss", "sssss"),
+    "toward": ("..s..", ".sss.", ".rsr.", ".sss.", "sssss", "sssss", "sssss", "sssss", "sssss", "sssss"),
+}
+SHADOW_HEMS = ("s.s.s", ".s.s.")
+SPIDER_SLOT_SECONDS = 40
+SPIDER_CHANCE = 0.8
+# The silk hangs from above the frame into the open sky between the hut and the mountain.
+SPIDER_COLUMNS = (46, 56)
+# Rows of the abdomen's top while hanging; the legs then end above the hills.
+SPIDER_REST_ROWS = (9, 12)
+SPIDER_DROP_SECONDS = 0.6
+SPIDER_HANG_SECONDS = (12, 22)
+SPIDER_CLIMB_SPEED = 5
+SPIDER_LUNGE_SECONDS = 0.7
+SPIDER_LUNGE_DEPTH = 4
+SPIDER_COLORS = {"b": (82, 70, 102), "l": (126, 114, 148), "c": (98, 86, 118), "h": (230, 28, 28), "r": (255, 36, 24), "f": (186, 182, 196)}
+SPIDER_SILK = (200, 206, 220)
+# A black widow hanging head down, anchored where the silk meets the abdomen: l legs, b abdomen, h hourglass,
+# c head, r eyes, f fangs.
+SPIDER_SPRITES = {
+    "spread": ("l.....bbb.....l", ".l...bbbbb...l.", "..l.bbhhhbb.l..", "...lbbbhbbbl...", "llllbbhhhbbllll", "....l.bbb.l....", "...l.lcccl.l...", "..l.l.rcr.l.l..", ".l..l.f.f.l..l.", "l...l.....l...l"),
+    "flex": ("......bbb......", "l....bbbbb....l", ".l..bbhhhbb..l.", "..llbbbhbbbll..", "....bbhhhbb....", "lllll.bbb.lllll", "....llcccll....", "...l..rcr..l...", "..l...f.f...l..", ".l...........l."),
+    "climb": ("..l...bbb...l..", "...l.bbbbb.l...", "....bbhhhbb....", "..llbbbhbbbll..", ".l..bbhhhbb..l.", "l..l..bbb..l..l", "..l..lcccl..l..", ".l..l.rcr.l..l.", "....l.f.f.l....", "...l.......l..."),
+}
+SPIDER_HEIGHT = len(SPIDER_SPRITES["spread"])
+
+
+def sprite_overlay(groups) -> Image.Image:
+    """An RGBA layer from groups of (points as an (n, 2) array of x, y, color, opacity); later groups cover earlier ones."""
+    layer = np.zeros((HEIGHT, WIDTH, 4), dtype=np.uint8)
+    for points, color, opacity in groups:
+        points = points[(points[:, 0] >= 0) & (points[:, 0] < WIDTH) & (points[:, 1] >= 0) & (points[:, 1] < HEIGHT)]
+        layer[points[:, 1], points[:, 0]] = (*color, round(255 * min(1.0, opacity)))
+    return Image.fromarray(layer, "RGBA")
+
+
+def paste_overlay(image: Image.Image, groups):
+    overlay = sprite_overlay(groups)
+    image.paste(overlay, (0, 0), overlay)
+
+
+def draw_halloween_mist(image: Image.Image, night: float, elapsed: float) -> Image.Image:
+    """A low bank of mist creeping across the valley floor, pale by day and ghostly green after dark."""
+    density = 0
+    for tile, speed, weight in HALLOWEEN_MIST_LAYERS:
+        offset = elapsed * speed % CLOUD_TILE
+        start = math.floor(offset)
+        window = tile[:, start : start + WIDTH + 1]
+        density = density + weight * (window[:, :-1] + (window[:, 1:] - window[:, :-1]) * (offset - start))
+    # The bank breathes up and down; its top edge stays ragged where the noise thins out.
+    depth = np.clip((HALLOWEEN_MIST_ROWS - HALLOWEEN_MIST_TOP - HALLOWEEN_MIST_BREATH * math.sin(elapsed * 0.3)) / HALLOWEEN_MIST_DEPTH, 0, 1)
+    thickness = np.clip((density * (0.5 + 0.5 * depth) - 0.25) / 0.4, 0, 1)
+    alpha = thickness * thickness * (3 - 2 * thickness) * depth * (0.36 + 0.08 * night)
+    pixels = np.array(image)
+    band = pixels[HALLOWEEN_MIST_ROW:].astype(np.float32)
+    band += (np.array(mix(HALLOWEEN_MIST_DAY, HALLOWEEN_MIST_NIGHT, night), dtype=np.float32) - band) * alpha[..., None]
+    pixels[HALLOWEEN_MIST_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def jack_center(index: int) -> tuple[float, float]:
+    """The middle of a pumpkin's sprite at its spot; it rolls about this point."""
+    cx, bottom, size = JACK_O_LANTERNS[index]
+    rows = JACK_SPRITES[size]
+    return cx - len(rows[0]) // 2 + (len(rows[0]) - 1) / 2, bottom - (len(rows) - 1) / 2
+
+
+@lru_cache(maxsize=len(JACK_SPRITES))
+def jack_rotations(size: str) -> tuple[tuple[tuple[int, int, str], ...], ...]:
+    """Per rotation step (counterclockwise), the sprite's pixels as integer offsets from the pixel at or just above
+    and left of its middle. Each screen pixel samples the sprite through the inverse rotation, so no pixel is lost
+    when an even side puts the middle between pixels."""
+    rows = JACK_SPRITES[size]
+    width, height = len(rows[0]), len(rows)
+    middle_x, middle_y = (width - 1) / 2, (height - 1) / 2
+    reach = math.ceil(math.hypot(width, height) / 2) + 1
+    frames = []
+    for step in range(JACK_ROLL_STEPS):
+        angle = math.tau * step / JACK_ROLL_STEPS
+        cos, sin = math.cos(angle), math.sin(angle)
+        pixels = []
+        for j in range(-reach, reach + 1):
+            for i in range(-reach, reach + 1):
+                # Screen y points down, so a counterclockwise turn on screen maps back through the transpose.
+                dx, dy = i - middle_x % 1, j - middle_y % 1
+                column, row = math.floor(cos * dx - sin * dy + middle_x + 0.5), math.floor(sin * dx + cos * dy + middle_y + 0.5)
+                if 0 <= column < width and 0 <= row < height and rows[row][column] != ".":
+                    pixels.append((i, j, rows[row][column]))
+        frames.append(tuple(pixels))
+    return tuple(frames)
+
+
+@lru_cache(maxsize=8)
+def jack_roll(slot: int, seed: int) -> tuple[int, float, float] | None:
+    """(pumpkin index, start, duration) of the roll in this slot, if any. Never spans two slots."""
+    rng = random.Random(seed * 4073 + slot * 60013 + 67)
+    if rng.random() > JACK_ROLL_CHANCE:
+        return None
+    duration = WIDTH / JACK_ROLL_SPEED
+    return rng.choice(tuple(JACK_ROLLERS)), slot * JACK_ROLL_SLOT_SECONDS + rng.uniform(1, JACK_ROLL_SLOT_SECONDS - duration - 1), duration
+
+
+def jack_roll_state(elapsed: float, seed: int) -> tuple[int, float, int] | None:
+    """(pumpkin index, horizontal travel so far, rotation step) while a pumpkin rolls, else None."""
+    roll = jack_roll(math.floor(elapsed / JACK_ROLL_SLOT_SECONDS), seed)
+    if roll is None or not roll[1] <= elapsed < roll[1] + roll[2]:
+        return None
+    index, start, duration = roll
+    progress = (elapsed - start) / duration
+    travel = WIDTH * (progress - math.sin(math.tau * progress) / math.tau)
+    # A whole number of turns over the trip, so it comes to rest upright.
+    width = len(JACK_SPRITES[JACK_O_LANTERNS[index][2]][0])
+    turns = max(1, round(WIDTH / (math.pi * width)))
+    step = round(travel / WIDTH * turns * JACK_ROLL_STEPS) * -JACK_ROLLERS[index] % JACK_ROLL_STEPS
+    return index, JACK_ROLLERS[index] * travel, step
+
+
+def jack_pixels(index: int, roll) -> list[tuple[int, int, str]]:
+    """A pumpkin's pixels where it is now, wrapping around the screen's sides while it rolls."""
+    cx, cy = jack_center(index)
+    step, travel = 0, 0.0
+    if roll is not None and roll[0] == index:
+        travel, step = roll[1], roll[2]
+    anchor_x, anchor_y = math.floor(cx) + math.floor(travel + 0.5), math.floor(cy)
+    return [((anchor_x + i) % WIDTH, anchor_y + j, char) for i, j, char in jack_rotations(JACK_O_LANTERNS[index][2])[step] if 0 <= anchor_y + j < HEIGHT]
+
+
+def candle_glow_mask(cx: float, face_y: float, reach: float) -> np.ndarray:
+    # Horizontal distance wraps, so a pumpkin rolling off one side lights the other.
+    dx = (FIREWORK_X - cx + WIDTH / 2) % WIDTH - WIDTH / 2
+    return np.exp(-(dx**2 + ((FIREWORK_Y - face_y) * 1.4) ** 2) / (2 * reach**2)) * 0.6
+
+
+def jack_glow(index: int, roll) -> np.ndarray:
+    """How strongly a pumpkin's candle lights the pixels around it (zero on the pumpkin itself)."""
+    cx, cy = jack_center(index)
+    size = JACK_O_LANTERNS[index][2]
+    mask = candle_glow_mask(cx + (roll[1] if roll is not None and roll[0] == index else 0), cy, 4.2 if size == "big" else 3.4)
+    for x, y, _ in jack_pixels(index, roll):
+        mask[y, x] = 0
+    return mask
+
+
+JACK_GLOW = np.stack([jack_glow(index, None) for index in range(len(JACK_O_LANTERNS))])
+# Candlelight only reaches the rows from here down.
+JACK_GLOW_ROW = int(np.flatnonzero((JACK_GLOW > 0.004).any(axis=(0, 2)))[0])
+JACK_GLOW = JACK_GLOW[:, JACK_GLOW_ROW:]
+
+
+def candle_flicker(index: int, elapsed: float, roll=None) -> float:
+    """0..1 candle brightness: a restless flame that now and then gutters."""
+    level = 0.82 + 0.1 * math.sin(elapsed * 11.3 + index * 1.9) + 0.08 * math.sin(elapsed * 17.9 + index * 4.3)
+    if roll is not None and roll[0] == index:
+        level *= JACK_ROLL_FLAME
+    return level * 0.55 if unit_hash(index, math.floor(elapsed * 5), 71) < 0.08 else level
+
+
+def draw_jack_o_lanterns(image: Image.Image, palette: Palette, night: float, elapsed: float, roll):
+    d = ImageDraw.Draw(image)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+
+    def lit(color: Color) -> Color:
+        return tuple(round(value * illumination) for value in color)
+
+    # A rolling pumpkin passes behind the ones still sitting in their spots.
+    order = sorted(range(len(JACK_O_LANTERNS)), key=lambda index: roll is None or roll[0] != index)
+    for index in order:
+        flame = candle_flicker(index, elapsed, roll)
+        # By day the carved face reads dark with a faint candle; after dark it blazes and warms the rind from inside.
+        face = mix(PUMPKIN_CARVED, CANDLE_FLAME, flame * (0.2 + 0.8 * night))
+        warmth = 0.35 * night * flame
+        colors = {"p": mix(lit(PUMPKIN_RIND), CANDLE_GLOW, warmth), "r": mix(lit(PUMPKIN_RIB), CANDLE_GLOW, warmth * 0.6), "s": lit(PUMPKIN_STEM), "e": face, "m": face}
+        for x, y, char in jack_pixels(index, roll):
+            d.point((x, y), fill=colors[char])
+
+
+def draw_jack_o_lantern_glow(image: Image.Image, night: float, elapsed: float, roll) -> Image.Image:
+    """After dark each candle throws a flickering orange glow onto the ground, the mist and anything passing by."""
+    if night <= 0:
+        return image
+    masks = JACK_GLOW
+    if roll is not None:
+        masks = masks.copy()
+        masks[roll[0]] = jack_glow(roll[0], roll)[JACK_GLOW_ROW:]
+    flames = np.array([candle_flicker(index, elapsed, roll) for index in range(len(JACK_O_LANTERNS))], dtype=np.float32)
+    light = np.clip(np.tensordot(flames, masks, axes=1) * night, 0, 0.6)
+    pixels = np.array(image)
+    band = pixels[JACK_GLOW_ROW:].astype(np.float32)
+    band += (np.array(CANDLE_GLOW, dtype=np.float32) - band) * light[..., None]
+    pixels[JACK_GLOW_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def halloween_lamp(night: float, elapsed: float, seed: int) -> float:
+    hum = 0.84 + 0.09 * math.sin(elapsed * 23.7) + 0.07 * math.sin(elapsed * 37.1 + 1.3)
+    stormy = unit_hash(seed, math.floor(elapsed / LAMP_FLICKER_SLOT_SECONDS), 91) < LAMP_FLICKER_CHANCE
+    if unit_hash(seed, math.floor(elapsed * LAMP_FLICKER_RATE), 93) < LAMP_DROPOUT_CHANCE[stormy]:
+        hum *= LAMP_DROPOUT_LEVEL
+    return (LAMP_HALLOWEEN_DAYLIGHT + (1 - LAMP_HALLOWEEN_DAYLIGHT) * night) * hum
+
+
+@dataclass(frozen=True, eq=False)
+class GhostVisit:
+    start: float
+    arrive: float
+    leave: float
+    end: float
+    swoop_in: tuple[np.ndarray, np.ndarray]
+    swoop_out: tuple[np.ndarray, np.ndarray]
+    hover: tuple[float, float]
+    boo: bool
+
+
+def ghost_path(points: list[tuple[float, float]]) -> tuple[np.ndarray, np.ndarray]:
+    """A Catmull-Rom curve through the points, sampled as (points, cumulative distance)."""
+    padded = [points[0], *points, points[-1]]
+    samples = []
+    for p0, p1, p2, p3 in zip(padded, padded[1:], padded[2:], padded[3:]):
+        for step in range(12):
+            t = step / 12
+            samples.append(tuple(0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t**3) for a, b, c, d in zip(p0, p1, p2, p3)))
+    samples.append(points[-1])
+    xy = np.array(samples)
+    return xy, np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))))
+
+
+@lru_cache(maxsize=8)
+def ghost_visit(slot: int, seed: int) -> GhostVisit | None:
+    """Swoop in along a looping path, hover (sometimes ending in a boo), then zoom away. Never spans two slots."""
+    rng = random.Random(seed * 5167 + slot * 77003 + 41)
+    if rng.random() > GHOST_CHANCE:
+        return None
+
+    def waypoint():
+        return rng.uniform(*GHOST_COLUMNS), rng.uniform(*GHOST_ROWS)
+
+    def edge():
+        return rng.choice((-5, WIDTH + 4)), rng.uniform(9, 16)
+
+    hover = (rng.uniform(28, 100), rng.uniform(14, 19))
+    swoop_in = ghost_path([edge(), *(waypoint() for _ in range(rng.randint(1, 3))), hover])
+    swoop_out = ghost_path([hover, *(waypoint() for _ in range(rng.randint(1, 3))), edge()])
+    peak = rng.uniform(*GHOST_PEAK_SPEED)
+    hold = rng.uniform(*GHOST_HOVER_SECONDS)
+    # An eased swoop peaks at twice its average speed.
+    fly_in, fly_out = 2 * float(swoop_in[1][-1]) / peak, 2 * float(swoop_out[1][-1]) / peak
+    room = GHOST_SLOT_SECONDS - 1 - hold
+    if fly_in + fly_out > room:
+        fly_in, fly_out = fly_in * room / (fly_in + fly_out), fly_out * room / (fly_in + fly_out)
+    start = slot * GHOST_SLOT_SECONDS + rng.uniform(0, room - fly_in - fly_out)
+    return GhostVisit(start, start + fly_in, start + fly_in + hold, start + fly_in + hold + fly_out, swoop_in, swoop_out, hover, rng.random() < 0.5)
+
+
+def ghost_along(path: tuple[np.ndarray, np.ndarray], progress: float) -> tuple[float, float]:
+    xy, distance = path
+    s = distance[-1] * (progress - math.sin(math.tau * progress) / math.tau)
+    return float(np.interp(s, distance, xy[:, 0])), float(np.interp(s, distance, xy[:, 1]))
+
+
+def ghost_state(elapsed: float, seed: int):
+    """Return (x, y, facing, pose, speed) or None while no ghost is about."""
+    visit = ghost_visit(math.floor(elapsed / GHOST_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if visit.arrive <= elapsed < visit.leave:
+        held = elapsed - visit.arrive
+        x, y = visit.hover[0] + 0.8 * math.sin(held * 2.1), visit.hover[1] + 1.2 * math.sin(held * 2.9)
+        if visit.boo and elapsed >= visit.leave - GHOST_BOO_SECONDS:
+            # Boo! It rears up and shudders.
+            return x + (1 if math.sin(held * 45) > 0 else 0), y - 1, 1, "boo", 0.0
+        return x, y, 1, "hover", 0.0
+    path, first, last = (visit.swoop_in, visit.start, visit.arrive) if elapsed < visit.arrive else (visit.swoop_out, visit.leave, visit.end)
+    x, y = ghost_along(path, (elapsed - first) / (last - first))
+    px, py = ghost_along(path, max(0.0, (elapsed - 0.02 - first) / (last - first)))
+    speed = math.hypot(x - px, y - py) / 0.02
+    return x, y, 1 if x >= px else -1, "fly" if speed > 12 else "hover", speed
+
+
+@lru_cache(maxsize=16)
+def ghost_pixels(pose: str, frame: int, facing: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Offsets from the anchor of the sheet, the eyes and mouth, and the 1 px halo around the sprite."""
+    rows = (*GHOST_BODIES[pose], GHOST_TAILS[pose][frame])
+    cells = {((column - 3) * facing, row - 3): char for row, line in enumerate(rows) for column, char in enumerate(line) if char != "."}
+    halo = {(x + dx, y + dy) for x, y in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))} - cells.keys()
+    return tuple(np.array(sorted(points), dtype=int).reshape(-1, 2) for points in ([p for p, c in cells.items() if c == "w"], [p for p, c in cells.items() if c == "k"], halo))
+
+
+GHOST_TRAIL_COLOR = mix(GHOST_WHITE, GHOST_GLOW, 0.5)
+
+
+def draw_ghost(image: Image.Image, night: float, elapsed: float, seed: int):
+    ghost = ghost_state(elapsed, seed)
+    if ghost is None:
+        return
+    x, y, facing, pose, speed = ghost
+    frame = math.floor(elapsed * 6) % 2
+    groups = []
+    if pose == "fly":
+        # Afterimages smear out behind it while it zooms.
+        for back in range(GHOST_TRAIL, 0, -1):
+            past = ghost_state(elapsed - back * GHOST_TRAIL_SPACING, seed)
+            if past is not None:
+                fade = 0.38 * (1 - back / (GHOST_TRAIL + 1)) * min(1, speed / 60)
+                groups.append((ghost_pixels(past[3], frame, past[2])[0] + (round(past[0]), round(past[1])), GHOST_TRAIL_COLOR, fade))
+    sheet, eyes, halo = (offsets + (round(x), round(y)) for offsets in ghost_pixels(pose, frame, facing))
+    if night > 0:
+        groups.append((halo, GHOST_GLOW, 0.3 * night))
+    groups += [(sheet, GHOST_WHITE, GHOST_OPACITY), (eyes, GHOST_EYES, 0.95)]
+    paste_overlay(image, groups)
+
+
+@dataclass(frozen=True)
+class ShadowVisit:
+    start: float
+    leave: float
+    settle: float
+    end: float
+    origin: tuple[int, int]
+    target: tuple[int, int]
+    looks: tuple[tuple[float, float], ...]
+
+
+@lru_cache(maxsize=8)
+def shadow_visit(slot: int, seed: int) -> ShadowVisit | None:
+    """Fade in at a lurking spot, maybe glide to a neighbouring one, look back now and then, fade away. Never spans two slots."""
+    rng = random.Random(seed * 8231 + slot * 91873 + 59)
+    if rng.random() > SHADOW_CHANCE:
+        return None
+    index = rng.randrange(len(SHADOW_SPOTS))
+    glides = SHADOW_GLIDES.get(index, ())
+    target_index = rng.choice(glides) if glides and rng.random() < 0.6 else index
+    origin, target = SHADOW_SPOTS[index], SHADOW_SPOTS[target_index]
+    first = rng.uniform(6, 12)
+    glide = abs(target[0] - origin[0]) / SHADOW_GLIDE_SPEED
+    second = rng.uniform(5, 10) if target_index != index else 0
+    total = SHADOW_FADE_SECONDS * 2 + first + glide + second
+    start = slot * SHADOW_SLOT_SECONDS + rng.uniform(0.5, SHADOW_SLOT_SECONDS - total - 0.5)
+    leave = start + SHADOW_FADE_SECONDS + first
+    settle = leave + glide
+    looks = []
+    # It only looks back while standing still and fully there.
+    for begin, length in ((start + SHADOW_FADE_SECONDS, first), (settle, second)):
+        if length > 4 and (not looks or rng.random() < 0.6):
+            look = rng.uniform(*SHADOW_LOOK_SECONDS)
+            at = begin + rng.uniform(0.8, length - look - 0.8)
+            looks.append((at, at + look))
+    return ShadowVisit(start, leave, settle, start + total, origin, target, tuple(looks))
+
+
+def shadow_state(elapsed: float, seed: int):
+    """Return (x, feet row, opacity, eye level 0..1) or None while nothing lurks."""
+    visit = shadow_visit(math.floor(elapsed / SHADOW_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    opacity = min(1.0, (elapsed - visit.start) / SHADOW_FADE_SECONDS, (visit.end - elapsed) / SHADOW_FADE_SECONDS)
+    progress = 0.0 if elapsed < visit.leave else 1.0 if elapsed >= visit.settle else (elapsed - visit.leave) / (visit.settle - visit.leave)
+    progress = progress * progress * (3 - 2 * progress)
+    x = visit.origin[0] + (visit.target[0] - visit.origin[0]) * progress
+    y = visit.origin[1] + (visit.target[1] - visit.origin[1]) * progress
+    eyes = max((min(1.0, (elapsed - first) / SHADOW_EYE_FADE_SECONDS, (last - elapsed) / SHADOW_EYE_FADE_SECONDS) for first, last in visit.looks if first <= elapsed < last), default=0.0)
+    return x, y, opacity, eyes
+
+
+@lru_cache(maxsize=4)
+def shadow_pixels(pose: str, frame: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Offsets from the feet of the body, the hem and the eyes."""
+    rows = (*SHADOW_BODIES[pose], SHADOW_HEMS[frame])
+    cells = {(column - 2, row - len(rows) + 1): char for row, line in enumerate(rows) for column, char in enumerate(line) if char != "."}
+    hem = {point for point in cells if point[1] == 0}
+    return tuple(np.array(sorted(points), dtype=int).reshape(-1, 2) for points in ([p for p, c in cells.items() if c == "s" and p not in hem], sorted(hem), [p for p, c in cells.items() if c == "r"]))
+
+
+def draw_shadow_figure(image: Image.Image, shadow, elapsed: float):
+    """The figure itself, among the scenery; its eyes are drawn later so no light tints them."""
+    if shadow is None:
+        return
+    x, y, opacity, eyes = shadow
+    body, hem, _ = shadow_pixels("toward" if eyes > 0 else "away", math.floor(elapsed * 3) % 2)
+    feet = (round(x), round(y))
+    paste_overlay(image, [(body + feet, SHADOW_COLOR, SHADOW_OPACITY * opacity), (hem + feet, SHADOW_COLOR, SHADOW_HEM_OPACITY * opacity)])
+
+
+def draw_shadow_eyes(image: Image.Image, shadow, night: float, elapsed: float):
+    if shadow is None or shadow[3] <= 0:
+        return
+    x, y, _, eyes = shadow
+    pupils = shadow_pixels("toward", math.floor(elapsed * 3) % 2)[2] + (round(x), round(y))
+    glow = np.array(sorted({(px + dx, py + dy) for px, py in pupils.tolist() for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1))} - set(map(tuple, pupils.tolist()))), dtype=int).reshape(-1, 2)
+    # A slow, menacing pulse.
+    pulse = 0.85 + 0.15 * math.sin(elapsed * 5)
+    paste_overlay(image, [(glow, SHADOW_EYES, 0.35 * eyes * (0.4 + 0.6 * night) * pulse), (pupils, SHADOW_EYES, eyes * pulse)])
+
+
+@dataclass(frozen=True)
+class SpiderVisit:
+    start: float
+    landed: float
+    climb: float
+    end: float
+    x: int
+    rest: float
+    lunge: float
+
+
+@lru_cache(maxsize=8)
+def spider_visit(slot: int, seed: int) -> SpiderVisit | None:
+    """Drop on a silk line, bounce, dangle and twitch, lunge once, then climb back out. Never spans two slots."""
+    rng = random.Random(seed * 2903 + slot * 31337 + 53)
+    if rng.random() > SPIDER_CHANCE:
+        return None
+    x, rest, hang = rng.randint(*SPIDER_COLUMNS), rng.uniform(*SPIDER_REST_ROWS), rng.uniform(*SPIDER_HANG_SECONDS)
+    climb_seconds = (rest + SPIDER_HEIGHT) / SPIDER_CLIMB_SPEED
+    start = slot * SPIDER_SLOT_SECONDS + rng.uniform(1, SPIDER_SLOT_SECONDS - SPIDER_DROP_SECONDS - hang - climb_seconds - 1)
+    landed = start + SPIDER_DROP_SECONDS
+    return SpiderVisit(start, landed, landed + hang, landed + hang + climb_seconds, x, rest, landed + rng.uniform(3, hang - 2))
+
+
+def spider_state(elapsed: float, seed: int):
+    """Return (silk column, x, abdomen top row, pose) or None while the spider is away."""
+    visit = spider_visit(math.floor(elapsed / SPIDER_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if elapsed < visit.landed:
+        progress = (elapsed - visit.start) / SPIDER_DROP_SECONDS
+        return visit.x, visit.x, -SPIDER_HEIGHT + (visit.rest + SPIDER_HEIGHT) * progress * progress, "flex"
+    if elapsed >= visit.climb:
+        return visit.x, visit.x, visit.rest - (elapsed - visit.climb) * SPIDER_CLIMB_SPEED, ("climb", "spread")[math.floor(elapsed * 6) % 2]
+    since = elapsed - visit.landed
+    # The silk stretches and recoils after the drop; then the spider sways and breathes on it.
+    y = visit.rest + 2.5 * math.exp(-since / 0.45) * math.sin(since * 11) + 0.5 * math.sin(since * 0.9)
+    x = visit.x + 0.7 * math.sin(since * 0.55)
+    lunge = elapsed - visit.lunge
+    if 0 <= lunge < SPIDER_LUNGE_SECONDS:
+        y += SPIDER_LUNGE_DEPTH * (lunge / 0.12 if lunge < 0.12 else 1 - (lunge - 0.12) / (SPIDER_LUNGE_SECONDS - 0.12))
+        return visit.x, x, y, "spread"
+    twitching = unit_hash(seed, math.floor(elapsed * 3), 7) < 0.3
+    return visit.x, x, y, "flex" if twitching and math.floor(elapsed * 10) % 2 else "spread"
+
+
+def cobweb_geometry() -> dict[str, np.ndarray]:
+    """Pixels of the radials, the ring and the guy lines; each pixel belongs to its most visible thread."""
+    hx, hy = COBWEB_HUB
+
+    def along(end: tuple[int, int], radius: float) -> tuple[int, int]:
+        reach = math.hypot(end[0] - hx, end[1] - hy)
+        return round(hx + (end[0] - hx) * radius / reach), round(hy + (end[1] - hy) * radius / reach)
+
+    ring = [along(end, COBWEB_RING) for end in COBWEB_RADIALS]
+    threads = {
+        "radial": [COBWEB_HUB, *(pixel for end in COBWEB_RADIALS for pixel in trace([along(end, COBWEB_FREE_ZONE), end]))],
+        "ring": trace([*ring, ring[0]]),
+        "guy": [pixel for guy in COBWEB_GUYS for pixel in trace(list(guy))],
+    }
+    taken: set[tuple[int, int]] = set()
+    geometry = {}
+    for name, pixels in threads.items():
+        unique = [pixel for pixel in dict.fromkeys(pixels) if pixel not in taken]
+        taken.update(unique)
+        geometry[name] = np.array(unique, dtype=int).reshape(-1, 2)
+    return geometry
+
+
+COBWEB = cobweb_geometry()
+COBWEB_SPIDER_AT = (COBWEB_HUB[0] + 2, COBWEB_HUB[1] + 3)
+COBWEB_SPIDER_PIXELS = tuple(
+    (np.array([(column - 1 + COBWEB_SPIDER_AT[0], row - 1 + COBWEB_SPIDER_AT[1]) for row, line in enumerate(COBWEB_SPIDER) for column, c in enumerate(line) if c == char], dtype=int).reshape(-1, 2), SPIDER_COLORS[char])
+    for char in "lb"
+)
+
+
+def draw_cobweb(image: Image.Image, night: float, elapsed: float, seed: int):
+    """The web catches the light by day and fades a little after dark; dew drops glint on the ring."""
+    fade = 1 - COBWEB_NIGHT_FADE * night
+    groups = [(COBWEB[name], COBWEB_SILK, opacity * fade) for name, opacity in COBWEB_OPACITY.items()]
+    ring = COBWEB["ring"]
+    for drop in range(COBWEB_DEW_DROPS):
+        # Each drop twinkles briefly at a fixed spot, at its own pace.
+        cycle, moment = divmod(elapsed + drop * 1.3, 2.6 + drop * 0.4)
+        if moment < 0.5:
+            index = int(unit_hash(seed, drop, int(cycle), 97) * len(ring))
+            groups.append((ring[index : index + 1], COBWEB_DEW, 0.9 * math.sin(math.pi * moment / 0.5) * fade))
+    groups += [(pixels, color, 1.0) for pixels, color in COBWEB_SPIDER_PIXELS]
+    paste_overlay(image, groups)
+
+
+@lru_cache(maxsize=len(SPIDER_SPRITES))
+def spider_pixels(pose: str) -> tuple[tuple[np.ndarray, Color], ...]:
+    """Offsets from the silk's attachment point per color, then the eye glow around the eyes, off the sprite."""
+    rows = SPIDER_SPRITES[pose]
+    cells = {(column - 7, row): char for row, line in enumerate(rows) for column, char in enumerate(line) if char != "."}
+    eyes = [point for point, char in cells.items() if char == "r"]
+    glow = {(x + dx, y + dy) for x, y in eyes for dx, dy in ((-1, 0), (1, 0), (0, 1))} - cells.keys()
+    parts = tuple((np.array(sorted(p for p, c in cells.items() if c == char), dtype=int).reshape(-1, 2), color) for char, color in SPIDER_COLORS.items())
+    return (*parts, (np.array(sorted(glow), dtype=int).reshape(-1, 2), SPIDER_COLORS["r"]))
+
+
+def draw_spider(image: Image.Image, night: float, elapsed: float, seed: int):
+    spider = spider_state(elapsed, seed)
+    if spider is None:
+        return
+    silk, x, y, pose = spider
+    anchor = (round(x), round(y))
+    groups = []
+    if anchor[1] > 0:
+        groups.append((np.array(trace([(silk, 0), (anchor[0], anchor[1] - 1)]), dtype=int).reshape(-1, 2), SPIDER_SILK, 0.45))
+    *parts, (glow, red) = spider_pixels(pose)
+    groups += [(offsets + anchor, color, 1.0) for offsets, color in parts]
+    if night > 0:
+        # Its eyes glow red in the dark.
+        groups.append((glow + anchor, red, 0.3 * night))
+    paste_overlay(image, groups)
+
+
+THANKSGIVING = "thanksgiving"
+# A harvest display stands in the meadow between the pond and the maple, where Halloween's pumpkins sit:
+# (sprite, left column, bottom row), back to front. A corn shock (c tassels, s/S stalks striped by column, t/T twine),
+# a straw bale (H top, B straw, w twine) carrying a pumpkin and a lantern (m frame, L glass), and a big pumpkin
+# (p rind, o ribs, g stem).
+HARVEST_DISPLAY = (
+    (("..c...c..", "c..c.c..c", ".c.cSc.c.", "..cSsSc..", "...sSs...", "...tTt...", "...SsS...", "..sSsSs..", "..sSsSs..", ".SsSsSsS.", ".SsSsSsS.", "sSsSsSsSs"), 82, 30),
+    (("HHHHHHHHH", "BBwBBBwBB", "BBwBBBwBB", "BBwBBBwBB"), 91, 31),
+    (("..g..", ".pop.", "popop", ".ppp."), 92, 27),
+    ((".m.", "mLm", "mLm", "mmm"), 97, 27),
+    (("...g...", ".poppo.", "popopop", "popopop", ".ppppp."), 101, 31),
+)
+HARVEST_COLORS = {
+    "c": (232, 206, 128), "s": (196, 160, 86), "S": (142, 110, 58), "t": (120, 70, 40), "T": (90, 52, 30),
+    "H": (230, 196, 110), "B": (192, 150, 70), "w": (140, 100, 50),
+    "p": PUMPKIN_RIND, "o": PUMPKIN_RIB, "g": PUMPKIN_STEM, "m": (52, 46, 44),
+}
+# The lantern's glass by day, before the candle inside outshines it after dark.
+LANTERN_DAY_GLASS = (150, 128, 84)
+# Lantern candles flicker with the jack-o'-lantern flame model under this candle index.
+LANTERN_CANDLE = 0
+LANTERN_GLOW_REACH = 5.0
+
+
+def harvest_pixels() -> tuple[tuple[str, np.ndarray], ...]:
+    cells: dict[tuple[int, int], str] = {}
+    for rows, left, bottom in HARVEST_DISPLAY:
+        for row, line in enumerate(rows):
+            for column, char in enumerate(line):
+                if char != ".":
+                    cells[left + column, bottom - len(rows) + 1 + row] = char
+    return tuple((char, np.array(sorted(point for point, c in cells.items() if c == char), dtype=int).reshape(-1, 2)) for char in dict.fromkeys(cells.values()))
+
+
+HARVEST_PIXELS = harvest_pixels()
+LANTERN_GLASS = next(points for char, points in HARVEST_PIXELS if char == "L")
+
+
+def lantern_glow() -> tuple[int, np.ndarray]:
+    """(first row, mask) of how strongly the lantern's candle lights the pixels around it, leaving the glass itself."""
+    cx, cy = LANTERN_GLASS.mean(axis=0)
+    mask = candle_glow_mask(float(cx), float(cy), LANTERN_GLOW_REACH)
+    mask[LANTERN_GLASS[:, 1], LANTERN_GLASS[:, 0]] = 0
+    top = int(np.flatnonzero((mask > 0.004).any(axis=1))[0])
+    return top, mask[top:]
+
+
+LANTERN_GLOW_ROW, LANTERN_GLOW = lantern_glow()
+
+
+def draw_harvest_display(image: Image.Image, palette: Palette, night: float, elapsed: float):
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    flame = candle_flicker(LANTERN_CANDLE, elapsed)
+    groups = []
+    for char, points in HARVEST_PIXELS:
+        if char == "L":
+            color = mix(tuple(round(value * illumination) for value in LANTERN_DAY_GLASS), CANDLE_FLAME, flame * (0.25 + 0.75 * night))
+        else:
+            color = tuple(round(value * illumination) for value in HARVEST_COLORS[char])
+        groups.append((points, color, 1.0))
+    paste_overlay(image, groups)
+
+
+def draw_lantern_glow(image: Image.Image, night: float, elapsed: float) -> Image.Image:
+    """After dark the lantern throws a flickering warm pool over the bale, the pumpkins and anything passing by."""
+    if night <= 0:
+        return image
+    light = LANTERN_GLOW * (candle_flicker(LANTERN_CANDLE, elapsed) * night)
+    pixels = np.array(image)
+    band = pixels[LANTERN_GLOW_ROW:].astype(np.float32)
+    band += (np.array(CANDLE_GLOW, dtype=np.float32) - band) * light[..., None]
+    pixels[LANTERN_GLOW_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+# On Thanksgiving a tom turkey has the run of the meadow all day and night, and by day small flocks of hens wander
+# through. Together they take the place of the deer, foxes and rabbits.
+TURKEY_SPEED = 4.5
+TURKEY_FEET_ROWS = (29, 31)
+TURKEY_STRUT_SECONDS = (6, 12)
+# While foraging, each bird picks what to do next every TURKEY_BEHAVIOR_SECONDS.
+TURKEY_BEHAVIOR_SECONDS = 1.3
+TURKEY_PECK_CHANCE = 0.55
+TURKEY_TURN_CHANCE = 0.2
+TURKEY_PECK_RATE = 3
+# A strutting tom gobbles every TURKEY_GOBBLE_PERIOD seconds.
+TURKEY_GOBBLE_PERIOD = 2.8
+TURKEY_GOBBLE_SECONDS = 0.5
+# The tom plans one slot at a time. Each slot starts and ends at a spot drawn from that slot alone, so any moment
+# is a pure function of `elapsed` without replaying earlier slots.
+TOM_SLOT_SECONDS = 60
+TOM_COLUMNS = (42, 122)
+# New activities stop starting this long before the slot ends, leaving time for the longest one plus the trip to the
+# next slot's spot.
+TOM_RESERVE_SECONDS = 26
+# Chances of each activity when he picks the next one; the rest are short wanders.
+TOM_ZOOMIES_CHANCE = 0.4
+TOM_STRUT_CHANCE = 0.2
+TOM_FORAGE_CHANCE = 0.25
+TOM_FORAGE_SECONDS = (3, 8)
+TOM_WANDER = (8, 25)
+# Zoomies: a few zigzag dashes, wings flapping, then a moment to catch his breath.
+TOM_RUN_SPEED = (26, 36)
+TOM_RUN_LEGS = (2, 4)
+TOM_RUN_DASH = (18, 45)
+TOM_RUN_STRIDE = 2.5
+TOM_RUN_REST = (0.6, 1.5)
+# By day small flocks of hens wander through, entering on one side and leaving on the other.
+TURKEY_SLOT_SECONDS = 150
+TURKEY_VISIT_CHANCE = 0.7
+# The lead hen stops to forage in the open meadow in front of the pond, clear of the pilgrims and the harvest display.
+TURKEY_STOP_COLUMNS = (44, 62)
+TURKEY_FORAGE_SECONDS = (8, 16)
+# Each hen trails the one ahead by this many pixels and seconds, so the flock bunches up and strings out as it goes.
+TURKEY_GAP = (7, 11)
+TURKEY_LAG = (0.8, 2.0)
+TURKEY_HENS = (2, 4)
+# Facing right and standing on the bottom row: b body, i bronze sheen, t tail, h bare head, k beak, r wattle, l legs,
+# W barred wing feathers. The tom faces the viewer to strut, his fan spread behind him: k buff tips, d dark band,
+# T chestnut feathers.
+TURKEY_SPRITES = {
+    "tom": {
+        "stand": (".....h..", ".....hk.", ".....r..", "..bbbr..", "tbbibbb.", "tbibibb.", ".bbbbb..", "..l..l.."),
+        "step": (".....h..", ".....hk.", ".....r..", "..bbbr..", "tbbibbb.", "tbibibb.", ".bbbbb..", "...ll..."),
+        "peck": ("........", "........", "........", "..bbb...", "tbbibbr.", "tbibibbr", ".bbbbb.h", "..l..l.k"),
+        "strut": ("...kkkkkkk...", ".kkTTTTTTTkk.", "kTTdddddddTTk", "kTdTTThTTTdTk", "kTdTbbhbbTdTk", ".kdbbbrbbbdk.", "...bbbrbbb...", "....bbbbb....", "....l...l...."),
+        "gobble": ("...kkkkkkk...", ".kkTTTTTTTkk.", "kTTdddhdddTTk", "kTdTTThTTTdTk", "kTdTbbrbbTdTk", ".kdbbbrbbbdk.", "...bbbrbbb...", "....bbbbb....", "....l...l...."),
+        # Running flat out with his neck stretched forward, wings beating up and down.
+        "run_up": ("..W.W...", "..WiW...", "...ii.hk", "tbbbbbh.", "tbibibr.", ".bbbbb..", "l....l.."),
+        "run_down": ("........", "........", "......hk", "tbbbbbh.", "tWiWibr.", "WiWbbb..", "..ll...."),
+    },
+    "hen": {
+        "stand": ("....h..", "....hk.", "...bb..", "tbbbb..", "tbibbb.", ".bbbb..", "..l.l.."),
+        "step": ("....h..", "....hk.", "...bb..", "tbbbb..", "tbibbb.", ".bbbb..", "...ll.."),
+        "peck": (".......", ".......", ".......", "tbbbb..", "tbibbb.", ".bbbbbh", "..l.l.k"),
+    },
+}
+TURKEY_COLORS = {
+    "tom": {"b": (56, 44, 38), "i": (118, 98, 64), "t": (110, 76, 50), "h": (176, 204, 232), "k": (226, 196, 140), "r": (222, 36, 36), "l": (214, 120, 84), "d": (40, 30, 26), "T": (150, 100, 60), "W": (196, 186, 166)},
+    "hen": {"b": (98, 74, 52), "i": (140, 112, 74), "t": (110, 80, 54), "h": (150, 170, 190), "k": (210, 186, 140), "r": (170, 80, 80), "l": (200, 120, 90)},
+}
+# The wattle flushes bright while he gobbles.
+TURKEY_GOBBLE_WATTLE = (255, 40, 52)
+
+
+@dataclass(frozen=True)
+class TomStep:
+    start: float
+    end: float
+    # "walk", "run", "forage", "strut" or "stand".
+    action: str
+    origin: tuple[float, float]
+    target: tuple[float, float]
+    facing: int
+
+
+def tom_spot(slot: int, seed: int) -> tuple[float, int]:
+    """Where the tom is (x, feet row) as slot `slot` begins."""
+    rng = random.Random(seed * 8513 + slot * 27277 + 61)
+    return rng.uniform(*TOM_COLUMNS), rng.randint(*TURKEY_FEET_ROWS)
+
+
+@lru_cache(maxsize=8)
+def tom_plan(slot: int, seed: int) -> tuple[TomStep, ...]:
+    """The tom's steps from this slot's spot to the next one's, covering the whole slot."""
+    rng = random.Random(seed * 4691 + slot * 39119 + 53)
+    t = slot * TOM_SLOT_SECONDS
+    end = t + TOM_SLOT_SECONDS
+    position: tuple[float, float] = tom_spot(slot, seed)
+    facing = rng.choice((-1, 1))
+    steps: list[TomStep] = []
+
+    def hold(action: str, seconds: float):
+        nonlocal t
+        steps.append(TomStep(t, t + seconds, action, position, position, facing))
+        t += seconds
+
+    def move(target: tuple[float, float], speed: float, action: str):
+        nonlocal t, position, facing
+        if target[0] != position[0]:
+            facing = 1 if target[0] > position[0] else -1
+        seconds = max(0.1, math.dist(position, target) / speed)
+        steps.append(TomStep(t, t + seconds, action, position, target, facing))
+        t += seconds
+        position = target
+
+    def toward(reach: tuple[float, float], direction: int) -> tuple[float, int]:
+        x = position[0] + direction * rng.uniform(*reach)
+        if not TOM_COLUMNS[0] <= x <= TOM_COLUMNS[1]:
+            x = position[0] - direction * rng.uniform(*reach)
+        return max(TOM_COLUMNS[0], min(TOM_COLUMNS[1], x)), rng.randint(*TURKEY_FEET_ROWS)
+
+    while t < end - TOM_RESERVE_SECONDS:
+        roll = rng.random()
+        if roll < TOM_ZOOMIES_CHANCE:
+            direction = rng.choice((-1, 1))
+            for _ in range(rng.randint(*TOM_RUN_LEGS)):
+                move(toward(TOM_RUN_DASH, direction), rng.uniform(*TOM_RUN_SPEED), "run")
+                direction = -facing
+            hold("stand", rng.uniform(*TOM_RUN_REST))
+        elif roll < TOM_ZOOMIES_CHANCE + TOM_STRUT_CHANCE:
+            hold("strut", rng.uniform(*TURKEY_STRUT_SECONDS))
+        elif roll < TOM_ZOOMIES_CHANCE + TOM_STRUT_CHANCE + TOM_FORAGE_CHANCE:
+            hold("forage", rng.uniform(*TOM_FORAGE_SECONDS))
+        else:
+            move(toward(TOM_WANDER, rng.choice((-1, 1))), TURKEY_SPEED, "walk")
+    # Make for the next slot's spot, hurrying if time is short, and forage there until the slot ends.
+    target = tom_spot(slot + 1, seed)
+    speed = max(TURKEY_SPEED, math.dist(position, target) / (end - t - 0.5))
+    move(target, speed, "run" if speed > 3 * TURKEY_SPEED else "walk")
+    hold("forage", end - t)
+    return tuple(steps)
+
+
+def tom_state(elapsed: float, seed: int) -> tuple[float, int, int, int, str]:
+    """(x, feet row, rows lifted off the ground, facing, pose) of the resident tom."""
+    slot = math.floor(elapsed / TOM_SLOT_SECONDS)
+    plan = tom_plan(slot, seed)
+    step = next((step for step in plan if elapsed < step.end), plan[-1])
+    progress = max(0.0, min(1.0, (elapsed - step.start) / (step.end - step.start)))
+    x = step.origin[0] + (step.target[0] - step.origin[0]) * progress
+    feet = round(step.origin[1] + (step.target[1] - step.origin[1]) * progress)
+    travelled = math.dist(step.origin, step.target) * progress
+    if step.action == "run":
+        # He bounds along, lifting off the ground on every upstroke.
+        up = int(travelled / TOM_RUN_STRIDE) % 2 == 0
+        return x, feet, int(up), step.facing, "run_up" if up else "run_down"
+    if step.action == "walk":
+        return x, feet, 0, step.facing, "step" if int(travelled / 2) % 2 else "stand"
+    held = elapsed - step.start
+    if step.action == "strut":
+        return x, feet, 0, step.facing, "gobble" if held % TURKEY_GOBBLE_PERIOD > TURKEY_GOBBLE_PERIOD - TURKEY_GOBBLE_SECONDS else "strut"
+    if step.action == "forage":
+        beat = math.floor(elapsed / TURKEY_BEHAVIOR_SECONDS)
+        facing = -step.facing if unit_hash(seed, beat, 9) < TURKEY_TURN_CHANCE else step.facing
+        pecking = unit_hash(seed, beat, 11) < TURKEY_PECK_CHANCE and elapsed * TURKEY_PECK_RATE % 1 < 0.5
+        return x, feet, 0, facing, "peck" if pecking else "stand"
+    return x, feet, 0, step.facing, "stand"
+
+
+@dataclass(frozen=True)
+class TurkeyVisit:
+    slot: int
+    start: float
+    end: float
+    heading: int
+    # The lead hen's walk: (start, end, from x, to x); a leg that stays put is a stop to forage.
+    legs: tuple[tuple[float, float, float, float], ...]
+    # (gap behind the leader in px, lag behind the leader in seconds, feet row), leader first.
+    hens: tuple[tuple[float, float, int], ...]
+
+
+@lru_cache(maxsize=8)
+def turkey_visit(slot: int, seed: int) -> TurkeyVisit | None:
+    """The hens wander in from one side, forage at two spots, then wander off the other side. Never spans two slots."""
+    rng = random.Random(seed * 3571 + slot * 51787 + 23)
+    if rng.random() > TURKEY_VISIT_CHANCE:
+        return None
+    heading = rng.choice((-1, 1))
+    hens, gap, lag = [], 0.0, 0.0
+    for index in range(rng.randint(*TURKEY_HENS)):
+        if index:
+            gap, lag = gap + rng.uniform(*TURKEY_GAP), lag + rng.uniform(*TURKEY_LAG)
+        hens.append((gap, lag, rng.randint(*TURKEY_FEET_ROWS)))
+    margin = 8
+    entry = -margin if heading > 0 else WIDTH + margin
+    exit_x = WIDTH + margin + gap if heading > 0 else -margin - gap
+    stops = sorted((rng.uniform(*TURKEY_STOP_COLUMNS), rng.uniform(*TURKEY_STOP_COLUMNS)), reverse=heading < 0)
+    plan, t, x = [], 0.0, float(entry)
+    for stop in stops:
+        plan.append((t, t + abs(stop - x) / TURKEY_SPEED, x, stop))
+        t, x = plan[-1][1], stop
+        hold = rng.uniform(*TURKEY_FORAGE_SECONDS)
+        plan.append((t, t + hold, x, x))
+        t += hold
+    plan.append((t, t + abs(exit_x - x) / TURKEY_SPEED, x, exit_x))
+    duration = plan[-1][1] + lag
+    start = slot * TURKEY_SLOT_SECONDS + rng.uniform(1, TURKEY_SLOT_SECONDS - duration - 1)
+    legs = tuple((start + a, start + b, x0, x1) for a, b, x0, x1 in plan)
+    return TurkeyVisit(slot, start, start + duration, heading, legs, tuple(hens))
+
+
+def turkeys_allowed(environment: "OutsideEnvironment") -> bool:
+    """Hens visit in daylight on Thanksgiving, in anything short of a downpour or heavy snow."""
+    rain, snow = precipitation(environment)
+    return THANKSGIVING in holiday_features(environment) and environment.sun_altitude is not None and environment.sun_altitude > SET_ALTITUDE and rain < 3 and snow < 2
+
+
+def turkey_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> TurkeyVisit | None:
+    """The hens' visit under way, if any. Like the deer, they keep clear of the dog's outings and of the eagle."""
+    if not turkeys_allowed(environment):
+        return None
+    visit = turkey_visit(math.floor(elapsed / TURKEY_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if dog_allowed(environment) and next(dog_outings_between(seed, visit.start, visit.end), None) is not None:
+        return None
+    if next(eagle_visits_present(environment, seed, visit.start, visit.end), None) is not None:
+        return None
+    return visit
+
+
+def turkey_pose(visit: TurkeyVisit, index: int, elapsed: float, seed: int) -> tuple[float, int, int, str]:
+    """(x, feet row, facing, pose) of one hen in the flock."""
+    gap, lag, feet = visit.hens[index]
+    t = elapsed - lag
+    leg = next((leg for leg in visit.legs if t < leg[1]), visit.legs[-1])
+    start, end, x0, x1 = leg
+    progress = max(0.0, min(1.0, (t - start) / (end - start)))
+    x = x0 + (x1 - x0) * progress - visit.heading * gap
+    if x0 != x1 or t < visit.legs[0][0]:
+        # Strides alternate every couple of pixels walked.
+        return x, feet, visit.heading, "step" if int(abs(x - visit.legs[0][2]) / 2) % 2 else "stand"
+    beat = math.floor(t / TURKEY_BEHAVIOR_SECONDS)
+    facing = -visit.heading if unit_hash(seed, visit.slot, index, beat, 5) < TURKEY_TURN_CHANCE else visit.heading
+    if unit_hash(seed, visit.slot, index, beat, 3) < TURKEY_PECK_CHANCE and t * TURKEY_PECK_RATE % 1 < 0.5:
+        return x, feet, facing, "peck"
+    return x, feet, facing, "stand"
+
+
+def draw_standing_sprite(d: ImageDraw.ImageDraw, rows: tuple[str, ...], x: float, feet: int, facing: int, colors: dict[str, Color]):
+    """Draw a right-facing sprite (mirrored when facing left) centered on column `x`, its bottom row on row `feet`."""
+    width = len(rows[0])
+    left = round(x) - (width - 1) // 2
+    for row, line in enumerate(rows):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            px = left + (column if facing > 0 else width - 1 - column)
+            py = feet - len(rows) + 1 + row
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=colors[char])
+
+
+# A pilgrim couple stands at the pond's near shore beside the harvest display. They are nearest the viewer, so they
+# stand a little taller than the hut.
+# Facing the viewer: K black hat and shoes, G gold buckles, H hair, S skin, E eyes, W white linen (collar, cuffs,
+# coif, apron, stockings), C coat, B breeches, D dress. Each pose keeps its columns, so a gesture never shifts the body.
+PILGRIM_SPRITES = {
+    "man": {
+        "stand": ("..KKK...", "..KGK...", "KKKKKKK.", "..ESE...", "..SSS...", ".WWWWW..", "CCWWWCC.", "CCCCCCC.", "CCCGCCC.", "WCCCCCW.", "SBBBBBS.", ".BB.BB..", ".WW.WW..", "KKK.KKK."),
+        # Lifting his hat off his head with his left hand (on the viewer's right).
+        "tip": ("..KKK...", "..KGK...", "KKKKKKK.", "..HHHSW.", "..ESE.C.", "..SSS.C.", ".WWWWWC.", "CCWWWCC.", "CCCCCC..", "CCCGCC..", "WCCCCC..", "SBBBBB..", ".BB.BB..", ".WW.WW..", "KKK.KKK."),
+    },
+    "woman": {
+        "stand": ("..WWW...", ".WWWWW..", ".WESEW..", ".WSSSW..", ".WWWWW..", "DDWWWDD.", "DDDDDDD.", "WDWWWDW.", "SDWWWDS.", ".DWWWD..", "DDWWWDD.", "DDDDDDD.", ".K...K.."),
+        # Waving her left hand (on the viewer's right) above her shoulder.
+        "wave": ("..WWW..S", ".WWWWW.W", ".WESEW.D", ".WSSSWD.", ".WWWWWD.", "DDWWWDD.", "DDDDDDD.", "WDWWWD..", "SDWWWD..", ".DWWWD..", "DDWWWDD.", "DDDDDDD.", ".K...K.."),
+    },
+}
+PILGRIM_COLORS = {"K": (26, 24, 30), "G": (236, 190, 64), "H": (110, 70, 40), "S": (232, 182, 140), "E": (54, 36, 30), "W": (236, 234, 222), "C": (40, 38, 46), "B": (34, 32, 38), "D": (70, 62, 66)}
+# (kind, center column, feet row): the man just in front of his wife, beside the corn shock.
+PILGRIMS = (("woman", 78, 30), ("man", 70, 31))
+# Every PILGRIM_GESTURE_SECONDS each pilgrim may tip his hat or wave for part of the slot.
+PILGRIM_GESTURE_SECONDS = 6.0
+PILGRIM_GESTURE_CHANCE = 0.35
+PILGRIM_GESTURE_LENGTH = (1.2, 2.2)
+
+
+def pilgrims_out(environment: "OutsideEnvironment") -> bool:
+    """Out on Thanksgiving from first light until the yard lamp goes off in the evening, unless it pours or snows hard."""
+    altitude = environment.sun_altitude
+    if THANKSGIVING not in holiday_features(environment) or altitude is None:
+        return False
+    rain, snow = precipitation(environment)
+    since = environment.since_nightfall
+    return rain < 3 and snow < 2 and (altitude > NIGHT_ALTITUDE or (since is not None and 0 <= since < LAMP_SECONDS))
+
+
+def pilgrim_pose(index: int, elapsed: float, seed: int) -> str:
+    kind = PILGRIMS[index][0]
+    slot = math.floor(elapsed / PILGRIM_GESTURE_SECONDS)
+    if unit_hash(seed, slot, index, 41) >= PILGRIM_GESTURE_CHANCE:
+        return "stand"
+    length = PILGRIM_GESTURE_LENGTH[0] + (PILGRIM_GESTURE_LENGTH[1] - PILGRIM_GESTURE_LENGTH[0]) * unit_hash(seed, slot, index, 43)
+    start = (PILGRIM_GESTURE_SECONDS - length) * unit_hash(seed, slot, index, 47)
+    if not start <= elapsed - slot * PILGRIM_GESTURE_SECONDS < start + length:
+        return "stand"
+    if kind == "woman":
+        # The wave swings between raised and lowered.
+        return "wave" if math.floor((elapsed - slot * PILGRIM_GESTURE_SECONDS - start) * 3) % 2 == 0 else "stand"
+    return "tip"
+
+
+def draw_thanksgiving_figures(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """The tom, any visiting hens and the pilgrims, back to front by the row each stands on; on a shared row the pilgrims
+    stand behind the birds."""
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+
+    def lit(colors: dict[str, Color]) -> dict[str, Color]:
+        return {char: tuple(round(value * illumination) for value in color) for char, color in colors.items()}
+
+    x, feet, lift, facing, pose = tom_state(elapsed, seed)
+    tom_colors = lit(TURKEY_COLORS["tom"])
+    if pose == "gobble":
+        tom_colors["r"] = TURKEY_GOBBLE_WATTLE
+    # (feet row, layer on a shared row, sprite, x, drawn row, facing, colors)
+    figures = [(feet, 1, TURKEY_SPRITES["tom"][pose], x, feet - lift, facing, tom_colors)]
+    visit = turkey_state(environment, elapsed, seed)
+    if visit is not None:
+        hen_colors = lit(TURKEY_COLORS["hen"])
+        for index in range(len(visit.hens)):
+            x, feet, facing, pose = turkey_pose(visit, index, elapsed, seed)
+            figures.append((feet, 1, TURKEY_SPRITES["hen"][pose], x, feet, facing, hen_colors))
+    if pilgrims_out(environment):
+        pilgrim_colors = lit(PILGRIM_COLORS)
+        for index, (kind, x, feet) in enumerate(PILGRIMS):
+            figures.append((feet, 0, PILGRIM_SPRITES[kind][pilgrim_pose(index, elapsed, seed)], x, feet, 1, pilgrim_colors))
+    d = ImageDraw.Draw(image)
+    for _, _, rows, x, row, facing, colors in sorted(figures, key=lambda figure: figure[:2]):
+        draw_standing_sprite(d, rows, x, row, facing, colors)
+
+
+# On Thanksgiving a skein of geese flying in a V takes the place of the small songbird flock.
+GEESE_SLOT_SECONDS = 75
+GEESE_CHANCE = 0.55
+GEESE_SPEED = 10
+GEESE_COUNT = (5, 7)
+# The leader's row; the V's arms then stay below the corner labels and above the treeline.
+GEESE_ROW = 13
+# Each rank back along an arm trails by this many columns and spreads by this many rows.
+GEESE_RANK_SPACING = (5, 2)
+GEESE_FLAP_RATE = 4.5
+# Wingbeats ripple back along the arms, each rank this many radians behind the one ahead.
+GEESE_FLAP_LAG = 0.7
+
+
+@lru_cache(maxsize=8)
+def geese_flight(slot: int, seed: int) -> tuple[float, float, int, int] | None:
+    """(start, end, heading, count) of the skein crossing in this slot, if any. Never spans two slots."""
+    rng = random.Random(seed * 2953 + slot * 70001 + 37)
+    if rng.random() > GEESE_CHANCE:
+        return None
+    count = rng.randint(*GEESE_COUNT)
+    length = (count // 2 + 1) * GEESE_RANK_SPACING[0]
+    duration = (WIDTH + 2 * length + 4) / GEESE_SPEED
+    start = slot * GEESE_SLOT_SECONDS + rng.uniform(1, GEESE_SLOT_SECONDS - duration - 1)
+    return start, start + duration, rng.choice((-1, 1)), count
+
+
+def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    flight = geese_flight(math.floor(elapsed / GEESE_SLOT_SECONDS), seed)
+    if flight is None or not flight[0] <= elapsed < flight[1]:
+        return
+    start, end, heading, count = flight
+    if next(eagle_visits_present(environment, seed, start, end), None) is not None:
+        return
+    length = (count // 2 + 1) * GEESE_RANK_SPACING[0]
+    travel = (elapsed - start) * GEESE_SPEED - length
+    lead_x = travel if heading > 0 else WIDTH - 1 - travel
+    d = ImageDraw.Draw(image)
+    for index in range(count):
+        # Geese alternate between the two arms of the V, one rank further back each pair.
+        rank, arm = (index + 1) // 2, 1 if index % 2 else -1
+        x = round(lead_x - heading * rank * GEESE_RANK_SPACING[0])
+        y = GEESE_ROW + arm * rank * GEESE_RANK_SPACING[1]
+        wing = 1 if math.sin(elapsed * GEESE_FLAP_RATE - rank * GEESE_FLAP_LAG) > 0 else -1
+        for px, py in ((x - 1, y - wing), (x, y), (x + 1, y - wing)):
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=palette.roof)
+
+
+def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> Image.Image:
     palette = scene_palette(environment)
     image = Image.new("RGB", (WIDTH, HEIGHT))
     d = ImageDraw.Draw(image)
@@ -2255,7 +3496,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         color = mix(palette.top, palette.middle, t / 0.55) if t < 0.55 else mix(palette.middle, palette.horizon, (t - 0.55) / 0.45)
         d.line((0, y, 127, y), fill=color)
     lightning = lightning_at(environment, elapsed, seed)
-    clouds = draw_sky(image, environment, palette, elapsed, lightning, seed)
+    clouds = draw_sky(image, environment, palette, elapsed, lightning, seed, star_clearings)
     holidays = holiday_features(environment)
     # Fireworks and Santa fly in the distance, in front of the clouds but behind the land.
     night = holiday_darkness(environment)
@@ -2288,13 +3529,27 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = round((elapsed * 0.22 + index * 49) % 168) - 40
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
+    halloween = HALLOWEEN in holidays
+    shadow = shadow_state(elapsed, seed) if halloween else None
+    roll = jack_roll_state(elapsed, seed) if halloween else None
+    if halloween:
+        image = draw_halloween_mist(image, night, elapsed)
+        # The lurking figure stands farther back than the pumpkins, which roll in front of it.
+        draw_shadow_figure(image, shadow, elapsed)
+        draw_jack_o_lanterns(image, palette, night, elapsed, roll)
+    thanksgiving = THANKSGIVING in holidays
+    if thanksgiving:
+        draw_harvest_display(image, palette, night, elapsed)
     wind = environment.weather.wind or 0
     if "flag" in holidays:
         draw_flag(image, palette, wind, elapsed)
     draw_leaves(image, palette, environment, elapsed, seed)
     draw_wildlife(image, palette, environment, elapsed, seed)
+    if thanksgiving:
+        draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
+    image = draw_smoke(image, palette, environment, elapsed, seed)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
@@ -2305,8 +3560,13 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             if environment.sun_altitude is not None and environment.sun_altitude > -5:
                 d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
+    if tree_ornaments_shown(environment):
+        draw_tree_ornaments(image, night, elapsed)
     # The owl perches on the fixed branch, in front of the swaying foliage.
     draw_owl(image, palette, owl_state(environment, elapsed, seed))
+    if halloween:
+        draw_cobweb(image, night, elapsed, seed)
+        draw_spider(image, night, elapsed, seed)
     if rain > 0:
         draw_rain(image, rain, wind, elapsed)
     if snow > 0:
@@ -2316,9 +3576,15 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = int((x0 + min(wind, 25) * elapsed * 0.035 + math.sin(elapsed * 0.7 + phase) * 2) % 128)
             if 0 <= y < HEIGHT:
                 d.point((x, y), fill=mix(image.getpixel((x, y)), (234, 235, 225), 0.65 + (phase % 5) * 0.025))
-    lamp = lamp_level(environment)
+    lamp = halloween_lamp(night, elapsed, seed) if halloween else lamp_level(environment)
     if lamp > 0:
         image = draw_lamp_light(image, lamp)
+    if halloween:
+        image = draw_jack_o_lantern_glow(image, night, elapsed, roll)
+        draw_shadow_eyes(image, shadow, night, elapsed)
+        draw_ghost(image, night, elapsed, seed)
+    if thanksgiving:
+        image = draw_lantern_glow(image, night, elapsed)
     # Christmas lights shine on top of the lamp's wash so they stay saturated.
     if "christmas_lights" in holidays:
         image = draw_christmas_lights(image, environment, elapsed)
@@ -2390,10 +3656,12 @@ def outside_notice(environment: "OutsideEnvironment") -> str:
     if environment.offset_minutes:
         if weather.status in ("FORECAST", "FORECAST_CACHED") and weather.code in WEATHER_DESCRIPTIONS:
             notices.append(WEATHER_DESCRIPTIONS[weather.code].upper() + ("~" if weather.status == "FORECAST_CACHED" else ""))
+        elif weather.status == "PENDING":
+            notices.append("FCST...")
         elif weather.status != "OFFLINE":
             notices.append("FCST?")
     elif weather.status not in ("LIVE", "OFFLINE"):
-        notices.append("WX~" if weather.status == "CACHED" else "WX?")
+        notices.append({"CACHED": "WX~", "PENDING": "WX..."}.get(weather.status, "WX?"))
     if environment.sky_status not in ("READY", "OFFLINE"):
         notices.append("SKY..." if environment.sky_status == "LOADING" else "SKY?")
     return " ".join(notices)
@@ -2424,10 +3692,13 @@ def draw_notice(image: Image.Image, text: str, left: int, right: int, elapsed: f
 
 
 def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, ...] = (None, None, None)) -> tuple[bool | None, bool | None, bool | None]:
-    image = render_outside_frame(environment, elapsed, seed)
     clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
+    clock_width, temperature_width = overlay_text_mask(clock).width, overlay_text_mask(temperature_text).width
+    label_bottom = overlay_text_mask(clock).height - 1 + LABEL_STAR_MARGIN
+    star_clearings = ((0, 0, clock_width - 1 + LABEL_STAR_MARGIN, label_bottom), (WIDTH - temperature_width - LABEL_STAR_MARGIN, 0, WIDTH - 1, label_bottom))
+    image = render_outside_frame(environment, elapsed, seed, star_clearings)
     previous_clock, previous_temperature, previous_notice = (*previous_text_styles, None, None, None)[:3]
     # Lightning flashes last a few frames; keep the labels' black/white style steady through them.
     flashing = lightning_at(environment, elapsed, seed) is not None

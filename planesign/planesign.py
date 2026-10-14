@@ -22,6 +22,9 @@ class PlaneSign:
         # Time-dithers the lowest PWM bit, which shortens every frame and nearly doubles the refresh rate
         # with no visible change. Shorter pwm_lsb_nanoseconds was faster still but visibly degraded the panel.
         options.pwm_dither_bits = 1
+        # Pads every frame to a fixed length so peripheral-bus stalls, which stretch a frame by up to ~2 ms,
+        # no longer dim the whole panel. Keep it a little below the uncapped rate (~286 Hz on adafruit-hat).
+        options.limit_refresh_rate_hz = 250
         options.hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
         options.led_rgb_sequence = shared_config.CONF["RGB_SEQUENCE"]
         options.drop_privileges = False

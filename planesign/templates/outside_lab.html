@@ -5,100 +5,136 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Outside lab</title>
 <style>
-    :root { color-scheme: dark; }
-    body { background: #101215; color: #dde1e6; font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; max-width: 980px; }
-    h1 { font-size: 20px; margin: 0 0 4px; }
-    h2 { font-size: 15px; margin: 22px 0 8px; color: #9fb3c8; text-transform: uppercase; letter-spacing: .05em; }
-    p.note, .note { color: #8a939c; }
-    p.note { margin: 0 0 12px; }
-    button { background: #1f252c; color: #dde1e6; border: 1px solid #38424d; border-radius: 6px; padding: 7px 11px; margin: 0 6px 6px 0; cursor: pointer; font: inherit; }
+    :root { color-scheme: dark; --bg: #101215; --card: #171b20; --line: #2c343d; --muted: #8a939c; --text: #dde1e6; }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; margin: 0; padding: 12px; }
+    main { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+    header { text-align: center; }
+    h1 { font-size: 18px; margin: 0 0 2px; }
+    h2 { font-size: 12px; margin: 0 0 8px; color: #9fb3c8; text-transform: uppercase; letter-spacing: .06em; }
+    .note { color: var(--muted); font-size: 12px; margin: 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+    button { background: #1f252c; color: var(--text); border: 1px solid #38424d; border-radius: 6px; padding: 4px 9px; cursor: pointer; font: inherit; white-space: nowrap; }
     button:hover { border-color: #6ea8ff; }
     button.live { background: #233a24; border-color: #4e8a50; }
     button.primary { background: #1e3350; border-color: #4f7fc0; }
-    input, select { background: #171b20; color: #dde1e6; border: 1px solid #38424d; border-radius: 5px; padding: 6px; font: inherit; }
-    label { display: inline-flex; flex-direction: column; gap: 3px; margin: 0 10px 10px 0; color: #9aa4ae; font-size: 12px; }
-    label input { width: 86px; }
-    #status { background: #171b20; border: 1px solid #2c343d; border-radius: 8px; padding: 10px 12px; position: sticky; top: 0; z-index: 2; }
-    #status .row { display: flex; flex-wrap: wrap; gap: 4px 18px; }
-    #status b { color: #fff; font-weight: 600; }
-    .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; background: #2a3138; color: #aab4be; }
+    input, select { background: #101317; color: var(--text); border: 1px solid #38424d; border-radius: 5px; padding: 4px 6px; font: inherit; min-width: 0; }
+    .chips, .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+    .row { display: grid; grid-template-columns: 64px 1fr; align-items: start; gap: 8px; margin-bottom: 7px; }
+    .row_label { color: #9aa4ae; font-size: 12px; padding-top: 5px; }
+    #status { position: sticky; top: 0; z-index: 2; box-shadow: 0 6px 12px var(--bg); }
+    .status_grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 4px 12px; }
+    .status_grid div { min-width: 0; }
+    .status_grid small { display: block; color: var(--muted); font-size: 11px; }
+    .status_grid b { color: #fff; font-weight: 600; overflow-wrap: anywhere; }
+    .status_grid .span2 { grid-column: span 2; }
+    .status_bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .status_bar .live { margin-left: auto; }
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; background: #2a3138; color: #aab4be; }
     .badge.on { background: #5a3d12; color: #ffd28a; }
-    #error { color: #ff8a80; min-height: 18px; margin-top: 4px; }
-    .holiday { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
-    .holiday span { min-width: 260px; }
-    .holiday button { margin: 0; }
-    #offset { width: 100%; max-width: 520px; }
-    #preview { display: none; margin-top: 12px; border: 1px solid #2c343d; border-radius: 8px; overflow: hidden; }
-    #preview iframe { border: 0; width: 1060px; height: 300px; transform-origin: 0 0; display: block; }
+    #error { color: #ff8a80; font-size: 12px; }
+    #error:not(:empty) { margin-top: 6px; }
+    .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 10px; align-items: start; }
+    .panels .wide { grid-column: 1 / -1; }
+    #offset { flex: 1; min-width: 120px; }
+    #offset_label { min-width: 44px; text-align: right; }
+    #presets { margin-bottom: 8px; }
+    .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+    .fields label { display: flex; flex-direction: column; gap: 2px; color: #9aa4ae; font-size: 11px; }
+    .fields label.full { grid-column: 1 / -1; }
+    .card > .note { margin-top: 6px; }
+    #holidays { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+    .holiday { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 4px 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
+    .holiday span { min-width: 0; }
+    .holiday div { display: flex; gap: 4px; flex: none; }
+    @media (max-width: 480px) {
+        #status { position: static; box-shadow: none; }
+        .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .status_grid .span2 { grid-column: auto; }
+    }
 </style>
 </head>
 <body>
-<h1>Outside lab</h1>
-<p class="note">Set Outside's time and weather by hand; the sign switches to Outside and redraws on the next frame.
-Only Outside is affected: the sign clock and other modes keep real time.
-Everything returns to live when the sign leaves Outside, after <span id="idle">15</span> minutes without a lab action, or with Back to live.</p>
+<main>
+<header>
+    <h1>Outside lab</h1>
+    <p class="note">Set Outside's time and weather by hand; the sign switches to Outside and redraws on the next frame.
+    Only Outside is affected. Everything returns to live when the sign leaves Outside, after <span id="idle">15</span> idle minutes, or with Back to live.</p>
+</header>
 
-<div id="status">
-    <div class="row">
-        <span>Showing <b id="s_time">…</b></span>
-        <span>Season <b id="s_season">…</b></span>
-        <span>Sun <b id="s_sun">…</b></span>
-        <span>Astronomy <b id="s_sky">…</b></span>
+<section id="status" class="card">
+    <div class="status_grid">
+        <div><small>Showing</small><b id="s_time">…</b></div>
+        <div><small>Season</small><b id="s_season">…</b></div>
+        <div><small>Sun</small><b id="s_sun">…</b></div>
+        <div><small>Astronomy</small><b id="s_sky">…</b></div>
+        <div class="span2"><small>Weather</small><b id="s_weather">…</b></div>
+        <div class="span2"><small>Holidays</small><b id="s_holidays">…</b></div>
     </div>
-    <div class="row">
-        <span>Weather <b id="s_weather">…</b></span>
-        <span>Holidays <b id="s_holidays">…</b></span>
-    </div>
-    <div class="row" style="margin-top:6px">
+    <div class="status_bar">
         <span class="badge" id="b_time">live time</span>
         <span class="badge" id="b_weather">live weather</span>
         <span class="badge" id="b_expires"></span>
         <span class="note">Sign clock: <span id="s_clock">…</span></span>
+        <button class="live" onclick="call('/outside/lab/reset')">Back to live</button>
     </div>
-    <div style="margin-top:8px"><button class="live" onclick="call('/outside/lab/reset')">Back to live</button></div>
-    <div id="error"></div>
-</div>
+    <div id="error" role="alert"></div>
+</section>
 
-<div id="preview"><iframe id="preview_frame" title="Emulator preview"></iframe></div>
+<div class="panels">
+<section class="card">
+    <h2>Time</h2>
+    <div class="row">
+        <span class="row_label">Jump to</span>
+        <div class="controls">
+            <input type="datetime-local" id="at" aria-label="Lab time">
+            <button class="primary" onclick="setAt()">Set</button>
+            <button onclick="call('/outside/lab/time', {reset: 1})">Live time</button>
+        </div>
+    </div>
+    <div class="row">
+        <span class="row_label">Speed</span>
+        <div class="chips">
+            <button onclick="call('/outside/lab/time', {speed: 1})">×1</button>
+            <button onclick="call('/outside/lab/time', {speed: 10})">×10</button>
+            <button onclick="call('/outside/lab/time', {speed: 60})">×60</button>
+            <button onclick="call('/outside/lab/time', {speed: 300})">×300</button>
+        </div>
+    </div>
+    <div class="row"><span class="row_label">Season</span><div id="seasons" class="chips"></div></div>
+    <div class="row"><span class="row_label">Sun</span><div id="sun_events" class="chips"></div></div>
+    <div class="row">
+        <label class="row_label" for="offset">Forecast</label>
+        <div class="controls"><input type="range" id="offset" min="0" max="1440" step="15" value="0"><b id="offset_label">+0 h</b></div>
+    </div>
+    <p class="note">Season keeps the time of day; sun events jump on the shown date.</p>
+</section>
 
-<h2>Time</h2>
-<div>
-    <input type="datetime-local" id="at">
-    <button class="primary" onclick="setAt()">Set time</button>
-    <button onclick="call('/outside/lab/time', {reset: 1})">Live time</button>
-</div>
-<div style="margin-top:6px">Speed:
-    <button onclick="call('/outside/lab/time', {speed: 1})">×1</button>
-    <button onclick="call('/outside/lab/time', {speed: 10})">×10</button>
-    <button onclick="call('/outside/lab/time', {speed: 60})">×60</button>
-    <button onclick="call('/outside/lab/time', {speed: 300})">×300</button>
-</div>
-<div id="seasons" style="margin-top:6px">Season (keeps time of day): </div>
-<div id="sun_events" style="margin-top:6px">On the shown date: </div>
-<div style="margin-top:10px">
-    Forecast offset: <b id="offset_label">+0 h</b><br>
-    <input type="range" id="offset" min="0" max="1440" step="15" value="0">
-</div>
+<section class="card">
+    <h2>Weather</h2>
+    <div id="presets" class="chips"></div>
+    <div class="fields">
+        <label class="full">Condition<select id="w_code"></select></label>
+        <label>Clouds %<input id="w_clouds" type="number" min="0" max="100"></label>
+        <label>Wind mph<input id="w_wind" type="number" min="0" step="1"></label>
+        <label>Temp °F<input id="w_temp" type="number" step="1"></label>
+        <label>Rain mm/h<input id="w_rain" type="number" min="0" step="0.1"></label>
+        <label>Snow mm/h<input id="w_snow" type="number" min="0" step="0.1"></label>
+        <label>Visibility m<input id="w_visibility" type="number" min="0" step="100"></label>
+    </div>
+    <div class="controls">
+        <button class="primary" onclick="applyWeather()">Apply weather</button>
+        <button onclick="call('/outside/lab/weather', {reset: 1})">Live weather</button>
+    </div>
+    <p class="note">A blank field is an unknown reading, as when the live feed omits it.</p>
+</section>
 
-<h2>Holidays</h2>
-<div id="holidays"></div>
-
-<h2>Weather</h2>
-<div id="presets"></div>
-<div style="margin-top:8px">
-    <label>Condition<select id="w_code"></select></label>
-    <label>Clouds %<input id="w_clouds" type="number" min="0" max="100"></label>
-    <label>Wind mph<input id="w_wind" type="number" min="0" step="1"></label>
-    <label>Rain mm/h<input id="w_rain" type="number" min="0" step="0.1"></label>
-    <label>Snow mm/h<input id="w_snow" type="number" min="0" step="0.1"></label>
-    <label>Temp °F<input id="w_temp" type="number" step="1"></label>
-    <label>Visibility m<input id="w_visibility" type="number" min="0" step="100"></label>
+<section class="card wide">
+    <h2>Holidays</h2>
+    <div id="holidays"></div>
+</section>
 </div>
-<div>
-    <button class="primary" onclick="applyWeather()">Apply weather</button>
-    <button onclick="call('/outside/lab/weather', {reset: 1})">Live weather</button>
-    <span class="note">A blank field is an unknown reading, as when the live feed omits it.</span>
-</div>
+</main>
 
 <script>
 // Works directly on the API port (/outside/lab) and through nginx (/api/outside/lab).
@@ -191,18 +227,6 @@ function build(options) {
         clearTimeout(offsetTimer);
         offsetTimer = setTimeout(() => call('/outside/lab/offset', {minutes: el('offset').value}), 120);
     };
-    // With --web, show the emulated matrix; nginx serves display.html next to /api.
-    if (options.emulated && API === '/api') {
-        el('preview_frame').src = '/display.html' + (options.ws_port === 5056 ? '' : '?ws_port=' + options.ws_port);
-        el('preview').style.display = 'block';
-        const fit = () => {
-            const scale = Math.min(1, el('preview').clientWidth / 1060);
-            el('preview_frame').style.transform = `scale(${scale})`;
-            el('preview').style.height = (300 * scale) + 'px';
-        };
-        window.addEventListener('resize', fit);
-        fit();
-    }
     built = true;
 }
 
@@ -217,8 +241,9 @@ function renderHolidays(holidays) {
         row.className = 'holiday';
         const name = document.createElement('span');
         name.textContent = holiday.label;
-        row.append(name);
-        for (const time of holiday.times) row.append(button(time.label, () => call('/outside/lab/time', {at: time.at})));
+        const times = document.createElement('div');
+        for (const time of holiday.times) times.append(button(time.label, () => call('/outside/lab/time', {at: time.at})));
+        row.append(name, times);
         box.append(row);
     }
 }
