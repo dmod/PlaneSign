@@ -11,13 +11,14 @@ RUN apt update && apt -y install --no-install-recommends \
   cmake \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.22 /uv /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /bin/
 ENV CFLAGS="-I/usr/include/python3.12"
 ENV UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /planesign
 
-COPY . .
+# Only the dependency manifests, so source changes reuse the cached venv (and the rgbmatrix compile).
+COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 # ---- Runtime stage: only what is needed to run the sign ----

@@ -25,7 +25,8 @@
         {
             "label": "uv sync",
             "type": "shell",
-            "command": "uv sync"
+            // --locked fails instead of rewriting uv.lock; run `uv lock` after editing pyproject.toml.
+            "command": "uv sync --locked"
         },
         {
             "label": "Start nginx",

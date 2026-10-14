@@ -93,7 +93,9 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - The VS Code devcontainer (`.devcontainer/devcontainer.json`) is built from the project `Dockerfile` and runs with `--privileged` and `--network=host`.
 - The workspace is shared with remote SSH as `pi`. The devcontainer runs as uid-1000 `ubuntu` (matching `pi`) with passwordless `sudo`, so the files it writes stay editable over SSH. If files become root-owned, run `sudo chown -R pi:pi ~/PlaneSign`.
 - A per-container named volume is mounted over `.venv`, because the Pi's system Python differs from the image's. Use `.venv/bin/python`, not system Python; run `uv sync` when dependencies are missing.
+- In agent shell tools, launch Python with `uv run python ...`. The tool runs a bare `cd … && .venv/bin/python …` command without a shell and resolves the symlink first, so Python starts as system `/usr/bin/python3.12` without the venv and fails with `ModuleNotFoundError: No module named 'websockets'`. `uv sync` does not fix that error. A pipe or redirect also forces a shell, but `uv run` works in every form.
 - The native RGB driver build needs Pillow's `Imaging.h` from the system `python3-pil` package. If uv's Python differs from the system Python, point `CFLAGS` at the system include directory before `uv sync`.
+- ruff is a `dev` dependency group (left out of the Docker image), configured in `pyproject.toml`: run `uv run ruff check <files>` and `uv run ruff format <files>`. The codebase has existing findings, so lint only the files you change.
 - Launch configurations: `PlaneSign Debug` (hardware, `sudo: true`, works over SSH and in the devcontainer) and `PlaneSign Debug - Web Display` (`--web`, runs `uv sync` and starts nginx first).
 - The devcontainer replaces the image's `CMD`, so `postStartCommand` starts nginx. nginx needs root for the TLS key and ports 80/443: always use `sudo service nginx start`. It is safe to run when nginx is already running.
 - To drive the physical panel from the devcontainer, stop the production sign container first, then run `sudo .venv/bin/python planesign/__main__.py --mode <MODE>`.
@@ -110,7 +112,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 2. From the repository root, run the following command, or use the Web Display launch configuration. `--help` lists the testing flags (`--mode`, `--fake-time`, `--time-speed`, `--config`, `--set`, `--api-port`, `--ws-port`):
 
 	```bash
-	.venv/bin/python planesign/__main__.py --web
+	uv run python planesign/__main__.py --web
 	```
 
 3. With nginx running, `http://localhost/` has the controls and `http://localhost/display.html` the matrix preview. Confirm the preview is receiving frames, and reload it if its WebSocket does not reconnect after a restart.
@@ -142,7 +144,7 @@ When the default ports are taken by an instance you should not stop, or a test n
 
 ```bash
 cp sign.conf <session files>/test_sign.conf
-.venv/bin/python planesign/__main__.py --web --api-port 5065 --ws-port 5066 \
+uv run python planesign/__main__.py --web --api-port 5065 --ws-port 5066 \
 	--config <session files>/test_sign.conf --set MILITARY_TIME=true --mode MOON
 ```
 
