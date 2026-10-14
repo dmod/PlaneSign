@@ -82,7 +82,8 @@
 
   <div class="groups_wrapper">
 
-    <fieldset class="mode_selector_button_group box1">
+    <div class="groups_column">
+    <fieldset class="mode_selector_button_group">
       <legend>Planes</legend>
       <button id="PLANES_ALERT" class="mode_button" onclick="set_mode(this.id)">Default Mode</button>
       <button id="PLANES_CLOSEST" class="mode_button" onclick="set_mode(this.id)">Show Closest</button>
@@ -95,7 +96,46 @@
       </div>
     </fieldset>
 
-    <div class="device_info_box box6">
+    <fieldset class="mode_selector_button_group">
+      <legend>Games</legend>
+      <button id="PONG" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
+      <div id="pong_div" hidden>
+        <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
+        <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
+      </div>
+      <button id="FLAGQUIZ" class="mode_button" onclick="set_mode(this.id); document.getElementById('flagquiz_div').hidden = false">Flag Quiz</button>
+      <div id="flagquiz_div" class="flagquiz_controls" hidden>
+        <p>Choose a difficulty to start or restart the shared quiz.</p>
+        <div class="flagquiz_difficulties">
+          <button type="button" onclick="start_flagquiz('easy')">Easy · 3 choices</button>
+          <button type="button" onclick="start_flagquiz('hard')">Hard · 4 choices</button>
+          <button type="button" onclick="start_flagquiz('expert')">Expert</button>
+        </div>
+        <label class="flagquiz_name_label" for="game_player_name">Your game name</label>
+        <div class="flagquiz_name_control">
+          <input id="game_player_name" maxlength="24" autocomplete="nickname">
+          <button type="button" onclick="rename_game_player()">Update name</button>
+        </div>
+        <p id="flagquiz_error" class="flagquiz_error" role="alert"></p>
+        <section id="flagquiz_game" class="flagquiz_game" hidden>
+          <p id="flagquiz_question_progress" class="flagquiz_progress" role="status"></p>
+          <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
+          <p id="flagquiz_feedback" class="flagquiz_feedback" role="status"></p>
+          <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
+          <div id="flagquiz_expert" class="flagquiz_expert" hidden>
+            <label for="flagquiz_expert_input">Country name</label>
+            <div class="flagquiz_autocomplete">
+              <input id="flagquiz_expert_input" type="text" autocomplete="off" oninput="get_flagquiz_suggestions(this.value)">
+              <div id="flagquiz_suggestions" class="flagquiz_suggestions"></div>
+            </div>
+          </div>
+          <h4>Players</h4>
+          <ol id="flagquiz_scoreboard" class="flagquiz_scoreboard"></ol>
+        </section>
+      </div>
+    </fieldset>
+
+    <div class="device_info_box">
       <div class="device_info_header">Device Info</div>
       <div id="device_info_content" class="device_info_content">
         <div class="device_info_row">
@@ -124,8 +164,10 @@
         </div>
       </div>
     </div>
+    </div>
 
-    <fieldset class="mode_selector_button_group box2">
+    <div class="groups_column">
+    <fieldset class="mode_selector_button_group">
       <legend>Informational</legend>
       <button id="WEATHER" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
       <button id="TIDES" class="mode_button" onclick="set_mode(this.id)">Tides 🌊</button>
@@ -190,46 +232,7 @@
       </div>
     </fieldset>
 
-    <fieldset class="mode_selector_button_group games_group">
-      <legend>Games</legend>
-      <button id="PONG" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
-      <div id="pong_div" hidden>
-        <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
-        <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
-      </div>
-      <button id="FLAGQUIZ" class="mode_button" onclick="set_mode(this.id); document.getElementById('flagquiz_div').hidden = false">Flag Quiz</button>
-      <div id="flagquiz_div" class="flagquiz_controls" hidden>
-        <p>Choose a difficulty to start or restart the shared quiz.</p>
-        <div class="flagquiz_difficulties">
-          <button type="button" onclick="start_flagquiz('easy')">Easy · 3 choices</button>
-          <button type="button" onclick="start_flagquiz('hard')">Hard · 4 choices</button>
-          <button type="button" onclick="start_flagquiz('expert')">Expert</button>
-        </div>
-        <label class="flagquiz_name_label" for="game_player_name">Your game name</label>
-        <div class="flagquiz_name_control">
-          <input id="game_player_name" maxlength="24" autocomplete="nickname">
-          <button type="button" onclick="rename_game_player()">Update name</button>
-        </div>
-        <p id="flagquiz_error" class="flagquiz_error" role="alert"></p>
-        <section id="flagquiz_game" class="flagquiz_game" hidden>
-          <p id="flagquiz_question_progress" class="flagquiz_progress" role="status"></p>
-          <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
-          <p id="flagquiz_feedback" class="flagquiz_feedback" role="status"></p>
-          <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
-          <div id="flagquiz_expert" class="flagquiz_expert" hidden>
-            <label for="flagquiz_expert_input">Country name</label>
-            <div class="flagquiz_autocomplete">
-              <input id="flagquiz_expert_input" type="text" autocomplete="off" oninput="get_flagquiz_suggestions(this.value)">
-              <div id="flagquiz_suggestions" class="flagquiz_suggestions"></div>
-            </div>
-          </div>
-          <h4>Players</h4>
-          <ol id="flagquiz_scoreboard" class="flagquiz_scoreboard"></ol>
-        </section>
-      </div>
-    </fieldset>
-
-    <fieldset class="mode_selector_button_group box3">
+    <fieldset class="mode_selector_button_group">
       <legend>Just for Fun :)</legend>
       <button id="CUSTOM_MESSAGE" class="mode_button" onclick="set_mode(this.id); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
       <div id="custom_message_div" hidden>
@@ -317,6 +320,7 @@
       <button id="SANTA" class="mode_button" onclick="set_mode(this.id)">Christmas</button>
       <button id="SNOWFALL" class="mode_button" onclick="set_mode(this.id)">Let It Snow!</button>
     </fieldset>
+    </div>
 
     <div id="mic_button" class="box4" hidden>
       <div class="record_button_object">
