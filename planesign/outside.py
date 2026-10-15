@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, draw_outside_frame, holiday_features
+from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, WEATHER_DESCRIPTIONS, draw_outside_frame, holiday_features
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -65,6 +65,8 @@ class OutsideEnvironment:
     since_nightfall: float | None = None
     # The displayed moment's local date, which selects the holiday decorations.
     local_date: date | None = None
+    # The sun has yet to rise on local_date; overnight holidays stay up until it does.
+    before_sunrise: bool = False
 
 
 def reading(value):
@@ -225,7 +227,9 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
         return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date())
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
-    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date())
+    sunrise = next((sunrise for sunrise in sky.get("sunrises", ()) if sunrise > moment.timestamp()), None)
+    before_sunrise = sunrise is not None and datetime.fromtimestamp(sunrise, moment.tzinfo).date() == moment.date()
+    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise)
 
 
 def sky_angles(ephemeris, instant, latitude: float, longitude: float):
@@ -260,12 +264,15 @@ def calculate_sky_timeline(ephemeris, timescale, timestamp: float, latitude: flo
     altitude = np.asarray(angles["sun_altitude"])
     falling = np.nonzero((altitude[:-1] >= NIGHT_ALTITUDE) & (altitude[1:] < NIGHT_ALTITUDE))[0]
     nightfalls = [float(start + (index + (altitude[index] - NIGHT_ALTITUDE) / (altitude[index] - altitude[index + 1])) * SKY_SAMPLE_SECONDS) for index in falling]
+    rising = np.nonzero((altitude[:-1] < SET_ALTITUDE) & (altitude[1:] >= SET_ALTITUDE))[0]
+    sunrises = [float(start + (index + (SET_ALTITUDE - altitude[index]) / (altitude[index + 1] - altitude[index])) * SKY_SAMPLE_SECONDS) for index in rising]
     return {
         "status": "READY",
         "start": start,
         "end": start + (count - 1) * SKY_SAMPLE_SECONDS,
         "location": [latitude, longitude],
         "nightfalls": nightfalls,
+        "sunrises": sunrises,
         **{field: value.tolist() for field, value in angles.items()},
     }
 

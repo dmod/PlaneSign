@@ -16,7 +16,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, holiday_span_start
+from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -31,6 +31,8 @@ SUN_EVENTS = {
     "nightfall": ("Nightfall (lamp on)", NIGHT_ALTITUDE, False, 1),
 }
 HOLIDAY_TIMES = (("Day", 12, 0), ("Night", 21, 30))
+# Holidays that last the night also get a shortcut into the small hours of the next morning.
+HOLIDAY_NIGHT_TIME = ("Before dawn", 3, 0)
 # How long a sun event jump waits for the astronomy worker to cover a newly selected day.
 SKY_WAIT_SECONDS = 20
 # Weather query parameters: name -> (OutsideWeather field, minimum, maximum, scale).
@@ -130,9 +132,13 @@ def holiday_shortcuts(year: int):
     for moment in sorted({holiday_span_start(span, year) for _, spans in HOLIDAYS.values() for span in spans}):
         environment = outside.OutsideEnvironment("", outside.OutsideWeather("LIVE"), "READY", local_date=moment)
         labels = [HOLIDAYS[feature][0] for feature in HOLIDAYS if feature in outside.holiday_features(environment)]
+        times = [(label, moment, hour, minute) for label, hour, minute in HOLIDAY_TIMES]
+        if (moment.month, moment.day) in HOLIDAY_NIGHTS:
+            label, hour, minute = HOLIDAY_NIGHT_TIME
+            times.append((label, moment + timedelta(days=1), hour, minute))
         shortcuts.append({
             "label": f"{moment:%b} {moment.day}: {', '.join(labels)}",
-            "times": [{"label": label, "at": f"{moment.isoformat()}T{hour:02d}:{minute:02d}"} for label, hour, minute in HOLIDAY_TIMES],
+            "times": [{"label": label, "at": f"{day.isoformat()}T{hour:02d}:{minute:02d}"} for label, day, hour, minute in times],
         })
     return shortcuts
 

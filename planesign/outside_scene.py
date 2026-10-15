@@ -4,7 +4,7 @@ import math
 import os
 import random
 from dataclasses import dataclass, fields, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from itertools import pairwise
 from typing import TYPE_CHECKING
@@ -279,6 +279,7 @@ LAMP_POST_X = 14
 LAMP_LENS = (17, 17)
 LAMP_GROUND_Y = 26
 LAMP_SECONDS = 3 * 3600
+LAMP_WARMUP_SECONDS = 40
 # Sun altitude (degrees) at which the scene palette becomes pure night.
 NIGHT_ALTITUDE = -10
 LAMP_LIGHT = (255, 200, 120)
@@ -1723,7 +1724,7 @@ def lamp_level(environment: "OutsideEnvironment") -> float:
     since = environment.since_nightfall
     if since is None or not 0 <= since < LAMP_SECONDS:
         return 0.0
-    return min(1.0, since / 40, (LAMP_SECONDS - since) / 20)
+    return min(1.0, since / LAMP_WARMUP_SECONDS, (LAMP_SECONDS - since) / 20)
 
 
 def lamp_light_mask() -> np.ndarray:
@@ -2006,11 +2007,15 @@ def holiday_span_start(span: tuple[int, ...], year: int) -> date:
 
 
 def holiday_features(environment: "OutsideEnvironment") -> frozenset[str]:
-    """Holiday easter eggs for the displayed local date."""
+    """Holiday easter eggs for the displayed local date, plus an overnight holiday's until the next sunrise."""
     day = environment.local_date
     if day is None:
         return frozenset()
-    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(holiday_span_matches(day, span) for span in spans))
+    days = [day]
+    yesterday = day - timedelta(days=1)
+    if environment.before_sunrise and (yesterday.month, yesterday.day) in HOLIDAY_NIGHTS:
+        days.append(yesterday)
+    return frozenset(feature for feature, (_, spans) in HOLIDAYS.items() if any(holiday_span_matches(moment, span) for moment in days for span in spans))
 
 
 def holiday_darkness(environment: "OutsideEnvironment") -> float:
@@ -2031,9 +2036,13 @@ HOLIDAYS = {
     "santa": ("Santa", ((12, 24, 24),)),
     "fireworks": ("Fireworks", ((12, 31, 31), (1, 1, 1), (7, 4, 4))),
     "flag": ("Flag", ((7, 4, 4),)),
+    "cannon": ("Cannon", ((7, 4, 4),)),
+    "fountains": ("Fountains", ((7, 4, 4),)),
     "halloween": ("Halloween", ((10, 31, 31),)),
     "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
 }
+# (month, day) of holidays whose whole scene stays up through the following night, until sunrise the next morning.
+HOLIDAY_NIGHTS = frozenset({(7, 4)})
 CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
 TOPPER_GOLD = (255, 206, 60)
 TOPPER_CORE = (255, 250, 214)
@@ -2240,7 +2249,7 @@ def draw_santa(image: Image.Image, environment: "OutsideEnvironment", elapsed: f
 
 
 FIREWORK_SLOT_SECONDS = 0.7
-FIREWORK_CHANCE = 0.75
+FIREWORK_CHANCE = 0.9
 # Each cycle ends with a finale that fires several shells per slot.
 FIREWORK_FINALE_PERIOD = 75
 FIREWORK_FINALE_SECONDS = 7
@@ -2387,31 +2396,409 @@ FLAG_ROWS = ("sbsbsbRRRRRRR", "bbbbbbWWWWWWW", "bsbsbsRRRRRRR", "bbbbbbWWWWWWW",
 FLAG_COLORS = {"R": (206, 22, 44), "W": (246, 246, 240), "b": (28, 46, 150), "s": (246, 246, 240)}
 FLAG_POLE = (196, 200, 206)
 FLAG_FINIAL = (255, 204, 70)
+# A ground floodlight at the pole's foot, aimed up at the flag; it switches on and off with the yard lamp.
+FLAG_FLOOD_HOUSING = ((45, 26), (46, 26))
+FLAG_FLOOD_LENS = (46, 25)
+FLAG_FLOOD_AIM = (50, 9)
+# Beam half-width gained per pixel of travel; wide enough to take in the whole fly by the flag's rows.
+FLAG_FLOOD_SPREAD = 0.5
+FLAG_FLOOD_LIGHT = (255, 244, 222)
+FLAG_FLOOD_GLOW = (255, 250, 236)
 
 
-def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float):
-    """A big American flag rippling on a pole beside the hut."""
-    d = ImageDraw.Draw(image)
+def flag_flood_masks() -> tuple[np.ndarray, np.ndarray]:
+    """How strongly the floodlight falls on the flag and pole at each pixel, and the faint beam it leaves in the air."""
+    lens_x, lens_y = FLAG_FLOOD_LENS
+    axis = np.array(FLAG_FLOOD_AIM, dtype=np.float32) - FLAG_FLOOD_LENS
+    reach = float(np.hypot(*axis))
+    ux, uy = axis / reach
+    rows, columns = np.arange(HEIGHT)[:, None] - lens_y, np.arange(WIDTH)[None, :] - lens_x
+    along = columns * ux + rows * uy
+    across = np.abs(columns * uy - rows * ux)
+    inside = np.clip(1 - across / (0.6 + np.maximum(along, 0) * FLAG_FLOOD_SPREAD), 0, 1)
+    ahead = (along > 0) & (along <= reach + 5)
+    # The flag is lit nearly evenly across the cone, a little brighter nearer the lamp.
+    surface = np.where(ahead, np.clip(inside * 2.2, 0, 1) * (1 - 0.25 * np.clip(along / reach, 0, 1)), 0)
+    haze = np.where(ahead, inside * (0.1 + 0.3 * np.clip(1 - along / reach, 0, 1)), 0)
+    halo = np.clip(1 - np.hypot(columns, rows * 1.3) / 2.2, 0, 1) * 0.5
+    return surface.astype(np.float32), np.maximum(haze, halo).astype(np.float32)
+
+
+FLAG_FLOOD_SURFACE, FLAG_FLOOD_HAZE = flag_flood_masks()
+FLAG_FLOOD_TINT = np.array(FLAG_FLOOD_LIGHT, dtype=np.float32) / 255
+FLAG_FLOOD_FIXTURE_COLUMNS, FLAG_FLOOD_FIXTURE_ROWS = (np.array(axis) for axis in zip(*FLAG_FLOOD_HOUSING, FLAG_FLOOD_LENS))
+FLAG_CLOTH = np.array([[FLAG_COLORS[char] for char in line] for line in FLAG_ROWS], dtype=np.float32)
+FLAG_CLOTH_ROWS = FLAG_TOP + np.arange(len(FLAG_ROWS))[:, None]
+FLAG_CLOTH_COLUMNS = np.arange(len(FLAG_ROWS[0]))
+# The pole from its gold finial down to the ground.
+FLAG_STAFF_ROWS = np.arange(FLAG_TOP - 1, FLAG_GROUND + 1)
+FLAG_STAFF = np.array([FLAG_FINIAL, *[FLAG_POLE] * (len(FLAG_STAFF_ROWS) - 1)], dtype=np.float32)
+
+
+def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float, flood: float = 0.0):
+    """A big American flag rippling on a pole beside the hut, floodlit from the ground after dark."""
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
 
-    def lit(color: Color, shade: float = 1.0) -> Color:
-        return tuple(min(255, round(value * illumination * shade)) for value in color)
+    def lit(colors: np.ndarray, rows: np.ndarray, columns: np.ndarray) -> np.ndarray:
+        light = np.minimum(1.0, illumination + (flood * FLAG_FLOOD_SURFACE[rows, columns])[..., None] * FLAG_FLOOD_TINT)
+        return colors * light
 
-    d.line((FLAG_POLE_X, FLAG_TOP, FLAG_POLE_X, FLAG_GROUND), fill=lit(FLAG_POLE))
-    d.point((FLAG_POLE_X, FLAG_TOP - 1), fill=lit(FLAG_FINIAL))
     breeze = 0.6 + min(wind, 25) / 25
     speed = 3.5 + min(wind, 25) * 0.15
-    for column in range(len(FLAG_ROWS[0])):
-        phase = column * 0.75 - elapsed * speed
-        # Ripples grow away from the hoist; their slopes catch more or less light.
-        lift = round(breeze * math.sin(phase) * column / 12)
-        shade = 1 + 0.2 * math.cos(phase) * min(1, column / 3)
-        x = FLAG_POLE_X + 1 + column
-        points: dict[str, list[tuple[int, int]]] = {}
-        for row, line in enumerate(FLAG_ROWS):
-            points.setdefault(line[column], []).append((x, FLAG_TOP + row + lift))
-        for char, pixels in points.items():
-            d.point(pixels, fill=lit(FLAG_COLORS[char], shade))
+    phase = FLAG_CLOTH_COLUMNS * 0.75 - elapsed * speed
+    # Ripples grow away from the hoist; their slopes catch more or less light.
+    lift = np.round(breeze * np.sin(phase) * FLAG_CLOTH_COLUMNS / 12).astype(int)
+    shade = 1 + 0.2 * np.cos(phase) * np.minimum(1, FLAG_CLOTH_COLUMNS / 3)
+    rows = FLAG_CLOTH_ROWS + lift
+    columns = np.broadcast_to(FLAG_POLE_X + 1 + FLAG_CLOTH_COLUMNS, rows.shape)
+    pixels = np.array(image)
+    pixels[FLAG_STAFF_ROWS, FLAG_POLE_X] = np.round(np.minimum(255, lit(FLAG_STAFF, FLAG_STAFF_ROWS, np.full_like(FLAG_STAFF_ROWS, FLAG_POLE_X))))
+    pixels[FLAG_FLOOD_FIXTURE_ROWS, FLAG_FLOOD_FIXTURE_COLUMNS] = palette.roof
+    pixels[rows, columns] = np.round(np.minimum(255, lit(FLAG_CLOTH, rows, columns) * shade[:, None]))
+    image.paste(Image.fromarray(pixels, "RGB"))
+
+
+def flag_flood_level(environment: "OutsideEnvironment") -> float:
+    """The floodlight comes on with the yard lamp at nightfall, warming up the same way, and burns until sunrise."""
+    altitude = environment.sun_altitude
+    if altitude is None or not (altitude < NIGHT_ALTITUDE or environment.before_sunrise):
+        return 0.0
+    since = environment.since_nightfall
+    return min(1.0, since / LAMP_WARMUP_SECONDS) if since is not None and 0 <= since < LAMP_WARMUP_SECONDS else 1.0
+
+
+def draw_flag_flood(image: Image.Image, level: float) -> Image.Image:
+    """The floodlight's faint beam through the night air and the glow of its lens."""
+    pixels = np.asarray(image, dtype=np.float32)
+    pixels = pixels + (np.array(FLAG_FLOOD_LIGHT, dtype=np.float32) - pixels) * (FLAG_FLOOD_HAZE * level)[..., None]
+    lit = Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
+    lit.putpixel(FLAG_FLOOD_LENS, mix(image.getpixel(FLAG_FLOOD_LENS), FLAG_FLOOD_GLOW, level))
+    return lit
+
+
+# A cartoon cannon left of the tree fires salutes: a blinding blast, a ball that streaks out of frame, and a shower of
+# embers that smolder on the ground.
+CANNON_MUZZLE_X = 90
+CANNON_GROUND = 29
+# Barrel elevation as rise per pixel; the ball leaves along it.
+CANNON_SLOPE = 0.8
+CANNON_BARREL_LENGTH = 11
+CANNON_BARREL_RADIUS = 1.6
+CANNON_MUZZLE_SWELL = 0.4
+# The wheel's hub, as (distance along the barrel, offset below it).
+CANNON_HUB = (9.5, 2.4)
+CANNON_WHEEL = ("..www..", ".wdwdw.", "wddwddw", "wwwowww", "wddwddw", ".wdwdw.", "..www..")
+CANNON_TRAIL_LENGTH = 7
+CANNON_COLORS = {"O": (14, 14, 18), "R": (96, 98, 112), "H": (150, 154, 170), "K": (58, 60, 70), "k": (26, 27, 32), "b": (230, 184, 64), "w": (146, 104, 62), "d": (66, 44, 28), "o": (230, 184, 64), "C": (120, 84, 50)}
+CANNON_SLOT_SECONDS = 14
+CANNON_FIRE_CHANCE = 0.8
+# Blast, flight, embers and smoke; a shot never crosses its slot.
+CANNON_SHOT_SECONDS = 6.0
+CANNON_RECOIL_SECONDS = 0.45
+# Px/s along the barrel; the ball clears the top of the frame in about half a second.
+CANNON_BALL_SPEED = 55
+CANNON_BALL = (40, 40, 46)
+CANNON_BALL_SHINE = (150, 152, 166)
+# After dark the red-hot ball still shows against the sky.
+CANNON_BALL_HOT = (255, 120, 40)
+CANNON_SMOKE = (226, 226, 228)
+CANNON_SMOKE_SECONDS = 4.0
+# Smoke puffs: (angle from the barrel in radians, reach in px, final radius in px).
+CANNON_PUFFS = ((0.0, 7.5, 3.4), (-0.45, 5.5, 2.8), (0.45, 5.5, 2.8), (-0.9, 3.5, 2.4), (0.9, 3.5, 2.4), (0.2, 2.0, 2.2), (-0.2, 9.5, 2.4))
+CANNON_FLASH_SECONDS = 0.6
+FLASH_CORE = (255, 252, 230)
+FLASH_FIRE = (255, 196, 60)
+FLASH_TIP = (255, 110, 30)
+CANNON_EMBERS = 18
+CANNON_EMBER_GRAVITY = 14
+CANNON_EMBER_DRAG = 1.6
+# Embers that land settle on the meadow at this row and smolder; those over the pond go out.
+CANNON_EMBER_GROUND = 27
+CANNON_MUZZLE_SMOLDER_SECONDS = 1.5
+EMBER_HOT = np.array((255, 236, 170), dtype=np.float32) / 255
+EMBER_WARM = np.array((255, 130, 30), dtype=np.float32) / 255
+EMBER_COOL = np.array((190, 34, 8), dtype=np.float32) / 255
+
+
+def cannon_sprite() -> tuple[dict[tuple[int, int], str], tuple[float, float], tuple[float, float]]:
+    """Absolute pixels -> material key, the muzzle's center, and the unit vector from the muzzle back to the breech."""
+    ux, uy = 1 / math.hypot(1, CANNON_SLOPE), CANNON_SLOPE / math.hypot(1, CANNON_SLOPE)
+    length, radius = CANNON_BARREL_LENGTH, CANNON_BARREL_RADIUS
+    barrel = {}
+    for y in range(-4, length + 4):
+        for x in range(-4, length + 4):
+            along, below = x * ux + y * uy, -x * uy + y * ux
+            reach = radius + (CANNON_MUZZLE_SWELL if along < 1.6 else 0)
+            if -0.5 <= along <= length and abs(below) <= reach:
+                barrel[(x, y)] = "R" if along < 1 else "H" if below < -reach * 0.35 else "k" if below > reach * 0.4 else "K"
+    barrel[(round((length + 0.9) * ux), round((length + 0.9) * uy))] = "b"
+    hub_along, hub_below = CANNON_HUB
+    hub = (round(hub_along * ux - hub_below * uy), round(hub_along * uy + hub_below * ux))
+    ground = hub[1] + len(CANNON_WHEEL) // 2
+    sprite = {}
+    # The carriage's trail runs from the axle back to the ground, two pixels thick.
+    for step in range(CANNON_TRAIL_LENGTH * 4 + 1):
+        x = hub[0] + step / 4
+        y = round(hub[1] + (ground - hub[1]) * step / (CANNON_TRAIL_LENGTH * 4))
+        sprite[(round(x), y)] = sprite[(round(x), y - 1)] = "C"
+    # A dark outline keeps the barrel readable against the hills.
+    for x, y in barrel:
+        for point in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if point not in barrel:
+                sprite[point] = "O"
+    sprite.update(barrel)
+    for row, line in enumerate(CANNON_WHEEL):
+        for column, key in enumerate(line):
+            if key != ".":
+                sprite[(hub[0] - len(line) // 2 + column, hub[1] - len(CANNON_WHEEL) // 2 + row)] = key
+    shift_x, shift_y = CANNON_MUZZLE_X, CANNON_GROUND - ground
+    return {(x + shift_x, y + shift_y): key for (x, y), key in sprite.items()}, (float(shift_x), float(shift_y)), (ux, uy)
+
+
+CANNON_PIXELS, CANNON_MUZZLE, CANNON_AXIS = cannon_sprite()
+CANNON_GROUPS = {key: [point for point, value in CANNON_PIXELS.items() if value == key] for key in CANNON_COLORS}
+# The ball leaves just past the muzzle, along the barrel.
+CANNON_LAUNCH = (CANNON_MUZZLE[0] - CANNON_AXIS[0], CANNON_MUZZLE[1] - CANNON_AXIS[1])
+
+
+@dataclass(frozen=True)
+class CannonShot:
+    slot: int
+    fire: float
+
+
+def cannon_shot(slot: int, seed: int) -> CannonShot | None:
+    if unit_hash(seed, slot, 401) >= CANNON_FIRE_CHANCE:
+        return None
+    return CannonShot(slot, slot * CANNON_SLOT_SECONDS + unit_hash(seed, slot, 402) * (CANNON_SLOT_SECONDS - CANNON_SHOT_SECONDS))
+
+
+def cannon_state(elapsed: float, seed: int) -> tuple[CannonShot, float] | None:
+    """The shot under way and seconds since it fired, or None between shots."""
+    shot = cannon_shot(math.floor(elapsed / CANNON_SLOT_SECONDS), seed)
+    if shot is None or not 0 <= elapsed - shot.fire < CANNON_SHOT_SECONDS:
+        return None
+    return shot, elapsed - shot.fire
+
+
+def draw_cannon(image: Image.Image, palette: Palette, state: tuple[CannonShot, float] | None):
+    """The cannon itself, jumping back a pixel as it fires."""
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    recoil = 1 if state is not None and state[1] < CANNON_RECOIL_SECONDS else 0
+    d = ImageDraw.Draw(image)
+    for key, points in CANNON_GROUPS.items():
+        color = tuple(round(value * (0.25 + 0.75 * illumination)) for value in CANNON_COLORS[key])
+        d.point([(x + recoil, y) for x, y in points], fill=color)
+
+
+def draw_cannon_shot(image: Image.Image, palette: Palette, state: tuple[CannonShot, float] | None, wind: float, night: float) -> Image.Image:
+    """The blast's billowing smoke, and the ball bursting out of it and streaking out of frame."""
+    if state is None:
+        return image
+    _, age = state
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    if age < CANNON_SMOKE_SECONDS:
+        smoke = Image.new("RGBA", (WIDTH, HEIGHT))
+        sd = ImageDraw.Draw(smoke)
+        gray = tuple(round(value * (0.25 + 0.75 * illumination)) for value in CANNON_SMOKE)
+        # The puffs are lit orange by the blast for an instant.
+        color = mix(gray, FLASH_FIRE, max(0.0, 1 - age / 0.25) * 0.7)
+        heading = math.atan2(-CANNON_AXIS[1], -CANNON_AXIS[0])
+        burst = 1 - math.exp(-age / 0.3)
+        opacity = 0.85 * (1 - age / CANNON_SMOKE_SECONDS) ** 1.5
+        for angle, reach, radius in CANNON_PUFFS:
+            x = CANNON_LAUNCH[0] + math.cos(heading + angle) * reach * burst + min(wind, 25) * age * SMOKE_WIND_DRIFT
+            y = CANNON_LAUNCH[1] + math.sin(heading + angle) * reach * burst - age * 0.8
+            r = 0.8 + (radius - 0.8) * (1 - math.exp(-age / 0.5))
+            sd.ellipse((x - r, y - r, x + r, y + r), fill=(*color, round(255 * opacity)))
+        image = Image.alpha_composite(image.convert("RGBA"), smoke).convert("RGB")
+    travel = age * CANNON_BALL_SPEED
+    x, y = CANNON_LAUNCH[0] - CANNON_AXIS[0] * travel, CANNON_LAUNCH[1] - CANNON_AXIS[1] * travel
+    if x < -2 or y < -2:
+        return image
+    d = ImageDraw.Draw(image)
+    ball = mix(tuple(round(value * (0.5 + 0.5 * illumination)) for value in CANNON_BALL), CANNON_BALL_HOT, 0.75 * night)
+    shine = mix(tuple(round(value * (0.4 + 0.6 * illumination)) for value in CANNON_BALL_SHINE), FLASH_CORE, 0.6 * night)
+    # A short smear just behind the ball sells its speed; it leaves no lasting path.
+    gap = CANNON_BALL_SPEED / 20
+    for step, opacity in ((2, 0.2), (1, 0.45)):
+        if travel > gap * step:
+            point = (round(x + CANNON_AXIS[0] * gap * step), round(y + CANNON_AXIS[1] * gap * step))
+            if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT:
+                d.point(point, fill=mix(image.getpixel(point), ball, opacity))
+    bx, by = round(x), round(y)
+    for point, color in (((bx, by), shine), ((bx + 1, by), ball), ((bx, by + 1), ball), ((bx + 1, by + 1), ball)):
+        if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT:
+            d.point(point, fill=color)
+    return image
+
+
+def cannon_flash_rays() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """A cartoon starburst: spiky rays, longest along the barrel, as (along, x, y, color) samples from the muzzle."""
+    heading = math.atan2(-CANNON_AXIS[1], -CANNON_AXIS[0])
+    alongs, xs, ys, colors = [], [], [], []
+    for ray in range(12):
+        angle = heading + ray * 2 * math.pi / 12
+        forward = math.cos(angle - heading)
+        length = 3 + 3 * max(0.0, forward) + 4.5 * max(0.0, forward) ** 6 + (1.2 if ray % 2 else 0)
+        for step in np.arange(0, length + 0.01, 0.5):
+            fraction = step / length
+            alongs.append(fraction)
+            xs.append(math.cos(angle) * step)
+            ys.append(math.sin(angle) * step)
+            colors.append(FLASH_CORE if fraction < 0.35 else FLASH_FIRE if fraction < 0.75 else FLASH_TIP)
+    # A solid white-hot ball of fire at the heart of the burst.
+    for dy in range(-2, 3):
+        for dx in range(-2, 3):
+            if dx * dx + dy * dy <= 4:
+                alongs.append(0.0)
+                xs.append(float(dx))
+                ys.append(float(dy))
+                colors.append(FLASH_CORE)
+    return np.array(alongs, dtype=np.float32), np.array(xs, dtype=np.float32), np.array(ys, dtype=np.float32), np.array(colors, dtype=np.float32) / 255
+
+
+CANNON_FLASH_RAYS = cannon_flash_rays()
+CANNON_FLASH_DISTANCE = (FIREWORK_X - CANNON_LAUNCH[0]) ** 2 + (FIREWORK_Y - CANNON_LAUNCH[1]) ** 2
+CANNON_FLASH_GLOW = np.exp(-CANNON_FLASH_DISTANCE / (2 * 9.0**2))[..., None] * (np.array(FLASH_FIRE, dtype=np.float32) / 255)
+# After dark the blast lights up the whole scene for an instant.
+CANNON_FLASH_WASH = np.exp(-CANNON_FLASH_DISTANCE / (2 * 30.0**2))[..., None] * (np.array((255, 214, 150), dtype=np.float32) / 255)
+
+
+@lru_cache(maxsize=4)
+def cannon_embers(slot: int, seed: int) -> tuple[np.ndarray, ...]:
+    """Each shot's burning embers: (heading cos, heading sin, speed px/s, lifetime s, flicker salt)."""
+    rng = random.Random(seed * 7919 + slot * 104729 + 17)
+    heading = math.atan2(-CANNON_AXIS[1], -CANNON_AXIS[0])
+    embers = []
+    for _ in range(CANNON_EMBERS):
+        angle = heading + rng.gauss(0, 0.7)
+        embers.append((math.cos(angle), math.sin(angle), rng.uniform(5, 22), rng.uniform(1.4, 3.6), rng.randrange(2**20)))
+    return tuple(np.array(values, dtype=np.float32 if index < 4 else np.int64) for index, values in enumerate(zip(*embers)))
+
+
+def cannon_light(state: tuple[CannonShot, float] | None, night: float, wind: float, seed: int) -> np.ndarray | None:
+    """The muzzle blast's blinding starburst, then embers that drift down, cool from yellow to red and smolder where
+    they land, as emitted light."""
+    if state is None:
+        return None
+    shot, age = state
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    if age < CANNON_FLASH_SECONDS:
+        strength = math.exp(-age / 0.13)
+        grow = min(1.0, 0.45 + age / 0.05)
+        light += CANNON_FLASH_GLOW * (strength * (0.4 + 0.6 * night)) + CANNON_FLASH_WASH * (strength * 0.4 * night)
+        alongs, xs, ys, colors = CANNON_FLASH_RAYS
+        splat(light, CANNON_LAUNCH[0] + xs * grow, CANNON_LAUNCH[1] + ys * grow, colors, strength * 1.5 * (1 - 0.4 * alongs) * (alongs <= grow))
+    if age < CANNON_MUZZLE_SMOLDER_SECONDS:
+        smolder = 1 - age / CANNON_MUZZLE_SMOLDER_SECONDS
+        splat(light, np.array([CANNON_MUZZLE[0] - 0.5]), np.array([CANNON_MUZZLE[1]]), (EMBER_COOL + (EMBER_WARM - EMBER_COOL) * smolder)[None], np.array([0.7 * smolder]))
+    cos, sin, speed, life, salt = cannon_embers(shot.slot, seed)
+    heat = np.clip(1 - age / life, 0, 1)
+    travel = speed / CANNON_EMBER_DRAG * (1 - math.exp(-CANNON_EMBER_DRAG * age))
+    xs = CANNON_LAUNCH[0] + cos * travel + min(wind, 25) * SMOKE_WIND_DRIFT * 0.5 * age
+    ys = CANNON_LAUNCH[1] + sin * travel + 0.5 * CANNON_EMBER_GRAVITY * age * age
+    landed = ys >= CANNON_EMBER_GROUND
+    ys = np.minimum(ys, CANNON_EMBER_GROUND)
+    columns = np.clip(np.rint(xs).astype(int), 0, WIDTH - 1)
+    # Embers that drop into the pond hiss out; the rest glow on in the grass.
+    doused = landed & WATER[CANNON_EMBER_GROUND, columns]
+    flicker = 0.55 + 0.45 * np.array([unit_hash(int(value), math.floor(age * 12)) for value in salt], dtype=np.float32)
+    weights = (0.25 + 0.75 * heat) * flicker * (heat > 0) * ~doused * np.where(landed, 0.8, 1.0)
+    colors = np.where((heat > 0.6)[:, None], EMBER_WARM + (EMBER_HOT - EMBER_WARM) * ((heat - 0.6) / 0.4)[:, None], EMBER_COOL + (EMBER_WARM - EMBER_COOL) * (heat / 0.6)[:, None])
+    splat(light, xs, ys, colors, weights.astype(np.float32))
+    return light if light.any() else None
+
+
+# Ground fountains on the pond's far bank, red, white and blue: they burn in turns while the fireworks fly, and all
+# together through each finale. (column, spark color)
+FOUNTAINS = ((58, (255, 52, 44)), (66, (255, 240, 214)), (74, (70, 140, 255)))
+FOUNTAIN_ROW = 24
+FOUNTAIN_HEIGHT = 8
+FOUNTAIN_GRAVITY = 30
+FOUNTAIN_SPARKS = 40
+FOUNTAIN_SLOT_SECONDS = 12
+FOUNTAIN_CHANCE = 0.6
+FOUNTAIN_BURN = (5, 9)
+FOUNTAIN_IGNITE_SECONDS = 0.5
+FOUNTAIN_DIE_SECONDS = 1.0
+FOUNTAIN_HOT = np.array((255, 250, 225), dtype=np.float32) / 255
+
+
+def fountain_sparks() -> dict[str, np.ndarray]:
+    """Every fountain's fixed spark streams in one flat table, each spark listed twice: itself and a dimmer point
+    trailing it."""
+    columns: dict[str, list] = {name: [] for name in ("owner", "x", "phase", "life", "sin", "cos", "speed", "tint", "spark")}
+    for index, (x, color) in enumerate(FOUNTAINS):
+        rng = random.Random(7301 + index * 31)
+        for spark in range(FOUNTAIN_SPARKS):
+            angle = rng.uniform(-0.5, 0.5)
+            values = {"owner": index, "x": x, "phase": rng.random(), "life": rng.uniform(0.9, 1.5), "sin": math.sin(angle), "cos": math.cos(angle), "speed": rng.uniform(0.8, 1.02), "tint": np.array(color) / 255, "spark": index * FOUNTAIN_SPARKS + spark}
+            for name, value in values.items():
+                columns[name].append(value)
+    table = {name: np.array(values * 2, dtype=np.int64 if name in ("owner", "spark") else np.float32) for name, values in columns.items()}
+    count = len(FOUNTAINS) * FOUNTAIN_SPARKS
+    table["back"] = np.repeat(np.array((0.0, 0.04), dtype=np.float32), count)
+    table["streak"] = np.repeat(np.array((1.0, 0.45), dtype=np.float32), count)
+    return table
+
+
+FOUNTAIN_SPARK_TABLE = fountain_sparks()
+FOUNTAIN_MOUTHS = np.array([x for x, _ in FOUNTAINS], dtype=np.float32)
+# Each fountain's glow on the bank, kept to a small box around its base: (columns, glow) within FOUNTAIN_GLOW_ROWS.
+FOUNTAIN_GLOW_ROWS = slice(FOUNTAIN_ROW - 7, FOUNTAIN_ROW + 6)
+FOUNTAIN_GLOWS = tuple((slice(x - 9, x + 10), (np.exp(-((FIREWORK_X - x) ** 2 + ((FIREWORK_Y - FOUNTAIN_ROW) * 1.6) ** 2) / (2 * 3.0**2))[..., None] * (np.array(color, dtype=np.float32) / 255 * 0.5 + 0.5))[FOUNTAIN_GLOW_ROWS, x - 9 : x + 10]) for x, color in FOUNTAINS)
+
+
+def burn_window(t: float, start: float, end: float) -> float:
+    """0..1 for a fountain lit at `start` and spent at `end`: it flares up, then sputters out."""
+    if t < start or t >= end + FOUNTAIN_DIE_SECONDS:
+        return 0.0
+    return min(1.0, (t - start) / FOUNTAIN_IGNITE_SECONDS, 1 - (t - end) / FOUNTAIN_DIE_SECONDS)
+
+
+def fountain_level(index: int, elapsed: float, seed: int) -> float:
+    cycle = elapsed % FIREWORK_FINALE_PERIOD
+    finale = FIREWORK_FINALE_PERIOD - FIREWORK_FINALE_SECONDS - 1
+    level = max(burn_window(cycle, finale, FIREWORK_FINALE_PERIOD), burn_window(cycle + FIREWORK_FINALE_PERIOD, finale, FIREWORK_FINALE_PERIOD))
+    slot = math.floor(elapsed / FOUNTAIN_SLOT_SECONDS)
+    if unit_hash(seed, slot, index, 501) < FOUNTAIN_CHANCE:
+        burn = FOUNTAIN_BURN[0] + unit_hash(seed, slot, index, 502) * (FOUNTAIN_BURN[1] - FOUNTAIN_BURN[0])
+        start = slot * FOUNTAIN_SLOT_SECONDS + unit_hash(seed, slot, index, 503) * (FOUNTAIN_SLOT_SECONDS - burn - FOUNTAIN_DIE_SECONDS)
+        level = max(level, burn_window(elapsed, start, start + burn))
+    return level
+
+
+def draw_fountain_tubes(image: Image.Image, palette: Palette):
+    d = ImageDraw.Draw(image)
+    for x, _ in FOUNTAINS:
+        d.point(((x, FOUNTAIN_ROW), (x, FOUNTAIN_ROW + 1)), fill=palette.roof)
+
+
+def fountain_light(elapsed: float, seed: int, night: float) -> np.ndarray | None:
+    """Sparks gushing up from each lit fountain and falling back, as emitted light."""
+    levels = np.array([fountain_level(index, elapsed, seed) for index in range(len(FOUNTAINS))], dtype=np.float32)
+    if not levels.any():
+        return None
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    sparks = FOUNTAIN_SPARK_TABLE
+    level = levels[sparks["owner"]]
+    # Fountains flare up to full height as they ignite and shrink as they sputter out.
+    speed = sparks["speed"] * math.sqrt(2 * FOUNTAIN_GRAVITY * FOUNTAIN_HEIGHT) * (0.35 + 0.65 * level)
+    life = sparks["life"]
+    age = (elapsed / life + sparks["phase"]) % 1 * life - sparks["back"]
+    xs = sparks["x"] + sparks["sin"] * speed * age
+    ys = FOUNTAIN_ROW - sparks["cos"] * speed * age + 0.5 * FOUNTAIN_GRAVITY * age * age
+    # Sparks crackle on and off, a different set each tick.
+    crackle = 0.35 + 0.65 * (np.modf(np.sin(sparks["spark"] * 12.9898 + math.floor(elapsed * 15) * 78.233) * 43758.5453)[0] ** 2 > 0.1)
+    colors = np.where((age < 0.08)[:, None], FOUNTAIN_HOT, sparks["tint"])
+    weights = level * sparks["streak"] * crackle * np.clip(1 - age / life, 0, 1) ** 1.2 * (age >= 0) * (ys <= FOUNTAIN_ROW)
+    # The white-hot mouth of each tube.
+    splat(light, np.concatenate((xs, FOUNTAIN_MOUTHS)), np.concatenate((ys, np.full(len(FOUNTAINS), FOUNTAIN_ROW, dtype=np.float32))), np.vstack((colors, np.tile(FOUNTAIN_HOT, (len(FOUNTAINS), 1)))), np.concatenate((weights, levels)))
+    for (columns, glow), lit in zip(FOUNTAIN_GLOWS, levels):
+        if lit > 0:
+            light[FOUNTAIN_GLOW_ROWS, columns] += glow * (lit * (0.12 + 0.3 * night))
+    return light
 
 
 HALLOWEEN = "halloween"
@@ -3521,8 +3908,16 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         for column in range(x + drift, x + width + drift + 1):
             if LAND.getpixel((column, y)) == INDEX["water"]:
                 d.point((column, y), fill=color)
-    if fireworks is not None:
-        image = reflect_fireworks(image, fireworks, elapsed)
+    # Fountains burn on the far bank, in front of the land; they and the fireworks shimmer on the pond.
+    sparkle = fireworks
+    if "fountains" in holidays:
+        draw_fountain_tubes(image, palette)
+        fountains = fountain_light(elapsed, seed, night)
+        if fountains is not None:
+            image = composite_light(image, fountains)
+            sparkle = fountains if sparkle is None else sparkle + fountains
+    if sparkle is not None:
+        image = reflect_fireworks(image, sparkle, elapsed)
         d = ImageDraw.Draw(image)
     mist = environment.weather.visibility is not None and environment.weather.visibility < 5000
     if mist or environment.weather.code in (701, 711, 721, 741):
@@ -3544,8 +3939,12 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     if thanksgiving:
         draw_harvest_display(image, palette, night, elapsed)
     wind = environment.weather.wind or 0
+    flood = flag_flood_level(environment) if "flag" in holidays else 0.0
     if "flag" in holidays:
-        draw_flag(image, palette, wind, elapsed)
+        draw_flag(image, palette, wind, elapsed, flood)
+    cannon = cannon_state(elapsed, seed) if "cannon" in holidays else None
+    if "cannon" in holidays:
+        draw_cannon(image, palette, cannon)
     draw_leaves(image, palette, environment, elapsed, seed)
     draw_wildlife(image, palette, environment, elapsed, seed)
     if thanksgiving:
@@ -3553,6 +3952,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     image = draw_smoke(image, palette, environment, elapsed, seed)
+    image = draw_cannon_shot(image, palette, cannon, wind, night)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
@@ -3582,6 +3982,11 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     lamp = halloween_lamp(night, elapsed, seed) if halloween else lamp_level(environment)
     if lamp > 0:
         image = draw_lamp_light(image, lamp)
+    if flood > 0:
+        image = draw_flag_flood(image, flood)
+    blast = cannon_light(cannon, night, wind, seed)
+    if blast is not None:
+        image = composite_light(image, blast)
     if halloween:
         image = draw_jack_o_lantern_glow(image, night, elapsed, roll)
         draw_shadow_eyes(image, shadow, night, elapsed)
