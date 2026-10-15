@@ -11,7 +11,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 
 ## Hardware
 - **Display:** Two chained 64x32 RGB LED matrix panels = **128 pixels wide × 32 pixels tall**
-- **Platform:** Raspberry Pi 4, driven by the `rgbmatrix` Python bindings from [dmod/rpi-rgb-led-matrix](https://github.com/dmod/rpi-rgb-led-matrix), a fork of [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) trimmed to the Pi 1–4 driver and Python bindings. It has no Pi 5 support, and a Pi 5 refuses to start. Make driver or binding changes in the fork and pin the new commit in `pyproject.toml`.
+- **Platform:** Raspberry Pi 4, driven by the `rgbmatrix` Python bindings from [dmod/rpi-rgb-led-matrix](https://github.com/dmod/rpi-rgb-led-matrix), a fork of [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) trimmed to the Python bindings and the driver for 64-bit Pis (Pi 2 v1.2, 3, 4, Zero 2). A Pi 1, Zero or Pi 5 refuses to start. The fork drives one chain with direct row addressing on the `regular`, `adafruit-hat` and `adafruit-hat-pwm` mappings; parallel chains, pixel mappers, multiplexed panels and privilege dropping are gone. Make driver or binding changes in the fork, pin the new commit in `pyproject.toml`, and keep `emulated_matrix.core.RGBMatrixOptions` to the same option names.
 - **Alternative display:** Adafruit 2.23" 128x32 monochrome OLED bonnet (SSD1305), selected by `PINOUT_HARDWARE_MAPPING=adafruit-oled`. Any other mapping value selects the native RGB driver. Changing the mapping needs a restart.
 
 ## Architecture

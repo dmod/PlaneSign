@@ -57,4 +57,5 @@ RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_n
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
 
-CMD ["sh", "-c", "service nginx start && .venv/bin/python planesign/"]
+# exec makes Python PID 1, so it receives docker stop's SIGTERM and blanks the panel; sh would swallow it.
+CMD ["sh", "-c", "service nginx start && exec .venv/bin/python planesign/"]

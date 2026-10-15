@@ -11,3 +11,4 @@ applyTo: "Dockerfile, docker_install_and_update.sh, docker_nginx_planesign.conf,
 - Keep the uv image version here equal to the devcontainer's uv feature `version`. A different uv can rewrite `uv.lock`.
 - The installer uses Docker's current Debian repository format (`docker.sources` and `docker.asc`). It removes its legacy `docker.list` before APT recovery when `docker.sources` already exists, and before configuring the modern repository.
 - The nginx config serves `web/` on 80/443 and proxies `/api/` to the Flask API on 5055, rewriting the `/api/` prefix away.
+- The `CMD` must `exec` Python. As PID 1, `sh` ignores `docker stop`'s SIGTERM, so the app never runs its shutdown and is SIGKILLed after the 90 s grace period with the panel still lit. Python as PID 1 doesn't reap orphaned grandchildren, so wait on every subprocess the app starts.

@@ -27,7 +27,9 @@ class PlaneSign:
         options.limit_refresh_rate_hz = 250
         options.hardware_mapping = shared_config.CONF["PINOUT_HARDWARE_MAPPING"]
         options.led_rgb_sequence = shared_config.CONF["RGB_SEQUENCE"]
-        options.drop_privileges = False
+        # Forks before dcd7ef1 drop to the "daemon" user after init unless told not to; later ones never do.
+        if hasattr(options, "drop_privileges"):
+            options.drop_privileges = False
 
         self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
