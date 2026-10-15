@@ -42,9 +42,6 @@
 		"ghcr.io/devcontainers-extra/features/apt-packages",
 		"ghcr.io/devcontainers-extra/features/uv"
 	],
-	"containerEnv": {
-		"CFLAGS": "-I/opt/pillow-include"
-	},
 	"postCreateCommand": "sudo chown ubuntu:ubuntu .venv && uv sync --frozen --no-install-project",
 	"postStartCommand": "sudo service nginx start",
 	"forwardPorts": [80, 443, 5055, 5056],

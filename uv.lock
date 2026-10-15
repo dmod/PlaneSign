@@ -677,7 +677,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "requests", specifier = ">=2.34.2" },
-    { name = "rgbmatrix", git = "https://github.com/hzeller/rpi-rgb-led-matrix.git?rev=41809e40e912b7f278ad34046f20abf5609b2b07" },
+    { name = "rgbmatrix", git = "https://github.com/dmod/rpi-rgb-led-matrix.git?rev=bc17e2e31243d9f0e1c459579c12e9f6cf0c497b" },
     { name = "rpi-gpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = ">=0.7.1" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "skyfield", specifier = ">=1.54" },
@@ -736,8 +736,8 @@ wheels = [
 
 [[package]]
 name = "rgbmatrix"
-version = "0.0.1+20260125"
-source = { git = "https://github.com/hzeller/rpi-rgb-led-matrix.git?rev=41809e40e912b7f278ad34046f20abf5609b2b07#41809e40e912b7f278ad34046f20abf5609b2b07" }
+version = "0.0.1+dmod.20261014"
+source = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git?rev=bc17e2e31243d9f0e1c459579c12e9f6cf0c497b#bc17e2e31243d9f0e1c459579c12e9f6cf0c497b" }
 
 [[package]]
 name = "rpi-gpio"

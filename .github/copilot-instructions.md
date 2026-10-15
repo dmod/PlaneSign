@@ -11,7 +11,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 
 ## Hardware
 - **Display:** Two chained 64x32 RGB LED matrix panels = **128 pixels wide × 32 pixels tall**
-- **Platform:** Raspberry Pi 4, uses the [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) library (`rgbmatrix` Python bindings)
+- **Platform:** Raspberry Pi 4, driven by the `rgbmatrix` Python bindings from [dmod/rpi-rgb-led-matrix](https://github.com/dmod/rpi-rgb-led-matrix), a fork of [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) trimmed to the Pi 1–4 driver and Python bindings. It has no Pi 5 support, and a Pi 5 refuses to start. Make driver or binding changes in the fork and pin the new commit in `pyproject.toml`.
 - **Alternative display:** Adafruit 2.23" 128x32 monochrome OLED bonnet (SSD1305), selected by `PINOUT_HARDWARE_MAPPING=adafruit-oled`. Any other mapping value selects the native RGB driver. Changing the mapping needs a restart.
 
 ## Architecture
@@ -94,7 +94,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - The workspace is shared with remote SSH as `pi`. The devcontainer runs as uid-1000 `ubuntu` (matching `pi`) with passwordless `sudo`, so the files it writes stay editable over SSH. If files become root-owned, run `sudo chown -R pi:pi ~/PlaneSign`.
 - A per-container named volume is mounted over `.venv`, because the Pi's system Python differs from the image's. Use `.venv/bin/python`, not system Python; run `uv sync` when dependencies are missing.
 - In agent shell tools, launch Python with `uv run python ...`. The tool runs a bare `cd … && .venv/bin/python …` command without a shell and resolves the symlink first, so Python starts as system `/usr/bin/python3.14` without the venv and fails with `ModuleNotFoundError: No module named 'websockets'`. `uv sync` does not fix that error. A pipe or redirect also forces a shell, but `uv run` works in every form.
-- The native RGB driver build compiles against Pillow's `Imaging.h`. `SetImage` reads Pillow's C image struct directly, and that layout changed in Pillow 12, so the headers must come from the Pillow version in `uv.lock`, not the system `python3-pil`. The image and devcontainer provide them in `/opt/pillow-include` (via `CFLAGS`). Outside a container, point `CFLAGS` at that Pillow version's `src/libImaging` before `uv sync`.
+- Building the native RGB driver needs only git, a C++ compiler, CMake and `python3-dev`. The fork's `SetImage` reads pixels with Pillow's public `Image.tobytes()`, so no Pillow headers or `CFLAGS` are involved. Do not reintroduce Pillow's private `Imaging.h`: Pillow's C structs are internal and change between releases.
 - ruff is a `dev` dependency group (left out of the Docker image), configured in `pyproject.toml`: run `uv run ruff check <files>` and `uv run ruff format <files>`. The codebase has existing findings, so lint only the files you change.
 - Launch configurations: `PlaneSign Debug` (hardware, `sudo: true`, works over SSH and in the devcontainer) and `PlaneSign Debug - Web Display` (`--web`, runs `uv sync` and starts nginx first).
 - The devcontainer replaces the image's `CMD`, so `postStartCommand` starts nginx. nginx needs root for the TLS key and ports 80/443: always use `sudo service nginx start`. It is safe to run when nginx is already running.
