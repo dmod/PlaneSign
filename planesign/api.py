@@ -129,6 +129,8 @@ def set_outside_time():
     offset = data.get("offset_minutes") if isinstance(data, dict) else None
     if not isinstance(offset, int) or isinstance(offset, bool) or not 0 <= offset <= 1440:
         return jsonify({"error": "offset_minutes must be an integer from 0 to 1440"}), 400
+    if data.get("clear_lab") is True and outside.lab_active(shared_config.data_dict):
+        outside.clear_lab(shared_config.data_dict, "Return to now in the web UI")
     shared_config.shared_outside_offset_minutes.value = offset
     shared_config.shared_outside_time_update.set()
     return jsonify(outside.outside_status())

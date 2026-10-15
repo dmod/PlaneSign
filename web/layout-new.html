@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=games-outside-lab-1"></script>
+  <script src="index.js?v=outside-return-now-1"></script>
   <title>Plane Sign New Interface (Beta)</title>
 </head>
 
@@ -343,7 +343,7 @@
                   <input id="outside_time_slider" type="range" min="0" max="1440" step="1" value="0" oninput="set_outside_time(this.value)">
                   <div class="outside_time_ticks" aria-hidden="true"><span>Now</span><span>+6h</span><span>+12h</span><span>+18h</span><span>+24h</span></div>
                   <div class="outside_actions">
-                    <button type="button" onclick="set_outside_time(0)">Return to now</button>
+                    <button type="button" onclick="return_outside_to_now()">Return to now</button>
                     <button type="button" onclick="window.open('api/outside/lab', '_blank')" title="Set Outside's time, weather and holidays by hand in a new tab">Outside lab</button>
                   </div>
                   <p id="outside_time_error" role="alert"></p>

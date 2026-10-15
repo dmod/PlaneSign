@@ -46,7 +46,7 @@
 		"CFLAGS": "-I/usr/include/python3.12"
 	},
 	"postCreateCommand": "sudo chown ubuntu:ubuntu .venv && uv sync --frozen --no-install-project",
-	"postStartCommand": "sudo service nginx start",
+	"postStartCommand": "git config --global --replace-all safe.directory ${containerWorkspaceFolder} '^${containerWorkspaceFolder}$' && sudo service nginx start",
 	"forwardPorts": [80, 443, 5055, 5056],
 	"portsAttributes": {
 		"80": { "label": "PlaneSign HTTP", "protocol": "http" },

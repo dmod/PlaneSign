@@ -9,6 +9,7 @@ var outside_time_pending = null;
 var outside_time_sending = false;
 var outside_time_timer = null;
 var outside_time_version = 0;
+var outside_time_clear_lab = false;
 var valid_tickers = null;
 var valid_resorts = null;
 var free_sketch_is_drawing = false;
@@ -168,6 +169,11 @@ function apply_outside_status(data) {
     document.getElementById('outside_status').textContent = data.season + ' / ' + weather + ' / ' + astronomy;
 }
 
+function return_outside_to_now() {
+    outside_time_clear_lab = true;
+    set_outside_time(0);
+}
+
 function set_outside_time(value) {
     var minutes = Number(value);
     document.getElementById('outside_time_slider').value = minutes;
@@ -183,7 +189,9 @@ function set_outside_time(value) {
 async function send_outside_time() {
     outside_time_timer = null;
     var minutes = outside_time_pending;
+    var clear_lab = outside_time_clear_lab;
     outside_time_pending = null;
+    outside_time_clear_lab = false;
     outside_time_sending = true;
     var version = outside_time_version;
     var controller = new AbortController();
@@ -192,7 +200,7 @@ async function send_outside_time() {
         var response = await fetch('api/outside/time', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({offset_minutes: minutes}),
+            body: JSON.stringify({offset_minutes: minutes, clear_lab: clear_lab}),
             signal: controller.signal
         });
         var data = await response.json();

@@ -3,7 +3,8 @@
 Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
 button in the web UI's Outside controls. Every lab action switches the sign to Outside. The overrides only affect
 Outside: the sign clock and every other mode keep real time and weather. They clear when the sign
-leaves Outside, after outside.LAB_IDLE_SECONDS without a lab action, on "Back to live", or on restart.
+leaves Outside, after outside.LAB_IDLE_SECONDS without a lab action, on "Back to live" (or the main
+page's "Return to now"), or on restart.
 """
 
 import logging

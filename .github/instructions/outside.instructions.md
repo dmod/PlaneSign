@@ -49,5 +49,5 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
   - Lab time is `shared_outside_lab_clock`, read through `outside.outside_time()`; it never touches `psclock`.
   - Lab weather is `data_dict["outside_lab_weather"]`, reported as `LIVE` (or `FORECAST` while the offset is ahead), so the scene renders exactly as it would for real weather.
   - `shared_outside_lab_version` makes the loop pick up changes on the next frame.
-- Overrides clear when the sign leaves Outside, after `LAB_IDLE_SECONDS` without a lab action, on "Back to live", or on restart. Polling `/outside/lab/state` is not activity. Keep anything new self-clearing the same way.
+- Overrides clear when the sign leaves Outside, after `LAB_IDLE_SECONDS` without a lab action, on "Back to live" in the lab or "Return to now" on the main page, or on restart. Polling `/outside/lab/state` is not activity. Keep anything new self-clearing the same way.
 - When adding a holiday, weather effect or time-dependent feature, make it reachable from the lab: a `HOLIDAYS` entry, a weather preset or a sun event.
