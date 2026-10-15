@@ -692,18 +692,27 @@ class Race:
             sim_dt = dt * time_scale
             self.race_time += sim_dt
 
+            crossed = []
             for horse in self.horses:
                 horse.update(sim_dt, self.race_time, self.dust)
                 if horse.finish_time is None and horse.progress >= RACE_LENGTH:
-                    horse.finish_time = self.race_time
-                    if self.winner is None:
-                        self.winner = horse
-                        others = [other.progress for other in self.horses if other is not horse]
-                        self.finish_gap = horse.progress - max(others)
-                        photo_finish = self.finish_gap < PHOTO_FINISH_GAP
-                        finish_started = time.perf_counter()
-                        white_flash = 0.85
-                        self.music.play(WIN_FANFARE)
+                    # Interpolate back to the moment the nose hit the line, so two horses crossing in
+                    # the same frame are ranked by who got there first, not by lane order
+                    overshoot = (horse.progress - RACE_LENGTH) / max(horse.speed, 1e-6)
+                    horse.finish_time = self.race_time - min(overshoot, sim_dt)
+                    crossed.append(horse)
+
+            if crossed and self.winner is None:
+                winner = min(crossed, key=lambda h: h.finish_time)
+                self.winner = winner
+                # Margin back to the next horse at the instant the winner crossed
+                rewind = self.race_time - winner.finish_time
+                others = [other.progress - other.speed * rewind for other in self.horses if other is not winner]
+                self.finish_gap = RACE_LENGTH - max(others)
+                photo_finish = self.finish_gap < PHOTO_FINISH_GAP
+                finish_started = time.perf_counter()
+                white_flash = 0.85
+                self.music.play(WIN_FANFARE)
 
             self.update_dust(sim_dt)
             self.camera = min(max(leader.progress - LEAD_UNITS, CAMERA_START), CAMERA_FINISH)
