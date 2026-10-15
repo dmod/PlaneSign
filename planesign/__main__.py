@@ -1,7 +1,12 @@
 import argparse
+import multiprocessing
 import os
 import sys
 from datetime import datetime
+
+# Python 3.14 made forkserver the Linux default. Children must inherit the module-level setup below
+# (shared_config state, Manager proxies, the selected rgbmatrix driver) instead of re-running this script.
+multiprocessing.set_start_method("fork")
 
 
 def parse_args():

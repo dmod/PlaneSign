@@ -5,7 +5,8 @@ applyTo: "Dockerfile, docker_install_and_update.sh, docker_nginx_planesign.conf,
 # Docker Image And Installer
 
 - The image's `.venv` links to Ubuntu's system Python, and the runtime stage copies only `.venv` and installs the matching `python3`/`libpython` packages. The builder sets `UV_PYTHON_DOWNLOADS=never`, so a `.python-version` that the base image cannot satisfy fails the build. Without it, the venv would link to a uv-managed interpreter that the runtime stage lacks.
-- Changing the Ubuntu base image means updating `.python-version`, `CFLAGS` and the `libpython` package together.
+- Changing the Ubuntu base image means updating `.python-version` and the `libpython` package together. Check the package's exact name in the new release: Ubuntu 24.04 used `libpython3.12t64`, while 26.04 uses `libpython3.14`.
+- The builder extracts the Pillow headers for rgbmatrix from the Pillow sdist pinned in `uv.lock` (hash-checked) into `/opt/pillow-include`. The runtime stage keeps a copy for the devcontainer's own `uv sync`. Do not switch back to `python3-pil`: its version differs from the venv's Pillow, so `SetImage` would read the wrong struct offsets.
 - The builder copies only `pyproject.toml`, `uv.lock` and `.python-version` before `uv sync`, so source changes reuse the cached venv layer instead of recompiling `rgbmatrix`. Add any other file the sync needs to that `COPY`, not a broader one.
 - Keep the uv image version here equal to the devcontainer's uv feature `version`. A different uv can rewrite `uv.lock`.
 - The installer uses Docker's current Debian repository format (`docker.sources` and `docker.asc`). It removes its legacy `docker.list` before APT recovery when `docker.sources` already exists, and before configuring the modern repository.

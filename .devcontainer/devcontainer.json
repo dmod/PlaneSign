@@ -26,7 +26,7 @@
 			"upgradePackages": false
 		},
 		"ghcr.io/devcontainers-extra/features/apt-packages:1": {
-			"packages": "python3-dev,python3-pil,build-essential,cmake,sudo"
+			"packages": "python3-dev,build-essential,cmake,sudo"
 		},
 		// Keep in step with the uv image version in the Dockerfile: a different uv can rewrite uv.lock.
 		"ghcr.io/devcontainers-extra/features/uv:1.0.2": { "version": "0.13.0" },
@@ -43,7 +43,7 @@
 		"ghcr.io/devcontainers-extra/features/uv"
 	],
 	"containerEnv": {
-		"CFLAGS": "-I/usr/include/python3.12"
+		"CFLAGS": "-I/opt/pillow-include"
 	},
 	"postCreateCommand": "sudo chown ubuntu:ubuntu .venv && uv sync --frozen --no-install-project",
 	"postStartCommand": "sudo service nginx start",
