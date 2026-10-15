@@ -36,7 +36,7 @@ skip-magic-trailing-comma = true
 
 [tool.uv.sources]
 # Trimmed fork of hzeller/rpi-rgb-led-matrix (Pi 1-4 driver and Python bindings only).
-rgbmatrix = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git", rev = "bc17e2e31243d9f0e1c459579c12e9f6cf0c497b" }
+rgbmatrix = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git" }
 
 [dependency-groups]
 dev = [
