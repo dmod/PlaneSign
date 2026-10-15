@@ -1,28 +1,27 @@
 # ---- Build stage: compile native dependencies and build the venv ----
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:26.04 AS builder
 
 RUN apt update && apt -y install --no-install-recommends \
   git \
   ca-certificates \
   python3 \
   python3-dev \
-  python3-pil \
   build-essential \
   cmake \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /bin/
-ENV CFLAGS="-I/usr/include/python3.12"
 ENV UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /planesign
 
 # Only the dependency manifests, so source changes reuse the cached venv (and the rgbmatrix compile).
 COPY pyproject.toml uv.lock .python-version ./
+
 RUN uv sync --frozen --no-install-project --no-dev
 
 # ---- Runtime stage: only what is needed to run the sign ----
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 RUN apt update && apt -y install --no-install-recommends \
   nginx \
@@ -30,7 +29,7 @@ RUN apt update && apt -y install --no-install-recommends \
   ca-certificates \
   curl \
   python3 \
-  libpython3.12t64 \
+  libpython3.14 \
   mpg123 \
   alsa-utils \
   && apt clean \
@@ -58,4 +57,5 @@ RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_n
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
 
-CMD ["sh", "-c", "service nginx start && .venv/bin/python planesign/"]
+# exec makes Python PID 1, so it receives docker stop's SIGTERM and blanks the panel; sh would swallow it.
+CMD ["sh", "-c", "service nginx start && exec .venv/bin/python planesign/"]

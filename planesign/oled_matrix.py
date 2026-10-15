@@ -64,7 +64,7 @@ class RGBMatrix(Canvas):
             options = RGBMatrixOptions()
             options.chain_length = 2
         width, height = options.cols * options.chain_length, options.rows
-        if (width, height) != (128, 32) or options.parallel != 1:
+        if (width, height) != (128, 32):
             raise ValueError("The Adafruit OLED bonnet requires a single 128x32 canvas")
 
         super().__init__(width, height)

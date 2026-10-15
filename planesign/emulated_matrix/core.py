@@ -21,22 +21,18 @@ class RGBMatrixOptions:
         self.rows = 32
         self.cols = 64
         self.chain_length = 1
-        self.parallel = 1
-        self.hardware_mapping = ""
+        self.hardware_mapping = "regular"
         self.gpio_slowdown = 1
         self.pwm_bits = 11
+        self.pwm_lsb_nanoseconds = 130
+        self.pwm_dither_bits = 0
         self.brightness = 100
         self.scan_mode = 0
-        self.row_address_type = 0
-        self.multiplexing = 0
         self.disable_hardware_pulsing = False
         self.show_refresh_rate = False
         self.inverse_colors = False
         self.led_rgb_sequence = "RGB"
-        self.pixel_mapper_config = ""
-        self.panel_type = ""
         self.limit_refresh_rate_hz = 0
-        self.drop_privileges = True
 
 
 class Canvas:
