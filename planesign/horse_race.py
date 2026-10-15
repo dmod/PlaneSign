@@ -2,11 +2,13 @@
 # Arcade style horse race. Four horses, a random race every time, no predetermined winner.
 ###
 
+import fcntl
 import logging
 import math
 import os
 import random
 import subprocess
+import threading
 import time
 
 import shared_config
@@ -235,44 +237,127 @@ def _put_scaled(pix, x, y, scale, color):
             _put(pix, x + ox, y + oy, color)
 
 
+MUSIC_RATE = 44100
+MUSIC_FRAME_BYTES = 4  # S16_LE stereo
+MUSIC_CHUNK_BYTES = 512 * MUSIC_FRAME_BYTES
+MUSIC_PIPE_BYTES = 4096  # smallest pipe Linux allows, so a track switch is not stuck behind queued audio
+_decoded_tracks = {}
+
+
+def _decode_track(filename):
+    """Raw PCM for a soundtrack file, decoded once per process."""
+    if filename not in _decoded_tracks:
+        path = os.path.join(MUSIC_DIR, filename)
+        command = ["/usr/bin/mpg123", "--quiet", "-s", "-e", "s16", "-r", str(MUSIC_RATE), "--stereo", path]
+        pcm = subprocess.run(command, capture_output=True, check=True, timeout=30).stdout
+        _decoded_tracks[filename] = pcm[: len(pcm) - len(pcm) % MUSIC_FRAME_BYTES]
+    return _decoded_tracks[filename]
+
+
 class Music:
-    """Fire and forget soundtrack. Stays quiet unless the sign itself has a speaker to play it."""
+    """Soundtrack on one audio stream that stays open for the whole mode. Stays quiet unless the sign itself has a speaker to play it.
+
+    Starting a new player for each track left the gallop silent for about a second after GO!, so the
+    tracks are decoded up front and a feeder thread switches between them inside a single stream.
+    """
 
     def __init__(self):
-        self.process = None
         self.enabled = shared_config.audio_device is not None and not shared_config.emulated_display
+        self.player = None
+        self.feeder = None
+        self.closing = threading.Event()
+        self.lock = threading.Lock()
+        self.tracks = {}
+        self.track = None
+        self.position = 0
+        self.loop = False
+        if self.enabled:
+            self._open()
 
-    def play(self, filename, loop=False):
-        self.stop()
-        if not self.enabled:
+    def _open(self):
+        for filename in (POST_CALL, RACE_LOOP, WIN_FANFARE):
+            try:
+                self.tracks[filename] = _decode_track(filename)
+            except (OSError, subprocess.SubprocessError):
+                logging.warning(f"Could not load horse race music {filename}", exc_info=True)
+        if not self.tracks:
+            self.enabled = False
             return
-        path = os.path.join(MUSIC_DIR, filename)
-        if not os.path.exists(path):
-            logging.warning(f"Horse race music missing: {path}")
-            return
+
+        command = ["/usr/bin/aplay", "--quiet", "-t", "raw", "-f", "S16_LE", "-c", "2", "-r", str(MUSIC_RATE), "--buffer-time=40000", "--period-time=10000", "-D", utilities.get_audio_playback_device()]
         try:
-            self.process = subprocess.Popen(utilities.mp3_playback_command(path, loop=loop))
+            self.player = subprocess.Popen(command, stdin=subprocess.PIPE, bufsize=0)
         except OSError:
             logging.exception("Could not start the horse race music")
             self.enabled = False
-
-    def stop(self):
+            return
         try:
-            if self.process is not None:
-                returncode = self.process.poll()
-                if returncode is None:
-                    self.process.terminate()
-                    try:
-                        self.process.wait(timeout=1)
-                    except subprocess.TimeoutExpired:
-                        self.process.kill()
-                        self.process.wait()
-                elif returncode != 0:
-                    logging.error("Horse race music exited with code %s", returncode)
+            fcntl.fcntl(self.player.stdin.fileno(), fcntl.F_SETPIPE_SZ, MUSIC_PIPE_BYTES)
         except OSError:
-            logging.exception("Could not stop the horse race music")
-        finally:
-            self.process = None
+            logging.warning("Could not shrink the horse race music pipe, track changes may lag", exc_info=True)
+        self.feeder = threading.Thread(target=self._feed, name="horse-race-music", daemon=True)
+        self.feeder.start()
+
+    def play(self, filename, loop=False):
+        """Switch tracks. The new one starts on the next chunk, without reopening the speaker."""
+        if not self.enabled:
+            return
+        with self.lock:
+            self.track = self.tracks.get(filename)
+            self.position = 0
+            self.loop = loop
+
+    def _next_chunk(self):
+        with self.lock:
+            track = self.track
+            if track is None:
+                return None
+            chunk = track[self.position : self.position + MUSIC_CHUNK_BYTES]
+            self.position += len(chunk)
+            if len(chunk) < MUSIC_CHUNK_BYTES:
+                if self.loop:
+                    self.position = min(MUSIC_CHUNK_BYTES - len(chunk), len(track))
+                    chunk += track[: self.position]
+                else:
+                    self.track = None
+            return chunk
+
+    def _feed(self):
+        silence = bytes(MUSIC_CHUNK_BYTES)
+        try:
+            while not self.closing.is_set():
+                # Silence between tracks keeps the stream running, and writes block at the playback rate
+                view = memoryview(self._next_chunk() or silence)
+                while view:
+                    view = view[self.player.stdin.write(view) :]
+        except (BrokenPipeError, ValueError):
+            if not self.closing.is_set():
+                logging.error("Horse race music player exited with code %s", self.player.poll())
+                self.enabled = False
+        except OSError:
+            logging.exception("Horse race music stopped")
+            self.enabled = False
+
+    def close(self):
+        self.closing.set()
+        if self.player is None:
+            return
+        if self.feeder is not None:
+            self.feeder.join(timeout=1)
+            if self.feeder.is_alive():
+                self.player.kill()  # wedged on a write, killing the player breaks the pipe
+                self.feeder.join(timeout=1)
+        try:
+            self.player.stdin.close()
+            self.player.wait(timeout=1)
+        except OSError:
+            pass
+        except subprocess.TimeoutExpired:
+            self.player.kill()
+            self.player.wait()
+        if self.player.returncode is not None and self.player.returncode > 0:
+            logging.error("Horse race music exited with code %s", self.player.returncode)
+        self.player = None
 
 
 class Dust:
@@ -863,4 +948,4 @@ def horse_race(sign):
                 continue
             race.run_banner()
     finally:
-        music.stop()
+        music.close()
