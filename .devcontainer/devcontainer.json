@@ -34,6 +34,14 @@
 		"ghcr.io/devcontainers/features/node:2": {},
 		"ghcr.io/devcontainers/features/github-cli:1": {}
 	},
+	// A pinned uv version is resolved with `git ls-remote`, and the image has no git,
+	// so git must be installed before the uv feature runs.
+	"overrideFeatureInstallOrder": [
+		"ghcr.io/devcontainers/features/common-utils",
+		"ghcr.io/devcontainers/features/git",
+		"ghcr.io/devcontainers-extra/features/apt-packages",
+		"ghcr.io/devcontainers-extra/features/uv"
+	],
 	"containerEnv": {
 		"CFLAGS": "-I/usr/include/python3.12"
 	},
