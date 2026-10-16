@@ -18,6 +18,7 @@ ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
 QUESTION_LIMIT = 25
 SUDDEN_DEATH_NOTICE_SECONDS = 3
+FIREWORK_SLOT_SECONDS = 0.82
 WIDTH = 128
 HEIGHT = 32
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
@@ -492,33 +493,87 @@ def _draw_loading(sign, elapsed):
     _draw_outlined_text(sign, sign.fontbig, text, x, 19, graphics.Color(46, 210, 255))
 
 
-def _scaled_color(color, factor):
-    return tuple(max(0, min(255, int(channel * factor))) for channel in color)
+@lru_cache(maxsize=32)
+def _firework_shell(slot):
+    rng = random.Random(0xF17E + slot * 104729)
+    palette = ((255, 75, 45), (255, 180, 50), (80, 170, 255), (230, 90, 255), (90, 255, 160), (255, 245, 190))
+    color = rng.choice(palette)
+    kind = rng.choice(("peony", "peony", "ring", "willow"))
+    count = rng.randint(30, 38)
+    radius = rng.uniform(8, 12)
+    angle_offset = rng.uniform(0, math.tau)
+    particles = []
+    for index in range(count):
+        angle = angle_offset + math.tau * index / count + rng.uniform(-0.08, 0.08)
+        spread = rng.uniform(0.82, 1.05) if rng.random() < 0.7 else rng.uniform(0.35, 0.65)
+        speed = radius * spread / 1.4
+        particle_color = (255, 248, 220) if rng.random() < 0.2 else color
+        particles.append((
+            angle,
+            speed,
+            rng.uniform(1.7, 2.2) if kind == "willow" else rng.uniform(1.5, 2.0),
+            particle_color,
+            rng.random(),
+            rng.uniform(4.0, 9.0),
+            rng.uniform(0.25, 0.85),
+        ))
+    return (
+        slot * FIREWORK_SLOT_SECONDS + rng.uniform(0.05, 0.35),
+        rng.uniform(30, 112),
+        rng.uniform(9, 17),
+        rng.uniform(0.55, 0.85),
+        3.5 if kind == "willow" else 2.0,
+        tuple(particles),
+    )
 
 
-def _draw_fireworks(draw, elapsed):
-    colors = ((100, 180, 255), (255, 100, 70), (255, 220, 80))
-    positions = ((24, 15), (104, 15), (64, 17))
-    for index, (x, burst_y) in enumerate(positions):
-        age = (elapsed + index * 0.92) % 2.8
-        color = colors[index]
-        if age < 0.8:
-            rocket_y = round(HEIGHT - 1 - (HEIGHT - burst_y - 1) * age / 0.8)
-            draw.point((x, rocket_y), fill=color)
-            if rocket_y < HEIGHT - 1:
-                draw.point((x, rocket_y + 1), fill=_scaled_color(color, 0.5))
-        elif age < 1.8:
-            progress = age - 0.8
-            radius = 1.0 + progress * 8.0
-            brightness = 1.0 - progress * 0.72
-            spark_color = _scaled_color(color, brightness)
-            for ray in range(8):
-                angle = math.tau * ray / 8
-                end_x = round(x + math.cos(angle) * radius)
-                end_y = round(burst_y + math.sin(angle) * radius * 0.55)
-                draw.line((x, burst_y, end_x, end_y), fill=spark_color)
-                if progress > 0.4:
-                    draw.point((round(x + math.cos(angle) * (radius + 2)), round(burst_y + math.sin(angle) * (radius + 2) * 0.55)), fill=_scaled_color(color, 0.45))
+def _add_firework_pixel(pixels, x, y, color, brightness):
+    x, y = round(x), round(y)
+    if not 0 <= x < WIDTH or not 0 <= y < HEIGHT or brightness < 0.025:
+        return
+    old = pixels[x, y]
+    pixels[x, y] = tuple(min(255, channel + round(value * brightness)) for channel, value in zip(old, color))
+
+
+def _draw_fireworks(image, elapsed):
+    pixels = image.load()
+    last_slot = math.floor(elapsed / FIREWORK_SLOT_SECONDS)
+    first_slot = math.floor((elapsed - 3.1) / FIREWORK_SLOT_SECONDS)
+    for slot in range(first_slot, last_slot + 1):
+        launch, burst_x, burst_y, rise, gravity, particles = _firework_shell(slot)
+        age = elapsed - launch
+        if age < 0 or age >= rise + 2.2:
+            continue
+
+        if age < rise:
+            progress = age / rise
+            eased = 1 - (1 - progress) ** 1.4
+            rocket_x = 64 + (burst_x - 64) * eased
+            rocket_y = HEIGHT - 1 + (burst_y - (HEIGHT - 1)) * eased
+            for trail_step, brightness in ((0.0, 1.0), (0.09, 0.48), (0.18, 0.2)):
+                trail_progress = max(0, age - trail_step) / rise
+                trail_eased = 1 - (1 - trail_progress) ** 1.4
+                trail_x = 64 + (burst_x - 64) * trail_eased
+                trail_y = HEIGHT - 1 + (burst_y - (HEIGHT - 1)) * trail_eased
+                _add_firework_pixel(pixels, trail_x, trail_y, (255, 214, 150), brightness)
+            _add_firework_pixel(pixels, rocket_x, rocket_y, (255, 255, 235), 1.0)
+            continue
+
+        burst_age = age - rise
+        if burst_age < 0.09:
+            _add_firework_pixel(pixels, burst_x, burst_y, (255, 255, 235), 1.0 - burst_age / 0.09)
+
+        for angle, speed, lifetime, color, phase, frequency, twinkle_depth in particles:
+            for trail_step, trail_weight in ((0.0, 1.0), (0.13, 0.48), (0.26, 0.22)):
+                particle_age = burst_age - trail_step
+                if not 0 <= particle_age < lifetime:
+                    continue
+                fade = (1 - particle_age / lifetime) ** 1.45
+                twinkle = 1 - twinkle_depth * (0.5 - 0.5 * math.sin(math.tau * (elapsed * frequency + phase)))
+                distance = speed * particle_age
+                x = burst_x + math.cos(angle) * distance
+                y = burst_y + math.sin(angle) * distance * 0.72 + gravity * particle_age**2
+                _add_firework_pixel(pixels, x, y, color, fade * twinkle * trail_weight)
 
 
 @lru_cache(maxsize=256)
@@ -546,8 +601,8 @@ def _draw_raising_flag(draw, elapsed, flag_codes):
 
 def _draw_victory(sign, state, elapsed):
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
+    _draw_fireworks(image, elapsed)
     draw = ImageDraw.Draw(image)
-    _draw_fireworks(draw, elapsed)
     _draw_raising_flag(draw, elapsed, state["victory_flag_codes"])
     sign.canvas.SetImage(image, 0, 0)
 
