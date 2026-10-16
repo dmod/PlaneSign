@@ -18,7 +18,9 @@ description: "Use when screenshotting the matrix preview, rendering PlaneSign fr
 - Playwright's `locator.screenshot({ path })` writes to the browser host, not the devcontainer. Use the screenshot tool for images you need to inspect.
 - Screenshots can be stale after a data or mode change. Before concluding that the sign is wrong, fetch `/frame.txt?fresh=1` or `/frame.png?fresh=1`, which are ground truth. You can also sample the canvas with `getImageData`: matrix pixel `(x, y)` is at `(x * 8 + 4, y * 8 + 4)`.
 - Rotating content and animation advance on wall-clock time. Take several captures (or sample one pixel repeatedly) to see every phase and to prove motion; a single frame cannot.
-- In a background tab, browsers stop scheduling animation frames, so Playwright's click waits for an element to become "stable" and times out. Use `click({ force: true })` once you have checked that nothing covers the element.
+- In a background tab, browsers stop scheduling animation frames, so Playwright's click waits for an element to become "stable" and times out, and `click({ force: true })` may not reach the page's handlers. Use `locator.dispatchEvent('click')` once you have checked that nothing covers the element.
+- Background tabs also throttle timers and freeze CSS transitions: debounced slider handlers fire seconds late, and an element that fades in on hover keeps its starting opacity. Wait longer, or set `transition: none` before reading computed styles.
+- With `--web`, the controls page and the Outside lab embed a preview: an `<img>` that keeps reloading `frame.png?fresh=1`. It stops while `document.hidden` is true, which is the usual state of an agent-driven tab, so its screenshots go stale. Run `Object.defineProperty(document, 'hidden', {get: () => false, configurable: true})` in the page first, or use `/frame.png` directly. Its pixels are cross-origin, so `getImageData` cannot read them.
 - The integrated browser only reaches ports that VS Code forwards (80 for nginx and 5056 for frames work). If a page on another port refuses to connect, forward that port, or serve the content through an existing route.
 
 ## Rendering Frames Offline

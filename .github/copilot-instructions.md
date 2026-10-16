@@ -115,7 +115,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 	uv run python planesign/__main__.py --web
 	```
 
-3. With nginx running, `http://localhost/` has the controls and `http://localhost/display.html` the matrix preview. Confirm the preview is receiving frames, and reload it if its WebSocket does not reconnect after a restart.
+3. With nginx running, `http://localhost/` has the controls and an embedded preview, and `http://localhost/display.html` the full-size matrix preview. Confirm the preview is receiving frames, and reload it if its WebSocket does not reconnect after a restart.
 4. Inspect the actual output (see "Capturing Frames Without A Browser"). Check readability, clipping, overlap, spacing, colors, graph labels and current-time markers, and observe every rotating phase, not just one frame.
 5. Exercise the relevant edge cases through the running app: long names, 12/24-hour clocks, midnight and DST, date-specific states, negative or flat values, loading or failed data, and switching into and out of the mode. Use the fake clock instead of waiting. Report the cases you could not exercise.
 6. State what was visually checked and give the preview URL. Emulator checks do not establish readability on the physical LED panel; report hardware checks separately. Leave the preview running for the user unless asked to stop it.
@@ -137,7 +137,7 @@ Drive time-dependent states (moon phases, Christmas Eve, New Year, DST changes, 
 - Start with `--fake-time 2026-12-24T17:59:30` (local to the sign's location without an offset), optionally with `--time-speed 60`.
 - With `--web`, `/debug/clock` reads the clock; `?at=ISO[&speed=N]` sets it, `?speed=N` changes only the pace, and `?reset=1` restores real time. Setting it forces a redraw and wakes Outside's astronomy worker.
 - The fake clock affects display and date logic only. Live data keeps its real fetch time, so a fake time far from now shows cached data as stale. Reset the clock when done.
-- For Outside, prefer the Outside lab at `http://localhost/api/outside/lab`: it sets time, weather and holidays for Outside alone, without `--web`, and on the physical panel. See the Outside instructions.
+- For Outside, prefer the Outside lab at `http://localhost/api/outside/lab`: it sets time, weather and holidays for Outside alone, summons visitors and sky events instead of waiting for them, and pauses the animation. It works without `--web` and on the physical panel. See the Outside instructions.
 
 ### Running An Isolated Instance
 When the default ports are taken by an instance you should not stop, or a test needs a different configuration, run a second instance alongside it:
