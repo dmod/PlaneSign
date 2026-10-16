@@ -48,8 +48,15 @@
     #w_code { flex: 1; }
     #tod_label { min-width: 72px; text-align: right; }
     button.unavailable { opacity: .45; }
-    #preview img { display: block; width: 100%; max-width: 512px; height: auto; margin: 0 auto 8px; image-rendering: pixelated; background: #000; border-radius: 4px; }
+    .preview_frame { position: relative; max-width: 512px; margin: 0 auto 8px; }
+    #preview img { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #000; border-radius: 4px; }
     #preview img:not([src]) { visibility: hidden; }
+    /* Bottom corner: the sign's clock and temperature sit in the top corners. */
+    .preview_open { position: absolute; bottom: 6px; right: 6px; padding: 2px 9px; border-radius: 12px; background: rgba(16, 18, 21, .8); border: 1px solid #38424d; color: var(--text); font-size: 12px; text-decoration: none; opacity: 0; transition: opacity .15s ease; }
+    .preview_frame:hover .preview_open, .preview_open:focus-visible { opacity: 1; }
+    .preview_open:hover { border-color: #6ea8ff; }
+    /* Touch screens cannot hover, so the link stays visible there. */
+    @media (hover: none) { .preview_open { opacity: 1; } }
     #preview .note { text-align: center; }
     #preview .note:not(:empty) { margin: -4px 0 8px; }
     #copied { color: #8fd18f; }
@@ -79,7 +86,10 @@
 
 <section id="status" class="card">
     <div id="preview" hidden>
-        <img id="preview_img" alt="What the sign is showing" width="128" height="32">
+        <div class="preview_frame">
+            <img id="preview_img" alt="What the sign is showing" width="128" height="32">
+            <a id="preview_link" class="preview_open" target="_blank" rel="noopener">Open display ↗</a>
+        </div>
         <p class="note" id="preview_note"></p>
     </div>
     <div class="status_grid">
@@ -427,6 +437,8 @@ function render(state) {
 // Live preview from the emulator's frame server: each image waits for the next frame, then asks for another.
 function startPreview(port) {
     el('preview').hidden = false;
+    // nginx serves the display page, even when this lab is opened on the API port directly.
+    el('preview_link').href = `${location.protocol}//${location.hostname}/display.html?ws_port=${port}`;
     const img = el('preview_img');
     const next = () => {
         if (document.hidden) {

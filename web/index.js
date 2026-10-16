@@ -270,6 +270,7 @@ window.onload = function () {
     update_device_info();
     setInterval(update_device_info, 10000);
     get_audio_support();
+    setup_matrix_preview();
     setup_free_sketch();
 
     recordButton = document.getElementById('mic_button');
@@ -2472,6 +2473,34 @@ async function play_a_sound(sound_id) {
     } catch (err) {
         report_audio_error(err);
     }
+}
+
+// With --web, show the emulator's frames from its frame server; each image waits for the next frame, then asks for
+// another. The physical panel has no frame server, so the preview stays hidden there.
+function setup_matrix_preview() {
+    call_endpoint("/preview", function (value) {
+        var port = JSON.parse(value).port;
+        if (!port) {
+            return;
+        }
+        var img = document.getElementById("matrix_preview_img");
+        document.getElementById("matrix_preview_link").href = location.protocol + "//" + location.hostname + "/display.html?ws_port=" + port;
+        document.getElementById("matrix_preview").hidden = false;
+        var next = function () {
+            if (document.hidden) {
+                setTimeout(next, 500);
+                return;
+            }
+            img.src = "http://" + location.hostname + ":" + port + "/frame.png?fresh=1&n=" + Date.now();
+        };
+        img.onload = function () {
+            setTimeout(next, 80);
+        };
+        img.onerror = function () {
+            setTimeout(next, 2000);
+        };
+        next();
+    });
 }
 
 function get_audio_support() {

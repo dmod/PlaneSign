@@ -118,6 +118,12 @@ def get_status():
     return str(shared_config.shared_mode.value)
 
 
+@app.route("/preview")
+def get_preview():
+    """The emulator's frame server port, for the web UI's matrix preview; null on the physical panel."""
+    return jsonify({"port": shared_config.ws_port if shared_config.emulated_display else None})
+
+
 @app.route("/outside/status")
 def get_outside_status():
     return jsonify(outside.outside_status())

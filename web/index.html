@@ -4,19 +4,23 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=soundboard-2">
+  <link rel="stylesheet" href="style.css?v=matrix-preview-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=soundboard-1"></script>
+  <script src="index.js?v=matrix-preview-1"></script>
   <title>Plane Sign</title>
 </head>
 
 <body>
   <div id="title_header">Plane Sign</div>
+  <div id="matrix_preview" class="matrix_preview" hidden>
+    <img id="matrix_preview_img" alt="What the sign is showing" width="128" height="32">
+    <a id="matrix_preview_link" class="matrix_preview_open" target="_blank" rel="noopener">Open display ↗</a>
+  </div>
   <div id="topbar">
     <div id="centered">
       <label id="header_switch" class="plane-switch">

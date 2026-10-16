@@ -812,6 +812,61 @@ input:checked+.slider:before {
   text-align: center;
 }
 
+.matrix_preview {
+  position: relative;
+  width: min(100%, 768px);
+  margin: 10px 0 20px;
+}
+
+.matrix_preview[hidden] {
+  display: none;
+}
+
+.matrix_preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  background: #000;
+  border: 3px solid black;
+  border-radius: 8px;
+}
+
+.matrix_preview img:not([src]) {
+  visibility: hidden;
+}
+
+.matrix_preview_open {
+  /* Bottom corner: the sign's clock and temperature sit in the top corners. */
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  font-size: 13px;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.matrix_preview:hover .matrix_preview_open,
+.matrix_preview_open:focus-visible {
+  opacity: 1;
+}
+
+.matrix_preview_open:hover {
+  background: red;
+}
+
+/* Touch screens cannot hover, so the link stays visible there. */
+@media (hover: none) {
+  .matrix_preview_open {
+    opacity: 1;
+  }
+}
+
 #topbar {
   margin-top: 25px;
   /*margin-bottom: 50px;*/
