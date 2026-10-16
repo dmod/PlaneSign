@@ -36,6 +36,9 @@ mainloop = None
 # delays every characteristic queued behind it.
 WORKERS = ThreadPoolExecutor(max_workers=6, thread_name_prefix="ble-worker")
 
+# Addresses of connected centrals, maintained by ClientConnectionWatcher on the main loop.
+CONNECTED_CENTRALS = set()
+
 
 def summarize(value, limit=120):
     """Single-line, length-capped rendering of a characteristic value for logs."""
@@ -85,7 +88,9 @@ class CachedValueCharacteristic(Characteristic):
     implementation returned before its background work had finished.
     """
 
-    # 0 disables the periodic refresh; the value is then only recomputed on demand.
+    # Periodic refresh while a connected client is subscribed; 0 disables it, and the value is
+    # then only recomputed on demand. Nobody can see the value otherwise, and the refreshes
+    # (e.g. /api/version every 30 s) would run around the clock.
     REFRESH_INTERVAL_SECONDS = 0
     # A read older than this triggers a background refresh after the cached value is sent.
     CACHE_TTL_SECONDS = 15.0
@@ -145,7 +150,10 @@ class CachedValueCharacteristic(Characteristic):
         submit_worker(f"{self.name} refresh", self._refresh_worker)
 
     def _on_refresh_timer(self):
-        self.request_refresh("periodic refresh")
+        # Check the connection as well as `notifying`: BlueZ keeps a bonded device's
+        # subscription across a disconnect and never calls StopNotify for it.
+        if self.notifying and CONNECTED_CENTRALS:
+            self.request_refresh("periodic refresh")
         return True
 
     def _refresh_worker(self):
@@ -233,7 +241,8 @@ class DockerUpdateCheckCharacteristic(CachedValueCharacteristic):
     # it, which would report "update-available" forever.
     MANIFEST_ACCEPT = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
     TIMEOUT_SECONDS = 8
-    # Two registry round trips; keep it warm so the app's check button answers instantly.
+    # Two registry round trips. Checked at startup and refreshed on connect, so the app's
+    # check button answers from cache while the fresh result follows as a notification.
     REFRESH_INTERVAL_SECONDS = 900
     CACHE_TTL_SECONDS = 120.0
 
@@ -762,24 +771,36 @@ class DockerContainerControlCharacteristic(CachedValueCharacteristic):
 
 
 class ClientConnectionWatcher:
-    """Logs central connections and warms every cached value the moment a phone attaches."""
+    """Tracks connected centrals and warms every cached value the moment a phone attaches."""
 
     def __init__(self, bus, app):
         self._app = app
-        self._connected = set()
         bus.add_signal_receiver(self._on_properties_changed, dbus_interface=DBUS_PROP_IFACE, signal_name="PropertiesChanged", arg0=DEVICE_IFACE, path_keyword="path")
+        self._seed_connected(bus)
+
+    def _seed_connected(self, bus):
+        """Count centrals that were already connected when this service started."""
+        try:
+            manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, "/"), "org.freedesktop.DBus.ObjectManager")
+            for path, interfaces in manager.GetManagedObjects().items():
+                if interfaces.get(DEVICE_IFACE, {}).get("Connected", False):
+                    CONNECTED_CENTRALS.add(str(path).rsplit("/", 1)[-1])
+        except dbus.exceptions.DBusException as exc:
+            LOG.warning("Could not list already-connected centrals: %s", exc)
+        if CONNECTED_CENTRALS:
+            LOG.info("%d central(s) already connected at startup", len(CONNECTED_CENTRALS))
 
     def _on_properties_changed(self, interface, changed, invalidated, path=None):
         if "Connected" not in changed:
             return
         address = str(path).rsplit("/", 1)[-1]
         if changed["Connected"]:
-            self._connected.add(address)
-            LOG.info("Central %s connected (%d connected)", address, len(self._connected))
+            CONNECTED_CENTRALS.add(address)
+            LOG.info("Central %s connected (%d connected)", address, len(CONNECTED_CENTRALS))
             self._app.warm_caches(f"{address} connected")
         else:
-            self._connected.discard(address)
-            LOG.info("Central %s disconnected (%d connected)", address, len(self._connected))
+            CONNECTED_CENTRALS.discard(address)
+            LOG.info("Central %s disconnected (%d connected)", address, len(CONNECTED_CENTRALS))
 
 
 def wait_for_adapter_powered(bus, adapter, timeout_seconds=15):
