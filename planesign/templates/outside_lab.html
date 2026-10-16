@@ -30,29 +30,41 @@
     .status_grid .span2 { grid-column: span 2; }
     .status_bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
     .status_bar .live { margin-left: auto; }
+    .status_bar .copy { margin-left: auto; }
+    .status_bar .copy + .live { margin-left: 0; }
     .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; background: #2a3138; color: #aab4be; }
     .badge.on { background: #5a3d12; color: #ffd28a; }
     #error { color: #ff8a80; font-size: 12px; }
     #error:not(:empty) { margin-top: 6px; }
     .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 10px; align-items: start; }
     .panels .wide { grid-column: 1 / -1; }
-    #offset { flex: 1; min-width: 120px; }
+    input[type=range] { flex: 1; min-width: 120px; padding: 0; }
     #offset_label { min-width: 44px; text-align: right; }
-    #moon_phase { flex: 1; min-width: 120px; }
     #moon_phase_label { min-width: 150px; }
+    .reading { min-width: 72px; text-align: right; }
+    .unknown { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; }
+    .unknown input { margin: 0; }
+    .controls.disabled input[type=range], .controls.disabled .reading { opacity: .4; }
+    #w_code { flex: 1; }
+    #tod_label { min-width: 72px; text-align: right; }
+    button.unavailable { opacity: .45; }
+    #preview img { display: block; width: 100%; max-width: 512px; height: auto; margin: 0 auto 8px; image-rendering: pixelated; background: #000; border-radius: 4px; }
+    #preview img:not([src]) { visibility: hidden; }
+    #preview .note { text-align: center; }
+    #preview .note:not(:empty) { margin: -4px 0 8px; }
+    #copied { color: #8fd18f; }
     button.selected { background: #1e3350; border-color: #4f7fc0; }
     #presets { margin-bottom: 8px; }
-    .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
-    .fields label { display: flex; flex-direction: column; gap: 2px; color: #9aa4ae; font-size: 11px; }
-    .fields label.full { grid-column: 1 / -1; }
+    .card > .controls { margin-top: 2px; }
     .card > .note { margin-top: 6px; }
     #holidays { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
     .holiday { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 4px 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
     .holiday span { min-width: 0; }
     .holiday div { display: flex; gap: 4px; flex: none; }
-    @media (max-width: 480px) {
+    @media (max-width: 480px), (max-height: 700px) {
         #status { position: static; box-shadow: none; }
-        .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 480px) {
         .status_grid .span2 { grid-column: auto; }
     }
 </style>
@@ -66,6 +78,10 @@
 </header>
 
 <section id="status" class="card">
+    <div id="preview" hidden>
+        <img id="preview_img" alt="What the sign is showing" width="128" height="32">
+        <p class="note" id="preview_note"></p>
+    </div>
     <div class="status_grid">
         <div><small>Showing</small><b id="s_time">…</b></div>
         <div><small>Season</small><b id="s_season">…</b></div>
@@ -81,6 +97,8 @@
         <span class="badge" id="b_moon">live moon</span>
         <span class="badge" id="b_expires"></span>
         <span class="note">Sign clock: <span id="s_clock">…</span></span>
+        <span class="note" id="copied"></span>
+        <button class="copy" onclick="copyLink()">Copy link</button>
         <button class="live" onclick="call('/outside/lab/reset')">Back to live</button>
     </div>
     <div id="error" role="alert"></div>
@@ -88,7 +106,7 @@
 
 <div class="panels">
 <section class="card">
-    <h2>Time</h2>
+    <h2>Time and sky</h2>
     <div class="row">
         <span class="row_label">Jump to</span>
         <div class="controls">
@@ -98,52 +116,47 @@
         </div>
     </div>
     <div class="row">
-        <span class="row_label">Speed</span>
-        <div class="chips">
-            <button onclick="call('/outside/lab/time', {speed: 1})">×1</button>
-            <button onclick="call('/outside/lab/time', {speed: 10})">×10</button>
-            <button onclick="call('/outside/lab/time', {speed: 60})">×60</button>
-            <button onclick="call('/outside/lab/time', {speed: 300})">×300</button>
-        </div>
+        <label class="row_label" for="tod">Time</label>
+        <div class="controls"><input type="range" id="tod" min="0" max="1435" step="5" value="720"><b id="tod_label">…</b></div>
     </div>
+    <div class="row"><span class="row_label">Speed</span><div id="speeds" class="chips"></div></div>
     <div class="row"><span class="row_label">Season</span><div id="seasons" class="chips"></div></div>
     <div class="row"><span class="row_label">Sun</span><div id="sun_events" class="chips"></div></div>
+    <div class="row">
+        <label class="row_label" for="moon_phase">Moon</label>
+        <div class="controls"><input type="range" id="moon_phase" min="0" max="359" step="1" value="0"><b id="moon_phase_label">0°</b></div>
+    </div>
+    <div class="row"><span class="row_label"></span><div id="moon_phases" class="chips"></div></div>
+    <div class="row">
+        <span class="row_label">Moon at</span>
+        <div class="chips"><span id="moon_positions" class="chips"></span><button onclick="call('/outside/lab/moon', {reset: 1})">Live moon</button></div>
+    </div>
     <div class="row">
         <label class="row_label" for="offset">Forecast</label>
         <div class="controls"><input type="range" id="offset" min="0" max="1440" step="15" value="0"><b id="offset_label">+0 h</b></div>
     </div>
-    <p class="note">Season keeps the time of day; sun events jump on the shown date.</p>
+    <p class="note">Season keeps the time of day; the time slider and sun events stay on the shown date. Pause freezes the clock and the animation. A moon phase or place overrides the computed one while time keeps running; at Actual the moon only shows while it is up and clear of the tree.</p>
 </section>
 
 <section class="card">
     <h2>Weather</h2>
     <div id="presets" class="chips"></div>
-    <div class="fields">
-        <label class="full">Condition<select id="w_code"></select></label>
-        <label>Clouds %<input id="w_clouds" type="number" min="0" max="100"></label>
-        <label>Wind mph<input id="w_wind" type="number" min="0" step="1"></label>
-        <label>Temp °F<input id="w_temp" type="number" step="1"></label>
-        <label>Rain mm/h<input id="w_rain" type="number" min="0" step="0.1"></label>
-        <label>Snow mm/h<input id="w_snow" type="number" min="0" step="0.1"></label>
-        <label>Visibility m<input id="w_visibility" type="number" min="0" step="100"></label>
+    <div class="row">
+        <label class="row_label" for="w_code">Condition</label>
+        <div class="controls"><select id="w_code"></select></div>
     </div>
+    <div id="weather_fields"></div>
     <div class="controls">
         <button class="primary" onclick="applyWeather()">Apply weather</button>
         <button onclick="call('/outside/lab/weather', {reset: 1})">Live weather</button>
     </div>
-    <p class="note">A blank field is an unknown reading, as when the live feed omits it.</p>
+    <p class="note">Changes apply as you drag. An unknown reading is left out, as when the live feed omits it.</p>
 </section>
 
-<section class="card">
-    <h2>Moon</h2>
-    <div class="row">
-        <label class="row_label" for="moon_phase">Phase</label>
-        <div class="controls"><input type="range" id="moon_phase" min="0" max="359" step="1" value="0"><b id="moon_phase_label">0°</b></div>
-    </div>
-    <div class="row"><span class="row_label"></span><div id="moon_phases" class="chips"></div></div>
-    <div class="row"><span class="row_label">Position</span><div id="moon_positions" class="chips"></div></div>
-    <div class="controls"><button onclick="call('/outside/lab/moon', {reset: 1})">Live moon</button></div>
-    <p class="note">Overrides the moon's phase and, unless Actual, its place in the sky; time keeps running. At Actual the moon only shows while it is up and clear of the tree.</p>
+<section class="card wide">
+    <h2>Visitors and events</h2>
+    <div id="summons" class="chips"></div>
+    <p class="note">Skips ahead to the event's next natural appearance; the clock and weather stay put. Dimmed events cannot happen in the current time, weather or holiday; click one to see why.</p>
 </section>
 
 <section class="card wide">
@@ -154,46 +167,47 @@
 </main>
 
 <script>
+// Settings rendered in by outside_lab.page_options(); the state polled below only carries what changes.
+const OPTIONS = {{ options|tojson }};
 // Works directly on the API port (/outside/lab) and through nginx (/api/outside/lab).
 const API = location.pathname.replace(/\/outside\/lab\/?$/, '');
-const FIELDS = ['clouds', 'wind', 'rain', 'snow', 'temp', 'visibility'];
-// Weather presets: OpenWeather condition id plus readings in the units of the form.
-const PRESETS = [
-    ['Clear', {code: 800, clouds: 0, wind: 5, rain: 0, snow: 0, temp: 72, visibility: 10000}],
-    ['Partly cloudy', {code: 802, clouds: 40, wind: 8, rain: 0, snow: 0, temp: 70, visibility: 10000}],
-    ['Mostly cloudy', {code: 803, clouds: 75, wind: 9, rain: 0, snow: 0, temp: 66, visibility: 10000}],
-    ['Overcast', {code: 804, clouds: 100, wind: 10, rain: 0, snow: 0, temp: 60, visibility: 10000}],
-    ['Drizzle', {code: 300, clouds: 90, wind: 6, rain: 0.3, snow: 0, temp: 58, visibility: 8000}],
-    ['Rain', {code: 501, clouds: 95, wind: 12, rain: 3, snow: 0, temp: 55, visibility: 6000}],
-    ['Heavy rain', {code: 502, clouds: 100, wind: 18, rain: 10, snow: 0, temp: 55, visibility: 3000}],
-    ['Light thunderstorm', {code: 210, clouds: 80, wind: 14, rain: 1, snow: 0, temp: 76, visibility: 8000}],
-    ['Thunderstorm', {code: 211, clouds: 95, wind: 20, rain: 5, snow: 0, temp: 75, visibility: 5000}],
-    ['Heavy thunderstorm', {code: 212, clouds: 100, wind: 26, rain: 12, snow: 0, temp: 74, visibility: 3000}],
-    ['Light snow', {code: 600, clouds: 90, wind: 5, rain: 0, snow: 0.5, temp: 28, visibility: 5000}],
-    ['Heavy snow', {code: 602, clouds: 100, wind: 12, rain: 0, snow: 4, temp: 24, visibility: 1000}],
-    ['Sleet', {code: 611, clouds: 100, wind: 10, rain: 1, snow: 0.5, temp: 33, visibility: 4000}],
-    ['Fog', {code: 741, clouds: 70, wind: 2, rain: 0, snow: 0, temp: 50, visibility: 300}],
-    ['Windy', {code: 801, clouds: 15, wind: 28, rain: 0, snow: 0, temp: 65, visibility: 10000}],
-    ['Freezing and clear', {code: 800, clouds: 0, wind: 4, rain: 0, snow: 0, temp: 20, visibility: 10000}],
-    ['Warm, calm evening', {code: 800, clouds: 5, wind: 3, rain: 0, snow: 0, temp: 80, visibility: 10000}],
-];
-let built = false;
-let filledWeather = false;
-let holidayKey = '';
-let offsetTimer = null;
-let moonTimer = null;
-let moonPhases = [];
+// A control the user just moved keeps its value instead of following the sign for this long.
+const TOUCH_MS = 3000;
+const timers = {};
+const touched = {};
 const moonPositionButtons = {};
+const speedButtons = [];
+const summonButtons = {};
+let holidayKey = '';
+let lastState = null;
 
 function el(id) { return document.getElementById(id); }
+function pad(value) { return String(value).padStart(2, '0'); }
+
+function touch(name) { touched[name] = Date.now(); }
+function recentlyTouched(name) { return Date.now() - (touched[name] || 0) < TOUCH_MS; }
+
+function debounce(name, fn, ms = 150) {
+    clearTimeout(timers[name]);
+    timers[name] = setTimeout(fn, ms);
+}
 
 function phaseName(degrees) {
-    return moonPhases[Math.round(degrees / 45) % moonPhases.length].label;
+    return OPTIONS.moon_phases[Math.round(degrees / 45) % OPTIONS.moon_phases.length].label;
 }
 
 function phaseLabel(degrees) {
     return `${Math.round(degrees)}° ${phaseName(degrees)}`;
 }
+
+function clockLabel(minutes, military) {
+    const hour = Math.floor(minutes / 60), minute = pad(minutes % 60);
+    return military ? `${pad(hour)}:${minute}` : `${hour % 12 || 12}:${minute} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+function minutesOf(iso) { return Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16)); }
+
+function hours(minutes) { return '+' + (minutes / 60) + ' h'; }
 
 function button(label, onclick) {
     const b = document.createElement('button');
@@ -208,12 +222,14 @@ async function call(path, params) {
         const data = await response.json();
         if (!response.ok) {
             el('error').textContent = data.error || response.statusText;
-            return;
+            return false;
         }
         el('error').textContent = '';
         render(data);
+        return true;
     } catch (error) {
         el('error').textContent = 'The sign did not answer: ' + error;
+        return false;
     }
 }
 
@@ -221,54 +237,117 @@ function setAt() {
     if (el('at').value) call('/outside/lab/time', {at: el('at').value});
 }
 
+// Weather form: one slider per reading, each with an "unknown" box for a reading the feed leaves out.
+function showReading(name) {
+    const unknown = el('w_' + name + '_unknown').checked;
+    el('w_' + name).disabled = unknown;
+    el('w_' + name).parentElement.classList.toggle('disabled', unknown);
+    const field = OPTIONS.weather_fields.find(f => f.name === name);
+    el('w_' + name + '_label').textContent = unknown ? 'unknown' : `${el('w_' + name).value} ${field.unit}`;
+}
+
 function fillWeather(values) {
-    el('w_code').value = values.code;
-    for (const name of FIELDS) el('w_' + name).value = values[name] ?? '';
+    if (values.code != null) el('w_code').value = values.code;
+    for (const {name} of OPTIONS.weather_fields) {
+        const value = values[name];
+        el('w_' + name + '_unknown').checked = value == null;
+        if (value != null) el('w_' + name).value = value;
+        showReading(name);
+    }
 }
 
 function applyWeather() {
+    touch('weather');
+    clearTimeout(timers.weather);
     const params = {code: el('w_code').value};
-    for (const name of FIELDS) params[name] = el('w_' + name).value;
-    call('/outside/lab/weather', params);
+    for (const {name} of OPTIONS.weather_fields) params[name] = el('w_' + name + '_unknown').checked ? '' : el('w_' + name).value;
+    return call('/outside/lab/weather', params);
 }
 
-function hours(minutes) { return '+' + (minutes / 60) + ' h'; }
+function buildWeatherFields() {
+    for (const field of OPTIONS.weather_fields) {
+        const name = field.name;
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('label');
+        label.className = 'row_label';
+        label.htmlFor = 'w_' + name;
+        label.textContent = field.label;
+        const controls = document.createElement('div');
+        controls.className = 'controls';
+        const slider = document.createElement('input');
+        Object.assign(slider, {type: 'range', id: 'w_' + name, min: field.min, max: field.max, step: field.step});
+        slider.oninput = () => { touch('weather'); showReading(name); debounce('weather', applyWeather); };
+        const reading = document.createElement('b');
+        reading.className = 'reading';
+        reading.id = 'w_' + name + '_label';
+        const unknown = document.createElement('label');
+        unknown.className = 'unknown';
+        const box = document.createElement('input');
+        Object.assign(box, {type: 'checkbox', id: 'w_' + name + '_unknown'});
+        box.onchange = () => { showReading(name); applyWeather(); };
+        unknown.append(box, 'unknown');
+        controls.append(slider, reading, unknown);
+        row.append(label, controls);
+        el('weather_fields').append(row);
+    }
+}
 
-function build(options) {
-    el('idle').textContent = options.idle_minutes;
-    for (const season of options.seasons) {
+function build() {
+    el('idle').textContent = OPTIONS.idle_minutes;
+    for (const {label, speed} of OPTIONS.speeds) {
+        const b = button(label, () => call('/outside/lab/time', {speed}));
+        b.dataset.speed = speed;
+        speedButtons.push(b);
+        el('speeds').append(b);
+    }
+    for (const season of OPTIONS.seasons) {
         el('seasons').append(button(season[0].toUpperCase() + season.slice(1), () => call('/outside/lab/time', {season})));
     }
-    for (const event of options.sun_events) {
+    for (const event of OPTIONS.sun_events) {
         const label = event.lead_minutes ? `${event.label} −${event.lead_minutes} min` : event.label;
         el('sun_events').append(button(label, () => call('/outside/lab/time', {event: event.name})));
     }
-    for (const [label, values] of PRESETS) {
+    for (const {label, values} of OPTIONS.weather_presets) {
         el('presets').append(button(label, () => { fillWeather(values); applyWeather(); }));
     }
-    for (const {code, description} of options.weather_codes) {
+    for (const {code, description} of OPTIONS.weather_codes) {
         el('w_code').append(new Option(`${code} ${description}`, code));
     }
-    fillWeather(PRESETS[0][1]);
-    el('offset').oninput = () => {
-        el('offset_label').textContent = hours(el('offset').value);
-        clearTimeout(offsetTimer);
-        offsetTimer = setTimeout(() => call('/outside/lab/offset', {minutes: el('offset').value}), 120);
-    };
-    moonPhases = options.moon_phases;
-    for (const {label, phase} of moonPhases) {
+    el('w_code').onchange = applyWeather;
+    buildWeatherFields();
+    fillWeather(OPTIONS.weather_presets[0].values);
+    for (const {label, phase} of OPTIONS.moon_phases) {
         el('moon_phases').append(button(label, () => call('/outside/lab/moon', {phase})));
     }
-    for (const {name, label} of options.moon_positions) {
+    for (const {name, label} of OPTIONS.moon_positions) {
         moonPositionButtons[name] = button(label, () => call('/outside/lab/moon', {position: name}));
         el('moon_positions').append(moonPositionButtons[name]);
     }
-    el('moon_phase').oninput = () => {
-        el('moon_phase_label').textContent = phaseLabel(el('moon_phase').value);
-        clearTimeout(moonTimer);
-        moonTimer = setTimeout(() => call('/outside/lab/moon', {phase: el('moon_phase').value}), 120);
+    for (const {name, label, requirement} of OPTIONS.summons) {
+        summonButtons[name] = button(label, () => call('/outside/lab/summon', {event: name}));
+        summonButtons[name].dataset.requirement = requirement;
+        el('summons').append(summonButtons[name]);
+    }
+    el('tod').oninput = () => {
+        touch('tod');
+        const minutes = Number(el('tod').value);
+        el('tod_label').textContent = clockLabel(minutes, lastState?.military_time);
+        if (!lastState) return;
+        const day = lastState.selected_time.slice(0, 10);
+        debounce('tod', () => call('/outside/lab/time', {at: `${day}T${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`}));
     };
-    built = true;
+    el('offset').oninput = () => {
+        touch('offset');
+        el('offset_label').textContent = hours(el('offset').value);
+        debounce('offset', () => call('/outside/lab/offset', {minutes: el('offset').value}), 120);
+    };
+    el('moon_phase').oninput = () => {
+        touch('moon');
+        el('moon_phase_label').textContent = phaseLabel(el('moon_phase').value);
+        debounce('moon', () => call('/outside/lab/moon', {phase: el('moon_phase').value}), 120);
+    };
+    if (OPTIONS.preview_port) startPreview(OPTIONS.preview_port);
 }
 
 function renderHolidays(holidays) {
@@ -290,8 +369,8 @@ function renderHolidays(holidays) {
 }
 
 function render(state) {
-    if (!built) build(state.options);
-    renderHolidays(state.options.holidays);
+    lastState = state;
+    renderHolidays(state.holiday_shortcuts);
     el('s_time').textContent = state.selected_time.slice(0, 16).replace('T', ' ') + (state.offset_minutes ? ` (${hours(state.offset_minutes)})` : '');
     el('s_season').textContent = state.season;
     el('s_sun').textContent = state.sun_altitude == null ? '—' : state.sun_altitude.toFixed(1) + '°';
@@ -312,38 +391,127 @@ function render(state) {
     el('s_holidays').textContent = state.holidays.length ? state.holidays.join(', ') : 'none';
     el('s_clock').textContent = state.sign_clock;
     const lab = state.lab;
-    el('b_time').textContent = lab.time ? `lab time ×${lab.speed}` : 'live time';
+    el('b_time').textContent = lab.time ? (lab.speed === 0 ? 'lab time paused' : `lab time ×${lab.speed}`) : 'live time';
     el('b_time').classList.toggle('on', !!lab.time);
     el('b_weather').textContent = lab.weather ? 'lab weather' : 'live weather';
     el('b_weather').classList.toggle('on', !!lab.weather);
     el('b_moon').textContent = lab.moon ? 'lab moon' : 'live moon';
     el('b_moon').classList.toggle('on', !!lab.moon);
+    el('b_expires').style.display = lab.expires_in == null ? 'none' : '';
+    if (lab.expires_in != null) el('b_expires').textContent = `resets in ${Math.floor(lab.expires_in / 60)}:${String(lab.expires_in % 60).padStart(2, '0')}`;
+    for (const b of speedButtons) b.classList.toggle('selected', lab.time != null && Number(b.dataset.speed) === lab.speed);
     const position = lab.moon?.position ?? 'actual';
     for (const [name, b] of Object.entries(moonPositionButtons)) b.classList.toggle('selected', name === position);
-    if (document.activeElement !== el('moon_phase') && state.moon_phase != null) {
+    for (const [name, b] of Object.entries(summonButtons)) {
+        const allowed = state.summons_allowed[name];
+        b.classList.toggle('unavailable', !allowed);
+        b.title = allowed ? 'Skip ahead to the next one' : b.dataset.requirement;
+    }
+    // Controls follow the sign unless the user is working on them.
+    if (!recentlyTouched('moon') && document.activeElement !== el('moon_phase') && state.moon_phase != null) {
         el('moon_phase').value = Math.round(state.moon_phase) % 360;
         el('moon_phase_label').textContent = phaseLabel(state.moon_phase);
     }
-    el('b_expires').style.display = lab.expires_in == null ? 'none' : '';
-    if (lab.expires_in != null) el('b_expires').textContent = `resets in ${Math.floor(lab.expires_in / 60)}:${String(lab.expires_in % 60).padStart(2, '0')}`;
-    if (document.activeElement !== el('offset')) {
+    if (!recentlyTouched('offset') && document.activeElement !== el('offset')) {
         el('offset').value = state.offset_minutes;
         el('offset_label').textContent = hours(state.offset_minutes);
     }
-    if (document.activeElement !== el('at')) el('at').value = (lab.time ?? state.now).slice(0, 16);
-    // Show an override that was already set (for example from another browser) once, on load.
-    if (lab.weather && !filledWeather) {
-        const o = lab.weather;
-        fillWeather({code: o.code, clouds: o.clouds == null ? null : Math.round(o.clouds * 100), wind: o.wind, rain: o.rain, snow: o.snow, temp: o.temperature, visibility: o.visibility});
+    if (!recentlyTouched('tod') && document.activeElement !== el('tod')) {
+        el('tod').value = minutesOf(state.selected_time);
+        el('tod_label').textContent = clockLabel(minutesOf(state.selected_time), state.military_time);
     }
-    filledWeather = true;
+    if (document.activeElement !== el('at')) el('at').value = (lab.time ?? state.now).slice(0, 16);
+    if (!recentlyTouched('weather') && !el('weather_fields').contains(document.activeElement)) fillWeather(state.weather_form);
+}
+
+// Live preview from the emulator's frame server: each image waits for the next frame, then asks for another.
+function startPreview(port) {
+    el('preview').hidden = false;
+    const img = el('preview_img');
+    const next = () => {
+        if (document.hidden) {
+            setTimeout(next, 500);
+            return;
+        }
+        img.src = `http://${location.hostname}:${port}/frame.png?fresh=1&n=${Date.now()}`;
+    };
+    img.onload = () => {
+        el('preview_note').textContent = '';
+        setTimeout(next, 80);
+    };
+    img.onerror = () => {
+        el('preview_note').textContent = location.protocol === 'https:' ? 'The preview needs this page over http.' : 'Waiting for the frame server…';
+        setTimeout(next, 2000);
+    };
+    next();
+}
+
+// A link that reproduces the current lab scene: time and speed, weather, moon and forecast offset.
+function sceneLink() {
+    const lab = lastState.lab;
+    const params = new URLSearchParams();
+    if (lab.time) {
+        params.set('at', lab.time.slice(0, 19));
+        params.set('speed', lab.speed);
+    }
+    if (lab.weather) {
+        params.set('code', lab.weather.code);
+        for (const {name, field, scale} of OPTIONS.weather_fields) {
+            const value = lab.weather[field];
+            if (value != null) params.set(name, Math.round(value / scale * 100) / 100);
+        }
+    }
+    if (lab.moon) {
+        if (lab.moon.phase != null) params.set('phase', Math.round(lab.moon.phase));
+        if (lab.moon.position && lab.moon.position !== 'actual') params.set('position', lab.moon.position);
+    }
+    if (lastState.offset_minutes) params.set('offset', lastState.offset_minutes);
+    const query = params.toString();
+    return location.origin + location.pathname + (query ? '#' + query : '');
+}
+
+async function copyLink() {
+    if (!lastState) return;
+    const link = sceneLink();
+    try {
+        await navigator.clipboard.writeText(link);
+        el('copied').textContent = 'Link copied';
+        setTimeout(() => { el('copied').textContent = ''; }, 2000);
+    } catch {
+        // The clipboard API needs a secure context; plain http on the LAN falls back to a prompt.
+        window.prompt('Copy this link to the current scene', link);
+    }
+}
+
+async function applyLink() {
+    const params = new URLSearchParams(location.hash.slice(1));
+    history.replaceState(null, '', location.pathname + location.search);
+    if (![...params.keys()].length) return;
+    // Start clean so overrides the link leaves out do not linger.
+    await call('/outside/lab/reset');
+    if (params.has('at')) await call('/outside/lab/time', params.has('speed') ? {at: params.get('at'), speed: params.get('speed')} : {at: params.get('at')});
+    if (params.has('code')) {
+        const weather = {code: params.get('code')};
+        for (const {name} of OPTIONS.weather_fields) weather[name] = params.get(name) ?? '';
+        touch('weather');
+        await call('/outside/lab/weather', weather);
+    }
+    const moon = {};
+    if (params.has('phase')) moon.phase = params.get('phase');
+    if (params.has('position')) moon.position = params.get('position');
+    if (Object.keys(moon).length) await call('/outside/lab/moon', moon);
+    if (params.has('offset')) await call('/outside/lab/offset', {minutes: params.get('offset')});
 }
 
 async function poll() {
     await call('/outside/lab/state');
     setTimeout(poll, 2000);
 }
-poll();
+
+build();
+// Opening a scene link in a tab already showing the lab changes only the hash, without reloading the page.
+window.addEventListener('hashchange', applyLink);
+applyLink().then(poll);
 </script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 """Outside lab: set Outside mode's time, weather and moon by hand and see the result on the sign at once.
+It can also pause Outside and summon its occasional visitors and sky events (outside_scene.SUMMONS).
 
 Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
 button in the web UI's Outside controls. Every lab action switches the sign to Outside. The overrides only affect
@@ -10,6 +11,7 @@ page's "Return to now"), or on restart.
 import logging
 import math
 import time
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import outside
@@ -17,7 +19,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, WEATHER_DESCRIPTIONS, holiday_span_start
+from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -46,15 +48,57 @@ MOON_POSITIONS = {
 }
 # Named phase shortcuts in degrees (0 new, 90 first quarter, 180 full, 270 last quarter).
 MOON_PHASES = (("New", 0), ("Waxing crescent", 45), ("First quarter", 90), ("Waxing gibbous", 135), ("Full", 180), ("Waning gibbous", 225), ("Last quarter", 270), ("Waning crescent", 315))
-# Weather query parameters: name -> (OutsideWeather field, minimum, maximum, scale).
+
+
+@dataclass(frozen=True)
+class WeatherField:
+    field: str
+    label: str
+    unit: str
+    # Accepted by /weather, in the query's units.
+    low: float
+    high: float
+    # Query units to OutsideWeather units.
+    scale: float
+    # The page's slider (min, max, step): what the scene reacts to, finer than the accepted range.
+    slider: tuple[float, float, float]
+    # outside_status() key holding the shown reading, in OutsideWeather units.
+    status_key: str
+
+
+# Weather query parameters, in the order the page shows them.
 WEATHER_FIELDS = {
-    "clouds": ("clouds", 0, 100, 0.01),
-    "wind": ("wind", 0, 200, 1),
-    "rain": ("rain", 0, 300, 1),
-    "snow": ("snow", 0, 300, 1),
-    "temp": ("temperature", -80, 140, 1),
-    "visibility": ("visibility", 0, 100000, 1),
+    "clouds": WeatherField("clouds", "Clouds", "%", 0, 100, 0.01, (0, 100, 1), "cloud_cover"),
+    "wind": WeatherField("wind", "Wind", "mph", 0, 200, 1, (0, 60, 1), "wind_mph"),
+    "temp": WeatherField("temperature", "Temp", "°F", -80, 140, 1, (-20, 110, 1), "temperature_f"),
+    "rain": WeatherField("rain", "Rain", "mm/h", 0, 300, 1, (0, 20, 0.1), "rain_mm_h"),
+    "snow": WeatherField("snow", "Snow", "mm/h", 0, 300, 1, (0, 10, 0.1), "snow_mm_h"),
+    # OpenWeather reports visibility up to 10 km.
+    "visibility": WeatherField("visibility", "Visibility", "m", 0, 100000, 1, (0, 10000, 100), "visibility_m"),
 }
+# Weather presets: OpenWeather condition id plus readings in the query's units.
+WEATHER_PRESETS = (
+    ("Clear", {"code": 800, "clouds": 0, "wind": 5, "rain": 0, "snow": 0, "temp": 72, "visibility": 10000}),
+    ("Partly cloudy", {"code": 802, "clouds": 40, "wind": 8, "rain": 0, "snow": 0, "temp": 70, "visibility": 10000}),
+    ("Mostly cloudy", {"code": 803, "clouds": 75, "wind": 9, "rain": 0, "snow": 0, "temp": 66, "visibility": 10000}),
+    ("Overcast", {"code": 804, "clouds": 100, "wind": 10, "rain": 0, "snow": 0, "temp": 60, "visibility": 10000}),
+    ("Drizzle", {"code": 300, "clouds": 90, "wind": 6, "rain": 0.3, "snow": 0, "temp": 58, "visibility": 8000}),
+    ("Rain", {"code": 501, "clouds": 95, "wind": 12, "rain": 3, "snow": 0, "temp": 55, "visibility": 6000}),
+    ("Heavy rain", {"code": 502, "clouds": 100, "wind": 18, "rain": 10, "snow": 0, "temp": 55, "visibility": 3000}),
+    ("Light thunderstorm", {"code": 210, "clouds": 80, "wind": 14, "rain": 1, "snow": 0, "temp": 76, "visibility": 8000}),
+    ("Thunderstorm", {"code": 211, "clouds": 95, "wind": 20, "rain": 5, "snow": 0, "temp": 75, "visibility": 5000}),
+    ("Heavy thunderstorm", {"code": 212, "clouds": 100, "wind": 26, "rain": 12, "snow": 0, "temp": 74, "visibility": 3000}),
+    ("Light snow", {"code": 600, "clouds": 90, "wind": 5, "rain": 0, "snow": 0.5, "temp": 28, "visibility": 5000}),
+    ("Heavy snow", {"code": 602, "clouds": 100, "wind": 12, "rain": 0, "snow": 4, "temp": 24, "visibility": 1000}),
+    ("Sleet", {"code": 611, "clouds": 100, "wind": 10, "rain": 1, "snow": 0.5, "temp": 33, "visibility": 4000}),
+    ("Fog", {"code": 741, "clouds": 70, "wind": 2, "rain": 0, "snow": 0, "temp": 50, "visibility": 300}),
+    ("Windy", {"code": 801, "clouds": 15, "wind": 28, "rain": 0, "snow": 0, "temp": 65, "visibility": 10000}),
+    ("Freezing and clear", {"code": 800, "clouds": 0, "wind": 4, "rain": 0, "snow": 0, "temp": 20, "visibility": 10000}),
+    ("Warm, calm evening", {"code": 800, "clouds": 5, "wind": 3, "rain": 0, "snow": 0, "temp": 80, "visibility": 10000}),
+)
+LAB_SPEEDS = (("Pause", 0), ("×1", 1), ("×10", 10), ("×60", 60), ("×300", 300))
+# How long /summon waits for the Outside loop to find the event and report back.
+SUMMON_WAIT_SECONDS = 3
 
 
 class LabError(ValueError):
@@ -154,20 +198,35 @@ def holiday_shortcuts(year: int):
     return shortcuts
 
 
+def page_options():
+    """Settings the lab page needs once, rendered into it rather than resent with every poll."""
+    return {
+        "weather_codes": [{"code": code, "description": description} for code, description in sorted(WEATHER_DESCRIPTIONS.items())],
+        "weather_fields": [{"name": name, "field": f.field, "label": f.label, "unit": f.unit, "min": f.slider[0], "max": f.slider[1], "step": f.slider[2], "scale": f.scale} for name, f in WEATHER_FIELDS.items()],
+        "weather_presets": [{"label": label, "values": values} for label, values in WEATHER_PRESETS],
+        "speeds": [{"label": label, "speed": speed} for label, speed in LAB_SPEEDS],
+        "seasons": list(SEASON_MONTHS),
+        "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
+        "moon_positions": [{"name": name, "label": label} for name, (label, _, _) in MOON_POSITIONS.items()],
+        "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
+        "summons": [{"name": name, "label": summon.label, "requirement": summon.requirement} for name, summon in SUMMONS.items()],
+        "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
+        # The emulator's frame server, for the live preview; None on the physical panel.
+        "preview_port": shared_config.ws_port if shared_config.emulated_display else None,
+    }
+
+
 def state():
     _, _, tz = location()
+    status, environment = outside.outside_status_and_environment()
     return {
-        **outside.outside_status(),
+        **status,
         "sign_clock": psclock.describe(),
-        "options": {
-            "weather_codes": [{"code": code, "description": description} for code, description in sorted(WEATHER_DESCRIPTIONS.items())],
-            "seasons": list(SEASON_MONTHS),
-            "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
-            "holidays": holiday_shortcuts(displayed_moment(tz).year),
-            "moon_positions": [{"name": name, "label": label} for name, (label, _, _) in MOON_POSITIONS.items()],
-            "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
-            "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
-        },
+        # The readings the sign is showing, in the weather form's units; None is an unknown reading.
+        "weather_form": {"code": status["condition_code"], **{name: None if status[f.status_key] is None else status[f.status_key] / f.scale for name, f in WEATHER_FIELDS.items()}},
+        "summons_allowed": {name: summon.allowed(environment) for name, summon in SUMMONS.items()},
+        # Follows the shown year, so it is sent with every state.
+        "holiday_shortcuts": holiday_shortcuts(displayed_moment(tz).year),
     }
 
 
@@ -187,7 +246,7 @@ def number(name: str, low: float, high: float) -> float | None:
 @blueprint.route("")
 @blueprint.route("/")
 def page():
-    return render_template("outside_lab.html")
+    return render_template("outside_lab.html", options=page_options())
 
 
 @blueprint.route("/state")
@@ -197,9 +256,9 @@ def get_state():
 
 @blueprint.route("/time")
 def set_time():
-    """?at=ISO (sensor-local without an offset), ?season=NAME, ?event=NAME, ?speed=FACTOR (alone or combined), or ?reset=1."""
+    """?at=ISO (sensor-local without an offset), ?season=NAME, ?event=NAME, ?speed=FACTOR (alone or combined; 0 pauses), or ?reset=1."""
     latitude, longitude, tz = location()
-    speed = number("speed", 0.01, 3600)
+    speed = number("speed", 0, 3600)
     touch()
     if request.args.get("reset"):
         with shared_config.shared_outside_lab_clock.get_lock():
@@ -250,10 +309,10 @@ def set_weather():
     if code not in WEATHER_DESCRIPTIONS:
         raise LabError(f"Unknown condition {code}")
     override = {"code": code}
-    for name, (field, low, high, scale) in WEATHER_FIELDS.items():
-        value = number(name, low, high)
+    for name, field in WEATHER_FIELDS.items():
+        value = number(name, field.low, field.high)
         # A blank field stays unknown, exactly like a reading missing from the live feed.
-        override[field] = None if value is None else value * scale
+        override[field.field] = None if value is None else value * field.scale
     touch()
     shared_config.data_dict["outside_lab_weather"] = override
     changed()
@@ -297,6 +356,27 @@ def set_offset():
     shared_config.shared_outside_offset_minutes.value = int(minutes)
     changed()
     return jsonify(state())
+
+
+@blueprint.route("/summon")
+def summon():
+    """?event=NAME: skip Outside's animation ahead to just before that event's next natural appearance."""
+    name = request.args.get("event", "")
+    if name not in SUMMONS:
+        raise LabError(f"event must be one of {', '.join(SUMMONS)}")
+    touch()
+    request_id = time.time()
+    shared_config.data_dict["outside_lab_summon"] = {"id": request_id, "event": name}
+    changed()
+    deadline = time.monotonic() + SUMMON_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        result = shared_config.data_dict.get("outside_lab_summon_result")
+        if result is not None and result["id"] == request_id:
+            if result["error"]:
+                raise LabError(result["error"], 409)
+            return jsonify(state())
+        time.sleep(0.05)
+    raise LabError("Outside did not pick up the request; try again once it is showing", 504)
 
 
 @blueprint.route("/reset")

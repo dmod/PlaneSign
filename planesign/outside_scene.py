@@ -3,6 +3,7 @@
 import math
 import os
 import random
+from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -833,9 +834,22 @@ def in_boxes(x: int, y: int, boxes: tuple[Box, ...]) -> bool:
     return any(left <= x <= right and top <= y <= bottom for left, top, right, bottom in boxes)
 
 
-def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int, clearings: tuple[Box, ...] = ()):
+def shooting_star_state(elapsed: float, seed: int) -> ShootingStar | None:
+    """The meteor streaking at `elapsed`, if any; it only shows where stars do."""
     star = shooting_star(math.floor(elapsed / SHOOTING_STAR_SLOT_SECONDS), seed)
-    if star is None or not star.start <= elapsed < star.start + star.duration:
+    return star if star is not None and star.start <= elapsed < star.start + star.duration else None
+
+
+def starlight(environment: "OutsideEnvironment") -> float:
+    """How strongly stars show: 0 in daylight, dimmed by cloud cover and moonlight."""
+    altitude = environment.sun_altitude
+    night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
+    return night * (1 - cloud_cover(environment) * 0.92) * (1 - moonlight(environment) * 0.25)
+
+
+def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int, clearings: tuple[Box, ...] = ()):
+    star = shooting_star_state(elapsed, seed)
+    if star is None:
         return
     age = elapsed - star.start
     progress = age / star.duration
@@ -864,7 +878,7 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
     cover = cloud_cover(environment)
-    visibility = night * (1 - cover * 0.92) * (1 - moonlight(environment) * 0.25)
+    visibility = starlight(environment)
     for x, y, phase in STARS:
         if star_clearings and in_boxes(x, y, star_clearings):
             continue
@@ -928,21 +942,46 @@ def wildlife_visit(slot: int, seed: int):
     return rng.random() < 0.8, rng.choice(("deer", "deer", "fox", "rabbit")), rng.uniform(4, 15), rng.uniform(50, 65), rng.choice((86, 91, 96)), rng.random() < 0.5
 
 
+def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
+    """Nothing comes out on Halloween, turkeys take the meadow on Thanksgiving, and heavy rain or snow keeps animals away."""
+    holidays = holiday_features(environment)
+    rain, snow = precipitation(environment)
+    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and rain < 3 and snow < 2
+
+
+def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Return (species, visit age, duration, target x, pair) for the visit under way, or None. Deer, foxes and rabbits
+    stay away whenever their visit would overlap the dog's time outside."""
+    if not wildlife_allowed(environment):
+        return None
+    slot, age = divmod(elapsed, 100)
+    present, species, start, duration, target, pair = wildlife_visit(int(slot), seed)
+    if not present or not start <= age < start + duration:
+        return None
+    visit = slot * 100 + start
+    if dog_allowed(environment) and next(dog_outings_between(seed, visit, visit + duration), None) is not None:
+        return None
+    return species, age - start, duration, target, pair
+
+
+def birds_allowed(environment: "OutsideEnvironment") -> bool:
+    """The songbird flock, or Thanksgiving's geese, fly by day in light weather."""
+    rain, snow = precipitation(environment)
+    sun_altitude = environment.sun_altitude
+    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and HALLOWEEN not in holiday_features(environment)
+
+
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
-    """Deer, foxes and rabbits stay away whenever their visit would overlap the dog's time outside. Nothing comes out on
-    Halloween; on Thanksgiving turkeys and geese take their places."""
+    """Deer, foxes and rabbits, then the songbird flock. Nothing comes out on Halloween; on Thanksgiving turkeys and geese
+    take their places."""
     holidays = holiday_features(environment)
     if HALLOWEEN in holidays:
         return
     thanksgiving = THANKSGIVING in holidays
     d = ImageDraw.Draw(image)
-    rain, snow = precipitation(environment)
-    slot, age = divmod(elapsed, 100)
-    present, species, start, duration, target, pair = wildlife_visit(int(slot), seed)
-    visit = slot * 100 + start
-    dog_nearby = dog_allowed(environment) and next(dog_outings_between(seed, visit, visit + duration), None) is not None
-    if present and start <= age < start + duration and rain < 3 and snow < 2 and not dog_nearby and not thanksgiving:
-        visit_age = age - start
+    wildlife = wildlife_state(environment, elapsed, seed)
+    if wildlife is not None:
+        species, visit_age, duration, target, pair = wildlife
         arrival = max(0, min(1, visit_age / 18))
         departure = max(0, min(1, (visit_age - duration + 18) / 18))
         x = round(128 + (target - 128) * arrival + (128 - target) * departure)
@@ -980,8 +1019,7 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 d.line((px(0), 30, px(2), 30), fill=c, width=2)
                 d.line((px(2), 29, px(2), 27), fill=c)
                 d.point((px(-1), 30), fill=palette.trim)
-    sun_altitude = environment.sun_altitude
-    if sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1:
+    if birds_allowed(environment):
         if thanksgiving:
             draw_geese(image, palette, environment, elapsed, seed)
             return
@@ -2277,11 +2315,17 @@ def draw_santa_sprite(image: Image.Image, rows: tuple[str, ...], center_x: float
         d.point(pixels, fill=colors[char])
 
 
-def draw_santa(image: Image.Image, environment: "OutsideEnvironment", elapsed: float, seed: int):
+def santa_state(elapsed: float, seed: int) -> SantaPass | None:
+    """The pass under way at `elapsed`; the caller shows it only on Christmas Eve."""
     santa = santa_pass(math.floor(elapsed / SANTA_SLOT_SECONDS), seed)
-    age = elapsed - santa.start
-    if not 0 <= age < santa.duration:
+    return santa if 0 <= elapsed - santa.start < santa.duration else None
+
+
+def draw_santa(image: Image.Image, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    santa = santa_state(elapsed, seed)
+    if santa is None:
         return
+    age = elapsed - santa.start
     night = holiday_darkness(environment)
     traveled = age * santa.speed
     sleigh_width = SANTA_SPRITE_WIDTH["sleigh"]
@@ -3930,13 +3974,21 @@ def geese_flight(slot: int, seed: int) -> tuple[float, float, int, int] | None:
     return start, start + duration, rng.choice((-1, 1)), count
 
 
-def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+def geese_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[float, float, int, int] | None:
+    """The skein crossing at `elapsed`, if any; like the songbirds, it keeps clear of the eagle."""
     flight = geese_flight(math.floor(elapsed / GEESE_SLOT_SECONDS), seed)
     if flight is None or not flight[0] <= elapsed < flight[1]:
+        return None
+    if next(eagle_visits_present(environment, seed, flight[0], flight[1]), None) is not None:
+        return None
+    return flight
+
+
+def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
+    flight = geese_state(environment, elapsed, seed)
+    if flight is None:
         return
-    start, end, heading, count = flight
-    if next(eagle_visits_present(environment, seed, start, end), None) is not None:
-        return
+    start, _, heading, count = flight
     length = (count // 2 + 1) * GEESE_RANK_SPACING[0]
     travel = (elapsed - start) * GEESE_SPEED - length
     lead_x = travel if heading > 0 else WIDTH - 1 - travel
@@ -3950,6 +4002,67 @@ def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnviro
         for px, py in ((x - 1, y - wing), (x, y), (x + 1, y - wing)):
             if 0 <= px < WIDTH and 0 <= py < HEIGHT:
                 d.point((px, py), fill=palette.roof)
+
+
+@dataclass(frozen=True)
+class Summon:
+    """An occasional event the lab can call up: it jumps the animation clock to the event's next natural start."""
+
+    label: str
+    # Shown when the current conditions rule the event out.
+    requirement: str
+    allowed: Callable[["OutsideEnvironment"], bool]
+    active: Callable[["OutsideEnvironment", float, int], bool]
+    # Seconds of build-up to show before the event starts.
+    lead: float
+    # Search resolution; shorter than the event's briefest appearance.
+    step: float
+
+
+def halloween_only(environment: "OutsideEnvironment") -> bool:
+    return HALLOWEEN in holiday_features(environment)
+
+
+# Every scheduled visitor and sky event the lab can summon. Add new occasional events here so they stay testable.
+SUMMONS = {
+    "owl": Summon("Owl", "Owls come out after dark in dry, calm weather, but not on Halloween or while ornaments hang on the tree.", owl_allowed, lambda e, t, s: owl_state(e, t, s) is not None, 1.0, 0.5),
+    "eagle": Summon("Eagle", "The eagle hunts by day in fair, dry, calm weather above freezing, with good visibility and not on Halloween.", eagle_allowed, lambda e, t, s: eagle_state(e, t, s) is not None, 1.0, 0.5),
+    "dog": Summon("Dog", "The dog goes out in dry daylight, but not on Halloween.", dog_allowed, lambda e, t, s: dog_state(e, t, s)[0] > 0, 0.5, 0.25),
+    "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween and Thanksgiving and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
+    "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
+    "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
+    "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
+    "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
+    "geese": Summon("Geese", "Geese fly over by day on Thanksgiving in light weather.", lambda e: THANKSGIVING in holiday_features(e) and birds_allowed(e), lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
+    "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(t, s) is not None, 0.5, 0.25),
+    "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
+    "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(t, s) is not None, 0.5, 0.25),
+}
+SUMMON_HORIZON_SECONDS = 3600
+
+
+class SummonUnavailable(ValueError):
+    pass
+
+
+def summon_start(name: str, environment: "OutsideEnvironment", elapsed: float, seed: int) -> float:
+    """The `elapsed` at which the next occurrence of event `name` begins after now, under the current conditions."""
+    summon = SUMMONS[name]
+    if not summon.allowed(environment):
+        raise SummonUnavailable(summon.requirement)
+    before, t = elapsed, elapsed + summon.step
+    was_active = summon.active(environment, before, seed)
+    while t < elapsed + SUMMON_HORIZON_SECONDS:
+        active = summon.active(environment, t, seed)
+        if active and not was_active:
+            # Narrow the start down between the last two probes.
+            low, high = before, t
+            for _ in range(8):
+                middle = (low + high) / 2
+                low, high = (low, middle) if summon.active(environment, middle, seed) else (middle, high)
+            return high
+        before, was_active, t = t, active, t + summon.step
+    raise SummonUnavailable(f"No {summon.label.lower()} is due within the next {SUMMON_HORIZON_SECONDS // 60} minutes under these conditions.")
 
 
 def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> Image.Image:

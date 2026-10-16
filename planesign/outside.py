@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, WEATHER_DESCRIPTIONS, draw_outside_frame, holiday_features
+from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, draw_outside_frame, holiday_features, summon_start
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -34,6 +34,8 @@ SKY_HISTORY_SECONDS = 4 * 3600
 SKY_REFRESH_MARGIN_SECONDS = 1800
 SKY_FIELDS = ("sun_altitude", "sun_azimuth", "moon_altitude", "moon_azimuth", "moon_phase")
 LAB_IDLE_SECONDS = 15 * 60
+# A summon request the Outside loop has not picked up within this long is stale (for example, from before a restart).
+LAB_SUMMON_SECONDS = 5
 OFFSET_TRANSITION_SECONDS = 0.15
 
 
@@ -342,6 +344,10 @@ def get_outside_data_worker(data_dict):
 
 
 def outside_status():
+    return outside_status_and_environment()[0]
+
+
+def outside_status_and_environment() -> tuple[dict, OutsideEnvironment]:
     latitude = float(shared_config.CONF["SENSOR_LAT"])
     longitude = float(shared_config.CONF["SENSOR_LON"])
     tz = location_timezone(latitude, longitude)
@@ -353,7 +359,7 @@ def outside_status():
     lab_now = lab_time()
     _, _, lab_speed = shared_config.shared_outside_lab_clock[:]
     active = lab_now is not None or override is not None or moon_override is not None
-    return {
+    status = {
         "offset_minutes": offset_minutes,
         "now": datetime.fromtimestamp(moment.timestamp() - offset_minutes * 60, tz).isoformat(),
         "selected_time": moment.isoformat(),
@@ -379,11 +385,33 @@ def outside_status():
         "cloud_cover": environment.weather.clouds,
         "rain_mm_h": environment.weather.rain,
         "snow_mm_h": environment.weather.snow,
+        "visibility_m": environment.weather.visibility,
         "sun_altitude": environment.sun_altitude,
         "moon_altitude": environment.moon_altitude,
         "moon_azimuth": environment.moon_azimuth if environment.sky_status == "READY" else None,
         "moon_phase": environment.moon_phase if environment.sky_status == "READY" else None,
     }
+    return status, environment
+
+
+def lab_paused() -> bool:
+    """A lab speed of zero stops the lab clock and freezes Outside's animation on the current frame."""
+    base, _, speed = shared_config.shared_outside_lab_clock[:]
+    return base != 0 and speed == 0
+
+
+def summon_jump(request, environment: OutsideEnvironment, elapsed: float, seed: int) -> tuple[float, dict]:
+    """Skip the animation clock to just before the requested event's next natural start; return the new elapsed and the result for the lab."""
+    name = request["event"]
+    try:
+        start = summon_start(name, environment, elapsed, seed)
+    except SummonUnavailable as error:
+        # Right after a jump to a new date the sun and moon are unknown, which would rule out any event that needs them.
+        message = "Astronomy is still loading for this time; try again in a moment." if environment.sky_status == "LOADING" else str(error)
+        return elapsed, {"id": request["id"], "error": message}
+    target = max(elapsed, start - SUMMONS[name].lead)
+    logger.info("Outside lab: summoned %s, skipping %.0f s ahead", SUMMONS[name].label.lower(), target - elapsed)
+    return target, {"id": request["id"], "error": None}
 
 
 @planesign_mode_handler(DisplayMode.OUTSIDE)
@@ -399,9 +427,16 @@ def outside(sign):
     transition_started = started
     text_styles: tuple[bool | None, bool | None, bool | None] = (None, None, None)
     seen_lab_version = None
+    frozen = None
+    handled_summon = None
+    pending_summon = None
     while shared_config.shared_mode.value == DisplayMode.OUTSIDE.value:
         frame_time = time.perf_counter()
+        paused = lab_paused()
+        if paused and frozen is not None:
+            started = frame_time - frozen
         elapsed = frame_time - started
+        frozen = elapsed if paused else None
         offset_minutes = shared_config.shared_outside_offset_minutes.value
         lab_version = shared_config.shared_outside_lab_version.value
         fraction = min(1, (frame_time - transition_started) / OFFSET_TRANSITION_SECONDS)
@@ -422,12 +457,22 @@ def outside(sign):
             weather_override = shared_config.data_dict.get("outside_lab_weather")
             moon_override = shared_config.data_dict.get("outside_lab_moon")
             lab = lab_active(shared_config.data_dict)
+            summon = shared_config.data_dict.get("outside_lab_summon")
+            if summon is not None and summon["id"] != handled_summon and time.time() - summon["id"] < LAB_SUMMON_SECONDS:
+                pending_summon = summon
             seen_lab_version = lab_version
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
         environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override)
         if lab:
             environment = replace(environment, lab=True)
+        if pending_summon is not None:
+            handled_summon = pending_summon["id"]
+            elapsed, result = summon_jump(pending_summon, environment, elapsed, seed)
+            started = frame_time - elapsed
+            frozen = elapsed if paused else None
+            shared_config.data_dict["outside_lab_summon_result"] = result
+            pending_summon = None
         status = environment.weather.status, environment.sky_status
         if status != last_status:
             if status[0] == "PENDING" and status[1] == "READY":
