@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 
 [[package]]
@@ -737,7 +737,7 @@ wheels = [
 [[package]]
 name = "rgbmatrix"
 version = "0.1.0+dmod.20261014"
-source = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git#dcd7ef1ac307c56e6e0924d5175371735ab86b8b" }
+source = { git = "https://github.com/dmod/rpi-rgb-led-matrix.git#a4838f626c46ac7ff7d718c360e462e9aaee1263" }
 
 [[package]]
 name = "rpi-gpio"
