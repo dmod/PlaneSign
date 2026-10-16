@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, draw_outside_frame, holiday_features, summon_start
+from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, draw_outside_frame, holiday_features, summon_start
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -49,6 +49,7 @@ class OutsideWeather:
     snow: float | None = None
     temperature: float | None = None
     visibility: float | None = None
+    dew_point: float | None = None
     observed_at: float | None = None
     forecast_at: float | None = None
 
@@ -71,6 +72,8 @@ class OutsideEnvironment:
     before_sunrise: bool = False
     # The Outside lab is overriding time, weather or the moon.
     lab: bool = False
+    # Comfortable beach weather; the Outside loop decides it with hysteresis (outside_scene.beach_weather).
+    beach: bool = False
 
 
 def reading(value):
@@ -98,6 +101,7 @@ def weather_readings(current, status: str, observed: float, forecast_at: float |
         snow=snow if snow is not None and snow >= 0 else None,
         temperature=reading(current.get("temp")),
         visibility=visibility if visibility is not None and visibility >= 0 else None,
+        dew_point=reading(current.get("dew_point")),
         observed_at=observed,
         forecast_at=forecast_at,
     )
@@ -168,6 +172,7 @@ def lab_weather(override, forecast_time: float | None) -> OutsideWeather:
         snow=override.get("snow"),
         temperature=override.get("temperature"),
         visibility=override.get("visibility"),
+        dew_point=override.get("dew_point"),
         observed_at=time.time(),
         forecast_at=forecast_time,
     )
@@ -386,6 +391,7 @@ def outside_status_and_environment() -> tuple[dict, OutsideEnvironment]:
         "rain_mm_h": environment.weather.rain,
         "snow_mm_h": environment.weather.snow,
         "visibility_m": environment.weather.visibility,
+        "dew_point_f": environment.weather.dew_point,
         "sun_altitude": environment.sun_altitude,
         "moon_altitude": environment.moon_altitude,
         "moon_azimuth": environment.moon_azimuth if environment.sky_status == "READY" else None,
@@ -426,6 +432,7 @@ def outside(sign):
     transition_from = rendered_offset
     transition_started = started
     text_styles: tuple[bool | None, bool | None, bool | None] = (None, None, None)
+    beach = False
     seen_lab_version = None
     frozen = None
     handled_summon = None
@@ -466,6 +473,9 @@ def outside(sign):
         environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override)
         if lab:
             environment = replace(environment, lab=True)
+        beach = beach_weather(environment, beach)
+        if beach:
+            environment = replace(environment, beach=True)
         if pending_summon is not None:
             handled_summon = pending_summon["id"]
             elapsed, result = summon_jump(pending_summon, environment, elapsed, seed)

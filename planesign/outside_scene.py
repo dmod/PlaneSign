@@ -1778,70 +1778,220 @@ def draw_fireflies(image: Image.Image, glows: list[tuple[float, float, float]]):
 
 LEAF_SLOT_SECONDS = 45
 LEAF_GUST_CHANCE = 0.72
-LEAF_REST_SECONDS = 3
-LEAF_FADE_SECONDS = 4
+LEAF_GUST_SIZE = 4
 LEAF_BREEZE_MPH = 8
 LEAF_GUST_MPH = 16
-LEAF_SHAPES = (((0, 0), (1, 0)), ((0, 0),), ((0, 0), (1, 1)), ((0, 0),), ((0, 0), (0, 1)), ((0, 0),), ((0, 0), (-1, 1)), ((0, 0),))
+# A leaf fades in on the front of the canopy and trembles there before it lets go.
+LEAF_HANG_SECONDS = 0.9
+LEAF_TREMBLE_RATE = 3.2
+LEAF_REST_SECONDS = 3
+LEAF_FADE_SECONDS = 4
+# Pendulum fall: the leaf dips through the middle of each swing and rises this many pixels toward its ends.
+LEAF_SWING_RISE = 2.0
+# Swings build up after the leaf lets go and die away over the end of its fall, so it settles onto the grass.
+LEAF_SWING_EASE_IN = 1.2
+LEAF_SETTLE_FROM = 0.72
+LEAF_LOOP_CHANCE = 0.55
+# On landing the tip bounces up twice before the leaf lies flat: (start, end) seconds after touchdown.
+LEAF_PLOP = ((0, 0.14), (0.3, 0.4))
+# Leaf centers on the rim of the canopy, so a trembling leaf shows before it falls.
+TREE_LEAF_SPOTS = ((103, 17), (107, 20), (104, 12), (110, 10), (113, 20), (116, 19), (119, 15))
+# 3x3 sprites around the leaf's center with the tip up and up-right; quarter turns give the other six headings.
+# F is the lit half and D the shaded half. Slim and stemless: a round body with a stem reads as a drumstick, and
+# a symmetric diamond for the straight headings reads as a plus-sign sparkle.
+LEAF_SPRITE_UP = (".F.", ".FD", ".D.")
+LEAF_SPRITE_UP_RIGHT = ("..F", ".FD", "FD.")
+# Daylight colors before the frame grade, which deepens them a lot: (lit, alternate lit) for each hue; a leaf
+# picks a shade between the two. Yellow and orange come up most, as on the tree, with some green and a little red.
+AUTUMN_LEAF_HUES = (
+    ((216, 192, 100), (222, 176, 92)),
+    ((214, 146, 84), (220, 162, 86)),
+    ((146, 168, 88), (178, 180, 92)),
+    ((184, 104, 80), (200, 122, 82)),
+)
+AUTUMN_LEAF_WEIGHTS = (3, 3, 2, 1.5)
+AUTUMN_LEAF_SHADE = (92, 52, 40)
+SPRING_PETAL_COLORS = ((239, 186, 182), (215, 146, 166))
+# Petals stay small: one or two pixels that tumble as they fall.
+PETAL_SHAPES = (((0, 0), (1, 0)), ((0, 0),), ((0, 0), (1, 1)), ((0, 0),), ((0, 0), (0, 1)), ((0, 0),), ((0, 0), (-1, 1)), ((0, 0),))
+
+
+def leaf_sprites() -> tuple[tuple[tuple[int, int, str], ...], ...]:
+    """Pixels (dx, dy, part) for the eight headings, clockwise from tip-up."""
+    poses = []
+    for heading in range(8):
+        grid = LEAF_SPRITE_UP if heading % 2 == 0 else LEAF_SPRITE_UP_RIGHT
+        size = len(grid)
+        for _ in range(heading // 2):
+            grid = tuple("".join(grid[size - 1 - x][y] for x in range(size)) for y in range(size))
+        poses.append(tuple((x - size // 2, y - size // 2, part) for y, row in enumerate(grid) for x, part in enumerate(row) if part != "."))
+    return tuple(poses)
+
+
+LEAF_SPRITES = leaf_sprites()
+
+
+def smoothstep(edge0: float, edge1: float, value: float) -> float:
+    t = max(0.0, min(1.0, (value - edge0) / (edge1 - edge0)))
+    return t * t * (3 - 2 * t)
+
+
+def tree_sway(elapsed: float, wind: float) -> int:
+    """How far the foliage leans in the wind, in whole pixels."""
+    return round(math.sin(elapsed * 0.6) * min(1, wind / 12))
 
 
 @dataclass(frozen=True)
 class LeafDrift:
+    # When the leaf lets go; it appears on the canopy LEAF_HANG_SECONDS earlier.
     release: float
     origin: tuple[int, int]
     flight_seconds: float
     ground_y: int
     phase: float
+    hue: int
     tint: float
+    swing: float
+    swing_period: float
+    # +1 when the first swing heads right.
+    first_swing: int
+    # Flight time at which a loop-the-loop starts, and its radius; 0 for none.
+    loop_at: float
+    loop_radius: float
+
+
+def leaf_loop(rng: random.Random, origin: tuple[int, int], flight: float, ground_y: int, period: float, first_swing: int) -> tuple[float, float]:
+    """A loop-the-loop starts mid-swing while the leaf glides left with the breeze, and rises over the top."""
+    radius = rng.uniform(2.6, 3.8)
+    first = 0.5 if first_swing > 0 else 1.0
+    starts = []
+    for cycle in range(12):
+        start = (first + cycle) * period
+        y = origin[1] + (ground_y - origin[1]) * start / flight
+        if LEAF_SWING_EASE_IN <= start and start + 0.5 <= flight * LEAF_SETTLE_FROM and y - 2 * radius - 2 >= TREE_FOLIAGE_TOP:
+            starts.append(start)
+    if not starts or rng.random() > LEAF_LOOP_CHANCE:
+        return 0.0, 0.0
+    return rng.choice(starts), radius
 
 
 @lru_cache(maxsize=16)
-def leaf_gust(slot: int, seed: int) -> tuple[LeafDrift, ...]:
+def leaf_gust(slot: int, seed: int, spring: bool) -> tuple[LeafDrift, ...]:
     """Fixed release order: wind adds leaves to a gust without reshuffling its paths."""
     rng = random.Random(seed * 7919 + slot * 104729 + 43)
     if rng.random() > LEAF_GUST_CHANCE:
         return ()
     start = slot * LEAF_SLOT_SECONDS + rng.uniform(4, 10)
     leaves = []
-    for index in range(3):
-        dx, dy = rng.choice(TREE_BLOSSOMS)
+    for index in range(LEAF_GUST_SIZE):
+        if spring:
+            dx, dy = rng.choice(TREE_BLOSSOMS)
+            origin = (TREE_X + dx, TREE_CANOPY_Y + dy)
+        else:
+            origin = rng.choice(TREE_LEAF_SPOTS)
+        flight = rng.uniform(10, 13)
+        ground_y = rng.randrange(29, 31)
+        period = rng.uniform(2.6, 3.4)
+        first_swing = rng.choice((-1, 1))
+        # Neighbors in a gust never share a hue.
+        hues = [hue for hue in range(len(AUTUMN_LEAF_HUES)) if not leaves or hue != leaves[-1].hue]
+        hue = rng.choices(hues, [AUTUMN_LEAF_WEIGHTS[hue] for hue in hues])[0]
+        loop_at, loop_radius = leaf_loop(rng, origin, flight, ground_y, period, first_swing)
         leaves.append(LeafDrift(
-            release=start + index * rng.uniform(0.65, 1.2),
-            origin=(TREE_X + dx, TREE_CANOPY_Y + dy),
-            flight_seconds=rng.uniform(8, 12),
-            ground_y=rng.randrange(29, 31),
+            release=start + index * rng.uniform(0.9, 1.4),
+            origin=origin,
+            flight_seconds=flight,
+            ground_y=ground_y,
             phase=rng.uniform(0, math.tau),
+            hue=hue,
             tint=rng.random(),
+            swing=rng.uniform(3.5, 5.5),
+            swing_period=period,
+            first_swing=first_swing,
+            loop_at=loop_at,
+            loop_radius=loop_radius,
         ))
     return tuple(leaves)
 
 
-def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[int, int, int, float, float]]:
-    """(x, y, pose, tint, opacity) for dry autumn leaves or spring blossom petals; the tree holds its leaves on Halloween."""
+def leaf_loop_seconds(leaf: LeafDrift, travel: float) -> float:
+    """The loop keeps the speed the leaf enters it with, swing and breeze together, so it sweeps in and out without a jolt."""
+    if not leaf.loop_radius:
+        return 0.0
+    speed = leaf.swing * math.tau / leaf.swing_period + travel / leaf.flight_seconds
+    return math.tau * leaf.loop_radius / speed
+
+
+def leaf_position(leaf: LeafDrift, travel: float, start_x: float, age: float) -> tuple[float, float]:
+    """Where a leaf is `age` seconds after it lets go: the breeze carries it left while it swings like a pendulum."""
+    loop_seconds = leaf_loop_seconds(leaf, travel)
+    age = max(0.0, min(age, leaf.flight_seconds + loop_seconds))
+    flight, loop_x, loop_y = age, 0.0, 0.0
+    into = age - leaf.loop_at
+    if loop_seconds and into > 0:
+        # The fall pauses for the loop and picks up where it left off, so the loop stays round in any wind.
+        flight = age - min(into, loop_seconds)
+        if into < loop_seconds:
+            turn = math.tau * into / loop_seconds
+            loop_x, loop_y = -leaf.loop_radius * math.sin(turn), -leaf.loop_radius * (1 - math.cos(turn))
+    progress = flight / leaf.flight_seconds
+    omega = math.tau / leaf.swing_period
+    envelope = smoothstep(0, LEAF_SWING_EASE_IN, flight) * (1 - smoothstep(LEAF_SETTLE_FROM, 1, progress))
+    x = start_x - travel * progress + leaf.first_swing * leaf.swing * envelope * math.sin(omega * flight) + loop_x
+    y = leaf.origin[1] + (leaf.ground_y - leaf.origin[1]) * progress - LEAF_SWING_RISE * envelope * (1 - math.cos(2 * omega * flight)) / 2 + loop_y
+    return x, y
+
+
+def leaf_heading(dx: float, dy: float) -> int:
+    """The nearest of the eight sprite headings, clockwise from up, for a direction of travel."""
+    return round(math.atan2(dx, -dy) / (math.pi / 4)) % 8
+
+
+def leaves_allowed(environment: "OutsideEnvironment") -> bool:
+    """Dry autumn leaves or spring blossom petals fall in a known wind; the tree holds its leaves on Halloween."""
     weather = environment.weather
     if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None or HALLOWEEN in holiday_features(environment):
-        return []
+        return False
     rain, snow = precipitation(environment)
-    if rain > 0 or snow > 0:
+    return rain == 0 and snow == 0
+
+
+def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[int, int, int, LeafDrift, float]]:
+    """(x, y, heading, leaf, opacity) for each falling leaf or petal."""
+    if not leaves_allowed(environment):
         return []
-    wind = min(30, weather.wind)
-    count = 1 + (wind >= LEAF_BREEZE_MPH) + (wind >= LEAF_GUST_MPH)
+    wind = min(30, environment.weather.wind)
+    count = 2 + (wind >= LEAF_BREEZE_MPH) + (wind >= LEAF_GUST_MPH)
     particles = []
-    for leaf in leaf_gust(math.floor(elapsed / LEAF_SLOT_SECONDS), seed)[:count]:
+    for leaf in leaf_gust(math.floor(elapsed / LEAF_SLOT_SECONDS), seed, environment.season == "spring")[:count]:
         age = elapsed - leaf.release
-        end = leaf.flight_seconds + LEAF_REST_SECONDS + LEAF_FADE_SECONDS
-        if not 0 <= age < end:
+        if age < -LEAF_HANG_SECONDS:
             continue
-        progress = min(1.0, age / leaf.flight_seconds)
-        # The scene's breeze carries leaves left into the meadow; only strong gusts reach the yard.
+        opacity = min(1.0, (age + LEAF_HANG_SECONDS) / 0.3)
+        if age < 0:
+            # Hanging tip down, it trembles in the swaying foliage.
+            tremble = 1 if math.sin(age * math.tau * LEAF_TREMBLE_RATE + leaf.phase) > 0 else -1
+            particles.append((leaf.origin[0] + tree_sway(elapsed, wind), leaf.origin[1], 4 + tremble, leaf, opacity))
+            continue
+        # The breeze carries leaves left into the meadow; only strong gusts reach the yard.
         travel = min(leaf.origin[0] - 3, 3 + wind * 4)
-        sway = round(math.sin(leaf.release * 0.6) * min(1, wind / 12))
-        flutter = (math.sin(age * 1.65 + leaf.phase) - math.sin(leaf.phase)) * (1 - progress) * (1.2 + wind / 30)
-        x = round(leaf.origin[0] + sway - travel * progress + flutter)
-        y = round(leaf.origin[1] + (leaf.ground_y - leaf.origin[1]) * progress)
-        pose = int(age * 2.5 + leaf.phase) % len(LEAF_SHAPES) if progress < 1 else 0
-        opacity = min(1.0, age / 0.3, (end - age) / LEAF_FADE_SECONDS)
-        particles.append((x, y, pose, leaf.tint, opacity))
+        start_x = leaf.origin[0] + tree_sway(leaf.release, wind)
+        airborne = leaf.flight_seconds + leaf_loop_seconds(leaf, travel)
+        end = airborne + LEAF_REST_SECONDS + LEAF_FADE_SECONDS
+        if age >= end:
+            continue
+        opacity = min(opacity, (end - age) / LEAF_FADE_SECONDS)
+        x, y = leaf_position(leaf, travel, start_x, age)
+        if age < airborne:
+            ahead, behind = leaf_position(leaf, travel, start_x, age + 0.05), leaf_position(leaf, travel, start_x, age - 0.05)
+            heading = leaf_heading(ahead[0] - behind[0], ahead[1] - behind[1])
+        else:
+            # It lands flat, tip toward where it was headed, and the tip bounces up twice.
+            last = leaf_position(leaf, travel, start_x, airborne - 0.1)
+            flat = 6 if last[0] >= x else 2
+            since = age - airborne
+            heading = (flat + (1 if flat == 6 else -1)) % 8 if any(a <= since < b for a, b in LEAF_PLOP) else flat
+        particles.append((round(x), round(y), heading, leaf, opacity))
     return particles
 
 
@@ -1849,15 +1999,24 @@ def draw_leaves(image: Image.Image, palette: Palette, environment: "OutsideEnvir
     particles = leaf_particles(environment, elapsed, seed)
     if not particles:
         return
-    colors = ((239, 186, 182), (215, 146, 166)) if environment.season == "spring" else ((231, 153, 63), (176, 82, 40))
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+
+    def lit(color: Color) -> Color:
+        return (round(color[0] * illumination), round(color[1] * illumination), round(color[2] * illumination))
+
     d = ImageDraw.Draw(image)
-    for x, y, pose, tint, opacity in particles:
-        color = mix(*colors, tint)
-        color = (round(color[0] * illumination), round(color[1] * illumination), round(color[2] * illumination))
-        for dx, dy in LEAF_SHAPES[pose]:
+    for x, y, heading, leaf, opacity in particles:
+        if environment.season == "spring":
+            color = lit(mix(*SPRING_PETAL_COLORS, leaf.tint))
+            age = elapsed - leaf.release
+            pixels = ((dx, dy, color) for dx, dy in PETAL_SHAPES[int(age * 2.5 + leaf.phase) % len(PETAL_SHAPES)])
+        else:
+            face = mix(*AUTUMN_LEAF_HUES[leaf.hue], leaf.tint)
+            colors = {"F": lit(face), "D": lit(mix(face, AUTUMN_LEAF_SHADE, 0.3))}
+            pixels = ((dx, dy, colors[part]) for dx, dy, part in LEAF_SPRITES[heading])
+        for dx, dy, color in pixels:
             px, py = x + dx, y + dy
-            if 0 <= px < WIDTH and 5 <= py < HEIGHT:
+            if 0 <= px < WIDTH and TREE_FOLIAGE_TOP <= py < HEIGHT:
                 d.point((px, py), fill=mix(image.getpixel((px, py)), color, opacity))
 
 
@@ -4262,6 +4421,89 @@ def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnviro
                 d.point((px, py), fill=palette.roof)
 
 
+# The scene draws fog below this visibility (m).
+FOG_VISIBILITY = 5000
+# Comfortable beach weather puts a beach umbrella up on the pond's right bank: a temperature range (°F), the highest
+# dew point (°F, which measures mugginess better than relative humidity), the most cloud cover and wind (mph), and the
+# lowest sun altitude. Once up, it stays up until a reading passes its limit by the margin, so a reading hovering at a
+# limit cannot flicker it on and off between weather refreshes.
+BEACH_TEMPERATURE, BEACH_TEMPERATURE_MARGIN = (75, 95), 2.5
+BEACH_DEW_POINT, BEACH_DEW_POINT_MARGIN = 68, 2
+BEACH_CLOUDS, BEACH_CLOUDS_MARGIN = 0.4, 0.1
+BEACH_WIND, BEACH_WIND_MARGIN = 15, 3
+BEACH_SUN_ALTITUDE, BEACH_SUN_MARGIN = 10, 2
+# Clear, few and scattered clouds; every other condition (drizzle, rain, storms, snow, haze, fog, heavy cloud) keeps it down.
+BEACH_CODES = frozenset({800, 801, 802})
+# The July 4 cannon, the Halloween jack-o'-lanterns and the Thanksgiving harvest display stand on the umbrella's spot.
+BEACH_HOLIDAYS = frozenset({"cannon", HALLOWEEN, THANKSGIVING})
+# A red and white striped beach umbrella leaning a little right, with "o" the foot of its pole at UMBRELLA_FOOT.
+# R and W are the lit panels, r and w their shaded rim, T the finial and P the pole.
+UMBRELLA_SPRITE = (
+    ".......T.....",
+    ".....RRRW....",
+    "..RRWWRRWWR..",
+    "RRRWWRRRRWWRR",
+    "rr.wwRRRRWWRR",
+    "......rr.ww.r",
+    "......P......",
+    ".....P.......",
+    ".....P.......",
+    "....P........",
+    "....o........",
+)
+UMBRELLA_FOOT = (85, 28)
+UMBRELLA_COLORS = {"R": (206, 70, 62), "r": (156, 50, 52), "W": (238, 236, 228), "w": (176, 178, 184), "T": (206, 70, 62), "P": (150, 146, 140), "o": (150, 146, 140)}
+# Shade on the grass under the canopy: center, radii and darkness at the center.
+UMBRELLA_SHADE = ((89, 28.6), (4.6, 1.1), 0.35)
+
+
+def beach_weather(environment: "OutsideEnvironment", up: bool) -> bool:
+    """Whether the beach umbrella stands: comfortable, dry, sunny daylight. Pass whether it stands now, for the margins.
+    An unknown reading keeps it down."""
+    weather = environment.weather
+    if weather.code not in BEACH_CODES or weather.temperature is None or weather.dew_point is None or weather.wind is None or environment.sun_altitude is None:
+        return False
+    if holiday_features(environment) & BEACH_HOLIDAYS or (weather.visibility is not None and weather.visibility < FOG_VISIBILITY) or any(precipitation(environment)):
+        return False
+    slack = 1 if up else 0
+    low, high = BEACH_TEMPERATURE
+    return (
+        low - slack * BEACH_TEMPERATURE_MARGIN <= weather.temperature <= high + slack * BEACH_TEMPERATURE_MARGIN
+        and weather.dew_point <= BEACH_DEW_POINT + slack * BEACH_DEW_POINT_MARGIN
+        and cloud_cover(environment) <= BEACH_CLOUDS + slack * BEACH_CLOUDS_MARGIN
+        and weather.wind <= BEACH_WIND + slack * BEACH_WIND_MARGIN
+        and environment.sun_altitude >= BEACH_SUN_ALTITUDE - slack * BEACH_SUN_MARGIN
+    )
+
+
+def umbrella_geometry() -> tuple[tuple[tuple[int, int, str], ...], tuple[tuple[int, int, float], ...]]:
+    """The umbrella's pixels (x, y, part) and its shade on the grass (x, y, darkness)."""
+    foot_x, foot_y = next((x, y) for y, row in enumerate(UMBRELLA_SPRITE) for x, part in enumerate(row) if part == "o")
+    pixels = tuple((UMBRELLA_FOOT[0] + x - foot_x, UMBRELLA_FOOT[1] + y - foot_y, part) for y, row in enumerate(UMBRELLA_SPRITE) for x, part in enumerate(row) if part != ".")
+    (cx, cy), (rx, ry), darkness = UMBRELLA_SHADE
+    ground = (INDEX["field"], INDEX["foreground"], INDEX["grass"])
+    shade = []
+    for y in range(math.floor(cy - ry), math.ceil(cy + ry) + 1):
+        for x in range(math.floor(cx - rx), math.ceil(cx + rx) + 1):
+            reach = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
+            if reach < 1 and 0 <= x < WIDTH and 0 <= y < HEIGHT and LAND.getpixel((x, y)) in ground:
+                shade.append((x, y, darkness * (1 - reach)))
+    return pixels, tuple(shade)
+
+
+UMBRELLA_PIXELS, UMBRELLA_SHADOW = umbrella_geometry()
+
+
+def draw_beach_umbrella(image: Image.Image, palette: Palette):
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    d = ImageDraw.Draw(image)
+    for x, y, darkness in UMBRELLA_SHADOW:
+        d.point((x, y), fill=mix(image.getpixel((x, y)), (0, 0, 0), darkness))
+    for x, y, part in UMBRELLA_PIXELS:
+        color = UMBRELLA_COLORS[part]
+        d.point((x, y), fill=(round(color[0] * illumination), round(color[1] * illumination), round(color[2] * illumination)))
+
+
 @dataclass(frozen=True)
 class Summon:
     """An occasional event the lab can call up: it jumps the animation clock to the event's next natural start."""
@@ -4297,6 +4539,7 @@ SUMMONS = {
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(t, s) is not None, 0.5, 0.25),
     "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
+    "leaves": Summon("Falling leaves", "Leaves fall in autumn and blossom petals in spring, in dry weather with a known wind, but not on Halloween.", leaves_allowed, lambda e, t, s: bool(leaf_particles(e, t, s)), 0.5, 0.5),
 }
 SUMMON_HORIZON_SECONDS = 3600
 
@@ -4367,7 +4610,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     if sparkle is not None:
         image = reflect_fireworks(image, sparkle, elapsed)
         d = ImageDraw.Draw(image)
-    mist = environment.weather.visibility is not None and environment.weather.visibility < 5000
+    mist = environment.weather.visibility is not None and environment.weather.visibility < FOG_VISIBILITY
     if mist or environment.weather.code in (701, 711, 721, 741):
         fog = Image.new("RGBA", (WIDTH, HEIGHT))
         fd = ImageDraw.Draw(fog)
@@ -4393,7 +4636,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     cannon = cannon_state(elapsed, seed) if "cannon" in holidays else None
     if "cannon" in holidays:
         draw_cannon(image, palette, cannon)
-    draw_leaves(image, palette, environment, elapsed, seed)
+    # The umbrella stands on the pond's right bank, behind visitors that wander under it.
+    if environment.beach:
+        draw_beach_umbrella(image, palette)
     draw_wildlife(image, palette, environment, elapsed, seed)
     if thanksgiving:
         draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
@@ -4402,7 +4647,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image = draw_smoke(image, palette, environment, elapsed, seed)
     image = draw_cannon_smoke(image, palette, cannon, wind)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
-    sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
+    sway = tree_sway(elapsed, wind)
     if foliage is not None:
         image.paste(foliage, (sway, 0), foliage)
     d = ImageDraw.Draw(image)
@@ -4411,6 +4656,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             if environment.sun_altitude is not None and environment.sun_altitude > -5:
                 d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
+    # Leaves let go from the front of the canopy, so they fall in front of the tree.
+    draw_leaves(image, palette, environment, elapsed, seed)
     # The mascot walks along the front of the meadow, in front of everything that stands on it, the tree included.
     draw_hotdog(image, palette, hotdog_state(environment, elapsed, seed))
     if tree_ornaments_shown(environment):
