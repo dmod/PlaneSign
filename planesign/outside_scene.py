@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from outside import OutsideEnvironment
 
 Color = tuple[int, int, int]
+Box = tuple[int, int, int, int]
 WIDTH, HEIGHT = 128, 32
 OVERLAY_DARK_LUMINANCE = 0.01
 OVERLAY_BRIGHT_LUMINANCE = 0.10
@@ -180,6 +181,13 @@ class Palette:
     shingle: Color
     door: Color
     dog: Color
+    # The hut's remaining materials. Each HutStyle supplies these and replaces hut, shingle and door (hut_palettes),
+    # so the defaults never show.
+    hut_detail: Color = (0, 0, 0)
+    shingle_detail: Color = (0, 0, 0)
+    frame: Color = (0, 0, 0)
+    accent: Color = (0, 0, 0)
+    chimney: Color = (0, 0, 0)
 
 
 DUSK = Palette(
@@ -258,7 +266,6 @@ MATERIALS = tuple(field.name for field in fields(Palette))
 INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
 INDEX["peak"] = len(MATERIALS) + 2
-INDEX["chimney"] = len(MATERIALS) + 3
 # One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
 MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 17), (77, 15), (80, 14), (83, 13), (86, 14), (89, 15), (92, 17), (96, 20), (100, 21), (106, 23), (127, 23))
 # The sunlit face runs from the summit down this spur to the foot of the mountain.
@@ -268,16 +275,12 @@ MOUNTAIN_LIT_FACE = ((83, 13), (80, 14), (77, 15), (74, 17), (70, 20), (66, 22),
 MOUNTAIN_SHADE, MOUNTAIN_LIT = 0.3, 0.16
 TREE_X, TREE_CANOPY_Y = 111, 15
 # Small conifers flanking the hut: (trunk x, base row, height); the apex is at row base - height.
-CONIFERS = ((4, 28, 12), (38, 25, 7))
-HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
+CONIFERS = ((4, 28, 12), (40, 25, 7))
+# Every hut style shares the door, so the dog's doorway (DOG_DOORWAY) fits them all.
 HUT_DOOR = (26, 21, 29, 25)
 HUT_KNOB = (28, 23)
-# A small stone chimney on the right roof slope: body box, cap row, and the flue mouth the smoke leaves from.
-CHIMNEY = (31, 14, 32, 17)
-CHIMNEY_CAP = (31, 13, 32, 13)
-CHIMNEY_FLUE = (31.5, 12.5)
-LAMP_POST_X = 14
-LAMP_LENS = (17, 17)
+LAMP_POST_X = 11
+LAMP_LENS = (14, 17)
 LAMP_GROUND_Y = 26
 LAMP_SECONDS = 3 * 3600
 LAMP_WARMUP_SECONDS = 40
@@ -308,6 +311,246 @@ TREE_CLUMPS = (
 # The temperature label owns rows 1-6; leaves never start above this row.
 TREE_FOLIAGE_TOP = 7
 TREE_BLOSSOMS = ((-8, -3), (-2, -5), (5, 1), (4, 2), (7, -3))
+# Hut layout shared by the styles: the walls, and a window either side of the door, each a 4x5 frame around
+# a 2x3 pane that looks through the hut onto the sky over the far hill.
+HUT_WALLS = (19, 19, 36, 25)
+HUT_WINDOW_FRAMES = ((21, 20, 24, 24), (31, 20, 34, 24))
+HUT_PANES = ((22, 21, 23, 23), (32, 21, 33, 23))
+# The ridge's treetop at this column would fill the hut's right-hand pane, so it is left out.
+RIDGE_GAP = 32
+# The materials a HutStyle colors.
+HUT_MATERIALS = ("hut", "hut_detail", "shingle", "shingle_detail", "frame", "door", "accent", "chimney")
+
+
+def polygon_pixels(points) -> list[tuple[int, int]]:
+    """The pixels ImageDraw fills for a polygon, for texturing a shape after drawing it."""
+    mask = Image.new("1", (WIDTH, HEIGHT), 0)
+    ImageDraw.Draw(mask).polygon(points, fill=1)
+    return [(int(x), int(y)) for y, x in np.argwhere(np.asarray(mask))]
+
+
+@dataclass(frozen=True)
+class HutStyle:
+    label: str
+    # Daylight colors for every HUT_MATERIALS entry; dusk and night are relit from them (hut_palettes).
+    colors: tuple[tuple[str, Color], ...]
+    # The roof's upper outline from eave to eave: snow settles along it and the Christmas lights follow it.
+    roof: tuple[tuple[int, int], ...]
+    # Chimney body (x0, y0, x1, y1) on the right-hand slope; its cap is the row above, and smoke leaves just over the cap.
+    chimney: Box
+    # See-through panes: the land and sky behind the hut show through them.
+    panes: tuple[Box, ...]
+    # Draws the walls, roof and trim into the land mask; the chimney, panes, door and knob go on top.
+    draw: Callable[[ImageDraw.ImageDraw], None]
+
+
+CABIN_ROOF = ((17, 18), (27, 13), (28, 13), (38, 18))
+
+
+def draw_log_cabin(d: ImageDraw.ImageDraw):
+    """Round logs with crossed corners, cream window frames and a green shingle roof."""
+    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+    for y in (20, 22, 24):
+        d.line((19, y, 36, y), fill=INDEX["hut_detail"])
+    # The logs cross at the corners, and their cut ends stick out past the walls.
+    for y in (19, 21, 23, 25):
+        d.point(((18, y), (37, y)), fill=INDEX["accent"])
+    for frame in HUT_WINDOW_FRAMES:
+        d.rectangle(frame, fill=INDEX["frame"])
+    d.polygon(CABIN_ROOF, fill=INDEX["shingle"])
+    for x, y in polygon_pixels(CABIN_ROOF):
+        if y in (16, 18):
+            d.point((x, y), fill=INDEX["shingle_detail"])
+
+
+COTTAGE_ROOF = ((18, 18), (27, 11), (28, 11), (37, 18))
+
+
+def draw_red_cottage(d: ImageDraw.ImageDraw):
+    """A Swedish falu-red board cottage: white corner boards, frames and fascia under a steep black tile roof."""
+    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+    for x in range(20, 36, 3):
+        d.line((x, 19, x, 25), fill=INDEX["hut_detail"])
+    d.line((19, 19, 19, 25), fill=INDEX["frame"])
+    d.line((36, 19, 36, 25), fill=INDEX["frame"])
+    for frame in HUT_WINDOW_FRAMES:
+        d.rectangle(frame, fill=INDEX["frame"])
+    d.polygon(COTTAGE_ROOF, fill=INDEX["shingle"])
+    for x, y in polygon_pixels(COTTAGE_ROOF):
+        if y % 2 == 0 and y < 18:
+            d.point((x, y), fill=INDEX["shingle_detail"])
+    d.line((18, 18, 37, 18), fill=INDEX["frame"])
+    # A small attic window in the gable.
+    d.rectangle((26, 13, 29, 16), fill=INDEX["frame"])
+
+
+STONE_ROOF = ((17, 19), (18, 17), (20, 16), (23, 15), (32, 15), (35, 16), (37, 17), (38, 19))
+
+
+def draw_stone_cottage(d: ImageDraw.ImageDraw):
+    """Fieldstone walls and oak window frames under a deep, rounded thatch with a ragged eave."""
+    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+    for x in range(HUT_WALLS[0], HUT_WALLS[2] + 1):
+        for y in range(HUT_WALLS[1], HUT_WALLS[3] + 1):
+            if grain(x, y, 41) < 30:
+                d.point((x, y), fill=INDEX["hut_detail"])
+    for frame in HUT_WINDOW_FRAMES:
+        d.rectangle(frame, fill=INDEX["frame"])
+    d.polygon(STONE_ROOF, fill=INDEX["shingle"])
+    # A darker ridge cap, a course line, and an eave fringed with the straw's cut ends.
+    for x, y in polygon_pixels(STONE_ROOF):
+        if y in (15, 17) or (y == 19 and x % 3 != 1):
+            d.point((x, y), fill=INDEX["accent" if y == 15 else "shingle_detail"])
+
+
+A_FRAME_ROOF = ((17, 25), (27, 12), (28, 12), (38, 25))
+A_FRAME_FACADE = ((20, 25), (27, 15), (28, 15), (35, 25))
+# The glass gable over the door, stepped to follow the roof: a tall middle pane between two lower side panes.
+A_FRAME_PANES = ((27, 17, 28, 20), (25, 19, 25, 20), (30, 19, 30, 20))
+
+
+def draw_a_frame(d: ImageDraw.ImageDraw):
+    """A steep black A-frame down to the ground around a board-and-batten cedar front with a glass gable."""
+    d.polygon(A_FRAME_ROOF, fill=INDEX["shingle"])
+    d.polygon(A_FRAME_FACADE, fill=INDEX["hut"])
+    for x, y in polygon_pixels(A_FRAME_FACADE):
+        if x % 3 == 0 and y > 21:
+            d.point((x, y), fill=INDEX["hut_detail"])
+    # Mullions between the panes, and a beam over the door.
+    d.rectangle((24, 18, 31, 21), fill=INDEX["frame"])
+    d.rectangle((26, 16, 29, 17), fill=INDEX["frame"])
+    d.line((22, 21, 33, 21), fill=INDEX["frame"])
+
+
+GAMBREL_ROOF = ((17, 18), (19, 15), (27, 13), (28, 13), (36, 15), (38, 18))
+
+
+def draw_gambrel_cottage(d: ImageDraw.ImageDraw):
+    """A pale blue clapboard cottage with white trim, a red door and a slate gambrel roof with an attic window."""
+    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+    for y in (20, 22, 24):
+        d.line((19, y, 36, y), fill=INDEX["hut_detail"])
+    d.line((19, 19, 19, 25), fill=INDEX["frame"])
+    d.line((36, 19, 36, 25), fill=INDEX["frame"])
+    for frame in HUT_WINDOW_FRAMES:
+        d.rectangle(frame, fill=INDEX["frame"])
+    d.polygon(GAMBREL_ROOF, fill=INDEX["shingle"])
+    for x, y in polygon_pixels(GAMBREL_ROOF):
+        if y % 2 == 1 and y < 18:
+            d.point((x, y), fill=INDEX["shingle_detail"])
+    d.line((17, 18, 38, 18), fill=INDEX["frame"])
+    d.rectangle((26, 14, 29, 17), fill=INDEX["frame"])
+
+
+CHALET_ROOF = ((17, 17), (27, 13), (28, 13), (38, 17))
+
+
+def draw_chalet(d: ImageDraw.ImageDraw):
+    """An alpine chalet: whitewashed walls in dark timber, green shutters, red geranium boxes and a wide tile roof."""
+    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+    d.line((19, 19, 36, 19), fill=INDEX["hut_detail"])
+    for x in (19, 25, 30, 36):
+        d.line((x, 19, x, 25), fill=INDEX["hut_detail"])
+    # Each window: a timber lintel, shutters either side and a geranium box below.
+    for x0, y0, x1, y1 in HUT_WINDOW_FRAMES:
+        d.line((x0, y0, x1, y0), fill=INDEX["hut_detail"])
+        d.line((x0, y0 + 1, x0, y1 - 1), fill=INDEX["frame"])
+        d.line((x1, y0 + 1, x1, y1 - 1), fill=INDEX["frame"])
+        d.line((x0, y1, x1, y1), fill=INDEX["accent"])
+    d.polygon(CHALET_ROOF, fill=INDEX["shingle"])
+    for x, y in polygon_pixels(CHALET_ROOF):
+        if y % 2 == 0:
+            d.point((x, y), fill=INDEX["shingle_detail"])
+    # The deep eave shows its rafter ends.
+    d.line((17, 18, 38, 18), fill=INDEX["shingle_detail"])
+    for x in range(17, 39, 3):
+        d.point((x, 18), fill=INDEX["hut_detail"])
+
+
+# Hut styles the Outside lab can switch between (outside_lab.HUTS); DEFAULT_HUT shows otherwise.
+HUT_STYLES = {
+    "cabin": HutStyle(
+        "Log cabin",
+        (("hut", (176, 122, 72)), ("hut_detail", (102, 66, 40)), ("accent", (220, 180, 124)), ("shingle", (82, 124, 80)), ("shingle_detail", (50, 82, 56)), ("frame", (234, 216, 172)), ("door", (126, 48, 36)), ("chimney", (128, 120, 108))),
+        CABIN_ROOF,
+        (33, 14, 34, 16),
+        HUT_PANES,
+        draw_log_cabin,
+    ),
+    "red": HutStyle(
+        "Red cottage",
+        (("hut", (152, 46, 36)), ("hut_detail", (118, 34, 28)), ("accent", (240, 236, 226)), ("shingle", (58, 58, 64)), ("shingle_detail", (40, 40, 46)), ("frame", (240, 236, 226)), ("door", (48, 88, 92)), ("chimney", (196, 190, 180))),
+        COTTAGE_ROOF,
+        (34, 14, 35, 16),
+        (*HUT_PANES, (27, 14, 28, 15)),
+        draw_red_cottage,
+    ),
+    "stone": HutStyle(
+        "Stone cottage",
+        (("hut", (150, 146, 134)), ("hut_detail", (108, 104, 98)), ("accent", (160, 124, 62)), ("shingle", (200, 164, 88)), ("shingle_detail", (150, 116, 58)), ("frame", (96, 64, 40)), ("door", (62, 98, 124)), ("chimney", (152, 86, 62))),
+        STONE_ROOF,
+        (32, 13, 34, 15),
+        HUT_PANES,
+        draw_stone_cottage,
+    ),
+    "a_frame": HutStyle(
+        "A-frame",
+        (("hut", (190, 114, 60)), ("hut_detail", (146, 84, 44)), ("accent", (190, 114, 60)), ("shingle", (46, 46, 52)), ("shingle_detail", (90, 90, 98)), ("frame", (226, 220, 204)), ("door", (226, 172, 52)), ("chimney", (132, 126, 118))),
+        A_FRAME_ROOF,
+        (33, 14, 34, 18),
+        A_FRAME_PANES,
+        draw_a_frame,
+    ),
+    "gambrel": HutStyle(
+        "Blue gambrel",
+        (("hut", (150, 184, 206)), ("hut_detail", (116, 148, 174)), ("accent", (240, 240, 232)), ("shingle", (112, 122, 138)), ("shingle_detail", (84, 92, 108)), ("frame", (240, 240, 232)), ("door", (172, 40, 46)), ("chimney", (156, 72, 56))),
+        GAMBREL_ROOF,
+        (33, 13, 34, 15),
+        (*HUT_PANES, (27, 15, 28, 16)),
+        draw_gambrel_cottage,
+    ),
+    "chalet": HutStyle(
+        "Alpine chalet",
+        (("hut", (232, 226, 210)), ("hut_detail", (92, 58, 38)), ("accent", (206, 46, 56)), ("shingle", (168, 84, 54)), ("shingle_detail", (128, 60, 42)), ("frame", (62, 104, 62)), ("door", (96, 60, 38)), ("chimney", (210, 204, 192))),
+        CHALET_ROOF,
+        (32, 13, 33, 15),
+        HUT_PANES,
+        draw_chalet,
+    ),
+}
+DEFAULT_HUT = "cabin"
+assert all({name for name, _ in style.colors} == set(HUT_MATERIALS) for style in HUT_STYLES.values()), "every hut style colors every hut material"
+# Built materials whose hand-tuned dusk and night colors the hut styles are relit to match.
+RELIGHT_MATERIALS = ("hut", "trim", "door", "shingle", "roof", "dog", "trunk", "snowcap")
+
+
+def relighting(target: Palette) -> tuple[float, float, float, float, float]:
+    """A least-squares fit from DAY to `target` over RELIGHT_MATERIALS in Oklab: L' = a L + b, and (A', B') = c (A, B) + (dA, dB)."""
+    day = to_oklab(np.array([getattr(DAY, name) for name in RELIGHT_MATERIALS]))
+    lit = to_oklab(np.array([getattr(target, name) for name in RELIGHT_MATERIALS]))
+    (a, b), *_ = np.linalg.lstsq(np.c_[day[:, 0], np.ones(len(day))], lit[:, 0], rcond=None)
+    count = len(day)
+    chroma = np.zeros((2 * count, 3))
+    chroma[:count, 0], chroma[count:, 0] = day[:, 1], day[:, 2]
+    chroma[:count, 1] = chroma[count:, 2] = 1
+    (c, da, db), *_ = np.linalg.lstsq(chroma, np.r_[lit[:, 1], lit[:, 2]], rcond=None)
+    return a, b, c, da, db
+
+
+@lru_cache(maxsize=16)
+def hut_palettes(hut: str) -> tuple[Palette, Palette, Palette]:
+    """DAY, DUSK and NIGHT carrying the hut style's colors, relit for dusk and night like the hand-tuned materials."""
+    names, colors = zip(*HUT_STYLES[hut].colors)
+    day = np.array(colors)
+    palettes = []
+    for base in (DAY, DUSK, NIGHT):
+        lit = day
+        if base is not DAY:
+            a, b, c, da, db = relighting(base)
+            lab = to_oklab(day)
+            lit = from_oklab(np.stack([a * lab[:, 0] + b, c * lab[:, 1] + da, c * lab[:, 2] + db], axis=-1))
+        palettes.append(replace(base, **{name: tuple(int(value) for value in color) for name, color in zip(names, lit)}))
+    return tuple(palettes)
 
 
 def blend_palette(a: Palette, b: Palette, fraction: float) -> Palette:
@@ -345,12 +588,13 @@ def moonlight(environment: "OutsideEnvironment") -> float:
 def scene_palette(environment: "OutsideEnvironment") -> Palette:
     altitude = environment.sun_altitude
     altitude = 0 if altitude is None else altitude
+    day, dusk, night = hut_palettes(environment.hut)
     if altitude < 0:
-        palette = blend_palette(NIGHT, DUSK, 1 - altitude / NIGHT_ALTITUDE)
+        palette = blend_palette(night, dusk, 1 - altitude / NIGHT_ALTITUDE)
         illumination = moonlight(environment) * max(0, min(1, altitude / NIGHT_ALTITUDE))
         palette = Palette(*(mix(getattr(palette, name), (106, 133, 157), illumination * (0.075 if name in ("top", "middle", "horizon") else 0.12)) for name in MATERIALS))
     else:
-        palette = blend_palette(DUSK, DAY, altitude / 14)
+        palette = blend_palette(dusk, day, altitude / 14)
     daylight = max(0.12, min(1, (altitude + 10) / 20))
     if environment.season == "autumn":
         palette = replace(palette, leaf=mix(palette.leaf, (146, 84, 47), daylight * 0.45), leaf_light=mix(palette.leaf_light, (229, 153, 63), daylight * 0.55), grass=mix(palette.grass, (167, 142, 76), daylight * 0.2))
@@ -382,39 +626,46 @@ def grade_frame(image: Image.Image) -> Image.Image:
     return Image.fromarray(from_oklab(lab), "RGB")
 
 
-def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
+def hill(d: ImageDraw.ImageDraw, points, material: str):
+    d.polygon([(0, 31), *points, (127, 31)], fill=INDEX[material])
+
+
+def backdrop() -> Image.Image:
+    """The land behind the hut: the mountain, the hills, the ridge's treeline and the field."""
     land = Image.new("P", (WIDTH, HEIGHT), 0)
     d = ImageDraw.Draw(land)
-
-    def hill(points, material):
-        d.polygon([(0, 31), *points, (127, 31)], fill=INDEX[material])
-
-    hill([*MOUNTAIN], "far")
+    hill(d, [*MOUNTAIN], "far")
     d.polygon(MOUNTAIN_LIT_FACE, fill=INDEX["peak"])
-    hill([(0, 23), (20, 22), (35, 23), (57, 22), (76, 23), (97, 22), (127, 23)], "hill")
+    hill(d, [(0, 23), (20, 22), (35, 23), (57, 22), (76, 23), (97, 22), (127, 23)], "hill")
     for x in range(0, 100, 4):
+        if x == RIDGE_GAP:
+            continue
         height = 2 + grain(x, 24) % 3
         if grain(x, 24, 3) < 55:
             d.ellipse((x - 2, 24 - height, x + 2, 24), fill=INDEX["ridge"])
         else:
             d.polygon([(x, 24 - height), (x - 2, 24), (x + 2, 24)], fill=INDEX["ridge"])
-    hill([(0, 26), (29, 25), (51, 27), (82, 25), (110, 26), (127, 25)], "field")
-    # Wood hut: plank walls with corner posts, a shingled roof and a front door with a knob.
-    d.rectangle((21, 20, 34, 25), fill=INDEX["hut"])
-    for y in (22, 24):
-        d.line((21, y, 34, y), fill=INDEX["trunk"])
-    d.line((21, 20, 21, 25), fill=INDEX["trunk"])
-    d.line((34, 20, 34, 25), fill=INDEX["trunk"])
-    d.polygon(HUT_ROOF, fill=INDEX["shingle"])
-    for y in (17, 19):
-        inset = math.ceil((20 - y) * 8 / 5)
-        d.line((19 + inset, y, 36 - inset, y), fill=INDEX["trunk"])
-    d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
-    d.line((19, 20, 36, 20), fill=INDEX["trunk"])
-    d.rectangle(CHIMNEY, fill=INDEX["chimney"])
-    d.rectangle(CHIMNEY_CAP, fill=INDEX["roof"])
-    d.rectangle(HUT_DOOR, fill=INDEX["door"])
-    d.point(HUT_KNOB, fill=INDEX["trim"])
+    hill(d, [(0, 26), (29, 25), (51, 27), (82, 25), (110, 26), (127, 25)], "field")
+    return land
+
+
+BACKDROP = backdrop()
+
+
+def land_geometry(style: HutStyle | None) -> Image.Image:
+    """The land mask with a hut in the given style, or with no hut."""
+    land = BACKDROP.copy()
+    d = ImageDraw.Draw(land)
+    if style is not None:
+        style.draw(d)
+        x0, y0, x1, _ = style.chimney
+        d.rectangle(style.chimney, fill=INDEX["chimney"])
+        d.rectangle((x0, y0 - 1, x1, y0 - 1), fill=INDEX["roof"])
+        # Panes show whatever stands behind the hut; the sky behind them stays transparent.
+        for left, top, right, bottom in style.panes:
+            land.paste(BACKDROP.crop((left, top, right + 1, bottom + 1)), (left, top))
+        d.rectangle(HUT_DOOR, fill=INDEX["door"])
+        d.point(HUT_KNOB, fill=INDEX["trim"])
     # Yard lamp: a post with an arm reaching toward the hut and a hood that shines down.
     lens_x, lens_y = LAMP_LENS
     d.line((LAMP_POST_X, lens_y - 1, LAMP_POST_X, LAMP_GROUND_Y), fill=INDEX["roof"])
@@ -427,7 +678,7 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
             w, y = max(1, offset // 3), base - height + offset
             d.polygon([(x, y - 2), (x - w, y + 1), (x + w, y + 1)], fill=INDEX["leaf_dark"])
             d.line((x - w, y + 1, x, y), fill=INDEX["leaf"])
-    hill([(0, 29), (20, 28), (45, 30), (79, 28), (102, 29), (127, 28)], "foreground")
+    hill(d, [(0, 29), (20, 28), (45, 30), (79, 28), (102, 29), (127, 28)], "foreground")
     for y in range(29, 32):
         for x in range(WIDTH):
             if grain(x, y, 2) < 9:
@@ -437,6 +688,11 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
     for x in range(3, 41, 6):
         d.line((x, 27, x, 31), fill=INDEX["trunk"])
         d.point((x, 27), fill=INDEX["trim"])
+    return land
+
+
+def tree_geometry() -> tuple[Image.Image, Image.Image]:
+    """The maple's masks: in leaf, and bare for winter."""
     leafy = Image.new("P", (WIDTH, HEIGHT), 0)
     bare = Image.new("P", (WIDTH, HEIGHT), 0)
     trunk = INDEX["trunk"]
@@ -484,13 +740,24 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         if n < 4 and shade < 0.2:
             continue
         pixels[x, y] = INDEX[material]
-    return land, leafy, bare
+    return leafy, bare
 
 
-LAND, LEAFY_TREE, BARE_TREE = geometry()
-CHIMNEY_MASK = Image.new("L", (WIDTH, HEIGHT), 0)
-ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY, fill=255)
-ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY_CAP, fill=255)
+# The land without a hut, for lookups that never involve it (the pond, the meadow); HUT_LAND has each style's.
+LAND = land_geometry(None)
+HUT_LAND = {name: land_geometry(style) for name, style in HUT_STYLES.items()}
+LEAFY_TREE, BARE_TREE = tree_geometry()
+
+
+def chimney_mask(style: HutStyle) -> Image.Image:
+    """The chimney and its cap, which the roof's snow line and the gable's Christmas lights pass behind."""
+    x0, y0, x1, y1 = style.chimney
+    mask = Image.new("L", (WIDTH, HEIGHT), 0)
+    ImageDraw.Draw(mask).rectangle((x0, y0 - 1, x1, y1), fill=255)
+    return mask
+
+
+CHIMNEY_MASKS = {name: chimney_mask(style) for name, style in HUT_STYLES.items()}
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
 # The Big Dipper (Ursa Major) right of the mountain, projected from the real stars at 0.7 px per degree in its
@@ -541,7 +808,8 @@ POINTERS = (
 CONSTELLATIONS = {"north": (BIG_DIPPER, ORION_BELT), "south": (SOUTHERN_CROSS + POINTERS, SAUCEPAN)}
 # Haze near the horizon hides faint stars, so field stars stay more than this many pixels from any land.
 STAR_HORIZON_CLEARANCE = 4
-LAND_ROWS, LAND_COLUMNS = np.nonzero(np.asarray(LAND))
+# Clearance is measured from every hut style's land, so the field stars stay put when the lab switches huts.
+LAND_ROWS, LAND_COLUMNS = np.nonzero(np.logical_or.reduce([np.asarray(land) > 0 for land in HUT_LAND.values()]))
 
 
 def field_stars(groups) -> tuple[tuple[int, int, int], ...]:
@@ -633,14 +901,13 @@ def draw_moon(image: Image.Image, cx: int, cy: int, phase: float, lit_strength: 
 
 
 @lru_cache(maxsize=96)
-def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
+def landscape(palette: Palette, hut: str, bare: bool, snow: bool, snowcap: bool):
     mountain = mix(palette.far, (0, 0, 0), MOUNTAIN_SHADE)
     table = [0, 0, 0]
     for name in MATERIALS:
         table.extend(mountain if name == "far" else getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
     table.extend(mix(mountain, palette.horizon, MOUNTAIN_LIT))
-    table.extend(mix(palette.roof, palette.trim, 0.3))
     table.extend([0] * (768 - len(table)))
 
     def colorize(mask):
@@ -650,19 +917,21 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
         image.putalpha(mask.point([0] + [255] * 255, "L"))
         return image
 
-    land = colorize(LAND)
+    land = colorize(HUT_LAND[hut])
     foliage = None if bare else colorize(TREE_FOLIAGE)
     wood = colorize(BARE_TREE if bare else TREE_WOOD)
     if snow:
         d = ImageDraw.Draw(land)
         for x in range(128):
-            if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["hut"], INDEX["door"]):
+            if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"]):
                 d.point((x, 26), fill=palette.grass)
+        style = HUT_STYLES[hut]
         chimney = land.copy()
-        d.line((19, 19, 27, 15, 28, 15, 36, 19), fill=palette.trim)
+        d.line(style.roof, fill=palette.trim)
         # The roof's snow stops at the chimney, which carries its own cap of snow.
-        land.paste(chimney, (0, 0), CHIMNEY_MASK)
-        d.line((CHIMNEY_CAP[0], CHIMNEY_CAP[1] - 1, CHIMNEY_CAP[2], CHIMNEY_CAP[1] - 1), fill=palette.trim)
+        land.paste(chimney, (0, 0), CHIMNEY_MASKS[hut])
+        x0, y0, x1, _ = style.chimney
+        d.line((x0, y0 - 2, x1, y0 - 2), fill=palette.trim)
         d.line((3, 27, 40, 27), fill=palette.grass)
     if snowcap:
         d = ImageDraw.Draw(land)
@@ -866,9 +1135,6 @@ def shooting_star(slot: int, seed: int) -> ShootingStar | None:
     start = slot * SHOOTING_STAR_SLOT_SECONDS + rng.uniform(0, SHOOTING_STAR_SLOT_SECONDS - duration)
     velocity = (direction * distance * math.cos(angle) / duration, distance * math.sin(angle) / duration)
     return ShootingStar(start, duration, (x, y), velocity, rng.uniform(0.75, 1.0))
-
-
-Box = tuple[int, int, int, int]
 
 
 def in_boxes(x: int, y: int, boxes: tuple[Box, ...]) -> bool:
@@ -1260,6 +1526,9 @@ def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) ->
     life = SMOKE_LIFETIME / (1 + wind / 60)
     rise = SMOKE_RISE / (1 + wind / SMOKE_BEND_WIND)
     drift = wind * SMOKE_WIND_DRIFT
+    # Puffs leave from just above the middle of the chimney's cap.
+    x0, y0, x1, _ = HUT_STYLES[environment.hut].chimney
+    flue_x, flue_y = (x0 + x1) / 2, y0 - 1.5
     newest = math.floor(elapsed / SMOKE_INTERVAL)
     puffs = []
     for n in range(newest - math.ceil(life / SMOKE_INTERVAL), newest + 1):
@@ -1273,8 +1542,8 @@ def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) ->
         across = drift * (age - 0.4 * (1 - math.exp(-age / 0.4)))
         # A faint sway keeps a calm column alive without leaning it; gusts toss puffs more.
         wobble = math.sin(age * 1.7 + phase) * (0.3 + wind / 40) * min(1, age)
-        x = CHIMNEY_FLUE[0] + across + wobble
-        y = CHIMNEY_FLUE[1] - up + math.cos(age * 2.3 + phase) * wind / 60 * min(1, age)
+        x = flue_x + across + wobble
+        y = flue_y - up + math.cos(age * 2.3 + phase) * wind / 60 * min(1, age)
         opacity = SMOKE_OPACITY * strength * min(1, age / 0.15) * min(1, (life - age) / SMOKE_FADE_SECONDS)
         radius = min(SMOKE_MAX_RADIUS, SMOKE_RADIUS + SMOKE_GROWTH * age) * lump
         puffs.append((x, y, radius, opacity))
@@ -2141,10 +2410,11 @@ LIGHTNING_CORE = (255, 255, 255)
 THUNDERSTORM_ACTIVITY = {200: 0.7, 201: 1.0, 202: 1.4, 210: 0.5, 211: 1.0, 212: 1.6, 221: 1.1, 230: 0.6, 231: 0.9, 232: 1.2}
 # How strongly each lightning kind lights the whole sky versus the region around the bolt, and that region's width.
 LIGHTNING_LIGHT = {"ground": (0.5, 0.45, 26), "cloud": (0.22, 0.6, 18), "sheet": (0.12, 0.35, 34)}
-SURFACE = tuple(next(y for y in range(HEIGHT) if LAND.getpixel((x, y))) for x in range(WIDTH))
-SCENERY = (np.asarray(LAND) > 0) | (np.asarray(LEAFY_TREE) > 0) | (np.asarray(BARE_TREE) > 0)
+# Per hut style: the top row of the land in each column, where a ground bolt strikes, and the scenery that hides bolts.
+SURFACES = {hut: tuple(next(y for y in range(HEIGHT) if land.getpixel((x, y))) for x in range(WIDTH)) for hut, land in HUT_LAND.items()}
+SCENERY = {hut: (np.asarray(land) > 0) | (np.asarray(LEAFY_TREE) > 0) | (np.asarray(BARE_TREE) > 0) for hut, land in HUT_LAND.items()}
 # Scenery catches less of the flash than open sky.
-FLASH_RECEIVE = np.where(SCENERY, 0.38, 1.0)
+FLASH_RECEIVE = {hut: np.where(scenery, 0.38, 1.0) for hut, scenery in SCENERY.items()}
 FLASH_COLUMNS = np.arange(WIDTH)
 FLASH_FALLOFF = np.linspace(1, 0.65, HEIGHT)
 
@@ -2183,7 +2453,7 @@ def trace(points: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return pixels
 
 
-def ground_bolt(rng: random.Random):
+def ground_bolt(rng: random.Random, surface: tuple[int, ...]):
     target = rng.randint(6, 100)
     x, y = max(4, min(100, target + rng.randint(-18, 18))), rng.randint(1, 4)
     points = [(x, y)]
@@ -2198,10 +2468,10 @@ def ground_bolt(rng: random.Random):
         y += rng.randint(2, 4)
         # Wander, drifting toward the strike target, until the bolt meets the land surface.
         x = max(2, min(102, round(x + max(-2, min(2, (target - x) / 4)) + rng.choice((-3, -2, -1, 0, 1, 2, 3)))))
-        if y >= SURFACE[x] - 1:
-            if SURFACE[x] - 1 < previous_y:
+        if y >= surface[x] - 1:
+            if surface[x] - 1 < previous_y:
                 x = previous_x
-            points.append((x, SURFACE[x] - 1))
+            points.append((x, surface[x] - 1))
             break
         points.append((x, y))
     channel = trace(points)
@@ -2212,11 +2482,11 @@ def ground_bolt(rng: random.Random):
         fork = [(bx, by)]
         for _ in range(rng.randint(2, 5)):
             bx, by = bx + side * rng.randint(1, 3), by + rng.randint(1, 3)
-            if by >= SURFACE[max(0, min(WIDTH - 1, bx))] - 1:
+            if by >= surface[max(0, min(WIDTH - 1, bx))] - 1:
                 break
             fork.append((bx, by))
         branches.extend(trace(fork)[1:])
-    return x, tuple(channel), tuple(dict.fromkeys(branches)), (x, SURFACE[x])
+    return x, tuple(channel), tuple(dict.fromkeys(branches)), (x, surface[x])
 
 
 def cloud_bolt(rng: random.Random):
@@ -2243,7 +2513,7 @@ def cloud_bolt(rng: random.Random):
 
 
 @lru_cache(maxsize=32)
-def lightning_event(slot: int, seed: int, activity: float) -> LightningEvent | None:
+def lightning_event(slot: int, seed: int, activity: float, hut: str) -> LightningEvent | None:
     rng = random.Random(seed * 7919 + slot * 104729 + 17)
     if rng.random() >= min(0.85, 0.42 * activity):
         return None
@@ -2251,7 +2521,7 @@ def lightning_event(slot: int, seed: int, activity: float) -> LightningEvent | N
     roll = rng.random()
     kind = "ground" if roll < 0.45 else "cloud" if roll < 0.85 else "sheet"
     if kind == "ground":
-        center, channel, branches, strike = ground_bolt(rng)
+        center, channel, branches, strike = ground_bolt(rng, SURFACES[hut])
         strokes, offset = [(0.0, 1.0)], 0.0
         for _ in range(rng.choice((1, 2, 2, 3))):
             offset += rng.uniform(0.06, 0.16)
@@ -2279,7 +2549,7 @@ def lightning_at(environment: "OutsideEnvironment", elapsed: float, seed: int) -
     activity = THUNDERSTORM_ACTIVITY.get(code, 1.0)
     slot = math.floor(elapsed / LIGHTNING_SLOT_SECONDS)
     for candidate in (slot, slot - 1):
-        event = lightning_event(candidate, seed, activity)
+        event = lightning_event(candidate, seed, activity, environment.hut)
         if event is not None:
             age = elapsed - event.start
             if (-LIGHTNING_LEADER_SECONDS if event.kind == "ground" else 0) <= age <= event.end:
@@ -2292,22 +2562,23 @@ def lightning_light(event: LightningEvent, intensity: float, column: float) -> f
     return intensity * (base + local * math.exp(-0.5 * ((column - event.center) / spread) ** 2))
 
 
-def flash_scene(image: Image.Image, event: LightningEvent, intensity: float, clouds: np.ndarray) -> Image.Image:
+def flash_scene(image: Image.Image, event: LightningEvent, intensity: float, clouds: np.ndarray, hut: str) -> Image.Image:
     base, local, spread = LIGHTNING_LIGHT[event.kind]
     across = base + local * np.exp(-0.5 * ((FLASH_COLUMNS - event.center) / spread) ** 2)
     # Clouds are already lit from within, so the general flash only half-lights them to keep their shape.
-    receive = np.where(clouds, FLASH_RECEIVE * 0.5, FLASH_RECEIVE)
+    receive = np.where(clouds, FLASH_RECEIVE[hut] * 0.5, FLASH_RECEIVE[hut])
     light = np.clip(intensity * across[None, :] * FLASH_FALLOFF[:, None] * receive, 0, 0.92)[..., None]
     pixels = np.asarray(image, dtype=np.float32)
     return Image.fromarray(np.round(pixels + (np.array(LIGHTNING_FLASH, dtype=np.float32) - pixels) * light).astype(np.uint8), "RGB")
 
 
-def draw_lightning(image: Image.Image, event: LightningEvent, age: float):
+def draw_lightning(image: Image.Image, event: LightningEvent, age: float, hut: str):
     d = ImageDraw.Draw(image)
+    scenery = SCENERY[hut]
 
     def light(pixels, color, amount):
         for x, y in pixels:
-            if not SCENERY[y, x]:
+            if not scenery[y, x]:
                 d.point((x, y), fill=mix(image.getpixel((x, y)), color, amount))
 
     if age < 0:
@@ -2391,9 +2662,9 @@ TOPPER_GOLD = (255, 206, 60)
 TOPPER_CORE = (255, 250, 214)
 
 
-def christmas_bulbs() -> tuple[tuple[int, int], ...]:
-    """Bulbs strung along the hut's gable (passing behind the chimney) and wound around each conifer."""
-    bulbs = [point for point in trace(list(HUT_ROOF))[::2] if not CHIMNEY_MASK.getpixel(point)]
+def christmas_bulbs(hut: str) -> tuple[tuple[int, int], ...]:
+    """Bulbs strung along the hut's roof line (passing behind the chimney) and wound around each conifer."""
+    bulbs = [point for point in trace(list(HUT_STYLES[hut].roof))[::2] if not CHIMNEY_MASKS[hut].getpixel(point)]
     foliage = (INDEX["leaf"], INDEX["leaf_dark"])
     for cx, base, height in CONIFERS:
         top = base - height
@@ -2405,13 +2676,28 @@ def christmas_bulbs() -> tuple[tuple[int, int], ...]:
     return tuple(dict.fromkeys(bulbs))
 
 
-CHRISTMAS_BULBS = christmas_bulbs()
-CHRISTMAS_BULB_ROWS = np.array([y for _, y in CHRISTMAS_BULBS])
-CHRISTMAS_BULB_COLUMNS = np.array([x for x, _ in CHRISTMAS_BULBS])
-CHRISTMAS_BULB_INDEX = np.arange(len(CHRISTMAS_BULBS))
-CHRISTMAS_BULB_LIGHT = SRGB_TO_LINEAR_ARRAY[np.array([CHRISTMAS_COLORS[index % len(CHRISTMAS_COLORS)] for index in range(len(CHRISTMAS_BULBS))])]
-# Each bulb's neighbors catch a little of its color after dark: (row, column, bulb index).
-CHRISTMAS_HALO = np.array([(y + dy, x + dx, index) for index, (x, y) in enumerate(CHRISTMAS_BULBS) for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (x + dx, y + dy) not in CHRISTMAS_BULBS and 0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT])
+@dataclass(frozen=True)
+class ChristmasLights:
+    rows: np.ndarray
+    columns: np.ndarray
+    index: np.ndarray
+    light: np.ndarray
+    # Each bulb's neighbors catch a little of its color after dark: (row, column, bulb index).
+    halo: np.ndarray
+
+
+def christmas_lights(hut: str) -> ChristmasLights:
+    bulbs = christmas_bulbs(hut)
+    return ChristmasLights(
+        np.array([y for _, y in bulbs]),
+        np.array([x for x, _ in bulbs]),
+        np.arange(len(bulbs)),
+        SRGB_TO_LINEAR_ARRAY[np.array([CHRISTMAS_COLORS[index % len(CHRISTMAS_COLORS)] for index in range(len(bulbs))])],
+        np.array([(y + dy, x + dx, index) for index, (x, y) in enumerate(bulbs) for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if (x + dx, y + dy) not in bulbs and 0 <= x + dx < WIDTH and 0 <= y + dy < HEIGHT]),
+    )
+
+
+CHRISTMAS_LIGHTS = {hut: christmas_lights(hut) for hut in HUT_STYLES}
 # A star sits just above each conifer's apex.
 TREE_TOPPERS = tuple((cx, base - height - 2) for cx, base, height in CONIFERS)
 # A sparse, lopsided handful of glass balls hangs from the bare maple's twigs: (left x, top row) of each 2x2 ball,
@@ -2433,17 +2719,18 @@ def linear_to_srgb_array(linear: np.ndarray) -> np.ndarray:
 
 def draw_christmas_lights(image: Image.Image, environment: "OutsideEnvironment", elapsed: float) -> Image.Image:
     night = holiday_darkness(environment)
-    twinkle = 0.5 + 0.5 * np.sin(elapsed * (1.1 + (CHRISTMAS_BULB_INDEX % 7) * 0.23) + CHRISTMAS_BULB_INDEX * 2.4)
+    lights = CHRISTMAS_LIGHTS[environment.hut]
+    twinkle = 0.5 + 0.5 * np.sin(elapsed * (1.1 + (lights.index % 7) * 0.23) + lights.index * 2.4)
     # Blend in linear light, converting only the pixels the lights touch.
     pixels = np.array(image)
     if night > 0:
-        rows, columns, bulbs = CHRISTMAS_HALO.T
+        rows, columns, bulbs = lights.halo.T
         halo = SRGB_TO_LINEAR_ARRAY[pixels[rows, columns]]
-        halo += (CHRISTMAS_BULB_LIGHT[bulbs] - halo) * (0.28 * night * (0.72 + 0.28 * twinkle[bulbs]))[:, None]
+        halo += (lights.light[bulbs] - halo) * (0.28 * night * (0.72 + 0.28 * twinkle[bulbs]))[:, None]
         pixels[rows, columns] = linear_to_srgb_array(halo)
-    bulb = SRGB_TO_LINEAR_ARRAY[pixels[CHRISTMAS_BULB_ROWS, CHRISTMAS_BULB_COLUMNS]]
-    bulb += (CHRISTMAS_BULB_LIGHT - bulb) * 0.9
-    pixels[CHRISTMAS_BULB_ROWS, CHRISTMAS_BULB_COLUMNS] = linear_to_srgb_array(bulb + (1 - bulb) * (0.12 * twinkle)[:, None])
+    bulb = SRGB_TO_LINEAR_ARRAY[pixels[lights.rows, lights.columns]]
+    bulb += (lights.light - bulb) * 0.9
+    pixels[lights.rows, lights.columns] = linear_to_srgb_array(bulb + (1 - bulb) * (0.12 * twinkle)[:, None])
     image = Image.fromarray(pixels, "RGB")
     d = ImageDraw.Draw(image)
     for index, (x, y) in enumerate(TREE_TOPPERS):
@@ -4630,7 +4917,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
-    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0)
+    land, foliage, wood = landscape(palette, environment.hut, winter, snow > 0, winter or snow > 0)
     image.paste(land, (0, 0), land)
     d = ImageDraw.Draw(image)
     for x, y, width, phase in RIPPLES:
@@ -4738,8 +5025,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     if lightning is not None:
         event, age = lightning
         if age >= 0 and event.intensity(age) > 0.01:
-            image = flash_scene(image, event, event.intensity(age), clouds)
-        draw_lightning(image, event, age)
+            image = flash_scene(image, event, event.intensity(age), clouds, environment.hut)
+        draw_lightning(image, event, age, environment.hut)
     return grade_frame(image)
 
 

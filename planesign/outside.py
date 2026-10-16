@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, draw_outside_frame, holiday_features, summon_start
+from outside_scene import DEFAULT_HUT, NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, draw_outside_frame, holiday_features, summon_start
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -76,6 +76,8 @@ class OutsideEnvironment:
     beach: bool = False
     # "north" or "south": picks the constellations and, with the date, the season.
     hemisphere: str = "north"
+    # The hut's style, an outside_scene.HUT_STYLES key; the Outside lab can switch it.
+    hut: str = DEFAULT_HUT
 
 
 def reading(value):
@@ -144,7 +146,7 @@ def outside_time() -> float:
 
 
 def lab_active(data_dict) -> bool:
-    return lab_time() is not None or any(data_dict.get(key) is not None for key in ("outside_lab_weather", "outside_lab_moon", "outside_lab_hemisphere"))
+    return lab_time() is not None or any(data_dict.get(key) is not None for key in ("outside_lab_weather", "outside_lab_moon", "outside_lab_hemisphere", "outside_lab_hut"))
 
 
 def bump_lab_version():
@@ -159,9 +161,10 @@ def clear_lab(data_dict, reason: str):
     data_dict["outside_lab_weather"] = None
     data_dict["outside_lab_moon"] = None
     data_dict["outside_lab_hemisphere"] = None
+    data_dict["outside_lab_hut"] = None
     bump_lab_version()
     shared_config.shared_outside_time_update.set()
-    logger.info("Outside lab: back to live time, weather, moon and hemisphere (%s)", reason)
+    logger.info("Outside lab: back to live time, weather, moon and hemisphere, and the default hut (%s)", reason)
 
 
 def lab_weather(override, forecast_time: float | None) -> OutsideWeather:
@@ -236,7 +239,9 @@ def lab_moon(environment: OutsideEnvironment, override) -> OutsideEnvironment:
     return replace(environment, **{field: value for field, value in changes.items() if value is not None})
 
 
-def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_pending: bool = False, weather_override=None, moon_override=None, hemisphere_override: str | None = None) -> OutsideEnvironment:
+def environment_snapshot(
+    sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_pending: bool = False, weather_override=None, moon_override=None, hemisphere_override: str | None = None, hut: str = DEFAULT_HUT
+) -> OutsideEnvironment:
     forecast_time = moment.timestamp() if offset_minutes else None
     if weather_override is not None:
         observed = lab_weather(weather_override, forecast_time)
@@ -248,15 +253,15 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
     hemisphere = hemisphere_at(latitude, hemisphere_override)
     season = local_season(moment, hemisphere)
     if not isinstance(sky, dict):
-        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere)
+        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, hut=hut)
     positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
     if positions is None:
-        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere)
+        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, hut=hut)
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
     sunrise = next((sunrise for sunrise in sky.get("sunrises", ()) if sunrise > moment.timestamp()), None)
     before_sunrise = sunrise is not None and datetime.fromtimestamp(sunrise, moment.tzinfo).date() == moment.date()
-    environment = OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere)
+    environment = OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere, hut=hut)
     return lab_moon(environment, moon_override)
 
 
@@ -370,10 +375,24 @@ def outside_status_and_environment() -> tuple[dict, OutsideEnvironment]:
     override = shared_config.data_dict.get("outside_lab_weather")
     moon_override = shared_config.data_dict.get("outside_lab_moon")
     hemisphere_override = shared_config.data_dict.get("outside_lab_hemisphere")
-    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline", weather_pending=utilities.weather_refresh_pending(), weather_override=override, moon_override=moon_override, hemisphere_override=hemisphere_override)
+    hut_override = shared_config.data_dict.get("outside_lab_hut")
+    environment = environment_snapshot(
+        shared_config.data_dict.get("outside_sky"),
+        shared_config.data_dict.get("weather"),
+        moment,
+        latitude,
+        longitude,
+        offset_minutes=offset_minutes,
+        weather_offline=shared_config.data_dict.get("weather_status") == "offline",
+        weather_pending=utilities.weather_refresh_pending(),
+        weather_override=override,
+        moon_override=moon_override,
+        hemisphere_override=hemisphere_override,
+        hut=hut_override or DEFAULT_HUT,
+    )
     lab_now = lab_time()
     _, _, lab_speed = shared_config.shared_outside_lab_clock[:]
-    active = lab_now is not None or override is not None or moon_override is not None or hemisphere_override is not None
+    active = lab_now is not None or any(value is not None for value in (override, moon_override, hemisphere_override, hut_override))
     status = {
         "offset_minutes": offset_minutes,
         "now": datetime.fromtimestamp(moment.timestamp() - offset_minutes * 60, tz).isoformat(),
@@ -384,12 +403,14 @@ def outside_status_and_environment() -> tuple[dict, OutsideEnvironment]:
             "weather": override,
             "moon": moon_override,
             "hemisphere": hemisphere_override,
+            "hut": hut_override,
             "expires_in": max(0, round(LAB_IDLE_SECONDS - (time.monotonic() - shared_config.shared_outside_lab_activity.value))) if active else None,
         },
         "timezone": getattr(tz, "key", "UTC"),
         "military_time": shared_config.CONF["MILITARY_TIME"].lower() == "true",
         "season": environment.season,
         "hemisphere": environment.hemisphere,
+        "hut": environment.hut,
         "holidays": sorted(holiday_features(environment)),
         "weather": environment.weather.status,
         "astronomy": environment.sky_status,
@@ -476,6 +497,7 @@ def outside(sign):
             weather_override = shared_config.data_dict.get("outside_lab_weather")
             moon_override = shared_config.data_dict.get("outside_lab_moon")
             hemisphere_override = shared_config.data_dict.get("outside_lab_hemisphere")
+            hut = shared_config.data_dict.get("outside_lab_hut") or DEFAULT_HUT
             lab = lab_active(shared_config.data_dict)
             summon = shared_config.data_dict.get("outside_lab_summon")
             if summon is not None and summon["id"] != handled_summon and time.time() - summon["id"] < LAB_SUMMON_SECONDS:
@@ -483,7 +505,9 @@ def outside(sign):
             seen_lab_version = lab_version
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
-        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override, hemisphere_override=hemisphere_override)
+        environment = environment_snapshot(
+            sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override, hemisphere_override=hemisphere_override, hut=hut
+        )
         if lab:
             environment = replace(environment, lab=True)
         beach = beach_weather(environment, beach)

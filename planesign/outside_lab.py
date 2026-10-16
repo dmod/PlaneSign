@@ -1,4 +1,4 @@
-"""Outside lab: set Outside mode's time, weather, moon and hemisphere by hand and see the result on the sign at once.
+"""Outside lab: set Outside mode's time, weather, moon, hemisphere and hut by hand and see the result on the sign at once.
 It can also pause Outside and summon its occasional visitors and sky events (outside_scene.SUMMONS).
 
 Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
@@ -19,7 +19,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, holiday_span_start
+from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, HUT_STYLES, NIGHT_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -39,10 +39,10 @@ HOLIDAY_NIGHT_TIME = ("Before dawn", 3, 0)
 # How long a sun event jump waits for the astronomy worker to cover a newly selected day.
 SKY_WAIT_SECONDS = 20
 # Moon positions the lab can place the moon at: name -> (label, altitude, azimuth). Each lands in open sky
-# (east of the chimney, high in the middle, low between the mountain and the tree); None keeps the computed position.
+# (east above the lamp, high in the middle, low between the mountain and the tree); None keeps the computed position.
 MOON_POSITIONS = {
     "actual": ("Actual", None, None),
-    "east": ("East", 28, 135),
+    "east": ("East", 34, 98),
     "high": ("High", 55, 180),
     "west": ("Low west", 12, 215),
 }
@@ -215,6 +215,7 @@ def page_options():
         "moon_positions": [{"name": name, "label": label} for name, (label, _, _) in MOON_POSITIONS.items()],
         "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
         "hemispheres": [{"name": name, "label": label} for name, label in HEMISPHERES.items()],
+        "huts": [{"name": name, "label": style.label} for name, style in HUT_STYLES.items()],
         "summons": [{"name": name, "label": summon.label, "requirement": summon.requirement} for name, summon in SUMMONS.items()],
         "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
         # The emulator's frame server, for the live preview; None on the physical panel.
@@ -367,6 +368,22 @@ def set_hemisphere():
     shared_config.data_dict["outside_lab_hemisphere"] = hemisphere
     changed()
     logger.info("Outside lab: hemisphere %s", request.query_string.decode())
+    return jsonify(state())
+
+
+@blueprint.route("/hut")
+def set_hut():
+    """?name=STYLE (an outside_scene.HUT_STYLES key) shows the hut in that style; or ?reset=1 for the default hut."""
+    if request.args.get("reset"):
+        hut = None
+    else:
+        hut = request.args.get("name", "")
+        if hut not in HUT_STYLES:
+            raise LabError(f"name must be one of {', '.join(HUT_STYLES)}")
+    touch()
+    shared_config.data_dict["outside_lab_hut"] = hut
+    changed()
+    logger.info("Outside lab: hut %s", request.query_string.decode())
     return jsonify(state())
 
 

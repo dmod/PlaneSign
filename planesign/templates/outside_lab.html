@@ -80,7 +80,7 @@
 <main>
 <header>
     <h1>Outside lab</h1>
-    <p class="note">Set Outside's time, weather, moon and hemisphere by hand; the sign switches to Outside and redraws on the next frame.
+    <p class="note">Set Outside's time, weather, moon, hemisphere and hut by hand; the sign switches to Outside and redraws on the next frame.
     Only Outside is affected. Everything returns to live when the sign leaves Outside, after <span id="idle">15</span> idle minutes, or with Back to live.</p>
 </header>
 
@@ -106,6 +106,7 @@
         <span class="badge" id="b_weather">live weather</span>
         <span class="badge" id="b_moon">live moon</span>
         <span class="badge" id="b_hemisphere">live sky</span>
+        <span class="badge" id="b_hut">default hut</span>
         <span class="badge" id="b_expires"></span>
         <span class="note">Sign clock: <span id="s_clock">…</span></span>
         <span class="note" id="copied"></span>
@@ -169,6 +170,12 @@
 </section>
 
 <section class="card wide">
+    <h2>Hut</h2>
+    <div class="chips"><span id="huts" class="chips"></span><button onclick="call('/outside/lab/hut', {reset: 1})">Default hut</button></div>
+    <p class="note">Shows the hut in another style. Like the other overrides, it returns to the default when the lab resets.</p>
+</section>
+
+<section class="card wide">
     <h2>Visitors and events</h2>
     <div id="summons" class="chips"></div>
     <p class="note">Skips ahead to the event's next natural appearance; the clock and weather stay put. Dimmed events cannot happen in the current time, weather or holiday; click one to see why.</p>
@@ -192,6 +199,7 @@ const timers = {};
 const touched = {};
 const moonPositionButtons = {};
 const hemisphereButtons = {};
+const hutButtons = {};
 const speedButtons = [];
 const summonButtons = {};
 let holidayKey = '';
@@ -344,6 +352,10 @@ function build() {
         hemisphereButtons[name] = button(label, () => call('/outside/lab/hemisphere', {name}));
         el('hemispheres').append(hemisphereButtons[name]);
     }
+    for (const {name, label} of OPTIONS.huts) {
+        hutButtons[name] = button(label, () => call('/outside/lab/hut', {name}));
+        el('huts').append(hutButtons[name]);
+    }
     for (const {name, label, requirement} of OPTIONS.summons) {
         summonButtons[name] = button(label, () => call('/outside/lab/summon', {event: name}));
         summonButtons[name].dataset.requirement = requirement;
@@ -419,12 +431,15 @@ function render(state) {
     el('b_moon').classList.toggle('on', !!lab.moon);
     el('b_hemisphere').textContent = lab.hemisphere ? `lab ${lab.hemisphere}ern sky` : 'live sky';
     el('b_hemisphere').classList.toggle('on', !!lab.hemisphere);
+    el('b_hut').textContent = lab.hut ? `lab hut: ${OPTIONS.huts.find(h => h.name === lab.hut).label}` : 'default hut';
+    el('b_hut').classList.toggle('on', !!lab.hut);
     el('b_expires').style.display = lab.expires_in == null ? 'none' : '';
     if (lab.expires_in != null) el('b_expires').textContent = `resets in ${Math.floor(lab.expires_in / 60)}:${String(lab.expires_in % 60).padStart(2, '0')}`;
     for (const b of speedButtons) b.classList.toggle('selected', lab.time != null && Number(b.dataset.speed) === lab.speed);
     const position = lab.moon?.position ?? 'actual';
     for (const [name, b] of Object.entries(moonPositionButtons)) b.classList.toggle('selected', name === position);
     for (const [name, b] of Object.entries(hemisphereButtons)) b.classList.toggle('selected', name === lab.hemisphere);
+    for (const [name, b] of Object.entries(hutButtons)) b.classList.toggle('selected', name === state.hut);
     for (const [name, b] of Object.entries(summonButtons)) {
         const allowed = state.summons_allowed[name];
         b.classList.toggle('unavailable', !allowed);
@@ -471,7 +486,7 @@ function startPreview(port) {
     next();
 }
 
-// A link that reproduces the current lab scene: time and speed, weather, moon, hemisphere and forecast offset.
+// A link that reproduces the current lab scene: time and speed, weather, moon, hemisphere, hut and forecast offset.
 function sceneLink() {
     const lab = lastState.lab;
     const params = new URLSearchParams();
@@ -491,6 +506,7 @@ function sceneLink() {
         if (lab.moon.position && lab.moon.position !== 'actual') params.set('position', lab.moon.position);
     }
     if (lab.hemisphere) params.set('hemisphere', lab.hemisphere);
+    if (lab.hut) params.set('hut', lab.hut);
     if (lastState.offset_minutes) params.set('offset', lastState.offset_minutes);
     const query = params.toString();
     return location.origin + location.pathname + (query ? '#' + query : '');
@@ -517,6 +533,7 @@ async function applyLink() {
     await call('/outside/lab/reset');
     // Before the time, so a season in the link lands in this hemisphere's months.
     if (params.has('hemisphere')) await call('/outside/lab/hemisphere', {name: params.get('hemisphere')});
+    if (params.has('hut')) await call('/outside/lab/hut', {name: params.get('hut')});
     if (params.has('at')) await call('/outside/lab/time', params.has('speed') ? {at: params.get('at'), speed: params.get('speed')} : {at: params.get('at')});
     if (params.has('code')) {
         const weather = {code: params.get('code')};
