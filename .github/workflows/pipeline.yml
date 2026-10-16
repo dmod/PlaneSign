@@ -58,7 +58,8 @@ jobs:
         with:
           context: .
           builder: ${{ steps.buildx.outputs.name }}
-          push: true
+          # zstd layers are ~18% smaller than gzip; pulling them needs Docker 23+.
+          outputs: type=registry,compression=zstd,compression-level=19,force-compression=true,oci-mediatypes=true
           platforms: linux/arm64/v8
           tags: |
             ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ---- Build stage: compile native dependencies and build the venv ----
 FROM ubuntu:26.04 AS builder
 
@@ -39,9 +40,14 @@ WORKDIR /planesign
 
 EXPOSE 80/tcp 443/tcp
 
-# Application source and the pre-built virtual environment
-COPY . .
+# Least to most frequently changed, so a source-only update downloads just the last layer.
+# Any layer after a changed one gets a new digest, even with identical files.
 COPY --from=builder /planesign/.venv /planesign/.venv
+COPY datafiles datafiles
+COPY fonts fonts
+COPY icons icons
+COPY sounds sounds
+COPY --exclude=datafiles --exclude=fonts --exclude=icons --exclude=sounds . .
 
 # Nginx Setup
 RUN unlink /etc/nginx/sites-enabled/default
