@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
   <script src="themes.js"></script>
-  <script src="index.js?v=outside-return-now-1"></script>
+  <script src="index.js?v=flagquiz-sudden-death-1"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -83,245 +83,245 @@
   <div class="groups_wrapper">
 
     <div class="groups_column">
-    <fieldset class="mode_selector_button_group">
-      <legend>Planes</legend>
-      <button id="PLANES_ALERT" class="mode_button" onclick="set_mode(this.id)">Default Mode</button>
-      <button id="PLANES_CLOSEST" class="mode_button" onclick="set_mode(this.id)">Show Closest</button>
-      <button id="PLANES_HIGHEST" class="mode_button" onclick="set_mode(this.id)">Show Highest</button>
-      <button id="PLANES_FASTEST" class="mode_button" onclick="set_mode(this.id)">Show Fastest</button>
-      <button id="PLANES_SLOWEST" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
-      <button id="TRACK_A_FLIGHT" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
-      <div id="track-a-flight_div" hidden>
-        <input id="track-a-flight_flight-num-input" autocomplete="off" oninput="this.value=this.value.replace( /[^a-zA-Z0-9]/ , ''); get_possible_autofill_flights(this.value)"></input>
-      </div>
-    </fieldset>
+      <fieldset class="mode_selector_button_group">
+        <legend>Planes</legend>
+        <button id="PLANES_ALERT" class="mode_button" onclick="set_mode(this.id)">Default Mode</button>
+        <button id="PLANES_CLOSEST" class="mode_button" onclick="set_mode(this.id)">Show Closest</button>
+        <button id="PLANES_HIGHEST" class="mode_button" onclick="set_mode(this.id)">Show Highest</button>
+        <button id="PLANES_FASTEST" class="mode_button" onclick="set_mode(this.id)">Show Fastest</button>
+        <button id="PLANES_SLOWEST" class="mode_button" onclick="set_mode(this.id)">Show Slowest</button>
+        <button id="TRACK_A_FLIGHT" class="mode_button" onclick="set_mode(this.id); document.getElementById('track-a-flight_div').hidden = false">Track-A-Flight™</button>
+        <div id="track-a-flight_div" hidden>
+          <input id="track-a-flight_flight-num-input" autocomplete="off" oninput="this.value=this.value.replace( /[^a-zA-Z0-9]/ , ''); get_possible_autofill_flights(this.value)"></input>
+        </div>
+      </fieldset>
 
-    <fieldset class="mode_selector_button_group">
-      <legend>Games</legend>
-      <button id="PONG" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
-      <div id="pong_div" hidden>
-        <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
-        <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
-      </div>
-      <button id="FLAGQUIZ" class="mode_button" onclick="set_mode(this.id); document.getElementById('flagquiz_div').hidden = false">Flag Quiz</button>
-      <div id="flagquiz_div" class="flagquiz_controls" hidden>
-        <p>Choose a difficulty to start or restart the shared quiz.</p>
-        <div class="flagquiz_difficulties">
-          <button type="button" onclick="start_flagquiz('easy')">Easy · 3 choices</button>
-          <button type="button" onclick="start_flagquiz('hard')">Hard · 4 choices</button>
-          <button type="button" onclick="start_flagquiz('expert')">Expert</button>
+      <fieldset class="mode_selector_button_group">
+        <legend>Games</legend>
+        <button id="PONG" class="mode_button" onclick="set_mode(this.id); document.getElementById('pong_div').hidden = false">PONG!</button>
+        <div id="pong_div" hidden>
+          <input class="pong_slider" id="pong_player1_slider" type="range" min="0" max="26" step="1" value="0">
+          <input class="pong_slider" id="pong_player2_slider" type="range" min="0" max="26" step="1" value="0">
         </div>
-        <label class="flagquiz_name_label" for="game_player_name">Your game name</label>
-        <div class="flagquiz_name_control">
-          <input id="game_player_name" maxlength="24" autocomplete="nickname">
-          <button type="button" onclick="rename_game_player()">Update name</button>
-        </div>
-        <p id="flagquiz_error" class="flagquiz_error" role="alert"></p>
-        <section id="flagquiz_game" class="flagquiz_game" hidden>
-          <p id="flagquiz_question_progress" class="flagquiz_progress" role="status"></p>
-          <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
-          <p id="flagquiz_feedback" class="flagquiz_feedback" role="status"></p>
-          <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
-          <div id="flagquiz_expert" class="flagquiz_expert" hidden>
-            <label for="flagquiz_expert_input">Country name</label>
-            <div class="flagquiz_autocomplete">
-              <input id="flagquiz_expert_input" type="text" autocomplete="off" oninput="get_flagquiz_suggestions(this.value)">
-              <div id="flagquiz_suggestions" class="flagquiz_suggestions"></div>
-            </div>
+        <button id="FLAGQUIZ" class="mode_button" onclick="set_mode(this.id); document.getElementById('flagquiz_div').hidden = false">Flag Quiz</button>
+        <div id="flagquiz_div" class="flagquiz_controls" hidden>
+          <p>Choose a difficulty to start or restart the shared quiz.</p>
+          <div class="flagquiz_difficulties">
+            <button type="button" onclick="start_flagquiz('easy')">Easy · 3 choices</button>
+            <button type="button" onclick="start_flagquiz('hard')">Hard · 4 choices</button>
+            <button type="button" onclick="start_flagquiz('expert')">Expert</button>
           </div>
-          <h4>Players</h4>
-          <ol id="flagquiz_scoreboard" class="flagquiz_scoreboard"></ol>
-        </section>
-      </div>
-    </fieldset>
+          <label class="flagquiz_name_label" for="game_player_name">Your game name</label>
+          <div class="flagquiz_name_control">
+            <input id="game_player_name" maxlength="24" autocomplete="nickname">
+            <button type="button" onclick="rename_game_player()">Update name</button>
+          </div>
+          <p id="flagquiz_error" class="flagquiz_error" role="alert"></p>
+          <section id="flagquiz_game" class="flagquiz_game" hidden>
+            <p id="flagquiz_question_progress" class="flagquiz_progress" role="status"></p>
+            <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
+            <p id="flagquiz_feedback" class="flagquiz_feedback" role="status"></p>
+            <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
+            <div id="flagquiz_expert" class="flagquiz_expert" hidden>
+              <label for="flagquiz_expert_input">Country name</label>
+              <div class="flagquiz_autocomplete">
+                <input id="flagquiz_expert_input" type="text" autocomplete="off" oninput="get_flagquiz_suggestions(this.value)">
+                <div id="flagquiz_suggestions" class="flagquiz_suggestions"></div>
+              </div>
+            </div>
+            <h4>Players</h4>
+            <ol id="flagquiz_scoreboard" class="flagquiz_scoreboard"></ol>
+          </section>
+        </div>
+      </fieldset>
 
-    <div class="device_info_box">
-      <div class="device_info_header">Device Info</div>
-      <div id="device_info_content" class="device_info_content">
-        <div class="device_info_row">
-          <span class="device_info_label">Hostname</span>
-          <span class="device_info_value" id="di_hostname">—</span>
-        </div>
-        <div class="device_info_row">
-          <span class="device_info_label">IP Address</span>
-          <span class="device_info_value" id="di_ip">—</span>
-        </div>
-        <div class="device_info_row">
-          <span class="device_info_label">CPU Temp</span>
-          <span class="device_info_value" id="di_cpu_temp">—</span>
-        </div>
-        <div class="device_info_row">
-          <span class="device_info_label">Disk Usage</span>
-          <span class="device_info_value" id="di_disk">—</span>
-        </div>
-        <div class="device_info_row">
-          <span class="device_info_label">Memory</span>
-          <span class="device_info_value" id="di_mem">—</span>
-        </div>
-        <div class="device_info_row">
-          <span class="device_info_label">Uptime</span>
-          <span class="device_info_value" id="di_uptime">—</span>
+      <div class="device_info_box">
+        <div class="device_info_header">Device Info</div>
+        <div id="device_info_content" class="device_info_content">
+          <div class="device_info_row">
+            <span class="device_info_label">Hostname</span>
+            <span class="device_info_value" id="di_hostname">—</span>
+          </div>
+          <div class="device_info_row">
+            <span class="device_info_label">IP Address</span>
+            <span class="device_info_value" id="di_ip">—</span>
+          </div>
+          <div class="device_info_row">
+            <span class="device_info_label">CPU Temp</span>
+            <span class="device_info_value" id="di_cpu_temp">—</span>
+          </div>
+          <div class="device_info_row">
+            <span class="device_info_label">Disk Usage</span>
+            <span class="device_info_value" id="di_disk">—</span>
+          </div>
+          <div class="device_info_row">
+            <span class="device_info_label">Memory</span>
+            <span class="device_info_value" id="di_mem">—</span>
+          </div>
+          <div class="device_info_row">
+            <span class="device_info_label">Uptime</span>
+            <span class="device_info_value" id="di_uptime">—</span>
+          </div>
         </div>
       </div>
-    </div>
     </div>
 
     <div class="groups_column">
-    <fieldset class="mode_selector_button_group">
-      <legend>Informational</legend>
-      <button id="WEATHER" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
-      <button id="TIDES" class="mode_button" onclick="set_mode(this.id)">Tides 🌊</button>
-      <button id="NFL" class="mode_button" onclick="set_mode(this.id); document.getElementById('nfl_div').hidden = false; get_nfl_games()">NFL 🏈</button>
-      <div id="nfl_div" hidden>
-        <select name="nfl_game" id="nfl_game_select" onchange="set_nfl_game(this.value)">
-          <option value="">Auto (next / live game)</option>
-        </select>
-      </div>
-      <button id="MLB" class="mode_button" onclick="set_mode(this.id); document.getElementById('mlb_div').hidden = false; get_mlb_games()">MLB ⚾</button>
-      <div id="mlb_div" hidden>
-        <select name="mlb_game" id="mlb_game_select" onchange="set_mlb_game(this.value)">
-          <option value="">Auto (next / live game)</option>
-        </select>
-      </div>
-      <button id="TIME_ONLY" class="mode_button" onclick="set_mode(this.id)">Clock Only 🕓</button>
-      <button id="SATELLITE" class="mode_button" onclick="set_mode(this.id); document.getElementById('satellite_div').hidden = false">Satellites 🛰️</button>
-      <div id="satellite_div" hidden>
-        <input type="radio" id="Overhead" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="1" checked="checked">
-        <label for="Overhead">Overhead</label>
-        <input type="radio" id="ISS" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="2">
-        <label for="ISS">ISS</label>
-      </div>
-      <button id="SNOW" class="mode_button" onclick="set_mode(this.id); get_resorts(); setTimeout(get_saved_resorts, 1000); document.getElementById('snow_div').hidden = false">Slope Conditions 🏂</button>
-      <div id="snow_div" style="position: relative;" hidden>
-        <div id="tracked_resorts" hidden>
-          <b style="padding-top: 5px;display: block;">Tracked Resorts</b>
-          <hr>
-          <input type="radio" id="Detail" name="snowmode" onclick="set_snow_mode(this.value)" value="1" checked="checked">
-          <label for="Detail">Rotate Detail</label>
-          <input type="radio" id="Overview" name="snowmode" onclick="set_snow_mode(this.value)" value="2">
-          <label for="Overview">Overview</label>
-          <hr>
-          <div id="user_resort_list">
+      <fieldset class="mode_selector_button_group">
+        <legend>Informational</legend>
+        <button id="WEATHER" class="mode_button" onclick="set_mode(this.id)">Weather ❄️</button>
+        <button id="TIDES" class="mode_button" onclick="set_mode(this.id)">Tides 🌊</button>
+        <button id="NFL" class="mode_button" onclick="set_mode(this.id); document.getElementById('nfl_div').hidden = false; get_nfl_games()">NFL 🏈</button>
+        <div id="nfl_div" hidden>
+          <select name="nfl_game" id="nfl_game_select" onchange="set_nfl_game(this.value)">
+            <option value="">Auto (next / live game)</option>
+          </select>
+        </div>
+        <button id="MLB" class="mode_button" onclick="set_mode(this.id); document.getElementById('mlb_div').hidden = false; get_mlb_games()">MLB ⚾</button>
+        <div id="mlb_div" hidden>
+          <select name="mlb_game" id="mlb_game_select" onchange="set_mlb_game(this.value)">
+            <option value="">Auto (next / live game)</option>
+          </select>
+        </div>
+        <button id="TIME_ONLY" class="mode_button" onclick="set_mode(this.id)">Clock Only 🕓</button>
+        <button id="SATELLITE" class="mode_button" onclick="set_mode(this.id); document.getElementById('satellite_div').hidden = false">Satellites 🛰️</button>
+        <div id="satellite_div" hidden>
+          <input type="radio" id="Overhead" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="1" checked="checked">
+          <label for="Overhead">Overhead</label>
+          <input type="radio" id="ISS" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="2">
+          <label for="ISS">ISS</label>
+        </div>
+        <button id="SNOW" class="mode_button" onclick="set_mode(this.id); get_resorts(); setTimeout(get_saved_resorts, 1000); document.getElementById('snow_div').hidden = false">Slope Conditions 🏂</button>
+        <div id="snow_div" style="position: relative;" hidden>
+          <div id="tracked_resorts" hidden>
+            <b style="padding-top: 5px;display: block;">Tracked Resorts</b>
+            <hr>
+            <input type="radio" id="Detail" name="snowmode" onclick="set_snow_mode(this.value)" value="1" checked="checked">
+            <label for="Detail">Rotate Detail</label>
+            <input type="radio" id="Overview" name="snowmode" onclick="set_snow_mode(this.value)" value="2">
+            <label for="Overview">Overview</label>
+            <hr>
+            <div id="user_resort_list">
+            </div>
+          </div>
+          <div id="resort_search" hidden>
+            <input type="text" id="resort_searchbar" autocomplete="off" oninput="get_possible_autofill_resorts(this.value)"></input>
+            <button id="save_resort" onclick="save_current_resort(); set_snow_mode(getElementById('Detail').value)">
+              Save
+            </button>
           </div>
         </div>
-        <div id="resort_search" hidden>
-          <input type="text" id="resort_searchbar" autocomplete="off" oninput="get_possible_autofill_resorts(this.value)"></input>
-          <button id="save_resort" onclick="save_current_resort(); set_snow_mode(getElementById('Detail').value)">
-            Save
-          </button>
+        <button id="MOON" class="mode_button" onclick="set_mode(this.id)">Moon 🌘</button>
+        <button id="LIGHTNING" class="mode_button" onclick="set_mode(this.id)">Lightning ⛈️</button>
+        <div id="lightning_div" hidden>
+          <div id="lightning_button_div" aria-label="Lightning map mode">
+            <input type="radio" id="lightning_usa" name="lightningmode" onclick="set_lightning_mode(this.value)" value="1" checked>
+            <label for="lightning_usa">USA</label>
+            <input type="radio" id="lightning_local" name="lightningmode" onclick="set_lightning_mode(this.value)" value="2">
+            <label for="lightning_local">Local</label>
+            <input type="radio" id="lightning_closest" name="lightningmode" onclick="set_lightning_mode(this.value)" value="3">
+            <label for="lightning_closest">Closest</label>
+          </div>
+          <div id="lightning_slider_div" hidden>
+            <input id="lightning_slider" type="range" min="0" max="9" step="1" value="6" aria-label="Local lightning zoom">
+          </div>
         </div>
-      </div>
-      <button id="MOON" class="mode_button" onclick="set_mode(this.id)">Moon 🌘</button>
-      <button id="LIGHTNING" class="mode_button" onclick="set_mode(this.id)">Lightning ⛈️</button>
-      <div id="lightning_div" hidden>
-        <div id="lightning_button_div" aria-label="Lightning map mode">
-          <input type="radio" id="lightning_usa" name="lightningmode" onclick="set_lightning_mode(this.value)" value="1" checked>
-          <label for="lightning_usa">USA</label>
-          <input type="radio" id="lightning_local" name="lightningmode" onclick="set_lightning_mode(this.value)" value="2">
-          <label for="lightning_local">Local</label>
-          <input type="radio" id="lightning_closest" name="lightningmode" onclick="set_lightning_mode(this.value)" value="3">
-          <label for="lightning_closest">Closest</label>
+        <button id="FINANCE" class="mode_button" onclick="set_mode(this.id); get_tickers();">Finance 🤑</button>
+        <div id="finance_div" hidden>
+          <input type="text" id="ticker" autocomplete="off" oninput="get_possible_autofill_tickers(this.value)"></input>
         </div>
-        <div id="lightning_slider_div" hidden>
-          <input id="lightning_slider" type="range" min="0" max="9" step="1" value="6" aria-label="Local lightning zoom">
-        </div>
-      </div>
-      <button id="FINANCE" class="mode_button" onclick="set_mode(this.id); get_tickers();">Finance 🤑</button>
-      <div id="finance_div" hidden>
-        <input type="text" id="ticker" autocomplete="off" oninput="get_possible_autofill_tickers(this.value)"></input>
-      </div>
-    </fieldset>
+      </fieldset>
 
-    <fieldset class="mode_selector_button_group">
-      <legend>Just for Fun :)</legend>
-      <button id="CUSTOM_MESSAGE" class="mode_button" onclick="set_mode(this.id); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
-      <div id="custom_message_div" hidden>
-        <div id="custom_message_buttons">
-          <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
-          <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
-          <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
-          <button class="custom_colors_button" onclick="set_color_mode(3)"><span style="color: rgb(173, 0, 30)">U</span><span style="color: rgb(108, 108, 108)">S</span><span style="color: rgb(37, 120, 178)">A</span></button>
-          <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
-          <input type="color" id="colorpicker" oninput="set_color_mode(6+parseInt(document.getElementById('colorpicker').value.substring(1), 16))" value="#ff0000" style="height: 30px;">
-          <button class="custom_colors_button" onclick="set_color_mode(5)">💿</button>
-        </div>
-        <br>
-        <input type="text" id="custom_message"></input>
-      </div>
-      <button id="COUNTDOWN" class="mode_button" onclick="set_mode(this.id); document.getElementById('countdown_div').hidden = false">Countdown</button>
-      <div id="countdown_div" hidden>
-        <div id="countdown_buttons">
-          <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
-          <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
-          <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
-          <button class="custom_colors_button" onclick="set_color_mode(3)"><span style="color: rgb(173, 0, 30)">U</span><span style="color: rgb(108, 108, 108)">S</span><span style="color: rgb(37, 120, 178)">A</span></button>
-          <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
-          <input type="color" id="colorpicker2" oninput="set_color_mode(6+parseInt(document.getElementById('colorpicker2').value.substring(1), 16))" value="#ff0000" style="height: 30px;">
-        </div>
-        <br>
-        <input type="text" id="countdown_message"></input>
-        <br>
-        <input type="datetime-local" id="setdatetime" name="setdatetime">
-        <input type="submit" onclick="set_countdown(document.getElementById('setdatetime').value,'a'+document.getElementById('countdown_message').value)" value="Submit">
-      </div>
-      <button id="WELCOME" class="mode_button" onclick="set_mode(this.id)">Welcome Intro</button>
-      <button id="CGOL" class="mode_button" onclick="set_mode(this.id); document.getElementById('cgol_div').hidden = false">CGOL</button>
-      <div id="cgol_div" hidden>
-        <input type="radio" id="rainbowgol" name="cgolstyle" onclick="set_mode('CGOL')" value="1" checked="checked">
-        <label for="rainbowgol">Rainbow Rules</label>
-        <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode('CGOL')" value="2">
-        <label for="colorshift">Color Shifting</label>
-      </div>
-      <button id="MANDELBROT" class="mode_button" onclick="set_mode(this.id); document.getElementById('mandelbrot_div').hidden = false">Mandelbrot</button>
-      <div id="mandelbrot_div" hidden>
-        <label for="colormap">Colormap:</label>
-        <select name="colormap" id="colormap" onchange="set_mandelbrot_color(this.value);">
-          <option value="0">Rainbow</option>
-          <option value="1">Sunset</option>
-          <option value="2">Nova</option>
-          <option value="3">Vaporwave</option>
-          <option value="4">70's</option>
-          <option value="5">Pastel</option>
-          <option value="6">Neon</option>
-          <option value="7">Elemental</option>
-          <option value="8">Fire</option>
-          <option value="9">Greyscale</option>
-        </select>
-        <br>
-        <input id="mandelbrot_slider" type="range" min="0.1" max="3" step="0.1" value="3">
-      </div>
-      <button id="CCA" class="mode_button" onclick="set_mode(this.id)">CCA</button>
-      <button id="AQUARIUM" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
-      <button id="PLANTS" class="mode_button" onclick="set_mode(this.id)">Plants</button>
-      <button id="HALLOWEEN" class="mode_button" onclick="set_mode(this.id)">Halloween</button>
-      <div id="halloween_div" class="halloween_controls" hidden>
-        <label class="halloween_lightning_switch">
-          <span>Background lightning</span>
-          <input id="halloween_lightning_toggle" type="checkbox" checked onchange="set_halloween_lightning(this.checked)" role="switch">
-          <span class="halloween_lightning_slider" aria-hidden="true"></span>
-        </label>
-      </div>
-      <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>
-      <div id="outside_div" hidden>
-        <div class="outside_timeline">
-          <label for="outside_time_slider">Preview the next 24 hours</label>
-          <output id="outside_time_label" for="outside_time_slider" aria-live="polite">Now</output>
-          <input id="outside_time_slider" type="range" min="0" max="1440" step="1" value="0" oninput="set_outside_time(this.value)">
-          <div class="outside_time_ticks" aria-hidden="true"><span>Now</span><span>+6h</span><span>+12h</span><span>+18h</span><span>+24h</span></div>
-          <div class="outside_actions">
-            <button type="button" onclick="return_outside_to_now()">Return to now</button>
-            <button type="button" onclick="window.open('api/outside/lab', '_blank')" title="Set Outside's time, weather and holidays by hand in a new tab">Outside lab</button>
+      <fieldset class="mode_selector_button_group">
+        <legend>Just for Fun :)</legend>
+        <button id="CUSTOM_MESSAGE" class="mode_button" onclick="set_mode(this.id); document.getElementById('custom_message_div').hidden = false">Custom Message</button>
+        <div id="custom_message_div" hidden>
+          <div id="custom_message_buttons">
+            <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
+            <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
+            <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
+            <button class="custom_colors_button" onclick="set_color_mode(3)"><span style="color: rgb(173, 0, 30)">U</span><span style="color: rgb(108, 108, 108)">S</span><span style="color: rgb(37, 120, 178)">A</span></button>
+            <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
+            <input type="color" id="colorpicker" oninput="set_color_mode(6+parseInt(document.getElementById('colorpicker').value.substring(1), 16))" value="#ff0000" style="height: 30px;">
+            <button class="custom_colors_button" onclick="set_color_mode(5)">💿</button>
           </div>
-          <p id="outside_time_error" role="alert"></p>
+          <br>
+          <input type="text" id="custom_message"></input>
         </div>
-        <p id="outside_status" class="outside_status" role="status">Loading local sky and weather...</p>
-      </div>
-      <button id="FIREWORKS" class="mode_button" onclick="set_mode(this.id)">Fireworks</button>
-      <button id="HORSE_RACE" class="mode_button" onclick="set_mode(this.id)">Horse Race 🐎</button>
-      <button id="FREE_SKETCH" class="mode_button" onclick="set_mode(this.id); open_free_sketch_modal()">Free Sketch</button>
-      <button id="SANTA" class="mode_button" onclick="set_mode(this.id)">Christmas</button>
-      <button id="SNOWFALL" class="mode_button" onclick="set_mode(this.id)">Let It Snow!</button>
-    </fieldset>
+        <button id="COUNTDOWN" class="mode_button" onclick="set_mode(this.id); document.getElementById('countdown_div').hidden = false">Countdown</button>
+        <div id="countdown_div" hidden>
+          <div id="countdown_buttons">
+            <button class="custom_colors_button" onclick="set_color_mode(0)">Plain</button>
+            <button class="custom_colors_button" onclick="set_color_mode(1)">🌈</button>
+            <button class="custom_colors_button" onclick="set_color_mode(2)">🎄</button>
+            <button class="custom_colors_button" onclick="set_color_mode(3)"><span style="color: rgb(173, 0, 30)">U</span><span style="color: rgb(108, 108, 108)">S</span><span style="color: rgb(37, 120, 178)">A</span></button>
+            <button class="custom_colors_button" onclick="set_color_mode(4)">🎃</button>
+            <input type="color" id="colorpicker2" oninput="set_color_mode(6+parseInt(document.getElementById('colorpicker2').value.substring(1), 16))" value="#ff0000" style="height: 30px;">
+          </div>
+          <br>
+          <input type="text" id="countdown_message"></input>
+          <br>
+          <input type="datetime-local" id="setdatetime" name="setdatetime">
+          <input type="submit" onclick="set_countdown(document.getElementById('setdatetime').value,'a'+document.getElementById('countdown_message').value)" value="Submit">
+        </div>
+        <button id="WELCOME" class="mode_button" onclick="set_mode(this.id)">Welcome Intro</button>
+        <button id="CGOL" class="mode_button" onclick="set_mode(this.id); document.getElementById('cgol_div').hidden = false">CGOL</button>
+        <div id="cgol_div" hidden>
+          <input type="radio" id="rainbowgol" name="cgolstyle" onclick="set_mode('CGOL')" value="1" checked="checked">
+          <label for="rainbowgol">Rainbow Rules</label>
+          <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode('CGOL')" value="2">
+          <label for="colorshift">Color Shifting</label>
+        </div>
+        <button id="MANDELBROT" class="mode_button" onclick="set_mode(this.id); document.getElementById('mandelbrot_div').hidden = false">Mandelbrot</button>
+        <div id="mandelbrot_div" hidden>
+          <label for="colormap">Colormap:</label>
+          <select name="colormap" id="colormap" onchange="set_mandelbrot_color(this.value);">
+            <option value="0">Rainbow</option>
+            <option value="1">Sunset</option>
+            <option value="2">Nova</option>
+            <option value="3">Vaporwave</option>
+            <option value="4">70's</option>
+            <option value="5">Pastel</option>
+            <option value="6">Neon</option>
+            <option value="7">Elemental</option>
+            <option value="8">Fire</option>
+            <option value="9">Greyscale</option>
+          </select>
+          <br>
+          <input id="mandelbrot_slider" type="range" min="0.1" max="3" step="0.1" value="3">
+        </div>
+        <button id="CCA" class="mode_button" onclick="set_mode(this.id)">CCA</button>
+        <button id="AQUARIUM" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
+        <button id="PLANTS" class="mode_button" onclick="set_mode(this.id)">Plants</button>
+        <button id="HALLOWEEN" class="mode_button" onclick="set_mode(this.id)">Halloween</button>
+        <div id="halloween_div" class="halloween_controls" hidden>
+          <label class="halloween_lightning_switch">
+            <span>Background lightning</span>
+            <input id="halloween_lightning_toggle" type="checkbox" checked onchange="set_halloween_lightning(this.checked)" role="switch">
+            <span class="halloween_lightning_slider" aria-hidden="true"></span>
+          </label>
+        </div>
+        <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>
+        <div id="outside_div" hidden>
+          <div class="outside_timeline">
+            <label for="outside_time_slider">Preview the next 24 hours</label>
+            <output id="outside_time_label" for="outside_time_slider" aria-live="polite">Now</output>
+            <input id="outside_time_slider" type="range" min="0" max="1440" step="1" value="0" oninput="set_outside_time(this.value)">
+            <div class="outside_time_ticks" aria-hidden="true"><span>Now</span><span>+6h</span><span>+12h</span><span>+18h</span><span>+24h</span></div>
+            <div class="outside_actions">
+              <button type="button" onclick="return_outside_to_now()">Return to now</button>
+              <button type="button" onclick="window.open('api/outside/lab', '_blank')" title="Set Outside's time, weather and holidays by hand in a new tab">Outside lab</button>
+            </div>
+            <p id="outside_time_error" role="alert"></p>
+          </div>
+          <p id="outside_status" class="outside_status" role="status">Loading local sky and weather...</p>
+        </div>
+        <button id="FIREWORKS" class="mode_button" onclick="set_mode(this.id)">Fireworks</button>
+        <button id="HORSE_RACE" class="mode_button" onclick="set_mode(this.id)">Horse Race 🐎</button>
+        <button id="FREE_SKETCH" class="mode_button" onclick="set_mode(this.id); open_free_sketch_modal()">Free Sketch</button>
+        <button id="SANTA" class="mode_button" onclick="set_mode(this.id)">Christmas</button>
+        <button id="SNOWFALL" class="mode_button" onclick="set_mode(this.id)">Let It Snow!</button>
+      </fieldset>
     </div>
 
     <div id="mic_button" class="box4" hidden>

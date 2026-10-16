@@ -753,9 +753,18 @@ function render_flagquiz_state(state) {
     }
 
     var current = state.current;
-    var progress = state.complete
-        ? "Complete · " + state.total + " questions"
-        : "Question " + state.question_number + " / " + state.total + " · " + state.seconds_left + "s";
+    var progress;
+    if (state.sudden_death_notice) {
+        progress = "Sudden death begins in " + state.notice_seconds + "s · tied scores";
+    } else if (state.complete) {
+        progress = state.tie
+            ? "It's a tie! · " + state.question_number + " questions"
+            : "Complete · " + state.question_number + " questions";
+    } else if (state.sudden_death) {
+        progress = "Sudden death · Question " + state.question_number + " · " + state.seconds_left + "s";
+    } else {
+        progress = "Question " + state.question_number + " / " + state.total + " · " + state.seconds_left + "s";
+    }
     document.getElementById("flagquiz_question_progress").textContent = progress;
     var flag = document.getElementById("flagquiz_flag");
     flag.hidden = !current;
@@ -767,7 +776,11 @@ function render_flagquiz_state(state) {
     }
 
     var feedback = document.getElementById("flagquiz_feedback");
-    if (state.your_answer) {
+    if (state.complete && state.tie) {
+        feedback.textContent = "It's a tie!";
+    } else if (state.complete && state.winner) {
+        feedback.textContent = state.winner.name + " WINS! Accuracy: " + state.winner.accuracy + "%";
+    } else if (state.your_answer) {
         feedback.textContent = state.your_answer.correct ? "Your answer is correct!" : "Your answer is incorrect.";
     } else if (state.last_result) {
         var personalResult = state.last_result.answers.find(function (answer) {
@@ -788,8 +801,8 @@ function render_flagquiz_state(state) {
     var answers = document.getElementById("flagquiz_answers");
     var expert = document.getElementById("flagquiz_expert");
     var isExpert = state.difficulty === "expert";
-    answers.hidden = isExpert;
-    expert.hidden = !isExpert;
+    answers.hidden = isExpert || !current;
+    expert.hidden = !isExpert || !current;
     var sameRound = flagquiz_round_id === state.round_id;
     if (!sameRound) {
         flagquiz_round_id = state.round_id;

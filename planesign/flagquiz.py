@@ -15,6 +15,8 @@ from rgbmatrix import graphics
 
 ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
+QUESTION_LIMIT = 25
+SUDDEN_DEATH_NOTICE_SECONDS = 3
 WIDTH = 128
 HEIGHT = 32
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
@@ -126,27 +128,64 @@ def start_game(difficulty, player_id):
     player = games.register_player(player_id)
     question_codes = [country["code"] for country in pool]
     random.shuffle(question_codes)
+    regular_question_count = min(QUESTION_LIMIT, len(question_codes))
     now = time.monotonic()
     players = games.get_players()
     scores = {pid: 0 for pid, record in players.items() if now - record["last_seen"] < games.ACTIVE_PLAYER_SECONDS}
     scores[player["id"]] = 0
+    victory_flag_codes = [country["code"] for country in load_countries()]
+    random.shuffle(victory_flag_codes)
 
     state = {
         "difficulty": difficulty,
         "question_codes": question_codes,
+        "regular_question_count": regular_question_count,
         "index": 0,
         "round_id": uuid.uuid4().hex,
         "deadline": now + _round_seconds(difficulty),
         "current": _make_question(question_codes[0], difficulty, pool),
         "answers": {},
         "scores": scores,
+        "attempts": {player_id: 0 for player_id in scores},
         "last_result": None,
+        "sudden_death": False,
+        "sudden_death_notice_until": None,
+        "winner_id": None,
+        "tie": False,
+        "victory_flag_codes": victory_flag_codes,
     }
     with shared_config.shared_games_lock:
         shared_config.data_dict["flagquiz_state"] = state
         shared_config.shared_mode.value = DisplayMode.FLAGQUIZ.value
         shared_config.shared_forced_sign_update.set()
-    return {"ok": True, "difficulty": difficulty, "total": len(question_codes)}
+    return {"ok": True, "difficulty": difficulty, "total": regular_question_count}
+
+
+def _unique_leader_id(scores):
+    if not scores:
+        return None
+    highest_score = max(scores.values())
+    leaders = [player_id for player_id, score in scores.items() if score == highest_score]
+    return leaders[0] if len(leaders) == 1 else None
+
+
+def _start_next_question(state, now):
+    if state["index"] >= len(state["question_codes"]):
+        state["current"] = None
+        state["deadline"] = None
+        state["round_id"] = None
+        state["sudden_death_notice_until"] = None
+        state["tie"] = True
+        return
+
+    state["round_id"] = uuid.uuid4().hex
+    state["deadline"] = now + _round_seconds(state["difficulty"])
+    state["current"] = _make_question(
+        state["question_codes"][state["index"]],
+        state["difficulty"],
+        _country_pool(state["difficulty"]),
+    )
+    state["sudden_death_notice_until"] = None
 
 
 def _advance(state, now, players, active_ids, timed_out):
@@ -172,21 +211,45 @@ def _advance(state, now, players, active_ids, timed_out):
         "answers": result_answers,
     }
     state["index"] += 1
+    attempts = state.setdefault("attempts", {})
+    for player_id in state["scores"]:
+        attempts[player_id] = attempts.get(player_id, 0) + 1
     state["answers"] = {}
-    if state["index"] == len(state["question_codes"]):
-        state["current"] = None
-        state["deadline"] = None
-        state["round_id"] = None
-        return
+    state["round_id"] = None
+    state["deadline"] = None
 
-    state["round_id"] = uuid.uuid4().hex
-    state["deadline"] = now + _round_seconds(state["difficulty"])
-    state["current"] = _make_question(state["question_codes"][state["index"]], state["difficulty"], _country_pool(state["difficulty"]))
+    if state["index"] >= state["regular_question_count"]:
+        leader_id = _unique_leader_id(state["scores"])
+        if leader_id is not None:
+            state["current"] = None
+            state["winner_id"] = leader_id
+            state["tie"] = False
+            return
+        if state["index"] == state["regular_question_count"]:
+            if state["index"] < len(state["question_codes"]):
+                state["sudden_death"] = True
+                state["sudden_death_notice_until"] = now + SUDDEN_DEATH_NOTICE_SECONDS
+                state["current"] = None
+                return
+            state["current"] = None
+            state["tie"] = True
+            return
+        if state["index"] >= len(state["question_codes"]):
+            state["current"] = None
+            state["tie"] = True
+            return
+
+    _start_next_question(state, now)
 
 
 def _advance_if_ready(state, players, now):
     if state["current"] is None:
+        notice_until = state.get("sudden_death_notice_until")
+        if notice_until is not None and now >= notice_until:
+            _start_next_question(state, now)
+            return True
         return False
+
     active_ids = [
         player_id for player_id in state["scores"]
         if player_id in players and now - players[player_id]["last_seen"] < games.ACTIVE_PLAYER_SECONDS
@@ -224,15 +287,23 @@ def _public_status(state, player_id, players, now):
             "options": [{"key": option["key"], "name": option["name"]} for option in current["options"]],
         }
         seconds_left = max(0, math.ceil(state["deadline"] - now))
+    notice_until = state.get("sudden_death_notice_until")
+    notice_seconds = max(0, math.ceil(notice_until - now)) if notice_until is not None else 0
+    winner = _winner_summary(state, players, now)
 
     return {
         "ok": True,
         "difficulty": state["difficulty"],
-        "question_number": min(state["index"] + 1, len(state["question_codes"])),
-        "total": len(state["question_codes"]),
+        "question_number": state["index"] + 1 if current is not None else state["index"],
+        "total": state["regular_question_count"],
         "round_id": state["round_id"],
         "seconds_left": seconds_left,
-        "complete": current is None,
+        "complete": current is None and notice_until is None,
+        "sudden_death": state["sudden_death"],
+        "sudden_death_notice": notice_until is not None,
+        "notice_seconds": notice_seconds,
+        "tie": state["tie"],
+        "winner": winner,
         "current": current_public,
         "your_answer": answers.get(player_id),
         "round_answers": [
@@ -241,6 +312,22 @@ def _public_status(state, player_id, players, now):
         ],
         "last_result": state["last_result"],
         "players": _player_summary(players, scores, now),
+    }
+
+
+def _winner_summary(state, players, now):
+    winner_id = state.get("winner_id")
+    if winner_id is None:
+        return None
+    player = players.get(winner_id, {})
+    attempts = state.get("attempts", {}).get(winner_id, 0)
+    score = state["scores"].get(winner_id, 0)
+    return {
+        "id": winner_id,
+        "name": player.get("name", "Player"),
+        "score": score,
+        "active": winner_id in players and now - players[winner_id]["last_seen"] < games.ACTIVE_PLAYER_SECONDS,
+        "accuracy": round(score * 100 / attempts) if attempts else 0,
     }
 
 
@@ -256,7 +343,9 @@ def get_game_status(player_id, player_name=None):
         state = dict(state)
         state["scores"] = dict(state["scores"])
         state["answers"] = dict(state["answers"])
+        state["attempts"] = dict(state.get("attempts", {}))
         state["scores"].setdefault(player["id"], 0)
+        state["attempts"].setdefault(player["id"], 0)
         _advance_if_ready(state, players, now)
         shared_config.data_dict["flagquiz_state"] = state
         status = _public_status(state, player["id"], players, now)
@@ -276,7 +365,9 @@ def submit_answer(player_id, round_id, answer):
         state = dict(state)
         state["scores"] = dict(state["scores"])
         state["answers"] = dict(state["answers"])
+        state["attempts"] = dict(state.get("attempts", {}))
         state["scores"].setdefault(player["id"], 0)
+        state["attempts"].setdefault(player["id"], 0)
         _advance_if_ready(state, players, now)
         if round_id != state["round_id"]:
             shared_config.data_dict["flagquiz_state"] = state
@@ -318,17 +409,22 @@ def get_sign_state():
         state = dict(state)
         state["scores"] = dict(state["scores"])
         state["answers"] = dict(state["answers"])
+        state["attempts"] = dict(state.get("attempts", {}))
         players = dict(shared_config.data_dict.get("game_players", {}))
         if _advance_if_ready(state, players, now):
             shared_config.data_dict["flagquiz_state"] = state
-        scoreboard = _player_summary(players, state["scores"], now)
+        notice_until = state.get("sudden_death_notice_until")
         return {
             "difficulty": state["difficulty"],
-            "question_number": min(state["index"] + 1, len(state["question_codes"])),
-            "total": len(state["question_codes"]),
+            "question_number": state["index"] + 1 if state["current"] is not None else state["index"],
+            "total": state["regular_question_count"],
             "current": state["current"],
-            "complete": state["current"] is None,
-            "winner": scoreboard[0] if state["current"] is None and scoreboard else None,
+            "complete": state["current"] is None and notice_until is None,
+            "sudden_death": state["sudden_death"],
+            "sudden_death_notice": notice_until is not None,
+            "tie": state["tie"],
+            "winner": _winner_summary(state, players, now),
+            "victory_flag_codes": state["victory_flag_codes"],
         }
 
 
@@ -362,11 +458,6 @@ def _loading_flag_rows():
             x += flag.width
         rows.append((ImageEnhance.Brightness(row).enhance(0.28), phase))
     return tuple(rows)
-
-
-@lru_cache(maxsize=1)
-def _winner_flag_codes():
-    return tuple(country["code"] for country in load_countries())
 
 
 def _draw_scrolling_flags(sign, elapsed):
@@ -428,17 +519,17 @@ def _draw_fireworks(draw, elapsed):
 
 @lru_cache(maxsize=256)
 def _resized_winner_flag(code):
-    image = _flag_image(code).resize((16, 10), Image.Resampling.LANCZOS)
-    return image
+    source = _flag_image(code)
+    width = max(1, round(source.width * 10 / source.height))
+    return source.resize((width, 10), Image.Resampling.LANCZOS)
 
 
-def _draw_raising_flag(draw, elapsed):
+def _draw_raising_flag(draw, elapsed, flag_codes):
     pole_x = 3
     draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=(150, 150, 165))
     draw.point((pole_x - 1, 0), fill=(245, 205, 75))
     draw.point((pole_x + 1, 0), fill=(245, 205, 75))
 
-    flag_codes = _winner_flag_codes()
     flag_index = int(elapsed / 2.5) % len(flag_codes)
     flag = _resized_winner_flag(flag_codes[flag_index])
     rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
@@ -453,20 +544,33 @@ def _draw_victory(sign, state, elapsed):
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(image)
     _draw_fireworks(draw, elapsed)
-    _draw_raising_flag(draw, elapsed)
+    _draw_raising_flag(draw, elapsed, state["victory_flag_codes"])
     sign.canvas.SetImage(image, 0, 0)
 
-    title = "QUIZ CHAMPION!"
+    winner = state.get("winner")
+    title = "FLAG CHAMPION!" if winner else "QUIZ COMPLETE!"
     title_x = (WIDTH - len(title) * 5) // 2
     title_color = graphics.Color(46, 210, 255) if int(elapsed * 3) % 2 == 0 else graphics.Color(255, 220, 80)
     _draw_outlined_text(sign, sign.font57, title, title_x, 9, title_color)
 
-    winner = state.get("winner")
-    name = winner["name"] if winner else "Everyone wins!"
-    message = name + " WINS!"
+    message = winner["name"] + " WINS!" if winner else "IT'S A TIE!"
     message_x = (WIDTH - len(message) * 4) // 2
     message_color = graphics.Color(255, 240, 150) if int(elapsed * 3) % 2 == 0 else graphics.Color(130, 255, 150)
-    _draw_outlined_text(sign, sign.font46, message, message_x, 28, message_color)
+    _draw_outlined_text(sign, sign.font46, message, message_x, 20, message_color)
+    if winner:
+        accuracy = f"ACCURACY {winner['accuracy']}%"
+        accuracy_x = (WIDTH - len(accuracy) * 4) // 2
+        _draw_outlined_text(sign, sign.font46, accuracy, accuracy_x, 30, graphics.Color(130, 255, 150))
+
+
+def _draw_sudden_death_notice(sign):
+    first_line = "SUDDEN DEATH"
+    second_line = "ROUNDS"
+    first_x = (WIDTH - len(first_line) * 6) // 2
+    second_x = (WIDTH - len(second_line) * 6) // 2
+    red = graphics.Color(255, 40, 40)
+    _draw_outlined_text(sign, sign.fontbig, first_line, first_x, 12, red)
+    _draw_outlined_text(sign, sign.fontbig, second_line, second_x, 27, red)
 
 
 def _fit_option(text, max_chars=20):
@@ -481,7 +585,9 @@ def _fit_option(text, max_chars=20):
 def _draw_question(sign, state, elapsed=0.0):
     sign.canvas.Clear()
     if state["current"] is None:
-        if state["complete"]:
+        if state.get("sudden_death_notice"):
+            _draw_sudden_death_notice(sign)
+        elif state["complete"]:
             _draw_victory(sign, state, elapsed)
         else:
             _draw_loading(sign, elapsed)
@@ -489,20 +595,25 @@ def _draw_question(sign, state, elapsed=0.0):
 
     current = state["current"]
     difficulty_mark = {"easy": "E", "hard": "H", "expert": "X"}[state["difficulty"]]
-    header = f"{difficulty_mark} {state['question_number']}/{state['total']}"
+    question_number = f"{state['question_number']}/{state['total']}"
+    header = f"{difficulty_mark} {question_number}"
+    header_label_color = graphics.Color(200, 220, 255)
+    question_number_color = graphics.Color(255, 40, 40) if state.get("sudden_death") else header_label_color
 
     flag = _flag_image(current["code"]).copy()
     if state["difficulty"] == "expert":
         flag.thumbnail((46, 28), Image.Resampling.LANCZOS)
         sign.canvas.SetImage(flag, (WIDTH - flag.width) // 2, (HEIGHT - flag.height) // 2)
         header_x = (40 - len(header) * 4) // 2
-        graphics.DrawText(sign.canvas, sign.font46, header_x, 18, graphics.Color(200, 220, 255), header)
+        graphics.DrawText(sign.canvas, sign.font46, header_x, 18, header_label_color, difficulty_mark)
+        graphics.DrawText(sign.canvas, sign.font46, header_x + 8, 18, question_number_color, question_number)
         return
 
     flag.thumbnail((42, 20), Image.Resampling.LANCZOS)
     sign.canvas.SetImage(flag, (44 - flag.width) // 2, 1)
     header_x = (44 - len(header) * 4) // 2
-    graphics.DrawText(sign.canvas, sign.font46, header_x, 29, graphics.Color(200, 220, 255), header)
+    graphics.DrawText(sign.canvas, sign.font46, header_x, 29, header_label_color, difficulty_mark)
+    graphics.DrawText(sign.canvas, sign.font46, header_x + 8, 29, question_number_color, question_number)
 
     options = current["options"]
     spacing = 8 if len(options) == 3 else 7
