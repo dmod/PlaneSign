@@ -50,5 +50,6 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
   - Lab weather is `data_dict["outside_lab_weather"]`, reported as `LIVE` (or `FORECAST` while the offset is ahead), so the scene renders exactly as it would for real weather.
   - Lab moon is `data_dict["outside_lab_moon"]`: its phase and position replace the computed ones in the environment, so moonlight, halo and silver linings follow it. `MOON_POSITIONS` are picked to land in open sky; re-check them when the hut, mountain, tree or lamp moves.
   - `shared_outside_lab_version` makes the loop pick up changes on the next frame.
+- While the lab is active (`outside.lab_active`), the top notice drops the forecast condition text, which covers too much of the scene being tuned. Status notices (`OFFLINE`, `FCST...`, `FCST~`, `SKY...`) still show.
 - Overrides clear when the sign leaves Outside, after `LAB_IDLE_SECONDS` without a lab action, on "Back to live" in the lab or "Return to now" on the main page, or on restart. Polling `/outside/lab/state` is not activity. Keep anything new self-clearing the same way.
 - When adding a holiday, weather effect or time-dependent feature, make it reachable from the lab: a `HOLIDAYS` entry, a weather preset, a sun event or the moon controls.

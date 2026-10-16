@@ -67,6 +67,8 @@ class OutsideEnvironment:
     local_date: date | None = None
     # The sun has yet to rise on local_date; overnight holidays stay up until it does.
     before_sunrise: bool = False
+    # The Outside lab is overriding time, weather or the moon.
+    lab: bool = False
 
 
 def reading(value):
@@ -419,10 +421,13 @@ def outside(sign):
             weather_pending = utilities.weather_refresh_pending()
             weather_override = shared_config.data_dict.get("outside_lab_weather")
             moon_override = shared_config.data_dict.get("outside_lab_moon")
+            lab = lab_active(shared_config.data_dict)
             seen_lab_version = lab_version
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
         environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override)
+        if lab:
+            environment = replace(environment, lab=True)
         status = environment.weather.status, environment.sky_status
         if status != last_status:
             if status[0] == "PENDING" and status[1] == "READY":

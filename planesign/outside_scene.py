@@ -1262,21 +1262,30 @@ OWL_VISIT_CHANCE = 0.65
 OWL_SUN_ALTITUDE = -6
 # Feet on the tip of the tree's lower-left limb, clear of the temperature label.
 OWL_PERCH = (103, 19)
+# Where the flying owl's body meets the perched owl's chest, so landing and takeoff do not jump.
+OWL_PERCH_BODY = (OWL_PERCH[0], OWL_PERCH[1] - 3)
 OWL_FLIGHT_SPEED = 17
 OWL_LANDING_SECONDS = 0.4
 OWL_EYES = (255, 208, 40)
 OWL_BLINK_WINDOW = 4.0
 OWL_BLINK_SECONDS = 0.2
-# Facing the viewer unless noted: u ear tufts, e eyes, k beak, f feathers, c chest, t talons.
+# Slow, deep wingbeats in bursts, then a short glide on level wings.
+OWL_WINGBEAT_SECONDS = 0.75
+OWL_WINGBEATS = 3
+OWL_GLIDE_SECONDS = 1.1
+# Perched sprites face the viewer: u ear tufts, e eyes, k beak, f feathers, c chest, t talons.
+# Flight sprites face right (mirrored for left), anchored on the body b, with h the head and no eyeshine.
 OWL_SPRITES = {
     "perch": (("u.u", "eke", "fff", "fcf", "fcf", ".t."), "t"),
-    # Head turned to the right; mirrored to look left.
-    "look": (("u.u", "fek", "fff", "fcf", "fcf", ".t."), "t"),
     "flare": (("f...f", "fekef", ".fff.", ".fcf.", ".fcf.", "..t.."), "t"),
-    "up": (("f...f", ".fef.", "..f.."), "e"),
-    "glide": (("ffeff", "..f.."), "e"),
-    "down": ((".fef.", "f.f.f"), "e"),
+    "up": (("f...........f", "ff.........ff", ".fff.....fff.", "...fff.fhh...", "....ffbfhh...", ".....ccc....."), "b"),
+    "lift": (("ff.........ff", ".ffff...ffff.", "....ff.f.hh..", "....ffbfhh...", ".....ccc....."), "b"),
+    "glide": (("f...........f", ".fffff.fffff.", "....ffbfhh...", ".....ccc....."), "b"),
+    "stroke": ((".........hh..", "...fffbfhhf..", ".fff.ccc.fff.", "ff.........ff"), "b"),
+    "down": ((".........hh..", "....ffbfhh...", "...ffcccff...", "..ff.....ff..", ".ff.......ff.", "f...........f"), "b"),
 }
+# Wing positions from fully raised to fully lowered.
+OWL_STROKE = ("up", "lift", "glide", "stroke", "down")
 
 
 @dataclass(frozen=True)
@@ -1296,22 +1305,20 @@ def owl_visit(slot: int, seed: int) -> OwlVisit | None:
     if rng.random() > OWL_VISIT_CHANCE:
         return None
     arrive = slot * OWL_SLOT_SECONDS + rng.uniform(5, 40)
-    entry = (rng.choice((-6, WIDTH + 5)), rng.uniform(8, 12))
-    exit = (rng.choice((-6, WIDTH + 5)), rng.uniform(6, 10))
-    land = arrive + math.dist(entry, OWL_PERCH) / OWL_FLIGHT_SPEED
+    # Low enough that raised wings stay clear of the corner labels.
+    entry = (rng.choice((-7, WIDTH + 6)), rng.uniform(11, 14))
+    exit = (rng.choice((-7, WIDTH + 6)), rng.uniform(10, 13))
+    land = arrive + math.dist(entry, OWL_PERCH_BODY) / OWL_FLIGHT_SPEED
     leave = land + rng.uniform(150, 220)
-    return OwlVisit(arrive, land, leave, leave + math.dist(OWL_PERCH, exit) / OWL_FLIGHT_SPEED, entry, exit)
+    return OwlVisit(arrive, land, leave, leave + math.dist(OWL_PERCH_BODY, exit) / OWL_FLIGHT_SPEED, entry, exit)
 
 
 @lru_cache(maxsize=64)
-def owl_glances(window: int, seed: int):
-    """Blink times within a window, plus an occasional head turn: (blinks, look direction, look start, look end)."""
+def owl_blinks(window: int, seed: int) -> tuple[float, ...]:
+    """Blink start times within a window: usually one, sometimes a quick double."""
     rng = random.Random(seed * 3571 + window * 7307 + 3)
     first = rng.uniform(0.2, OWL_BLINK_WINDOW - 0.8)
-    blinks = (first, first + 0.38) if rng.random() < 0.3 else (first,)
-    look_start = rng.uniform(0, OWL_BLINK_WINDOW - 2.5)
-    look = rng.choice((-1, 1)) if rng.random() < 0.2 else 0
-    return blinks, look, look_start, look_start + rng.uniform(1.2, 2.5)
+    return (first, first + 0.38) if rng.random() < 0.3 else (first,)
 
 
 def owl_allowed(environment: "OutsideEnvironment") -> bool:
@@ -1320,12 +1327,16 @@ def owl_allowed(environment: "OutsideEnvironment") -> bool:
 
 
 def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
-    """A silent swooping glide with short bursts of slow wingbeats."""
+    """A swooping flight: bursts of slow, deep wingbeats between short glides on level wings."""
     x = origin[0] + (target[0] - origin[0]) * progress
     y = origin[1] + (target[1] - origin[1]) * progress + 3 * math.sin(math.pi * progress)
-    beat = age % 1.6
-    pose = ("up", "glide", "down", "glide")[int(beat / 0.2) % 4] if beat < 0.8 else "glide"
-    return x, y, 1 if target[0] > origin[0] else -1, pose
+    flapping = OWL_WINGBEATS * OWL_WINGBEAT_SECONDS
+    beat = age % (flapping + OWL_GLIDE_SECONDS)
+    # Wing height from 1 (raised) to -1 (lowered). Each beat starts and ends level, so glides join it smoothly.
+    lift = math.sin(2 * math.pi * beat / OWL_WINGBEAT_SECONDS) if beat < flapping else 0.0
+    pose = OWL_STROKE[round((1 - lift) * 2)]
+    # The downstroke heaves the body up; it sinks again as the wings rise.
+    return x, y + 0.6 * lift, 1 if target[0] > origin[0] else -1, pose
 
 
 def owl_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -1336,23 +1347,21 @@ def owl_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     if visit is None or not visit.arrive <= elapsed < visit.gone:
         return None
     if elapsed < visit.land:
-        progress = (elapsed - visit.arrive) / (visit.land - visit.arrive)
+        # Eyeshine only shows once the owl has settled on the branch and faces the viewer.
         if elapsed >= visit.land - OWL_LANDING_SECONDS:
-            return *OWL_PERCH, 1, "flare", 1.0
-        return *owl_flight(visit.entry, OWL_PERCH, progress, elapsed - visit.arrive), 1.0
+            return *OWL_PERCH, 1, "flare", 0.0
+        progress = (elapsed - visit.arrive) / (visit.land - OWL_LANDING_SECONDS - visit.arrive)
+        return *owl_flight(visit.entry, OWL_PERCH_BODY, progress, elapsed - visit.arrive), 0.0
     if elapsed >= visit.leave:
         progress = (elapsed - visit.leave) / (visit.gone - visit.leave)
-        return *owl_flight(OWL_PERCH, visit.exit, progress, elapsed - visit.leave), 1.0
+        return *owl_flight(OWL_PERCH_BODY, visit.exit, progress, elapsed - visit.leave), 0.0
     window, moment = divmod(elapsed, OWL_BLINK_WINDOW)
-    blinks, look, look_start, look_end = owl_glances(int(window), seed)
     openness = 1.0
-    for blink in blinks:
+    for blink in owl_blinks(int(window), seed):
         if blink <= moment < blink + OWL_BLINK_SECONDS:
             # The lids snap shut, stay closed briefly, then open again.
             phase = (moment - blink) / OWL_BLINK_SECONDS
             openness = 0.35 if phase < 0.25 or phase >= 0.75 else 0.0
-    if look and look_start <= moment < look_end:
-        return *OWL_PERCH, look, "look", openness
     return *OWL_PERCH, 1, "perch", openness
 
 
@@ -1365,6 +1374,9 @@ def draw_owl(image: Image.Image, palette: Palette, owl):
         "u": mix(feathers, palette.trunk, 0.3),
         "f": feathers,
         "c": mix(palette.animal, palette.trim, 0.35),
+        "b": feathers,
+        # A pale facial disc picks the head out against the dark back.
+        "h": mix(palette.animal, palette.trim, 0.5),
         "k": mix(feathers, palette.trunk, 0.5),
         "t": mix(palette.animal, palette.trim, 0.5),
         # Eyeshine stays bright in the dark; a blink dims it to the surrounding feathers.
@@ -4125,7 +4137,11 @@ def outside_notice(environment: "OutsideEnvironment") -> str:
     if weather.status == "OFFLINE" or environment.sky_status == "OFFLINE":
         notices.append("OFFLINE")
     if environment.offset_minutes:
-        if weather.status in ("FORECAST", "FORECAST_CACHED") and weather.code in WEATHER_DESCRIPTIONS:
+        # The condition text hides too much of the scene while the lab is in use; status notices stay.
+        if environment.lab and weather.status in ("FORECAST", "FORECAST_CACHED"):
+            if weather.status == "FORECAST_CACHED":
+                notices.append("FCST~")
+        elif weather.status in ("FORECAST", "FORECAST_CACHED") and weather.code in WEATHER_DESCRIPTIONS:
             notices.append(WEATHER_DESCRIPTIONS[weather.code].upper() + ("~" if weather.status == "FORECAST_CACHED" else ""))
         elif weather.status == "PENDING":
             notices.append("FCST...")
