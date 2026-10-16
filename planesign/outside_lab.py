@@ -1,4 +1,4 @@
-"""Outside lab: set Outside mode's time and weather by hand and see the result on the sign at once.
+"""Outside lab: set Outside mode's time, weather and moon by hand and see the result on the sign at once.
 
 Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
 button in the web UI's Outside controls. Every lab action switches the sign to Outside. The overrides only affect
@@ -36,6 +36,16 @@ HOLIDAY_TIMES = (("Day", 12, 0), ("Night", 21, 30))
 HOLIDAY_NIGHT_TIME = ("Before dawn", 3, 0)
 # How long a sun event jump waits for the astronomy worker to cover a newly selected day.
 SKY_WAIT_SECONDS = 20
+# Moon positions the lab can place the moon at: name -> (label, altitude, azimuth). Each lands in open sky
+# (east of the chimney, high in the middle, low between the mountain and the tree); None keeps the computed position.
+MOON_POSITIONS = {
+    "actual": ("Actual", None, None),
+    "east": ("East", 28, 135),
+    "high": ("High", 55, 180),
+    "west": ("Low west", 12, 215),
+}
+# Named phase shortcuts in degrees (0 new, 90 first quarter, 180 full, 270 last quarter).
+MOON_PHASES = (("New", 0), ("Waxing crescent", 45), ("First quarter", 90), ("Waxing gibbous", 135), ("Full", 180), ("Waning gibbous", 225), ("Last quarter", 270), ("Waning crescent", 315))
 # Weather query parameters: name -> (OutsideWeather field, minimum, maximum, scale).
 WEATHER_FIELDS = {
     "clouds": ("clouds", 0, 100, 0.01),
@@ -154,6 +164,8 @@ def state():
             "seasons": list(SEASON_MONTHS),
             "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
             "holidays": holiday_shortcuts(displayed_moment(tz).year),
+            "moon_positions": [{"name": name, "label": label} for name, (label, _, _) in MOON_POSITIONS.items()],
+            "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
             "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
         },
     }
@@ -246,6 +258,33 @@ def set_weather():
     shared_config.data_dict["outside_lab_weather"] = override
     changed()
     logger.info("Outside lab: weather %s", request.query_string.decode())
+    return jsonify(state())
+
+
+@blueprint.route("/moon")
+def set_moon():
+    """?phase=DEGREES (0 new, 180 full) and/or ?position=NAME; whichever is omitted keeps its current setting. Or ?reset=1."""
+    if request.args.get("reset"):
+        touch()
+        shared_config.data_dict["outside_lab_moon"] = None
+        changed()
+        return jsonify(state())
+    phase = number("phase", 0, 360)
+    position = request.args.get("position")
+    if position is not None and position not in MOON_POSITIONS:
+        raise LabError(f"position must be one of {', '.join(MOON_POSITIONS)}")
+    if phase is None and position is None:
+        raise LabError("Pass phase, position or reset")
+    override = dict(shared_config.data_dict.get("outside_lab_moon") or {"phase": None, "position": "actual", "altitude": None, "azimuth": None})
+    if phase is not None:
+        override["phase"] = phase % 360
+    if position is not None:
+        _, altitude, azimuth = MOON_POSITIONS[position]
+        override.update(position=position, altitude=altitude, azimuth=azimuth)
+    touch()
+    shared_config.data_dict["outside_lab_moon"] = override
+    changed()
+    logger.info("Outside lab: moon %s", request.query_string.decode())
     return jsonify(state())
 
 

@@ -520,7 +520,74 @@ STARS = tuple(
 STAR_COLORS = ((232, 244, 255), (255, 239, 207), (225, 231, 255))
 RIPPLES = ((60, 27, 15, 0), (55, 28, 9, 2.3), (68, 29, 7, 4.5))
 PARTICLES = tuple((grain(i, 3) / 97 * 128, grain(i, 9) / 97 * 35, 0.7 + grain(i, 5) / 97, grain(i, 7)) for i in range(80))
-MOON_PIXELS = tuple((x, y, math.sqrt(9 - y * y)) for y in range(-3, 4) for x in range(-3, 4) if x * x + y * y <= 9)
+MOON_DIAMETER = 7
+# Photo samples per sign pixel along each axis; the phase is cut at this resolution and averaged
+# down, so the limb and terminator land on partial pixels instead of stepping on and off.
+MOON_SUPERSAMPLE = 32
+MOON_LIT = (239, 226, 186)
+MOON_EARTHSHINE = (76, 82, 94)
+# How much of the photo's albedo range survives: 1 keeps the full maria contrast, 0 paints a flat disk.
+MOON_TEXTURE_CONTRAST = 0.7
+
+
+@lru_cache(maxsize=1)
+def moon_textures() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Linear albedo of the sunlit and earthshine photos (1 = bright highlands) and the disk coverage, supersampled."""
+    size = MOON_DIAMETER * MOON_SUPERSAMPLE
+    lit = Image.open(f"{shared_config.icons_dir}/moon/moon.png").convert("RGBA")
+    disk = lit.getchannel("A").getbbox()
+    lit = lit.crop(disk).resize((size, size), Image.LANCZOS)
+    dark = Image.open(f"{shared_config.icons_dir}/moon/moonbg.png").convert("RGB").crop(disk).resize((size, size), Image.LANCZOS)
+    coverage = np.asarray(lit.getchannel("A"), dtype=np.float64) / 255
+
+    def albedo(photo: Image.Image) -> np.ndarray:
+        luminance = SRGB_TO_LINEAR_ARRAY[np.asarray(photo)[..., :3]] @ (0.2126, 0.7152, 0.0722)
+        relative = np.clip(luminance / np.percentile(luminance[coverage > 0.99], 98), 0, 1)
+        return 1 - MOON_TEXTURE_CONTRAST * (1 - relative)
+
+    return albedo(lit), albedo(dark), coverage
+
+
+@lru_cache(maxsize=64)
+def moon_sprite(phase: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Premultiplied linear color and coverage of the sunlit and earthshine sides for a phase in whole degrees
+    (0 new, 180 full), shrunk from the photos. The sunlit side faces right while waxing."""
+    lit_albedo, dark_albedo, coverage = moon_textures()
+    size = MOON_DIAMETER * MOON_SUPERSAMPLE
+    axis = (np.arange(size) + 0.5) / size * 2 - 1
+    across, down = axis[None, :], axis[:, None]
+    edge = np.sqrt(np.clip(1 - down * down, 0, None))
+    angle = math.radians(phase)
+    sunlit = across >= math.cos(angle) * edge if angle <= math.pi else across <= -math.cos(angle) * edge
+    lit_coverage = coverage * sunlit
+    dark_coverage = coverage - lit_coverage
+
+    def shrink(values: np.ndarray) -> np.ndarray:
+        return values.reshape(MOON_DIAMETER, MOON_SUPERSAMPLE, MOON_DIAMETER, MOON_SUPERSAMPLE).mean(axis=(1, 3))
+
+    def tint(color: Color) -> np.ndarray:
+        return SRGB_TO_LINEAR_ARRAY[np.array(color)]
+
+    return (
+        shrink(lit_albedo * lit_coverage)[..., None] * tint(MOON_LIT),
+        shrink(lit_coverage),
+        shrink(dark_albedo * dark_coverage)[..., None] * tint(MOON_EARTHSHINE),
+        shrink(dark_coverage),
+    )
+
+
+def draw_moon(image: Image.Image, cx: int, cy: int, phase: float, lit_strength: float, earthshine_strength: float):
+    """Blend the moon sprite over the sky in linear light; the earthshine side also hides the stars behind it."""
+    lit_color, lit_alpha, dark_color, dark_alpha = moon_sprite(round(phase) % 360)
+    left, top = cx - MOON_DIAMETER // 2, cy - MOON_DIAMETER // 2
+    box = (max(0, left), max(0, top), min(WIDTH, left + MOON_DIAMETER), min(HEIGHT, top + MOON_DIAMETER))
+    if box[0] >= box[2] or box[1] >= box[3]:
+        return
+    window = (slice(box[1] - top, box[3] - top), slice(box[0] - left, box[2] - left))
+    sky = SRGB_TO_LINEAR_ARRAY[np.asarray(image.crop(box))]
+    alpha = lit_alpha[window] * lit_strength + dark_alpha[window] * earthshine_strength
+    linear = sky * (1 - alpha[..., None]) + lit_color[window] * lit_strength + dark_color[window] * earthshine_strength
+    image.paste(Image.fromarray(linear_to_srgb_array(linear), "RGB"), box)
 
 
 @lru_cache(maxsize=96)
@@ -832,12 +899,8 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         for radius, alpha in ((5, 10), (4, 18)):
             hd.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=(155, 178, 192, round(alpha * fraction * night * (1 - cover))))
         image.paste(halo, (0, 0), halo)
-        for dx, dy, edge in MOON_PIXELS:
-            lit = dx >= math.cos(phase) * edge if phase <= math.pi else dx <= -math.cos(phase) * edge
-            if lit and fraction > 0.005:
-                x, y = cx + dx, cy + dy
-                if 0 <= x < WIDTH and 0 <= y < HEIGHT:
-                    d.point((x, y), fill=mix(image.getpixel((x, y)), (239, 226, 186), strength))
+        # Daylight scatters over the earthshine side, so it only shows once night falls.
+        draw_moon(image, cx, cy, environment.moon_phase, strength, night * (1 - cover * 0.5))
     clouds = draw_cloudscape(image, environment, palette, elapsed, glows, lightning)
     d = ImageDraw.Draw(image)
     wind = environment.weather.wind or 0

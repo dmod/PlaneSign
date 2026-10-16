@@ -134,7 +134,7 @@ def outside_time() -> float:
 
 
 def lab_active(data_dict) -> bool:
-    return lab_time() is not None or data_dict.get("outside_lab_weather") is not None
+    return lab_time() is not None or data_dict.get("outside_lab_weather") is not None or data_dict.get("outside_lab_moon") is not None
 
 
 def bump_lab_version():
@@ -147,9 +147,10 @@ def clear_lab(data_dict, reason: str):
     with shared_config.shared_outside_lab_clock.get_lock():
         shared_config.shared_outside_lab_clock[:] = [0.0, 0.0, 1.0]
     data_dict["outside_lab_weather"] = None
+    data_dict["outside_lab_moon"] = None
     bump_lab_version()
     shared_config.shared_outside_time_update.set()
-    logger.info("Outside lab: back to live time and weather (%s)", reason)
+    logger.info("Outside lab: back to live time, weather and moon (%s)", reason)
 
 
 def lab_weather(override, forecast_time: float | None) -> OutsideWeather:
@@ -210,7 +211,15 @@ def sky_snapshot(sky, timestamp: float, latitude: float, longitude: float):
     return values
 
 
-def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_pending: bool = False, weather_override=None) -> OutsideEnvironment:
+def lab_moon(environment: OutsideEnvironment, override) -> OutsideEnvironment:
+    """The lab's moon: a set phase or position replaces the computed one; the sun and the clock keep running."""
+    if override is None or environment.sky_status != "READY":
+        return environment
+    changes = {"moon_phase": override.get("phase"), "moon_altitude": override.get("altitude"), "moon_azimuth": override.get("azimuth")}
+    return replace(environment, **{field: value for field, value in changes.items() if value is not None})
+
+
+def environment_snapshot(sky, weather, moment: datetime, latitude: float, longitude: float, *, offset_minutes: int = 0, weather_offline: bool = False, weather_pending: bool = False, weather_override=None, moon_override=None) -> OutsideEnvironment:
     forecast_time = moment.timestamp() if offset_minutes else None
     if weather_override is not None:
         observed = lab_weather(weather_override, forecast_time)
@@ -229,7 +238,8 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
     sunrise = next((sunrise for sunrise in sky.get("sunrises", ()) if sunrise > moment.timestamp()), None)
     before_sunrise = sunrise is not None and datetime.fromtimestamp(sunrise, moment.tzinfo).date() == moment.date()
-    return OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise)
+    environment = OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise)
+    return lab_moon(environment, moon_override)
 
 
 def sky_angles(ephemeris, instant, latitude: float, longitude: float):
@@ -336,10 +346,11 @@ def outside_status():
     offset_minutes = shared_config.shared_outside_offset_minutes.value
     moment = outside_moment(tz, offset_minutes)
     override = shared_config.data_dict.get("outside_lab_weather")
-    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline", weather_pending=utilities.weather_refresh_pending(), weather_override=override)
+    moon_override = shared_config.data_dict.get("outside_lab_moon")
+    environment = environment_snapshot(shared_config.data_dict.get("outside_sky"), shared_config.data_dict.get("weather"), moment, latitude, longitude, offset_minutes=offset_minutes, weather_offline=shared_config.data_dict.get("weather_status") == "offline", weather_pending=utilities.weather_refresh_pending(), weather_override=override, moon_override=moon_override)
     lab_now = lab_time()
     _, _, lab_speed = shared_config.shared_outside_lab_clock[:]
-    active = lab_now is not None or override is not None
+    active = lab_now is not None or override is not None or moon_override is not None
     return {
         "offset_minutes": offset_minutes,
         "now": datetime.fromtimestamp(moment.timestamp() - offset_minutes * 60, tz).isoformat(),
@@ -348,6 +359,7 @@ def outside_status():
             "time": datetime.fromtimestamp(lab_now, tz).isoformat() if lab_now is not None else None,
             "speed": lab_speed if lab_now is not None else None,
             "weather": override,
+            "moon": moon_override,
             "expires_in": max(0, round(LAB_IDLE_SECONDS - (time.monotonic() - shared_config.shared_outside_lab_activity.value))) if active else None,
         },
         "timezone": getattr(tz, "key", "UTC"),
@@ -367,6 +379,7 @@ def outside_status():
         "snow_mm_h": environment.weather.snow,
         "sun_altitude": environment.sun_altitude,
         "moon_altitude": environment.moon_altitude,
+        "moon_azimuth": environment.moon_azimuth if environment.sky_status == "READY" else None,
         "moon_phase": environment.moon_phase if environment.sky_status == "READY" else None,
     }
 
@@ -405,10 +418,11 @@ def outside(sign):
             weather_offline = shared_config.data_dict.get("weather_status") == "offline"
             weather_pending = utilities.weather_refresh_pending()
             weather_override = shared_config.data_dict.get("outside_lab_weather")
+            moon_override = shared_config.data_dict.get("outside_lab_moon")
             seen_lab_version = lab_version
             last_snapshot = int(elapsed)
         moment = outside_moment(tz, rendered_offset)
-        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override)
+        environment = environment_snapshot(sky, weather, moment, latitude, longitude, offset_minutes=math.ceil(rendered_offset), weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override)
         status = environment.weather.status, environment.sky_status
         if status != last_status:
             if status[0] == "PENDING" and status[1] == "READY":

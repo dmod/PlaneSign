@@ -38,6 +38,9 @@
     .panels .wide { grid-column: 1 / -1; }
     #offset { flex: 1; min-width: 120px; }
     #offset_label { min-width: 44px; text-align: right; }
+    #moon_phase { flex: 1; min-width: 120px; }
+    #moon_phase_label { min-width: 150px; }
+    button.selected { background: #1e3350; border-color: #4f7fc0; }
     #presets { margin-bottom: 8px; }
     .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
     .fields label { display: flex; flex-direction: column; gap: 2px; color: #9aa4ae; font-size: 11px; }
@@ -58,7 +61,7 @@
 <main>
 <header>
     <h1>Outside lab</h1>
-    <p class="note">Set Outside's time and weather by hand; the sign switches to Outside and redraws on the next frame.
+    <p class="note">Set Outside's time, weather and moon by hand; the sign switches to Outside and redraws on the next frame.
     Only Outside is affected. Everything returns to live when the sign leaves Outside, after <span id="idle">15</span> idle minutes, or with Back to live.</p>
 </header>
 
@@ -68,12 +71,14 @@
         <div><small>Season</small><b id="s_season">…</b></div>
         <div><small>Sun</small><b id="s_sun">…</b></div>
         <div><small>Astronomy</small><b id="s_sky">…</b></div>
+        <div class="span2"><small>Moon</small><b id="s_moon">…</b></div>
         <div class="span2"><small>Weather</small><b id="s_weather">…</b></div>
         <div class="span2"><small>Holidays</small><b id="s_holidays">…</b></div>
     </div>
     <div class="status_bar">
         <span class="badge" id="b_time">live time</span>
         <span class="badge" id="b_weather">live weather</span>
+        <span class="badge" id="b_moon">live moon</span>
         <span class="badge" id="b_expires"></span>
         <span class="note">Sign clock: <span id="s_clock">…</span></span>
         <button class="live" onclick="call('/outside/lab/reset')">Back to live</button>
@@ -129,6 +134,18 @@
     <p class="note">A blank field is an unknown reading, as when the live feed omits it.</p>
 </section>
 
+<section class="card">
+    <h2>Moon</h2>
+    <div class="row">
+        <label class="row_label" for="moon_phase">Phase</label>
+        <div class="controls"><input type="range" id="moon_phase" min="0" max="359" step="1" value="0"><b id="moon_phase_label">0°</b></div>
+    </div>
+    <div class="row"><span class="row_label"></span><div id="moon_phases" class="chips"></div></div>
+    <div class="row"><span class="row_label">Position</span><div id="moon_positions" class="chips"></div></div>
+    <div class="controls"><button onclick="call('/outside/lab/moon', {reset: 1})">Live moon</button></div>
+    <p class="note">Overrides the moon's phase and, unless Actual, its place in the sky; time keeps running. At Actual the moon only shows while it is up and clear of the tree.</p>
+</section>
+
 <section class="card wide">
     <h2>Holidays</h2>
     <div id="holidays"></div>
@@ -164,8 +181,19 @@ let built = false;
 let filledWeather = false;
 let holidayKey = '';
 let offsetTimer = null;
+let moonTimer = null;
+let moonPhases = [];
+const moonPositionButtons = {};
 
 function el(id) { return document.getElementById(id); }
+
+function phaseName(degrees) {
+    return moonPhases[Math.round(degrees / 45) % moonPhases.length].label;
+}
+
+function phaseLabel(degrees) {
+    return `${Math.round(degrees)}° ${phaseName(degrees)}`;
+}
 
 function button(label, onclick) {
     const b = document.createElement('button');
@@ -227,6 +255,19 @@ function build(options) {
         clearTimeout(offsetTimer);
         offsetTimer = setTimeout(() => call('/outside/lab/offset', {minutes: el('offset').value}), 120);
     };
+    moonPhases = options.moon_phases;
+    for (const {label, phase} of moonPhases) {
+        el('moon_phases').append(button(label, () => call('/outside/lab/moon', {phase})));
+    }
+    for (const {name, label} of options.moon_positions) {
+        moonPositionButtons[name] = button(label, () => call('/outside/lab/moon', {position: name}));
+        el('moon_positions').append(moonPositionButtons[name]);
+    }
+    el('moon_phase').oninput = () => {
+        el('moon_phase_label').textContent = phaseLabel(el('moon_phase').value);
+        clearTimeout(moonTimer);
+        moonTimer = setTimeout(() => call('/outside/lab/moon', {phase: el('moon_phase').value}), 120);
+    };
     built = true;
 }
 
@@ -255,6 +296,12 @@ function render(state) {
     el('s_season').textContent = state.season;
     el('s_sun').textContent = state.sun_altitude == null ? '—' : state.sun_altitude.toFixed(1) + '°';
     el('s_sky').textContent = state.astronomy;
+    if (state.moon_phase == null) {
+        el('s_moon').textContent = '—';
+    } else {
+        const altitude = state.moon_altitude > 0 ? `${state.moon_altitude.toFixed(1)}° up, azimuth ${Math.round(state.moon_azimuth)}°` : 'below the horizon';
+        el('s_moon').textContent = `${phaseLabel(state.moon_phase)}, ${altitude}`;
+    }
     const parts = [
         state.condition ?? 'unknown',
         state.temperature_f == null ? null : Math.round(state.temperature_f) + '°F',
@@ -269,6 +316,14 @@ function render(state) {
     el('b_time').classList.toggle('on', !!lab.time);
     el('b_weather').textContent = lab.weather ? 'lab weather' : 'live weather';
     el('b_weather').classList.toggle('on', !!lab.weather);
+    el('b_moon').textContent = lab.moon ? 'lab moon' : 'live moon';
+    el('b_moon').classList.toggle('on', !!lab.moon);
+    const position = lab.moon?.position ?? 'actual';
+    for (const [name, b] of Object.entries(moonPositionButtons)) b.classList.toggle('selected', name === position);
+    if (document.activeElement !== el('moon_phase') && state.moon_phase != null) {
+        el('moon_phase').value = Math.round(state.moon_phase) % 360;
+        el('moon_phase_label').textContent = phaseLabel(state.moon_phase);
+    }
     el('b_expires').style.display = lab.expires_in == null ? 'none' : '';
     if (lab.expires_in != null) el('b_expires').textContent = `resets in ${Math.floor(lab.expires_in / 60)}:${String(lab.expires_in % 60).padStart(2, '0')}`;
     if (document.activeElement !== el('offset')) {
