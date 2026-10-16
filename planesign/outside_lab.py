@@ -1,4 +1,4 @@
-"""Outside lab: set Outside mode's time, weather and moon by hand and see the result on the sign at once.
+"""Outside lab: set Outside mode's time, weather, moon and hemisphere by hand and see the result on the sign at once.
 It can also pause Outside and summon its occasional visitors and sky events (outside_scene.SUMMONS).
 
 Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
@@ -48,6 +48,8 @@ MOON_POSITIONS = {
 }
 # Named phase shortcuts in degrees (0 new, 90 first quarter, 180 full, 270 last quarter).
 MOON_PHASES = (("New", 0), ("Waxing crescent", 45), ("First quarter", 90), ("Waxing gibbous", 135), ("Full", 180), ("Waning gibbous", 225), ("Last quarter", 270), ("Waning crescent", 315))
+# Hemispheres the lab can show: their constellations and seasons. The sun and moon stay where they are at the sign's location.
+HEMISPHERES = {"north": "Northern", "south": "Southern"}
 
 
 @dataclass(frozen=True)
@@ -212,6 +214,7 @@ def page_options():
         "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
         "moon_positions": [{"name": name, "label": label} for name, (label, _, _) in MOON_POSITIONS.items()],
         "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
+        "hemispheres": [{"name": name, "label": label} for name, label in HEMISPHERES.items()],
         "summons": [{"name": name, "label": summon.label, "requirement": summon.requirement} for name, summon in SUMMONS.items()],
         "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
         # The emulator's frame server, for the live preview; None on the physical panel.
@@ -278,7 +281,8 @@ def set_time():
         if season not in SEASON_MONTHS:
             raise LabError(f"season must be one of {', '.join(SEASON_MONTHS)}")
         moment = displayed_moment(tz)
-        month = SEASON_MONTHS[season] if latitude >= 0 else (SEASON_MONTHS[season] + 5) % 12 + 1
+        hemisphere = outside.hemisphere_at(latitude, shared_config.data_dict.get("outside_lab_hemisphere"))
+        month = SEASON_MONTHS[season] if hemisphere == "north" else (SEASON_MONTHS[season] + 5) % 12 + 1
         set_lab_time(local_timestamp(date(moment.year, month, 15), moment.hour, moment.minute, tz), speed)
     elif "event" in request.args:
         name = request.args["event"]
@@ -347,6 +351,22 @@ def set_moon():
     shared_config.data_dict["outside_lab_moon"] = override
     changed()
     logger.info("Outside lab: moon %s", request.query_string.decode())
+    return jsonify(state())
+
+
+@blueprint.route("/hemisphere")
+def set_hemisphere():
+    """?name=north|south shows that hemisphere's constellations and seasons; or ?reset=1 for the sign's own."""
+    if request.args.get("reset"):
+        hemisphere = None
+    else:
+        hemisphere = request.args.get("name", "")
+        if hemisphere not in HEMISPHERES:
+            raise LabError(f"name must be one of {', '.join(HEMISPHERES)}")
+    touch()
+    shared_config.data_dict["outside_lab_hemisphere"] = hemisphere
+    changed()
+    logger.info("Outside lab: hemisphere %s", request.query_string.decode())
     return jsonify(state())
 
 

@@ -505,19 +505,60 @@ BIG_DIPPER = (
     (99, 7, 0.83, (232, 240, 255)),  # Merak
     (99, 3, 1.0, (255, 222, 180)),  # Dubhe
 )
-# Random field stars keep a 3 px berth around the constellation so its shape reads cleanly.
-DIPPER_BOUNDS = (min(s[0] for s in BIG_DIPPER) - 3, min(s[1] for s in BIG_DIPPER) - 3, max(s[0] for s in BIG_DIPPER) + 3, max(s[1] for s in BIG_DIPPER) + 3)
+# The other constellations use the Dipper's brightness scale, peak = min(1, 1 - 0.29 * (magnitude - 1.8)), and are
+# drawn as seen when facing them. Orion's three belt stars sit just left of center, projected at 2.2 px per degree
+# (larger than the Dipper so they separate) with the spacing evened out.
+ORION_BELT = (
+    (54, 11, 1.0, (218, 230, 255)),  # Alnitak
+    (57, 9, 1.0, (218, 230, 255)),  # Alnilam
+    (60, 7, 0.87, (218, 230, 255)),  # Mintaka
+)
+# South of the equator Orion stands on his head: the belt is the base of "the Saucepan" and the sword its handle,
+# rising above the belt. The same projection turned 180 degrees, set lower to leave room for the handle.
+SAUCEPAN = (
+    (54, 15, 0.87, (218, 230, 255)),  # Mintaka
+    (57, 13, 1.0, (218, 230, 255)),  # Alnilam
+    (60, 11, 1.0, (218, 230, 255)),  # Alnitak
+    (56, 5, 0.25, (218, 230, 255)),  # 42 Orionis
+    (56, 4, 0.36, (232, 222, 236)),  # The Orion Nebula's Trapezium
+    (56, 3, 0.72, (218, 230, 255)),  # Iota Orionis, the handle's tip
+)
+# The Southern Cross (Crux) where the Dipper stands in the north, upright as it is when highest, with its
+# Pointers (Alpha and Beta Centauri) leading up to it from the lower left. Projected at 1.4 px per degree, turned 10 degrees.
+SOUTHERN_CROSS = (
+    (94, 2, 1.0, (255, 196, 150)),  # Gacrux, a red giant
+    (91, 5, 1.0, (222, 232, 255)),  # Mimosa
+    (97, 5, 0.71, (222, 232, 255)),  # Delta Crucis
+    (95, 7, 0.48, (232, 240, 255)),  # Epsilon Crucis
+    (94, 10, 1.0, (222, 232, 255)),  # Acrux
+)
+POINTERS = (
+    (71, 9, 1.0, (255, 240, 214)),  # Alpha Centauri
+    (78, 7, 1.0, (222, 232, 255)),  # Hadar (Beta Centauri)
+)
+# Each hemisphere's star groups; the hemisphere comes from SENSOR_LAT (or the Outside lab). The Pointers share the
+# Cross's field-star clearing, so no stray star breaks the line between them.
+CONSTELLATIONS = {"north": (BIG_DIPPER, ORION_BELT), "south": (SOUTHERN_CROSS + POINTERS, SAUCEPAN)}
 # Haze near the horizon hides faint stars, so field stars stay more than this many pixels from any land.
 STAR_HORIZON_CLEARANCE = 4
 LAND_ROWS, LAND_COLUMNS = np.nonzero(np.asarray(LAND))
-STARS = tuple(
-    (x, y, grain(x, y, 5))
-    for y in range(1, 21)
-    for x in range(2, 126)
-    if grain(x, y, 9) < 2
-    and not (DIPPER_BOUNDS[0] <= x <= DIPPER_BOUNDS[2] and DIPPER_BOUNDS[1] <= y <= DIPPER_BOUNDS[3])
-    and np.min(np.hypot(LAND_COLUMNS - x, LAND_ROWS - y)) > STAR_HORIZON_CLEARANCE
-)
+
+
+def field_stars(groups) -> tuple[tuple[int, int, int], ...]:
+    # Random field stars keep a 3 px berth around each star group so its shape reads cleanly.
+    bounds = [(min(s[0] for s in g) - 3, min(s[1] for s in g) - 3, max(s[0] for s in g) + 3, max(s[1] for s in g) + 3) for g in groups]
+    return tuple(
+        (x, y, grain(x, y, 5))
+        for y in range(1, 21)
+        for x in range(2, 126)
+        if grain(x, y, 9) < 2
+        and not any(left <= x <= right and top <= y <= bottom for left, top, right, bottom in bounds)
+        and np.min(np.hypot(LAND_COLUMNS - x, LAND_ROWS - y)) > STAR_HORIZON_CLEARANCE
+    )
+
+
+STARS = {hemisphere: field_stars(groups) for hemisphere, groups in CONSTELLATIONS.items()}
+CONSTELLATION_STARS = {hemisphere: tuple(star for group in groups for star in group) for hemisphere, groups in CONSTELLATIONS.items()}
 STAR_COLORS = ((232, 244, 255), (255, 239, 207), (225, 231, 255))
 RIPPLES = ((60, 27, 15, 0), (55, 28, 9, 2.3), (68, 29, 7, 4.5))
 PARTICLES = tuple((grain(i, 3) / 97 * 128, grain(i, 9) / 97 * 35, 0.7 + grain(i, 5) / 97, grain(i, 7)) for i in range(80))
@@ -879,7 +920,7 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
     cover = cloud_cover(environment)
     visibility = starlight(environment)
-    for x, y, phase in STARS:
+    for x, y, phase in STARS[environment.hemisphere]:
         if star_clearings and in_boxes(x, y, star_clearings):
             continue
         swell = 0.5 + 0.5 * math.sin(elapsed * (0.65 + phase / 160) + phase)
@@ -888,8 +929,8 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         strength = visibility * shimmer
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), STAR_COLORS[phase % len(STAR_COLORS)], strength))
-    # The constellation twinkles only gently so its shape never drops out.
-    for index, (x, y, peak, color) in enumerate(BIG_DIPPER):
+    # Constellations twinkle only gently so their shapes never drop out.
+    for index, (x, y, peak, color) in enumerate(CONSTELLATION_STARS[environment.hemisphere]):
         strength = visibility * peak * (0.85 + 0.15 * math.sin(elapsed * (1.1 + index * 0.23) + index * 1.7))
         if strength > 0:
             d.point((x, y), fill=mix(image.getpixel((x, y)), color, strength))
