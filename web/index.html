@@ -4,29 +4,18 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=games-outside-lab-1">
+  <link rel="stylesheet" href="style.css?v=soundboard-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
-  <link rel="stylesheet" href="layout-toggle.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="themes.js"></script>
-  <script src="index.js?v=flagquiz-sudden-death-1"></script>
+  <script src="index.js?v=soundboard-1"></script>
   <title>Plane Sign</title>
 </head>
 
 <body>
-  <div id="layout_bar" class="layout-toggle-bar layout-toggle-bar--light">
-    <span class="layout-toggle-label active">Original</span>
-    <label class="layout-switch" aria-label="Switch to new interface">
-      <input type="checkbox" id="layout_toggle" onchange="toggle_layout()">
-      <span class="layout-slider"></span>
-    </label>
-    <span class="layout-toggle-label">New Interface (Beta)</span>
-    <script>init_layout_toggle();</script>
-  </div>
   <div id="title_header">Plane Sign</div>
   <div id="topbar">
     <div id="centered">
@@ -344,9 +333,7 @@
     </div>
 
     <div id="sounds_div" class="box5" hidden>
-      <select name="sounds" id="sound-list">
-      </select>
-      <button class="a_sound_button" onclick="play_selected_sound();">🎺</button>
+      <div id="soundboard" class="soundboard" role="group" aria-label="Soundboard"></div>
     </div>
 
   </div>

@@ -11,5 +11,5 @@ applyTo: "web/**"
   - Check portrait and short landscape viewports (for example 390x480 and 844x390). Reach the top and bottom by touch and inspect the controls and the saved-sketch gallery.
   - Confirm that scrolling neither moves the background page nor changes canvas pixels, and that strokes still reach the live matrix.
   - Undo test strokes; do not save or delete sketches.
-- For gesture tests, derive coordinates from the dialog's actual bounds, padding and scrollbar width, not from `innerWidth` or a fixed offset. Start outside the canvas and the scrollbar track; the fixed layout toggle can intercept gestures near the top of the page.
+- For gesture tests, derive coordinates from the dialog's actual bounds, padding and scrollbar width, not from `innerWidth` or a fixed offset. Start outside the canvas and the scrollbar track.
 - If the sign is already in `FREE_SKETCH`, loading the controls can open the modal automatically and cover the mode button. Check for it before clicking.

@@ -173,9 +173,50 @@ body {
   width: 100%;
 }
 
-.a_sound_button {
+.soundboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  align-items: stretch;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 25px;
+  background: #7bb9c9;
+}
+
+.soundboard_button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 92px;
+  padding: 10px 6px;
+  border: 3px solid black;
+  background-color: black;
+  color: white;
+  cursor: pointer;
+}
+
+.soundboard_button:hover,
+.soundboard_button:focus-visible {
+  border-color: red;
+}
+
+.soundboard_button:active {
+  background-color: red;
+}
+
+.soundboard_icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.soundboard_label {
+  width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
   text-align: center;
-  font-size: 80px;
+  overflow-wrap: anywhere;
 }
 
 .mode_button {

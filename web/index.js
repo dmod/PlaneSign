@@ -2456,14 +2456,6 @@ function update_volume_slider() {
     });
 }
 
-function play_selected_sound() {
-    e = document.getElementById("sound-list");
-    sound_id = e.options[e.selectedIndex].value;
-    if (sound_id) {
-        play_a_sound(sound_id);
-    }
-}
-
 async function play_a_sound(sound_id) {
     try {
         var response = await fetch("api/play_a_sound/" + encodeURIComponent(sound_id));
@@ -2490,7 +2482,7 @@ function get_audio_support() {
         document.getElementById("mic_button").hidden = !value;
         document.getElementById("sounds_div").hidden = !value;
         if (value) {
-            populate_sound_dropdown();
+            populate_soundboard();
 
             if (window.location.protocol === 'http:') {
                 // Mic recording requires HTTPS — replace mic button with link
@@ -2624,29 +2616,9 @@ function build_soundboard(board, filenames) {
     }
 }
 
-function populate_sound_dropdown() {
-    var board = document.getElementById("soundboard");
-    var e = document.getElementById("sound-list");
+function populate_soundboard() {
     call_endpoint("/get_sounds", function (value) {
-        console.log("Found files: " + value);
-
-        var jsn = JSON.parse(value);
-
-        if (board) {
-            build_soundboard(board, jsn);
-            return;
-        }
-
-        for (let i = 0; i < jsn.length; i++) {
-            var option = document.createElement("option");
-            var fname = jsn[i].split("/");
-            fname = fname[fname.length - 1];
-            option.value = fname;
-            fname = fname.split(".");
-            fname = fname[0];
-            option.text = fname;
-            e.add(option);
-        }
+        build_soundboard(document.getElementById("soundboard"), JSON.parse(value));
     });
 }
 

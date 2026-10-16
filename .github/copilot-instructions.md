@@ -77,7 +77,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Derive texture and noise from a deterministic function of `(x, y)`, not `random`, so grain stays put instead of flickering every frame.
 
 ## New Display Modes
-- Follow a neighboring mode's registration and lifecycle patterns. Append new `DisplayMode` members, so existing numeric IDs stay stable, and expose the mode in both `web/index.html` and `web/layout-new.html`.
+- Follow a neighboring mode's registration and lifecycle patterns. Append new `DisplayMode` members, so existing numeric IDs stay stable, and expose the mode in `web/index.html`.
 - Fetch remote data in a background worker, not in the frame loop. Use timeouts, caching and retry backoff, integrate with the existing shutdown handling, and guard every request as described in "Network And Offline Mode".
 - Render explicit loading, unavailable and expired-data states. Mark cached data while it is still usable; never show missing data as zero or stale data as current.
 - The FR24 worker only polls while a mode in `planes.PLANE_DATA_MODES` is showing, and plane handlers call `planes.request_plane_data()` on entry to wake it. A new mode that reads the plane data needs both.
@@ -87,7 +87,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - The container runs with `--network host` (no port mapping; host interfaces such as `wlan0` are directly accessible). Install and update with `docker_install_and_update.sh`. nginx (`docker_nginx_planesign.conf`) serves `web/` on 80/443 and proxies `/api/` to 5055. Image and installer details are in `.github/instructions/docker.instructions.md`.
 
 ## Web Interface
-- The original interface (`web/index.html`, `web/style.css`) and the new one (`web/layout-new.html`, `web/layout-new.css`) share `web/index.js`. Apply UI behavior fixes to both layouts, and bump the stylesheet and script query-string versions in the HTML to invalidate browser caches.
+- The interface is `web/index.html` with `web/style.css` and `web/index.js`. Bump the stylesheet and script query-string versions in the HTML to invalidate browser caches.
 
 ## Dev Environment
 - The VS Code devcontainer (`.devcontainer/devcontainer.json`) is built from the project `Dockerfile` and runs with `--privileged` and `--network=host`.
