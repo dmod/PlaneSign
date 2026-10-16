@@ -12,6 +12,7 @@ import shared_config
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageDraw, ImageEnhance
 from rgbmatrix import graphics
+from utilities import fix_black
 
 ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
@@ -431,7 +432,10 @@ def get_sign_state():
 @lru_cache(maxsize=1)
 def _flag_image(code):
     with Image.open(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")) as image:
-        return image.convert("RGB")
+        image = image.convert("RGB")
+        if code != "NPL" and code != "OH":
+            image = fix_black(image)
+        return image
 
 
 @lru_cache(maxsize=1)
