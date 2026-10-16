@@ -31,10 +31,18 @@ PLANESIGN_BRANCH="${PLANESIGN_BRANCH:-main}"
 COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
 CONTAINER_NAME=PlaneSignRuntime
 
+REBOOT_REQUIRED=false
+STOPPED_APT_TIMERS=()
+
 # Raspberry Pi OS starts apt-daily/unattended-upgrades a few minutes after boot;
 # they hold the same dpkg locks this installer needs.
 stop_background_apt_jobs() {
   local unit
+  for unit in apt-daily.timer apt-daily-upgrade.timer; do
+    if systemctl is-active --quiet "$unit"; then
+      STOPPED_APT_TIMERS+=("$unit")
+    fi
+  done
   for unit in \
       apt-daily.timer \
       apt-daily-upgrade.timer \
@@ -161,8 +169,14 @@ main() {
   if [ -f "$CMDLINE_FILE" ] && ! grep -qw "isolcpus" "$CMDLINE_FILE"; then
     echo "Adding isolcpus config to $CMDLINE_FILE"
     sed -i '$ s/$/ isolcpus=3/' "$CMDLINE_FILE"
+    REBOOT_REQUIRED=true
   elif [ -f "$CMDLINE_FILE" ]; then
     echo "isolcpus config found in $CMDLINE_FILE"
+    # Saved by an earlier run that did not reboot yet.
+    if ! grep -qw "isolcpus" /proc/cmdline; then
+      echo "isolcpus is not active yet; a reboot is required"
+      REBOOT_REQUIRED=true
+    fi
   else
     echo "Warning: $CMDLINE_FILE not found; skipping isolcpus config"
   fi
@@ -171,12 +185,19 @@ main() {
   if lsmod | grep -wq "snd_bcm2835"; then
     echo "snd_bcm2835 is loaded, unloading..."
     # On an update run the sign container is still playing audio, which keeps the
-    # module busy. The blacklist below takes care of it after the reboot, so a
+    # module busy. The blacklist below takes care of it after a reboot, so a
     # failure here must not abort the install.
-    rmmod snd_bcm2835 || echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies on reboot"
+    if ! rmmod snd_bcm2835; then
+      echo "Warning: unable to unload snd_bcm2835 (still in use); the blacklist applies after a reboot"
+      REBOOT_REQUIRED=true
+    fi
   fi
   if [ -f "$CONFIG_FILE" ]; then
-    sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
+    if grep -q 'dtparam=audio=on' "$CONFIG_FILE"; then
+      echo "Disabling onboard audio in $CONFIG_FILE"
+      sed -i 's/dtparam=audio=on/dtparam=audio=off/' "$CONFIG_FILE"
+      REBOOT_REQUIRED=true
+    fi
   else
     echo "Warning: $CONFIG_FILE not found; skipping onboard audio config"
   fi
@@ -307,12 +328,30 @@ EOF
 
   chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
 
-  echo "Installation and configuration completed! Rebooting..."
-  # Rebooting while a package operation is in flight is what corrupts dpkg for
-  # the next run, so make sure nothing is mid-install first.
-  wait_for_apt_locks
-  sync
-  reboot
+  # Not every Raspberry Pi OS package writes this marker, so it is only one of the checks.
+  if [ -f /run/reboot-required ]; then
+    echo "The system reports a pending reboot"
+    REBOOT_REQUIRED=true
+  fi
+
+  if [ "$REBOOT_REQUIRED" = true ]; then
+    echo "Installation and configuration completed! Rebooting..."
+    # Rebooting while a package operation is in flight is what corrupts dpkg for
+    # the next run, so make sure nothing is mid-install first.
+    wait_for_apt_locks
+    sync
+    reboot
+  else
+    if [ "${#STOPPED_APT_TIMERS[@]}" -gt 0 ]; then
+      systemctl start "${STOPPED_APT_TIMERS[@]}" || echo "Warning: unable to restart ${STOPPED_APT_TIMERS[*]}"
+    fi
+    # App-triggered updates run inside planesign-ble.service, and restarting it
+    # kills its whole cgroup, including this installer. Restart it from a
+    # transient unit once the installer has exited and reported its result.
+    systemd-run --on-active=10 systemctl restart planesign-ble.service \
+      || echo "Warning: unable to schedule a restart of planesign-ble.service"
+    echo "Update completed. PlaneSign restarted; no reboot required."
+  fi
 }
 
 main "$@"
