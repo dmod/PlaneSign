@@ -943,10 +943,11 @@ def wildlife_visit(slot: int, seed: int):
 
 
 def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
-    """Nothing comes out on Halloween, turkeys take the meadow on Thanksgiving, and heavy rain or snow keeps animals away."""
+    """Nothing comes out on Halloween, turkeys take the meadow on Thanksgiving, the hotdog mascot has it to himself on
+    July 4, and heavy rain or snow keeps animals away."""
     holidays = holiday_features(environment)
     rain, snow = precipitation(environment)
-    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and rain < 3 and snow < 2
+    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and HOTDOG not in holidays and rain < 3 and snow < 2
 
 
 def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -965,10 +966,11 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
 
 
 def birds_allowed(environment: "OutsideEnvironment") -> bool:
-    """The songbird flock, or Thanksgiving's geese, fly by day in light weather."""
+    """The songbird flock, or Thanksgiving's geese, fly by day in light weather, but not on Halloween or July 4."""
     rain, snow = precipitation(environment)
     sun_altitude = environment.sun_altitude
-    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and HALLOWEEN not in holiday_features(environment)
+    holidays = holiday_features(environment)
+    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and HALLOWEEN not in holidays and HOTDOG not in holidays
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -1171,33 +1173,51 @@ def dog_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
 
 # The fireplace is lit below this temperature (°F); colder days burn a thicker plume.
 SMOKE_MAX_TEMPERATURE = 45
-SMOKE_INTERVAL = 0.3
-SMOKE_LIFETIME = 5.0
-# Buoyant rise (px/s at the flue) decays over SMOKE_RISE_SECONDS.
-SMOKE_RISE = 2.4
-SMOKE_RISE_SECONDS = 3.0
+# Cartoon smoke: the flue pops out a round puff every SMOKE_INTERVAL seconds, and each puff
+# swells and rises on its own path, so the plume reads as a chain of separate puffs.
+SMOKE_INTERVAL = 0.9
+SMOKE_LIFETIME = 4.5
+# Buoyant rise (px/s at the flue) decays over SMOKE_RISE_SECONDS; wind bends it over, so by
+# SMOKE_BEND_WIND mph the rise has halved and puffs leave the flue nearly sideways.
+SMOKE_RISE = 4.0
+SMOKE_RISE_SECONDS = 2.0
+SMOKE_BEND_WIND = 4
+# Puffs leave the flue at SMOKE_RADIUS px and swell by SMOKE_GROWTH px/s up to SMOKE_MAX_RADIUS;
+# each is up to ±SMOKE_LUMP larger or smaller, so the chain looks hand-drawn.
+SMOKE_RADIUS = 1.2
+SMOKE_GROWTH = 0.8
+SMOKE_MAX_RADIUS = 3.0
+SMOKE_LUMP = 0.2
+# Puffs hold their opacity, then dissolve over their last SMOKE_FADE_SECONDS.
+SMOKE_FADE_SECONDS = 1.2
 # The clock label (as wide as "12:59PM") sits right above the chimney on rows 1-6, so smoke
 # thins out over SMOKE_CEILING_FADE rows and is gone by SMOKE_CEILING.
 SMOKE_CEILING = 8
-SMOKE_CEILING_FADE = 3
+SMOKE_CEILING_FADE = 2
 # Wind carries puffs right, like the flag, rain and snow, at this many px/s per mph; it also
-# flattens the plume and shreds it sooner.
+# shreds them sooner.
 SMOKE_WIND_DRIFT = 0.3
-SMOKE_OPACITY = 0.7
+SMOKE_OPACITY = 0.85
 SMOKE_COLOR = (214, 214, 220)
+# Light from above: a puff's top is brightened and its underside shaded by up to this fraction.
+SMOKE_SHADING = 0.3
+# Puffs wider than SMOKE_RIM_RADIUS get a rim this much darker, which outlines each puff
+# against the one behind it like an ink line.
+SMOKE_RIM = 0.22
+SMOKE_RIM_RADIUS = 1.3
 
 
-def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[float, float, float, float, float]]:
-    """(x, y, x radius, y radius, opacity) for chimney smoke, oldest first; none unless a known temperature is cold enough,
+def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) -> list[tuple[float, float, float, float]]:
+    """(x, y, radius, opacity) for chimney smoke puffs, oldest first; none unless a known temperature is cold enough,
     except that the fire burns all Thanksgiving whatever the weather."""
     temperature = environment.weather.temperature
     cold = temperature is not None and temperature < SMOKE_MAX_TEMPERATURE
     if not cold and THANKSGIVING not in holiday_features(environment):
         return []
     wind = min(30, environment.weather.wind or 0)
-    strength = 0.6 + 0.4 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25) if cold else 0.6
-    life = SMOKE_LIFETIME / (1 + wind / 40)
-    rise = SMOKE_RISE / (1 + wind / 10)
+    strength = 0.7 + 0.3 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25) if cold else 0.7
+    life = SMOKE_LIFETIME / (1 + wind / 60)
+    rise = SMOKE_RISE / (1 + wind / SMOKE_BEND_WIND)
     drift = wind * SMOKE_WIND_DRIFT
     newest = math.floor(elapsed / SMOKE_INTERVAL)
     puffs = []
@@ -1206,17 +1226,17 @@ def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) ->
         if not 0 <= age < life:
             continue
         phase = grain(n % 9973, 17, seed) / 97 * math.tau
+        lump = 1 + SMOKE_LUMP * (grain(n % 9973, 29, seed) / 48.5 - 1)
         up = rise * SMOKE_RISE_SECONDS * (1 - math.exp(-age / SMOKE_RISE_SECONDS))
         # Puffs pick up the wind's speed within a fraction of a second of leaving the flue.
         across = drift * (age - 0.4 * (1 - math.exp(-age / 0.4)))
-        # A faint meander keeps a calm plume alive without leaning it; gusts add turbulence.
-        wobble = math.sin(age * 1.7 + phase) * (0.25 + wind / 40) * min(1, age)
+        # A faint sway keeps a calm column alive without leaning it; gusts toss puffs more.
+        wobble = math.sin(age * 1.7 + phase) * (0.3 + wind / 40) * min(1, age)
         x = CHIMNEY_FLUE[0] + across + wobble
         y = CHIMNEY_FLUE[1] - up + math.cos(age * 2.3 + phase) * wind / 60 * min(1, age)
-        opacity = SMOKE_OPACITY * strength * min(1, age / 0.2) * (1 - age / life) ** 1.3
-        radius = 0.5 + 0.22 * age
-        # Wind spreads successive puffs apart; stretching each along the wind keeps the plume continuous.
-        puffs.append((x, y, radius + 0.4 * drift * SMOKE_INTERVAL * min(1, age / 0.5), radius, opacity))
+        opacity = SMOKE_OPACITY * strength * min(1, age / 0.15) * min(1, (life - age) / SMOKE_FADE_SECONDS)
+        radius = min(SMOKE_MAX_RADIUS, SMOKE_RADIUS + SMOKE_GROWTH * age) * lump
+        puffs.append((x, y, radius, opacity))
     return puffs
 
 
@@ -1224,24 +1244,31 @@ def draw_smoke(image: Image.Image, palette: Palette, environment: "OutsideEnviro
     puffs = smoke_puffs(environment, elapsed, seed)
     if not puffs:
         return image
-    left = max(0, math.floor(min(x - 2 * rx for x, _, rx, _, _ in puffs)))
-    right = min(WIDTH, math.ceil(max(x + 2 * rx for x, _, rx, _, _ in puffs)) + 1)
-    top = max(0, math.floor(min(y - 2 * ry for _, y, _, ry, _ in puffs)))
-    bottom = min(HEIGHT, math.ceil(max(y + 2 * ry for _, y, _, ry, _ in puffs)) + 1)
+    left = max(0, math.floor(min(x - r for x, _, r, _ in puffs)) - 1)
+    right = min(WIDTH, math.ceil(max(x + r for x, _, r, _ in puffs)) + 1)
+    top = max(SMOKE_CEILING, math.floor(min(y - r for _, y, r, _ in puffs)) - 1)
+    bottom = min(HEIGHT, math.ceil(max(y + r for _, y, r, _ in puffs)) + 1)
     if left >= right or top >= bottom:
         return image
-    x, y, rx, ry, opacity = (np.array(values, dtype=np.float32)[:, None, None] for values in zip(*puffs))
-    columns = np.arange(left, right, dtype=np.float32)[None, None, :]
-    rows = np.arange(top, bottom, dtype=np.float32)[None, :, None]
-    # Pixel centers sit at +0.5, so a puff glides smoothly between pixels.
-    density = opacity * np.exp(-(((columns + 0.5 - x) / rx) ** 2 + ((rows + 0.5 - y) / ry) ** 2) / 2)
-    density = density * np.clip((rows + 0.5 - SMOKE_CEILING) / SMOKE_CEILING_FADE, 0, 1)
-    cover = 1 - np.prod(1 - np.clip(density, 0, 1), axis=0)
+    columns = np.arange(left, right, dtype=np.float32)[None, :] + 0.5
+    rows = np.arange(top, bottom, dtype=np.float32)[:, None] + 0.5
+    ceiling = np.clip((rows - SMOKE_CEILING) / SMOKE_CEILING_FADE, 0, 1)
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
     color = np.array(mix(palette.horizon, SMOKE_COLOR, 0.35 + 0.4 * illumination), dtype=np.float32) * (0.45 + 0.55 * illumination)
     pixels = np.array(image, dtype=np.float32)
     region = pixels[top:bottom, left:right]
-    pixels[top:bottom, left:right] = region + (color - region) * cover[..., None]
+    # Oldest first, so each newer puff overlaps the one above it and its lit top edge
+    # separates the two.
+    for x, y, radius, opacity in puffs:
+        distance = np.hypot(columns - x, rows - y)
+        # A crisp disc, antialiased over one pixel so it glides smoothly between pixels.
+        cover = np.clip(radius + 0.5 - distance, 0, 1) * opacity * ceiling
+        shade = 1 - SMOKE_SHADING * np.clip((rows - y) / radius, -1, 1)
+        if radius > SMOKE_RIM_RADIUS:
+            shade = shade * (1 - SMOKE_RIM * np.clip(distance - radius + 1.3, 0, 1))
+        tint = np.clip(color[None, None, :] * shade[..., None], 0, 255)
+        region += (tint - region) * cover[..., None]
+    pixels[top:bottom, left:right] = region
     return Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
 
 
@@ -1361,7 +1388,7 @@ def owl_blinks(window: int, seed: int) -> tuple[float, ...]:
 
 def owl_allowed(environment: "OutsideEnvironment") -> bool:
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment) and not tree_ornaments_shown(environment)
+    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment) and HOTDOG not in holiday_features(environment) and not tree_ornaments_shown(environment)
 
 
 def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
@@ -1517,13 +1544,15 @@ def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: fl
 
 
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
-    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond. The ghost owns Halloween's sky."""
+    """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond. The ghost owns
+    Halloween's sky, and the eagle stays away on July 4."""
     w = environment.weather
     rain, snow = precipitation(environment)
     return (
         environment.sun_altitude is not None
         and environment.sun_altitude > EAGLE_SUN_ALTITUDE
         and HALLOWEEN not in holiday_features(environment)
+        and HOTDOG not in holiday_features(environment)
         and w.code in (800, 801, 802, 803)
         and cloud_cover(environment) <= 0.75
         and rain == 0
@@ -2151,6 +2180,7 @@ HOLIDAYS = {
     "flag": ("Flag", ((7, 4, 4),)),
     "cannon": ("Cannon", ((7, 4, 4),)),
     "fountains": ("Fountains", ((7, 4, 4),)),
+    "hotdog": ("Hotdog mascot", ((7, 4, 4),)),
     "halloween": ("Halloween", ((10, 31, 31),)),
     "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
 }
@@ -2595,8 +2625,8 @@ def draw_flag_flood(image: Image.Image, level: float) -> Image.Image:
     return lit
 
 
-# A cartoon cannon left of the tree fires salutes: a blinding blast, a ball that streaks out of frame, and a shower of
-# embers that smolder on the ground.
+# A cartoon cannon left of the tree fires salutes: a fuse that sputters down to the breech, a blinding blast, a ball
+# that streaks out of frame, and a shower of embers that smolder on the ground.
 CANNON_MUZZLE_X = 90
 CANNON_GROUND = 29
 # Barrel elevation as rise per pixel; the ball leaves along it.
@@ -2611,11 +2641,19 @@ CANNON_TRAIL_LENGTH = 7
 CANNON_COLORS = {"O": (14, 14, 18), "R": (96, 98, 112), "H": (150, 154, 170), "K": (58, 60, 70), "k": (26, 27, 32), "b": (230, 184, 64), "w": (146, 104, 62), "d": (66, 44, 28), "o": (230, 184, 64), "C": (120, 84, 50)}
 CANNON_SLOT_SECONDS = 14
 CANNON_FIRE_CHANCE = 0.8
-# Blast, flight, embers and smoke; a shot never crosses its slot.
+# Blast, flight, embers and smoke; a shot, with the fuse burning before it, never crosses its slot.
 CANNON_SHOT_SECONDS = 6.0
+# The fuse burns down for this long before the cannon fires, so the blast can be seen coming.
+CANNON_FUSE_SECONDS = 2.5
+# Its sparks flare up over the last moments before the blast.
+CANNON_FUSE_FLARE_SECONDS = 0.6
+# The wick curls up and back from the touch hole, listed from the hole to its tip.
+CANNON_FUSE = ((0, 0), (0, -1), (1, -2), (2, -2))
+CANNON_FUSE_COLOR = (170, 140, 92)
+CANNON_FUSE_SPARKS = 7
 CANNON_RECOIL_SECONDS = 0.45
-# Px/s along the barrel; the ball clears the top of the frame in about half a second.
-CANNON_BALL_SPEED = 55
+# Px/s along the barrel; the ball clears the top of the frame in about a third of a second.
+CANNON_BALL_SPEED = 110
 CANNON_BALL = (40, 40, 46)
 CANNON_BALL_SHINE = (150, 152, 166)
 # After dark the red-hot ball still shows against the sky.
@@ -2624,11 +2662,16 @@ CANNON_SMOKE = (226, 226, 228)
 CANNON_SMOKE_SECONDS = 4.0
 # Smoke puffs: (angle from the barrel in radians, reach in px, final radius in px).
 CANNON_PUFFS = ((0.0, 7.5, 3.4), (-0.45, 5.5, 2.8), (0.45, 5.5, 2.8), (-0.9, 3.5, 2.4), (0.9, 3.5, 2.4), (0.2, 2.0, 2.2), (-0.2, 9.5, 2.4))
-CANNON_FLASH_SECONDS = 0.6
+CANNON_FLASH_SECONDS = 0.9
+# Decay time constant of the blast's light.
+CANNON_FLASH_DECAY = 0.2
+# A ring of fire bursts out from the muzzle at this many px/s and is gone after CANNON_SHOCK_SECONDS.
+CANNON_SHOCK_SPEED = 70
+CANNON_SHOCK_SECONDS = 0.35
 FLASH_CORE = (255, 252, 230)
 FLASH_FIRE = (255, 196, 60)
 FLASH_TIP = (255, 110, 30)
-CANNON_EMBERS = 18
+CANNON_EMBERS = 36
 CANNON_EMBER_GRAVITY = 14
 CANNON_EMBER_DRAG = 1.6
 # Embers that land settle on the meadow at this row and smolder; those over the pond go out.
@@ -2680,6 +2723,18 @@ CANNON_GROUPS = {key: [point for point, value in CANNON_PIXELS.items() if value 
 CANNON_LAUNCH = (CANNON_MUZZLE[0] - CANNON_AXIS[0], CANNON_MUZZLE[1] - CANNON_AXIS[1])
 
 
+def cannon_fuse_pixels() -> tuple[tuple[int, int], ...]:
+    """The wick's pixels, from the touch hole on top of the breech out to its tip."""
+    ux, uy = CANNON_AXIS
+    along, above = CANNON_BARREL_LENGTH - 2, CANNON_BARREL_RADIUS + 1
+    # (uy, -ux) points up, off the barrel's top.
+    hole = (round(CANNON_MUZZLE[0] + ux * along + uy * above), round(CANNON_MUZZLE[1] + uy * along - ux * above))
+    return tuple((hole[0] + dx, hole[1] + dy) for dx, dy in CANNON_FUSE)
+
+
+CANNON_FUSE_PIXELS = cannon_fuse_pixels()
+
+
 @dataclass(frozen=True)
 class CannonShot:
     slot: int
@@ -2689,30 +2744,41 @@ class CannonShot:
 def cannon_shot(slot: int, seed: int) -> CannonShot | None:
     if unit_hash(seed, slot, 401) >= CANNON_FIRE_CHANCE:
         return None
-    return CannonShot(slot, slot * CANNON_SLOT_SECONDS + unit_hash(seed, slot, 402) * (CANNON_SLOT_SECONDS - CANNON_SHOT_SECONDS))
+    return CannonShot(slot, slot * CANNON_SLOT_SECONDS + CANNON_FUSE_SECONDS + unit_hash(seed, slot, 402) * (CANNON_SLOT_SECONDS - CANNON_SHOT_SECONDS - CANNON_FUSE_SECONDS))
 
 
 def cannon_state(elapsed: float, seed: int) -> tuple[CannonShot, float] | None:
-    """The shot under way and seconds since it fired, or None between shots."""
+    """The shot under way and seconds since it fired (negative while the fuse burns), or None between shots."""
     shot = cannon_shot(math.floor(elapsed / CANNON_SLOT_SECONDS), seed)
-    if shot is None or not 0 <= elapsed - shot.fire < CANNON_SHOT_SECONDS:
+    if shot is None or not -CANNON_FUSE_SECONDS <= elapsed - shot.fire < CANNON_SHOT_SECONDS:
         return None
     return shot, elapsed - shot.fire
+
+
+def cannon_fuse_left(state: tuple[CannonShot, float] | None) -> float:
+    """How much of the wick is left, 1 when it is unlit; it is gone once the cannon fires and is replaced after the shot."""
+    if state is None:
+        return 1.0
+    return max(0.0, -state[1] / CANNON_FUSE_SECONDS)
 
 
 def draw_cannon(image: Image.Image, palette: Palette, state: tuple[CannonShot, float] | None):
     """The cannon itself, jumping back a pixel as it fires."""
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
-    recoil = 1 if state is not None and state[1] < CANNON_RECOIL_SECONDS else 0
+    recoil = 1 if state is not None and 0 <= state[1] < CANNON_RECOIL_SECONDS else 0
     d = ImageDraw.Draw(image)
     for key, points in CANNON_GROUPS.items():
         color = tuple(round(value * (0.25 + 0.75 * illumination)) for value in CANNON_COLORS[key])
         d.point([(x + recoil, y) for x, y in points], fill=color)
+    left = cannon_fuse_left(state)
+    if left > 0:
+        wick = CANNON_FUSE_PIXELS[: math.ceil(left * len(CANNON_FUSE_PIXELS))]
+        d.point(wick, fill=tuple(round(value * (0.25 + 0.75 * illumination)) for value in CANNON_FUSE_COLOR))
 
 
-def draw_cannon_shot(image: Image.Image, palette: Palette, state: tuple[CannonShot, float] | None, wind: float, night: float) -> Image.Image:
-    """The blast's billowing smoke, and the ball bursting out of it and streaking out of frame."""
-    if state is None:
+def draw_cannon_smoke(image: Image.Image, palette: Palette, state: tuple[CannonShot, float] | None, wind: float) -> Image.Image:
+    """The blast's billowing smoke."""
+    if state is None or state[1] < 0:
         return image
     _, age = state
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
@@ -2731,25 +2797,38 @@ def draw_cannon_shot(image: Image.Image, palette: Palette, state: tuple[CannonSh
             r = 0.8 + (radius - 0.8) * (1 - math.exp(-age / 0.5))
             sd.ellipse((x - r, y - r, x + r, y + r), fill=(*color, round(255 * opacity)))
         image = Image.alpha_composite(image.convert("RGBA"), smoke).convert("RGB")
+    return image
+
+
+def draw_cannon_ball(image: Image.Image, palette: Palette, state: tuple[CannonShot, float] | None, night: float):
+    """The ball bursting out of the blast and streaking out of frame; drawn over the blast's light so the flash
+    cannot hide it."""
+    if state is None or state[1] < 0:
+        return
+    age = state[1]
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
     travel = age * CANNON_BALL_SPEED
     x, y = CANNON_LAUNCH[0] - CANNON_AXIS[0] * travel, CANNON_LAUNCH[1] - CANNON_AXIS[1] * travel
     if x < -2 or y < -2:
-        return image
+        return
     d = ImageDraw.Draw(image)
     ball = mix(tuple(round(value * (0.5 + 0.5 * illumination)) for value in CANNON_BALL), CANNON_BALL_HOT, 0.75 * night)
     shine = mix(tuple(round(value * (0.4 + 0.6 * illumination)) for value in CANNON_BALL_SHINE), FLASH_CORE, 0.6 * night)
-    # A short smear just behind the ball sells its speed; it leaves no lasting path.
-    gap = CANNON_BALL_SPEED / 20
-    for step, opacity in ((2, 0.2), (1, 0.45)):
-        if travel > gap * step:
-            point = (round(x + CANNON_AXIS[0] * gap * step), round(y + CANNON_AXIS[1] * gap * step))
-            if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT:
-                d.point(point, fill=mix(image.getpixel(point), ball, opacity))
+    # A smear behind the ball, about one frame long, sells its speed; it leaves no lasting path.
+    for back, opacity in ((5.0, 0.15), (3.5, 0.3), (2.0, 0.5)):
+        if travel > back:
+            px, py = round(x + CANNON_AXIS[0] * back), round(y + CANNON_AXIS[1] * back)
+            for point in ((px, py), (px + 1, py), (px, py + 1)):
+                if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT:
+                    d.point(point, fill=mix(image.getpixel(point), ball, opacity))
+    # A round 3x3 ball: half-blended corners, and a glint near its top.
     bx, by = round(x), round(y)
-    for point, color in (((bx, by), shine), ((bx + 1, by), ball), ((bx, by + 1), ball), ((bx + 1, by + 1), ball)):
-        if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT:
-            d.point(point, fill=color)
-    return image
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            point = (bx + dx, by + dy)
+            if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT:
+                color = shine if (dx, dy) == (0, -1) else ball
+                d.point(point, fill=mix(image.getpixel(point), color, 0.55 if dx and dy else 1.0))
 
 
 def cannon_flash_rays() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -2759,7 +2838,7 @@ def cannon_flash_rays() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
     for ray in range(12):
         angle = heading + ray * 2 * math.pi / 12
         forward = math.cos(angle - heading)
-        length = 3 + 3 * max(0.0, forward) + 4.5 * max(0.0, forward) ** 6 + (1.2 if ray % 2 else 0)
+        length = 4.5 + 4.5 * max(0.0, forward) + 7 * max(0.0, forward) ** 6 + (2.0 if ray % 2 else 0)
         for step in np.arange(0, length + 0.01, 0.5):
             fraction = step / length
             alongs.append(fraction)
@@ -2767,9 +2846,9 @@ def cannon_flash_rays() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
             ys.append(math.sin(angle) * step)
             colors.append(FLASH_CORE if fraction < 0.35 else FLASH_FIRE if fraction < 0.75 else FLASH_TIP)
     # A solid white-hot ball of fire at the heart of the burst.
-    for dy in range(-2, 3):
-        for dx in range(-2, 3):
-            if dx * dx + dy * dy <= 4:
+    for dy in range(-3, 4):
+        for dx in range(-3, 4):
+            if dx * dx + dy * dy <= 9:
                 alongs.append(0.0)
                 xs.append(float(dx))
                 ys.append(float(dy))
@@ -2779,9 +2858,9 @@ def cannon_flash_rays() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 
 CANNON_FLASH_RAYS = cannon_flash_rays()
 CANNON_FLASH_DISTANCE = (FIREWORK_X - CANNON_LAUNCH[0]) ** 2 + (FIREWORK_Y - CANNON_LAUNCH[1]) ** 2
-CANNON_FLASH_GLOW = np.exp(-CANNON_FLASH_DISTANCE / (2 * 9.0**2))[..., None] * (np.array(FLASH_FIRE, dtype=np.float32) / 255)
-# After dark the blast lights up the whole scene for an instant.
-CANNON_FLASH_WASH = np.exp(-CANNON_FLASH_DISTANCE / (2 * 30.0**2))[..., None] * (np.array((255, 214, 150), dtype=np.float32) / 255)
+CANNON_FLASH_GLOW = np.exp(-CANNON_FLASH_DISTANCE / (2 * 14.0**2))[..., None] * (np.array(FLASH_FIRE, dtype=np.float32) / 255)
+# The blast floods the right side of the scene with light, by day as well as by night.
+CANNON_FLASH_WASH = np.exp(-CANNON_FLASH_DISTANCE / (2 * 36.0**2))[..., None] * (np.array((255, 214, 150), dtype=np.float32) / 255)
 
 
 @lru_cache(maxsize=4)
@@ -2792,23 +2871,31 @@ def cannon_embers(slot: int, seed: int) -> tuple[np.ndarray, ...]:
     embers = []
     for _ in range(CANNON_EMBERS):
         angle = heading + rng.gauss(0, 0.7)
-        embers.append((math.cos(angle), math.sin(angle), rng.uniform(5, 22), rng.uniform(1.4, 3.6), rng.randrange(2**20)))
+        embers.append((math.cos(angle), math.sin(angle), rng.uniform(6, 32), rng.uniform(1.4, 3.6), rng.randrange(2**20)))
     return tuple(np.array(values, dtype=np.float32 if index < 4 else np.int64) for index, values in enumerate(zip(*embers)))
 
 
 def cannon_light(state: tuple[CannonShot, float] | None, night: float, wind: float, seed: int) -> np.ndarray | None:
-    """The muzzle blast's blinding starburst, then embers that drift down, cool from yellow to red and smolder where
-    they land, as emitted light."""
+    """The fuse's sputtering sparks; then the muzzle blast's blinding starburst and ring of fire, and embers that drift
+    down, cool from yellow to red and smolder where they land, as emitted light."""
     if state is None:
         return None
     shot, age = state
     light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    if age < 0:
+        return cannon_fuse_light(light, age, seed)
     if age < CANNON_FLASH_SECONDS:
-        strength = math.exp(-age / 0.13)
+        strength = math.exp(-age / CANNON_FLASH_DECAY)
         grow = min(1.0, 0.45 + age / 0.05)
-        light += CANNON_FLASH_GLOW * (strength * (0.4 + 0.6 * night)) + CANNON_FLASH_WASH * (strength * 0.4 * night)
+        light += CANNON_FLASH_GLOW * (strength * (0.7 + 0.5 * night)) + CANNON_FLASH_WASH * (strength * (0.55 + 0.25 * night))
         alongs, xs, ys, colors = CANNON_FLASH_RAYS
-        splat(light, CANNON_LAUNCH[0] + xs * grow, CANNON_LAUNCH[1] + ys * grow, colors, strength * 1.5 * (1 - 0.4 * alongs) * (alongs <= grow))
+        splat(light, CANNON_LAUNCH[0] + xs * grow, CANNON_LAUNCH[1] + ys * grow, colors, strength * 1.8 * (1 - 0.4 * alongs) * (alongs <= grow))
+    if age < CANNON_SHOCK_SECONDS:
+        radius = 3 + age * CANNON_SHOCK_SPEED
+        angles = np.linspace(0, math.tau, max(24, round(radius * 7)), endpoint=False, dtype=np.float32)
+        fade = 1 - age / CANNON_SHOCK_SECONDS
+        color = (np.array(FLASH_FIRE, dtype=np.float32) + (np.array(FLASH_CORE, dtype=np.float32) - np.array(FLASH_FIRE, dtype=np.float32)) * fade) / 255
+        splat(light, CANNON_LAUNCH[0] + np.cos(angles) * radius, CANNON_LAUNCH[1] + np.sin(angles) * radius * 0.8, np.tile(color, (len(angles), 1)), np.full(len(angles), 0.5 * fade, dtype=np.float32))
     if age < CANNON_MUZZLE_SMOLDER_SECONDS:
         smolder = 1 - age / CANNON_MUZZLE_SMOLDER_SECONDS
         splat(light, np.array([CANNON_MUZZLE[0] - 0.5]), np.array([CANNON_MUZZLE[1]]), (EMBER_COOL + (EMBER_WARM - EMBER_COOL) * smolder)[None], np.array([0.7 * smolder]))
@@ -2827,6 +2914,31 @@ def cannon_light(state: tuple[CannonShot, float] | None, night: float, wind: flo
     colors = np.where((heat > 0.6)[:, None], EMBER_WARM + (EMBER_HOT - EMBER_WARM) * ((heat - 0.6) / 0.4)[:, None], EMBER_COOL + (EMBER_WARM - EMBER_COOL) * (heat / 0.6)[:, None])
     splat(light, xs, ys, colors, weights.astype(np.float32))
     return light if light.any() else None
+
+
+def cannon_fuse_light(light: np.ndarray, age: float, seed: int) -> np.ndarray:
+    """The lit fuse: a white-hot point at the end of the wick throwing sparks, which flare up just before the blast."""
+    left = -age / CANNON_FUSE_SECONDS
+    # The burning point creeps from the wick's tip down to the touch hole.
+    position = left * (len(CANNON_FUSE_PIXELS) - 1)
+    low = CANNON_FUSE_PIXELS[math.floor(position)]
+    high = CANNON_FUSE_PIXELS[min(len(CANNON_FUSE_PIXELS) - 1, math.floor(position) + 1)]
+    fraction = position - math.floor(position)
+    x, y = low[0] + (high[0] - low[0]) * fraction, low[1] + (high[1] - low[1]) * fraction
+    flare = 1 + 1.5 * max(0.0, 1 - -age / CANNON_FUSE_FLARE_SECONDS)
+    frame = math.floor(age * 15)
+    glow = np.exp(-((FIREWORK_X - x) ** 2 + (FIREWORK_Y - y) ** 2) / (2 * 2.5**2))[..., None]
+    light += glow * (np.array(FLASH_FIRE, dtype=np.float32) / 255 * 0.25 * flare)
+    count = round(CANNON_FUSE_SPARKS * flare)
+    angles = np.array([unit_hash(seed, frame, 411, index) for index in range(count)], dtype=np.float32) * math.tau
+    reach = np.array([unit_hash(seed, frame, 412, index) for index in range(count)], dtype=np.float32) * (1.5 + flare)
+    # Sparks spray mostly upward.
+    xs = x + np.cos(angles) * reach
+    ys = y - np.abs(np.sin(angles)) * reach
+    colors = np.tile(np.array(FLASH_FIRE, dtype=np.float32) / 255, (count, 1))
+    splat(light, xs, ys, colors, np.full(count, 0.8, dtype=np.float32))
+    splat(light, np.array([x]), np.array([y]), np.array([FLASH_CORE], dtype=np.float32) / 255, np.array([1.0], dtype=np.float32))
+    return light
 
 
 # Ground fountains on the pond's far bank, red, white and blue: they burn in turns while the fireworks fly, and all
@@ -3947,6 +4059,152 @@ def draw_thanksgiving_figures(image: Image.Image, palette: Palette, environment:
         draw_standing_sprite(d, rows, x, row, facing, colors)
 
 
+# On July 4 a hotdog mascot in sunglasses now and then walks in along the front of the meadow, dances between the flag
+# and the cannon, and walks off the other side.
+# Deer, foxes, rabbits, songbirds, the eagle and the owl stay away for the whole July 4 scene.
+HOTDOG = "hotdog"
+HOTDOG_SLOT_SECONDS = 80
+HOTDOG_CHANCE = 0.45
+HOTDOG_SPEED = 10
+HOTDOG_FEET_ROW = 31
+HOTDOG_DANCE_COLUMNS = (58, 76)
+HOTDOG_DANCE_SECONDS = (6.0, 10.0)
+HOTDOG_STEP_SECONDS = 0.2
+HOTDOG_BEAT_SECONDS = 0.3
+# Facing the viewer: S sausage, B bun, b bun shade, M mustard, K sunglasses, G their glint, m mouth.
+HOTDOG_BODY = (
+    "....SSS....",
+    "...SSSSS...",
+    "..KKKKKKK..",
+    "...GKSGK...",
+    "...SSSSS...",
+    "..BSmmmSB..",
+    ".bBSSMSSBb.",
+    ".bBSMSSSBb.",
+    ".bBSSMSSBb.",
+    ".bBSSSMSBb.",
+    ".bBSSMSSBb.",
+    ".bBBSSSBBb.",
+    "..bbbbbbb..",
+)
+# l legs, R sneakers; "kick" swings his left leg out.
+HOTDOG_LEGS = {"stand": ("....l.l....", "...RR.RR..."), "stride": ("...l...l...", "..RR...RR.."), "kick": ("....l..lRR.", "...RR......")}
+# a arms ending in W white gloves, as (column, row) overlays on the body.
+HOTDOG_ARMS = {
+    "down": {(0, 7): "a", (0, 8): "W", (10, 7): "a", (10, 8): "W"},
+    "swing_a": {(0, 6): "a", (0, 7): "W", (10, 8): "a", (10, 9): "W"},
+    "swing_b": {(0, 8): "a", (0, 9): "W", (10, 6): "a", (10, 7): "W"},
+    "up": {(1, 5): "a", (0, 4): "a", (0, 3): "W", (9, 5): "a", (10, 4): "a", (10, 3): "W"},
+    "right_up": {(0, 7): "a", (0, 8): "W", (9, 5): "a", (10, 4): "a", (10, 3): "W"},
+    "out": {(0, 6): "W", (10, 6): "W"},
+}
+HOTDOG_COLORS = {"S": (210, 74, 48), "B": (240, 184, 100), "b": (178, 116, 56), "M": (255, 222, 30), "K": (10, 10, 14), "G": (180, 220, 255), "m": (92, 20, 20), "a": (178, 116, 56), "W": (246, 246, 240), "l": (52, 36, 30), "R": (224, 28, 40)}
+# The dance, one move per beat: (arms, legs, rows lifted, columns swayed, facing). A mirrored move swaps sides.
+HOTDOG_DANCE = (
+    ("up", "stride", 1, 0, 1),
+    ("down", "stand", 0, 0, 1),
+    ("up", "stride", 1, 0, 1),
+    ("down", "stand", 0, 0, 1),
+    ("right_up", "kick", 0, 1, 1),
+    ("down", "stand", 0, 0, 1),
+    ("right_up", "kick", 0, -1, -1),
+    ("down", "stand", 0, 0, 1),
+    ("out", "stand", 0, 1, 1),
+    ("out", "stand", 0, -1, 1),
+    ("out", "stand", 0, 1, 1),
+    ("out", "stand", 0, -1, 1),
+)
+
+
+@dataclass(frozen=True)
+class HotdogVisit:
+    start: float
+    enter: float
+    spot: float
+    leave: float
+    dance: float
+
+    @property
+    def walk_in(self) -> float:
+        return abs(self.spot - self.enter) / HOTDOG_SPEED
+
+    @property
+    def end(self) -> float:
+        return self.start + self.walk_in + self.dance + abs(self.leave - self.spot) / HOTDOG_SPEED
+
+
+@dataclass(frozen=True)
+class HotdogPose:
+    x: float
+    lift: int
+    facing: int
+    arms: str
+    legs: str
+
+
+@lru_cache(maxsize=8)
+def hotdog_visit(slot: int, seed: int) -> HotdogVisit | None:
+    """The mascot's visit in this slot, if any; it never spans two slots."""
+    rng = random.Random(seed * 6007 + slot * 90001 + 53)
+    if rng.random() >= HOTDOG_CHANCE:
+        return None
+    # He starts and ends just out of frame, half his width past the edge.
+    edges = (-6.0, WIDTH + 5.0)
+    enter, leave = edges if rng.random() < 0.5 else edges[::-1]
+    visit = HotdogVisit(0.0, enter, rng.uniform(*HOTDOG_DANCE_COLUMNS), leave, rng.uniform(*HOTDOG_DANCE_SECONDS))
+    duration = visit.end
+    return replace(visit, start=slot * HOTDOG_SLOT_SECONDS + rng.uniform(0, HOTDOG_SLOT_SECONDS - duration))
+
+
+def hotdog_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return HOTDOG in holiday_features(environment) and rain < 3 and snow < 2
+
+
+def hotdog_visit_shown(environment: "OutsideEnvironment", visit: HotdogVisit, seed: int) -> bool:
+    return not dog_allowed(environment) or next(dog_outings_between(seed, visit.start, visit.end), None) is None
+
+
+def hotdog_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> HotdogPose | None:
+    """The mascot's pose, or None. He skips any visit that would overlap the dog's time outside."""
+    if not hotdog_allowed(environment):
+        return None
+    visit = hotdog_visit(math.floor(elapsed / HOTDOG_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end or not hotdog_visit_shown(environment, visit, seed):
+        return None
+    age = elapsed - visit.start
+    dancing = age - visit.walk_in
+    if 0 <= dancing < visit.dance:
+        arms, legs, lift, sway, facing = HOTDOG_DANCE[math.floor(dancing / HOTDOG_BEAT_SECONDS) % len(HOTDOG_DANCE)]
+        return HotdogPose(visit.spot + sway, lift, facing, arms, legs)
+    if dancing < 0:
+        origin, target, walked = visit.enter, visit.spot, age
+    else:
+        origin, target, walked = visit.spot, visit.leave, dancing - visit.dance
+    heading = 1 if target > origin else -1
+    step = math.floor(walked / HOTDOG_STEP_SECONDS) % 2
+    # A one-row bob on each stride.
+    return HotdogPose(origin + heading * HOTDOG_SPEED * walked, step, heading, ("swing_a", "swing_b")[step], ("stand", "stride")[step])
+
+
+@lru_cache(maxsize=32)
+def hotdog_sprite(arms: str, legs: str) -> tuple[str, ...]:
+    rows = [list(line) for line in (*HOTDOG_BODY, *HOTDOG_LEGS[legs])]
+    for (column, row), char in HOTDOG_ARMS[arms].items():
+        rows[row][column] = char
+    return tuple("".join(line) for line in rows)
+
+
+def draw_hotdog(image: Image.Image, palette: Palette, pose: HotdogPose | None):
+    if pose is None:
+        return
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    # He stays readable after dark, when the fireworks are flying.
+    shade = 0.35 + 0.65 * illumination
+    colors = {char: tuple(round(value * shade) for value in color) for char, color in HOTDOG_COLORS.items()}
+    draw_standing_sprite(ImageDraw.Draw(image), hotdog_sprite(pose.arms, pose.legs), pose.x, HOTDOG_FEET_ROW - pose.lift, pose.facing, colors)
+
+
 # On Thanksgiving a skein of geese flying in a V takes the place of the small songbird flock.
 GEESE_SLOT_SECONDS = 75
 GEESE_CHANCE = 0.55
@@ -4037,6 +4295,8 @@ SUMMONS = {
     "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(t, s) is not None, 0.5, 0.25),
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(t, s) is not None, 0.5, 0.25),
+    "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
+    "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
 }
 SUMMON_HORIZON_SECONDS = 3600
 
@@ -4140,7 +4400,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     image = draw_smoke(image, palette, environment, elapsed, seed)
-    image = draw_cannon_shot(image, palette, cannon, wind, night)
+    image = draw_cannon_smoke(image, palette, cannon, wind)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
     sway = round(math.sin(elapsed * 0.6) * min(1, wind / 12))
     if foliage is not None:
@@ -4151,6 +4411,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             if environment.sun_altitude is not None and environment.sun_altitude > -5:
                 d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
+    # The mascot walks along the front of the meadow, in front of everything that stands on it, the tree included.
+    draw_hotdog(image, palette, hotdog_state(environment, elapsed, seed))
     if tree_ornaments_shown(environment):
         draw_tree_ornaments(image, night, elapsed)
     # The owl perches on the fixed branch, in front of the swaying foliage.
@@ -4175,6 +4437,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     blast = cannon_light(cannon, night, wind, seed)
     if blast is not None:
         image = composite_light(image, blast)
+    draw_cannon_ball(image, palette, cannon, night)
     if halloween:
         image = draw_jack_o_lantern_glow(image, night, elapsed, roll)
         draw_shadow_eyes(image, shadow, night, elapsed)
