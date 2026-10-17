@@ -4,6 +4,7 @@ import os
 import random
 import re
 import time
+from collections import OrderedDict
 from datetime import datetime
 from os.path import exists
 
@@ -137,7 +138,12 @@ def gen_flag(code):
     return image
 
 
-def get_flag(selected, satellite_data):
+def get_flag(selected, satellite_data, flag_cache):
+    cache_key = (selected["satid"], selected["intDesignator"], selected["launchDate"], selected["satname"])
+    image = flag_cache.get(cache_key)
+    if image is not None:
+        flag_cache.move_to_end(cache_key)
+        return image
 
     image = None
 
@@ -306,18 +312,20 @@ def get_flag(selected, satellite_data):
         image = gen_flag(code)
 
     if image is None:
-        image = Image.new("RGB", (13, 9), (0, 0, 0))
-
-    else:
+        image = Image.open(f"{shared_config.icons_dir}/flags/UNKNOWN.png").convert("RGB")
+    elif code != "NPL":
         image = fix_black(image)
 
-        w, h = image.size
+    w, h = image.size
 
-        if round(9 * w / h) < 13:
-            image = image.resize((round(9 * w / h), 9), Image.BICUBIC)
-        else:
-            image = image.resize((13, 9), Image.BICUBIC)
+    if round(9 * w / h) < 13:
+        image = image.resize((round(9 * w / h), 9), Image.BICUBIC)
+    else:
+        image = image.resize((13, 9), Image.BICUBIC)
 
+    flag_cache[cache_key] = image
+    if len(flag_cache) > 256:
+        flag_cache.popitem(last=False)
     return image
 
 
@@ -459,6 +467,8 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(112, 127), random.randint(0, 12), random.randint(50, 150), 0))
     stars.append(Star(sign, random.randint(112, 127), random.randint(0, 12), random.randint(50, 150), 0))
 
+    flag_cache = OrderedDict()
+
     while shared_config.shared_mode.value == DisplayMode.SATELLITE.value:
         if shared_config.shared_satellite_mode.value == 1:
             t = time.perf_counter()
@@ -579,7 +589,7 @@ def satellites(sign):
                 sign.canvas.SetPixel(26, 14, 200, 10, 10)
                 sign.canvas.SetPixel(25, 15, 200, 10, 10)
 
-                flag = get_flag(closest, satellite_data)
+                flag = get_flag(closest, satellite_data, flag_cache)
                 w, _ = flag.size
                 sign.canvas.SetImage(flag, round(55.5 - w / 2), 8)
 
@@ -624,7 +634,7 @@ def satellites(sign):
                 sign.canvas.SetPixel(91, 14, 200, 10, 10)
                 sign.canvas.SetPixel(90, 15, 200, 10, 10)
 
-                flag = get_flag(lowest, satellite_data)
+                flag = get_flag(lowest, satellite_data, flag_cache)
                 w, _ = flag.size
                 sign.canvas.SetImage(flag, round(120.5 - w / 2), 8)
 
