@@ -512,7 +512,7 @@ def satellites(sign):
 
                     polltime = t
 
-                    if data:
+                    if data and "above" in data:
                         above = data["above"]
 
                         above = [dict(item, dist=get_distance((item["satlat"], item["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600 / (6371.009 + item["satalt"]))) for item in above]
