@@ -93,7 +93,7 @@ Manage the PlaneSign Docker container lifecycle, check for updates, and perform 
 |---|----------------|------|:----:|:-----:|:------:|-------------|
 | 0 | Container Control | `29352a73-3108-4ecc-9440-57b5a8a5c027` | ✅ | ✅ | ✅ | Read returns the live container status (name, state, running, ID), refreshed every 30 s. Write `start` or `stop` to control the `PlaneSignRuntime` container; the write is acknowledged immediately and the resulting status arrives as a notification. Stop uses `docker kill` for a forced shutdown. |
 | 1 | Version | `8d1151e7-04b8-49e2-955a-daa50e1285e5` | ✅ | — | ✅ | Current PlaneSign application version from the local API (`http://127.0.0.1/api/version`), refreshed every 30 s. |
-| 2 | Update Check | `a9cc9f79-aa76-4955-aeb5-85aa9299028e` | ✅ | — | ✅ | Compares the local Docker image digest against the remote GHCR digest. Checked at startup and every 15 minutes, so reads answer immediately with `up-to-date` / `update-available` plus short digest hashes, or `check failed: …`. |
+| 2 | Update Check | `a9cc9f79-aa76-4955-aeb5-85aa9299028e` | ✅ | — | ✅ | Compares the local Docker image digest against the remote GHCR digest. Checked at startup, when a central connects (if the result is over 2 minutes old) and every 15 minutes while subscribed. Reads answer immediately from the cache with `up-to-date` / `update-available` plus short digest hashes, or `check failed: …`; a newer result follows as a notification. |
 | 3 | System Update | `32d1b76b-9532-44da-9a43-3b682b8be90c` | ✅ | ✅ | ✅ | Write `update` to trigger the OTA update script. Read returns current status (`idle`, `updating`, `complete`, or `failed: …`). Subscribe to notifications for real-time status changes. |
 | 4 | Update Log | `f63b67f9-b823-4f8f-a528-94e286cda73e` | ✅ | — | ✅ | Streams stdout/stderr from the update script. Read returns the last 512 bytes of the log buffer (64 KB ring buffer). Subscribe to notifications for live log streaming in ≤180-byte chunks, which fit the ATT payload iOS negotiates. |
 
@@ -114,8 +114,10 @@ The server is built around that constraint:
   methods.
 - Everything that shells out or talks to the network derives from `CachedValueCharacteristic`.
   Reads answer from cache immediately; the value is recomputed on a worker thread and pushed
-  to subscribers. Caches are warmed at startup, on a per-characteristic interval, and again
-  whenever a central connects.
+  to subscribers. Caches are warmed at startup and whenever a central connects. The
+  per-characteristic interval refreshes (the "every N s" figures above) only run while a
+  central is connected and subscribed, so an idle sign does not keep polling `/api/version`,
+  Docker or GHCR.
 - The very first read of a characteristic is held open until its initial value lands (up to
   10–15 s) rather than returning an empty string.
 - Blob reads honour BlueZ's `offset` option and are served from the same cached value, so a

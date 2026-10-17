@@ -107,13 +107,7 @@ def load_forecast(weather, start_index_day):
     if not current or not isinstance(daily, list) or len(daily) < start_index_day + 3:
         return None
 
-    return (
-        daily[start_index_day],
-        daily[start_index_day + 1],
-        daily[start_index_day + 2],
-        utilities.convert_unix_to_local_time(current["sunrise"]),
-        utilities.convert_unix_to_local_time(current["sunset"]),
-    )
+    return (daily[start_index_day], daily[start_index_day + 1], daily[start_index_day + 2], utilities.convert_unix_to_local_time(current["sunrise"]), utilities.convert_unix_to_local_time(current["sunset"]))
 
 
 def weather_data_wanted():
@@ -132,7 +126,7 @@ def refresh_weather(data_dict):
             data_dict["weather"] = weather_json
             data_dict["weather_fresh_until"] = time.time() + WEATHER_STALE_SECONDS
             data_dict["weather_status"] = "ready"
-            logging.info(f"At: {utilities.convert_unix_to_local_time(current['dt'])} Temp: {current['temp']}")
+            logging.info(f"Wx: {utilities.convert_unix_to_local_time(current['dt'])} {current['weather'][0]['description']} - Temp: {current['temp']} Clouds: {current['clouds']}% Wind: {current['wind_speed']}")
             return WEATHER_POLL_SECONDS
         cod = weather_json.get("cod", weather_data.status_code)
         message = weather_json.get("message", "missing expected weather fields")

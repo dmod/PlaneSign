@@ -80,7 +80,7 @@
 <main>
 <header>
     <h1>Outside lab</h1>
-    <p class="note">Set Outside's time, weather and moon by hand; the sign switches to Outside and redraws on the next frame.
+    <p class="note">Set Outside's time, weather, moon and hemisphere by hand; the sign switches to Outside and redraws on the next frame.
     Only Outside is affected. Everything returns to live when the sign leaves Outside, after <span id="idle">15</span> idle minutes, or with Back to live.</p>
 </header>
 
@@ -105,6 +105,7 @@
         <span class="badge" id="b_time">live time</span>
         <span class="badge" id="b_weather">live weather</span>
         <span class="badge" id="b_moon">live moon</span>
+        <span class="badge" id="b_hemisphere">live sky</span>
         <span class="badge" id="b_expires"></span>
         <span class="note">Sign clock: <span id="s_clock">…</span></span>
         <span class="note" id="copied"></span>
@@ -142,10 +143,14 @@
         <div class="chips"><span id="moon_positions" class="chips"></span><button onclick="call('/outside/lab/moon', {reset: 1})">Live moon</button></div>
     </div>
     <div class="row">
+        <span class="row_label">Sky</span>
+        <div class="chips"><span id="hemispheres" class="chips"></span><button onclick="call('/outside/lab/hemisphere', {reset: 1})">Live sky</button></div>
+    </div>
+    <div class="row">
         <label class="row_label" for="offset">Forecast</label>
         <div class="controls"><input type="range" id="offset" min="0" max="1440" step="15" value="0"><b id="offset_label">+0 h</b></div>
     </div>
-    <p class="note">Season keeps the time of day; the time slider and sun events stay on the shown date. Pause freezes the clock and the animation. A moon phase or place overrides the computed one while time keeps running; at Actual the moon only shows while it is up and clear of the tree.</p>
+    <p class="note">Season keeps the time of day; the time slider and sun events stay on the shown date. Pause freezes the clock and the animation. A moon phase or place overrides the computed one while time keeps running; at Actual the moon only shows while it is up and clear of the tree. Sky shows a hemisphere's constellations and seasons; the sun and moon still follow the sign's location.</p>
 </section>
 
 <section class="card">
@@ -186,6 +191,7 @@ const TOUCH_MS = 3000;
 const timers = {};
 const touched = {};
 const moonPositionButtons = {};
+const hemisphereButtons = {};
 const speedButtons = [];
 const summonButtons = {};
 let holidayKey = '';
@@ -334,6 +340,10 @@ function build() {
         moonPositionButtons[name] = button(label, () => call('/outside/lab/moon', {position: name}));
         el('moon_positions').append(moonPositionButtons[name]);
     }
+    for (const {name, label} of OPTIONS.hemispheres) {
+        hemisphereButtons[name] = button(label, () => call('/outside/lab/hemisphere', {name}));
+        el('hemispheres').append(hemisphereButtons[name]);
+    }
     for (const {name, label, requirement} of OPTIONS.summons) {
         summonButtons[name] = button(label, () => call('/outside/lab/summon', {event: name}));
         summonButtons[name].dataset.requirement = requirement;
@@ -382,7 +392,7 @@ function render(state) {
     lastState = state;
     renderHolidays(state.holiday_shortcuts);
     el('s_time').textContent = state.selected_time.slice(0, 16).replace('T', ' ') + (state.offset_minutes ? ` (${hours(state.offset_minutes)})` : '');
-    el('s_season').textContent = state.season;
+    el('s_season').textContent = `${state.season}, ${state.hemisphere}ern sky`;
     el('s_sun').textContent = state.sun_altitude == null ? '—' : state.sun_altitude.toFixed(1) + '°';
     el('s_sky').textContent = state.astronomy;
     if (state.moon_phase == null) {
@@ -407,11 +417,14 @@ function render(state) {
     el('b_weather').classList.toggle('on', !!lab.weather);
     el('b_moon').textContent = lab.moon ? 'lab moon' : 'live moon';
     el('b_moon').classList.toggle('on', !!lab.moon);
+    el('b_hemisphere').textContent = lab.hemisphere ? `lab ${lab.hemisphere}ern sky` : 'live sky';
+    el('b_hemisphere').classList.toggle('on', !!lab.hemisphere);
     el('b_expires').style.display = lab.expires_in == null ? 'none' : '';
     if (lab.expires_in != null) el('b_expires').textContent = `resets in ${Math.floor(lab.expires_in / 60)}:${String(lab.expires_in % 60).padStart(2, '0')}`;
     for (const b of speedButtons) b.classList.toggle('selected', lab.time != null && Number(b.dataset.speed) === lab.speed);
     const position = lab.moon?.position ?? 'actual';
     for (const [name, b] of Object.entries(moonPositionButtons)) b.classList.toggle('selected', name === position);
+    for (const [name, b] of Object.entries(hemisphereButtons)) b.classList.toggle('selected', name === lab.hemisphere);
     for (const [name, b] of Object.entries(summonButtons)) {
         const allowed = state.summons_allowed[name];
         b.classList.toggle('unavailable', !allowed);
@@ -458,7 +471,7 @@ function startPreview(port) {
     next();
 }
 
-// A link that reproduces the current lab scene: time and speed, weather, moon and forecast offset.
+// A link that reproduces the current lab scene: time and speed, weather, moon, hemisphere and forecast offset.
 function sceneLink() {
     const lab = lastState.lab;
     const params = new URLSearchParams();
@@ -477,6 +490,7 @@ function sceneLink() {
         if (lab.moon.phase != null) params.set('phase', Math.round(lab.moon.phase));
         if (lab.moon.position && lab.moon.position !== 'actual') params.set('position', lab.moon.position);
     }
+    if (lab.hemisphere) params.set('hemisphere', lab.hemisphere);
     if (lastState.offset_minutes) params.set('offset', lastState.offset_minutes);
     const query = params.toString();
     return location.origin + location.pathname + (query ? '#' + query : '');
@@ -501,6 +515,8 @@ async function applyLink() {
     if (![...params.keys()].length) return;
     // Start clean so overrides the link leaves out do not linger.
     await call('/outside/lab/reset');
+    // Before the time, so a season in the link lands in this hemisphere's months.
+    if (params.has('hemisphere')) await call('/outside/lab/hemisphere', {name: params.get('hemisphere')});
     if (params.has('at')) await call('/outside/lab/time', params.has('speed') ? {at: params.get('at'), speed: params.get('speed')} : {at: params.get('at')});
     if (params.has('code')) {
         const weather = {code: params.get('code')};

@@ -1,4 +1,4 @@
-"""Outside lab: set Outside mode's time, weather and moon by hand and see the result on the sign at once.
+"""Outside lab: set Outside mode's time, weather, moon and hemisphere by hand and see the result on the sign at once.
 It can also pause Outside and summon its occasional visitors and sky events (outside_scene.SUMMONS).
 
 Open /outside/lab on the API (http://<sign>/api/outside/lab through nginx), or use the "Outside lab"
@@ -48,6 +48,8 @@ MOON_POSITIONS = {
 }
 # Named phase shortcuts in degrees (0 new, 90 first quarter, 180 full, 270 last quarter).
 MOON_PHASES = (("New", 0), ("Waxing crescent", 45), ("First quarter", 90), ("Waxing gibbous", 135), ("Full", 180), ("Waning gibbous", 225), ("Last quarter", 270), ("Waning crescent", 315))
+# Hemispheres the lab can show: their constellations and seasons. The sun and moon stay where they are at the sign's location.
+HEMISPHERES = {"north": "Northern", "south": "Southern"}
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ WEATHER_FIELDS = {
     "clouds": WeatherField("clouds", "Clouds", "%", 0, 100, 0.01, (0, 100, 1), "cloud_cover"),
     "wind": WeatherField("wind", "Wind", "mph", 0, 200, 1, (0, 60, 1), "wind_mph"),
     "temp": WeatherField("temperature", "Temp", "°F", -80, 140, 1, (-20, 110, 1), "temperature_f"),
+    "dew_point": WeatherField("dew_point", "Dew point", "°F", -80, 100, 1, (-10, 85, 1), "dew_point_f"),
     "rain": WeatherField("rain", "Rain", "mm/h", 0, 300, 1, (0, 20, 0.1), "rain_mm_h"),
     "snow": WeatherField("snow", "Snow", "mm/h", 0, 300, 1, (0, 10, 0.1), "snow_mm_h"),
     # OpenWeather reports visibility up to 10 km.
@@ -78,23 +81,25 @@ WEATHER_FIELDS = {
 }
 # Weather presets: OpenWeather condition id plus readings in the query's units.
 WEATHER_PRESETS = (
-    ("Clear", {"code": 800, "clouds": 0, "wind": 5, "rain": 0, "snow": 0, "temp": 72, "visibility": 10000}),
-    ("Partly cloudy", {"code": 802, "clouds": 40, "wind": 8, "rain": 0, "snow": 0, "temp": 70, "visibility": 10000}),
-    ("Mostly cloudy", {"code": 803, "clouds": 75, "wind": 9, "rain": 0, "snow": 0, "temp": 66, "visibility": 10000}),
-    ("Overcast", {"code": 804, "clouds": 100, "wind": 10, "rain": 0, "snow": 0, "temp": 60, "visibility": 10000}),
-    ("Drizzle", {"code": 300, "clouds": 90, "wind": 6, "rain": 0.3, "snow": 0, "temp": 58, "visibility": 8000}),
-    ("Rain", {"code": 501, "clouds": 95, "wind": 12, "rain": 3, "snow": 0, "temp": 55, "visibility": 6000}),
-    ("Heavy rain", {"code": 502, "clouds": 100, "wind": 18, "rain": 10, "snow": 0, "temp": 55, "visibility": 3000}),
-    ("Light thunderstorm", {"code": 210, "clouds": 80, "wind": 14, "rain": 1, "snow": 0, "temp": 76, "visibility": 8000}),
-    ("Thunderstorm", {"code": 211, "clouds": 95, "wind": 20, "rain": 5, "snow": 0, "temp": 75, "visibility": 5000}),
-    ("Heavy thunderstorm", {"code": 212, "clouds": 100, "wind": 26, "rain": 12, "snow": 0, "temp": 74, "visibility": 3000}),
-    ("Light snow", {"code": 600, "clouds": 90, "wind": 5, "rain": 0, "snow": 0.5, "temp": 28, "visibility": 5000}),
-    ("Heavy snow", {"code": 602, "clouds": 100, "wind": 12, "rain": 0, "snow": 4, "temp": 24, "visibility": 1000}),
-    ("Sleet", {"code": 611, "clouds": 100, "wind": 10, "rain": 1, "snow": 0.5, "temp": 33, "visibility": 4000}),
-    ("Fog", {"code": 741, "clouds": 70, "wind": 2, "rain": 0, "snow": 0, "temp": 50, "visibility": 300}),
-    ("Windy", {"code": 801, "clouds": 15, "wind": 28, "rain": 0, "snow": 0, "temp": 65, "visibility": 10000}),
-    ("Freezing and clear", {"code": 800, "clouds": 0, "wind": 4, "rain": 0, "snow": 0, "temp": 20, "visibility": 10000}),
-    ("Warm, calm evening", {"code": 800, "clouds": 5, "wind": 3, "rain": 0, "snow": 0, "temp": 80, "visibility": 10000}),
+    ("Clear", {"code": 800, "clouds": 0, "wind": 5, "rain": 0, "snow": 0, "temp": 72, "dew_point": 50, "visibility": 10000}),
+    ("Partly cloudy", {"code": 802, "clouds": 40, "wind": 8, "rain": 0, "snow": 0, "temp": 70, "dew_point": 52, "visibility": 10000}),
+    ("Mostly cloudy", {"code": 803, "clouds": 75, "wind": 9, "rain": 0, "snow": 0, "temp": 66, "dew_point": 55, "visibility": 10000}),
+    ("Overcast", {"code": 804, "clouds": 100, "wind": 10, "rain": 0, "snow": 0, "temp": 60, "dew_point": 52, "visibility": 10000}),
+    ("Drizzle", {"code": 300, "clouds": 90, "wind": 6, "rain": 0.3, "snow": 0, "temp": 58, "dew_point": 56, "visibility": 8000}),
+    ("Rain", {"code": 501, "clouds": 95, "wind": 12, "rain": 3, "snow": 0, "temp": 55, "dew_point": 53, "visibility": 6000}),
+    ("Heavy rain", {"code": 502, "clouds": 100, "wind": 18, "rain": 10, "snow": 0, "temp": 55, "dew_point": 54, "visibility": 3000}),
+    ("Light thunderstorm", {"code": 210, "clouds": 80, "wind": 14, "rain": 1, "snow": 0, "temp": 76, "dew_point": 68, "visibility": 8000}),
+    ("Thunderstorm", {"code": 211, "clouds": 95, "wind": 20, "rain": 5, "snow": 0, "temp": 75, "dew_point": 70, "visibility": 5000}),
+    ("Heavy thunderstorm", {"code": 212, "clouds": 100, "wind": 26, "rain": 12, "snow": 0, "temp": 74, "dew_point": 71, "visibility": 3000}),
+    ("Light snow", {"code": 600, "clouds": 90, "wind": 5, "rain": 0, "snow": 0.5, "temp": 28, "dew_point": 25, "visibility": 5000}),
+    ("Heavy snow", {"code": 602, "clouds": 100, "wind": 12, "rain": 0, "snow": 4, "temp": 24, "dew_point": 22, "visibility": 1000}),
+    ("Sleet", {"code": 611, "clouds": 100, "wind": 10, "rain": 1, "snow": 0.5, "temp": 33, "dew_point": 31, "visibility": 4000}),
+    ("Fog", {"code": 741, "clouds": 70, "wind": 2, "rain": 0, "snow": 0, "temp": 50, "dew_point": 50, "visibility": 300}),
+    ("Windy", {"code": 801, "clouds": 15, "wind": 28, "rain": 0, "snow": 0, "temp": 65, "dew_point": 45, "visibility": 10000}),
+    ("Freezing and clear", {"code": 800, "clouds": 0, "wind": 4, "rain": 0, "snow": 0, "temp": 20, "dew_point": 8, "visibility": 10000}),
+    ("Warm, calm evening", {"code": 800, "clouds": 5, "wind": 3, "rain": 0, "snow": 0, "temp": 80, "dew_point": 62, "visibility": 10000}),
+    ("Beach day", {"code": 800, "clouds": 10, "wind": 7, "rain": 0, "snow": 0, "temp": 84, "dew_point": 62, "visibility": 10000}),
+    ("Hot and muggy", {"code": 801, "clouds": 20, "wind": 6, "rain": 0, "snow": 0, "temp": 90, "dew_point": 75, "visibility": 10000}),
 )
 LAB_SPEEDS = (("Pause", 0), ("×1", 1), ("×10", 10), ("×60", 60), ("×300", 300))
 # How long /summon waits for the Outside loop to find the event and report back.
@@ -209,6 +214,7 @@ def page_options():
         "sun_events": [{"name": name, "label": label, "lead_minutes": lead} for name, (label, _, _, lead) in SUN_EVENTS.items()],
         "moon_positions": [{"name": name, "label": label} for name, (label, _, _) in MOON_POSITIONS.items()],
         "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
+        "hemispheres": [{"name": name, "label": label} for name, label in HEMISPHERES.items()],
         "summons": [{"name": name, "label": summon.label, "requirement": summon.requirement} for name, summon in SUMMONS.items()],
         "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
         # The emulator's frame server, for the live preview; None on the physical panel.
@@ -275,7 +281,8 @@ def set_time():
         if season not in SEASON_MONTHS:
             raise LabError(f"season must be one of {', '.join(SEASON_MONTHS)}")
         moment = displayed_moment(tz)
-        month = SEASON_MONTHS[season] if latitude >= 0 else (SEASON_MONTHS[season] + 5) % 12 + 1
+        hemisphere = outside.hemisphere_at(latitude, shared_config.data_dict.get("outside_lab_hemisphere"))
+        month = SEASON_MONTHS[season] if hemisphere == "north" else (SEASON_MONTHS[season] + 5) % 12 + 1
         set_lab_time(local_timestamp(date(moment.year, month, 15), moment.hour, moment.minute, tz), speed)
     elif "event" in request.args:
         name = request.args["event"]
@@ -296,7 +303,7 @@ def set_time():
 
 @blueprint.route("/weather")
 def set_weather():
-    """?code=OPENWEATHER_ID with optional clouds (%), wind (mph), rain/snow (mm/h), temp (°F), visibility (m); or ?reset=1."""
+    """?code=OPENWEATHER_ID with optional clouds (%), wind (mph), rain/snow (mm/h), temp and dew_point (°F), visibility (m); or ?reset=1."""
     if request.args.get("reset"):
         touch()
         shared_config.data_dict["outside_lab_weather"] = None
@@ -344,6 +351,22 @@ def set_moon():
     shared_config.data_dict["outside_lab_moon"] = override
     changed()
     logger.info("Outside lab: moon %s", request.query_string.decode())
+    return jsonify(state())
+
+
+@blueprint.route("/hemisphere")
+def set_hemisphere():
+    """?name=north|south shows that hemisphere's constellations and seasons; or ?reset=1 for the sign's own."""
+    if request.args.get("reset"):
+        hemisphere = None
+    else:
+        hemisphere = request.args.get("name", "")
+        if hemisphere not in HEMISPHERES:
+            raise LabError(f"name must be one of {', '.join(HEMISPHERES)}")
+    touch()
+    shared_config.data_dict["outside_lab_hemisphere"] = hemisphere
+    changed()
+    logger.info("Outside lab: hemisphere %s", request.query_string.decode())
     return jsonify(state())
 
 
