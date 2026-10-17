@@ -351,7 +351,7 @@ def reverse_geocode(lat, lon):
             code = "OCEAN"
 
             # Special case codes
-            if water_code in ["IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "NEMO", "SHIP"]:
+            if water_code in ["NORTH", "IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "NEMO", "SHIP"]:
                 code = water_code
 
     if formatted_address is None:
