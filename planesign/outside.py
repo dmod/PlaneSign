@@ -6,7 +6,7 @@ import random
 import signal
 import time
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, draw_outside_frame, holiday_features, summon_start
+from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, crisp_weather, draw_outside_frame, holiday_features, summon_start
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -74,6 +74,10 @@ class OutsideEnvironment:
     lab: bool = False
     # Comfortable beach weather; the Outside loop decides it with hysteresis (outside_scene.beach_weather).
     beach: bool = False
+    # A crisp evening that lights the campfire; the Outside loop decides it with hysteresis (outside_scene.crisp_weather).
+    crisp: bool = False
+    # Seconds from the displayed moment to the next local midnight, which puts out the campfire.
+    until_midnight: float | None = None
     # "north" or "south": picks the constellations and, with the date, the season.
     hemisphere: str = "north"
 
@@ -247,16 +251,20 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
             observed = replace(observed, status="PENDING")
     hemisphere = hemisphere_at(latitude, hemisphere_override)
     season = local_season(moment, hemisphere)
+    # Local midnight as an absolute time, so the count stays exact on DST days.
+    until_midnight = datetime.combine(moment.date() + timedelta(days=1), datetime.min.time(), moment.tzinfo).timestamp() - moment.timestamp()
     if not isinstance(sky, dict):
-        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere)
+        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight)
     positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
     if positions is None:
-        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere)
+        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight)
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
     sunrise = next((sunrise for sunrise in sky.get("sunrises", ()) if sunrise > moment.timestamp()), None)
     before_sunrise = sunrise is not None and datetime.fromtimestamp(sunrise, moment.tzinfo).date() == moment.date()
-    environment = OutsideEnvironment(season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere)
+    environment = OutsideEnvironment(
+        season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere, until_midnight=until_midnight
+    )
     return lab_moon(environment, moon_override)
 
 
@@ -445,6 +453,7 @@ def outside(sign):
     transition_started = started
     text_styles: tuple[bool | None, bool | None, bool | None] = (None, None, None)
     beach = False
+    crisp = False
     seen_lab_version = None
     frozen = None
     handled_summon = None
@@ -489,6 +498,9 @@ def outside(sign):
         beach = beach_weather(environment, beach)
         if beach:
             environment = replace(environment, beach=True)
+        crisp = crisp_weather(environment, crisp)
+        if crisp:
+            environment = replace(environment, crisp=True)
         if pending_summon is not None:
             handled_summon = pending_summon["id"]
             elapsed, result = summon_jump(pending_summon, environment, elapsed, seed)

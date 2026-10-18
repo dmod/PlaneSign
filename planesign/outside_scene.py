@@ -985,10 +985,10 @@ def wildlife_visit(slot: int, seed: int):
 
 def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
     """Nothing comes out on Halloween, turkeys take the meadow on Thanksgiving, the hotdog mascot has it to himself on
-    July 4, and heavy rain or snow keeps animals away."""
+    July 4, animals keep away from a burning campfire, and heavy rain or snow keeps them away."""
     holidays = holiday_features(environment)
     rain, snow = precipitation(environment)
-    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and HOTDOG not in holidays and rain < 3 and snow < 2
+    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and HOTDOG not in holidays and rain < 3 and snow < 2 and campfire_state(environment) is None
 
 
 def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -4545,6 +4545,309 @@ def draw_beach_umbrella(image: Image.Image, palette: Palette):
         d.point((x, y), fill=(round(color[0] * illumination), round(color[1] * illumination), round(color[2] * illumination)))
 
 
+# On a crisp evening (clear, cold, dry and calm) a campfire burns between the pond and the maple from sunset until local
+# midnight, but never on a holiday. Weather limits: a temperature range (°F), the least gap between temperature and dew point (°F,
+# which keeps the air dry), and the most cloud cover and wind (mph). Like the beach umbrella's, each limit has a margin
+# once the fire is lit, so a reading hovering at a limit cannot light and douse it between weather refreshes.
+CRISP_TEMPERATURE, CRISP_TEMPERATURE_MARGIN = (25, 48), 2.5
+CRISP_DEW_POINT_SPREAD, CRISP_DEW_POINT_MARGIN = 8, 2
+CRISP_CLOUDS, CRISP_CLOUDS_MARGIN = 0.25, 0.1
+CRISP_WIND, CRISP_WIND_MARGIN = 10, 3
+CRISP_CODES = frozenset({800, 801, 802})
+# The coals catch first, then the flames build as the sun sinks this many degrees below sunset. Over the last
+# CAMPFIRE_BURN_DOWN_SECONDS before midnight the flames die down, and the coals go dark over the last CAMPFIRE_COALS_SECONDS.
+CAMPFIRE_KINDLE_DEGREES = 1.5
+CAMPFIRE_BURN_DOWN_SECONDS = 15 * 60
+CAMPFIRE_COALS_SECONDS = 60
+# Only the evening's half of the night counts; after midnight the fire stays out until the next sunset.
+CAMPFIRE_EVENING_SECONDS = 12 * 3600
+# A campfire in the meadow between the pond and the maple. Nothing stands in front of the flames: a teepee of sticks
+# leans together behind them, showing only around their edges and through gaps between tongues, and a single log lies
+# along the ground below their base, with a stone at either side. Logs are ((end), (end), thickness, in front of the
+# flames); stones (x, y, radius); the coal bed (center, radii) glows behind the flames' base. Pixel centers are integers.
+CAMPFIRE_LOGS = (((89, 30), (97, 20), 1.5, False), ((101, 30), (93, 20), 1.5, False), ((88, 30.5), (102, 30.5), 2, True))
+# The top of each stick in the teepee is burnt black over this many px.
+CAMPFIRE_CHARRED = 2.5
+CAMPFIRE_STONES = ((85, 31, 1.3), (105, 31, 1.3))
+CAMPFIRE_COAL_BED = ((95, 29), (4.5, 0.7))
+# Parts: B/b lit and shaded bark, k ash and charred wood; S/s lit and shaded stone; c coals.
+CAMPFIRE_COLORS = {"B": (124, 100, 80), "b": (80, 64, 52), "k": (38, 28, 24), "S": (132, 128, 122), "s": (84, 82, 82)}
+# The flames rise from this point, just above the front log.
+CAMPFIRE_X, CAMPFIRE_BASE = 95.0, 29.4
+# Full-size flames: height and half-width at the base (px). Wind leans their tips right by this many px per mph.
+CAMPFIRE_FLAME_HEIGHT = 12.0
+CAMPFIRE_FLAME_WIDTH = 4.4
+CAMPFIRE_WIND_LEAN = 0.12
+# Turbulence rises through the flames at these speeds (px/s); faster small eddies ride on slower large ones.
+CAMPFIRE_RISE = (7.0, 11.0)
+# Heat to color, from the flames' dim red edges to their pale yellow core. Picked by their graded result on the panel.
+CAMPFIRE_HEAT = (0.12, 0.26, 0.4, 0.55, 0.72, 0.92)
+CAMPFIRE_FIRE = np.array(((120, 16, 2), (196, 38, 6), (246, 90, 12), (255, 146, 28), (255, 206, 76), (255, 244, 196)), dtype=np.float32) / 255
+CAMPFIRE_COAL = (np.array((150, 18, 4), dtype=np.float32) / 255, np.array((255, 110, 20), dtype=np.float32) / 255)
+# Firelight: a flickering warm wash reaching this far (px) over the ground, the trunk and the underside of the canopy.
+# Open air catches only CAMPFIRE_AIR_GLOW of it, a faint halo rather than a lit box of sky.
+CAMPFIRE_LIGHT = (255, 146, 58)
+CAMPFIRE_LIGHT_REACH = 6.5
+CAMPFIRE_LIGHT_STRENGTH = 0.5
+CAMPFIRE_AIR_GLOW = 0.22
+# A steady stream of embers rides the plume up, joined now and then by a burst when a log pops. Each ember slows over
+# CAMPFIRE_EMBER_SLOW seconds and cools as it rises, and every ember is out by CAMPFIRE_EMBER_CEILING, below the
+# temperature label.
+CAMPFIRE_EMBER_INTERVAL = 0.22
+CAMPFIRE_EMBER_CHANCE = 0.75
+CAMPFIRE_EMBER_SPEED = (6.0, 13.0)
+CAMPFIRE_EMBER_LIFE = (1.2, 3.0)
+CAMPFIRE_EMBER_SLOW = 1.6
+CAMPFIRE_EMBER_CEILING = 9
+CAMPFIRE_POP_SECONDS = 5.0
+CAMPFIRE_POP_CHANCE = 0.45
+CAMPFIRE_POP_EMBERS = (3, 6)
+CAMPFIRE_POP_SPEED = (12.0, 18.0)
+
+
+def crisp_weather(environment: "OutsideEnvironment", lit: bool) -> bool:
+    """Whether the evening is crisp enough for the campfire: clear, cold, dry and calm. Pass whether the fire is lit
+    now, for the margins. An unknown reading keeps it out."""
+    weather = environment.weather
+    if weather.code not in CRISP_CODES or weather.temperature is None or weather.dew_point is None or weather.wind is None:
+        return False
+    if (weather.visibility is not None and weather.visibility < FOG_VISIBILITY) or any(precipitation(environment)):
+        return False
+    slack = 1 if lit else 0
+    low, high = CRISP_TEMPERATURE
+    return (
+        low - slack * CRISP_TEMPERATURE_MARGIN <= weather.temperature <= high + slack * CRISP_TEMPERATURE_MARGIN
+        and weather.temperature - weather.dew_point >= CRISP_DEW_POINT_SPREAD - slack * CRISP_DEW_POINT_MARGIN
+        and cloud_cover(environment) <= CRISP_CLOUDS + slack * CRISP_CLOUDS_MARGIN
+        and weather.wind <= CRISP_WIND + slack * CRISP_WIND_MARGIN
+    )
+
+
+def campfire_state(environment: "OutsideEnvironment") -> tuple[float, float] | None:
+    """(flames, coals), each 0..1, while the campfire burns: on a crisp evening between sunset and local midnight, on
+    no holiday."""
+    altitude, left = environment.sun_altitude, environment.until_midnight
+    if not environment.crisp or altitude is None or left is None or altitude >= SET_ALTITUDE or left > CAMPFIRE_EVENING_SECONDS:
+        return None
+    if holiday_features(environment):
+        return None
+    kindle = min(1.0, (SET_ALTITUDE - altitude) / CAMPFIRE_KINDLE_DEGREES)
+    return min(kindle, left / CAMPFIRE_BURN_DOWN_SECONDS), min(1.0, kindle * 3, left / CAMPFIRE_COALS_SECONDS)
+
+
+def campfire_pixels() -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
+    """The campfire's pixels by part (see CAMPFIRE_COLORS): those behind the flames, then those in front of them."""
+    back: dict[tuple[int, int], str] = {}
+    front: dict[tuple[int, int], str] = {}
+    for (ax, ay), (bx, by), thickness, ahead in CAMPFIRE_LOGS:
+        cells = front if ahead else back
+        length = math.hypot(bx - ax, by - ay)
+        dx, dy = (bx - ax) / length, (by - ay) / length
+        # The normal pointing up the screen (or toward the fire for an upright stick), toward the log's lit side.
+        nx, ny = (dy, -dx) if dx > 0 else (-dy, dx)
+        if abs(dx) < abs(dy):
+            nx, ny = (nx, ny) if nx * (CAMPFIRE_X - ax) > 0 else (-nx, -ny)
+        half = thickness / 2
+        for y in range(math.floor(min(ay, by) - thickness), math.ceil(max(ay, by) + thickness) + 1):
+            for x in range(math.floor(min(ax, bx) - thickness), math.ceil(max(ax, bx) + thickness) + 1):
+                along = (x - ax) * dx + (y - ay) * dy
+                across = (x - ax) * nx + (y - ay) * ny
+                if 0 <= along <= length and -half < across <= half:
+                    cells[x, y] = "k" if not ahead and along > length - CAMPFIRE_CHARRED else "B" if across > 0 else "b"
+    (cx, cy), (rx, ry) = CAMPFIRE_COAL_BED
+    for y in range(math.floor(cy - ry), math.ceil(cy + ry) + 1):
+        for x in range(math.floor(cx - rx), math.ceil(cx + rx) + 1):
+            if ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1:
+                # Dark ash breaks up the glowing bed.
+                back[x, y] = "k" if grain(x, y, 47) < 30 else "c"
+    for sx, sy, radius in CAMPFIRE_STONES:
+        for y in range(math.floor(sy - radius), math.ceil(sy + radius) + 1):
+            for x in range(math.floor(sx - radius), math.ceil(sx + radius) + 1):
+                if math.hypot(x - sx, y - sy) < radius + 0.3:
+                    # Lit from the fire's side and from above.
+                    front[x, y] = "S" if y < sy or (x - sx) * (CAMPFIRE_X - sx) > 0 else "s"
+    back = {point: char for point, char in back.items() if point not in front}
+    return tuple({point: char for point, char in cells.items() if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT} for cells in (back, front))
+
+
+def campfire_layer(cells: dict[tuple[int, int], str]) -> tuple[np.ndarray, np.ndarray]:
+    """(points, base colors) of a layer's solid pixels, leaving out the glowing coals."""
+    solid = [(point, CAMPFIRE_COLORS[char]) for point, char in cells.items() if char != "c"]
+    return np.array([point for point, _ in solid], dtype=int), np.array([color for _, color in solid], dtype=np.float32)
+
+
+CAMPFIRE_BACK_CELLS, CAMPFIRE_FRONT_CELLS = campfire_pixels()
+CAMPFIRE_COAL_PIXELS = np.array([point for point, char in CAMPFIRE_BACK_CELLS.items() if char == "c"], dtype=int)
+CAMPFIRE_BACK, CAMPFIRE_BACK_COLORS = campfire_layer(CAMPFIRE_BACK_CELLS)
+CAMPFIRE_FRONT, CAMPFIRE_FRONT_COLORS = campfire_layer(CAMPFIRE_FRONT_CELLS)
+# The fire lights its own logs and stones this much: their colors brighten toward full and warm toward the firelight,
+# rather than taking the ground's wash, which would flood them into one orange block.
+CAMPFIRE_SELF_LIGHT, CAMPFIRE_SELF_WARMTH = 0.85, 0.08
+
+
+def wrapping_noise(size: int, cell: int, salt: int) -> np.ndarray:
+    """Smooth value noise on a square tile that wraps both ways, so it can scroll forever."""
+    count = size // cell
+    grid = np.random.default_rng(salt).random((count, count))
+    steps = np.arange(size) / cell
+    low = np.floor(steps).astype(int)
+    fraction = steps - low
+    fraction = fraction * fraction * (3 - 2 * fraction)
+    high = (low + 1) % count
+    rows = grid[low] + (grid[high] - grid[low]) * fraction[:, None]
+    return (rows[:, low] + (rows[:, high] - rows[:, low]) * fraction[None, :]).astype(np.float32)
+
+
+CAMPFIRE_NOISE_SIZE = 64
+CAMPFIRE_NOISE = (wrapping_noise(CAMPFIRE_NOISE_SIZE, 4, 401), wrapping_noise(CAMPFIRE_NOISE_SIZE, 2, 402))
+
+
+def sample_noise(tile: np.ndarray, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+    """Bilinear samples of a wrapping noise tile at fractional coordinates, so scrolling noise moves smoothly."""
+    x0, y0 = np.floor(xs), np.floor(ys)
+    fx, fy = xs - x0, ys - y0
+    x0, y0 = x0.astype(int) % CAMPFIRE_NOISE_SIZE, y0.astype(int) % CAMPFIRE_NOISE_SIZE
+    x1, y1 = (x0 + 1) % CAMPFIRE_NOISE_SIZE, (y0 + 1) % CAMPFIRE_NOISE_SIZE
+    top = tile[y0, x0] + (tile[y0, x1] - tile[y0, x0]) * fx
+    bottom = tile[y1, x0] + (tile[y1, x1] - tile[y1, x0]) * fx
+    return top + (bottom - top) * fy
+
+
+# The flames are evaluated in this box (rows, columns) around their base.
+CAMPFIRE_FLAME_ROWS = np.arange(math.floor(CAMPFIRE_BASE - CAMPFIRE_FLAME_HEIGHT * 1.5), math.ceil(CAMPFIRE_BASE) + 1)
+CAMPFIRE_FLAME_COLUMNS = np.arange(math.floor(CAMPFIRE_X) - 8, math.ceil(CAMPFIRE_X) + 9)
+CAMPFIRE_FLAME_Y, CAMPFIRE_FLAME_X = np.meshgrid(CAMPFIRE_FLAME_ROWS.astype(np.float32), CAMPFIRE_FLAME_COLUMNS.astype(np.float32), indexing="ij")
+CAMPFIRE_SURFACES = (np.asarray(LAND) != 0) | (np.asarray(LEAFY_TREE) != 0) | (np.asarray(BARE_TREE) != 0)
+CAMPFIRE_GLOW = np.exp(-((FIREWORK_X - CAMPFIRE_X) ** 2 + ((FIREWORK_Y - (CAMPFIRE_BASE - 3)) * 1.3) ** 2) / (2 * CAMPFIRE_LIGHT_REACH**2)) * CAMPFIRE_LIGHT_STRENGTH * np.where(CAMPFIRE_SURFACES, 1.0, CAMPFIRE_AIR_GLOW)
+CAMPFIRE_GLOW[CAMPFIRE_GLOW < 0.004] = 0
+# Everything the fire lights, from the firelight to the farthest embers, falls in this corner (top row, left column),
+# so only it is blended each frame.
+CAMPFIRE_REGION = (min(int(np.flatnonzero(CAMPFIRE_GLOW.any(axis=1))[0]), CAMPFIRE_EMBER_CEILING - 1), min(int(np.flatnonzero(CAMPFIRE_GLOW.any(axis=0))[0]), math.floor(CAMPFIRE_X) - 18))
+CAMPFIRE_GLOW = CAMPFIRE_GLOW[CAMPFIRE_REGION[0] :, CAMPFIRE_REGION[1] :, None].astype(np.float32)
+# Heat to premultiplied flame color, as a lookup table over CAMPFIRE_HEAT's range.
+CAMPFIRE_RAMP_HEAT = np.linspace(CAMPFIRE_HEAT[0], CAMPFIRE_HEAT[-1], 256)
+CAMPFIRE_RAMP = (np.stack([np.interp(CAMPFIRE_RAMP_HEAT, CAMPFIRE_HEAT, CAMPFIRE_FIRE[:, channel]) for channel in range(3)], axis=-1) * np.clip((CAMPFIRE_RAMP_HEAT - CAMPFIRE_HEAT[0]) / (CAMPFIRE_HEAT[1] - CAMPFIRE_HEAT[0]), 0, 1)[:, None]).astype(np.float32)
+
+
+def campfire_flicker(elapsed: float) -> float:
+    """0..1 brightness of the whole fire: a slow breathing with quicker flutters on top, never a hard jump."""
+    return 0.86 + 0.07 * math.sin(elapsed * 4.3) + 0.04 * math.sin(elapsed * 7.9 + 1.1) + 0.03 * math.sin(elapsed * 13.1 + 2.3)
+
+
+def campfire_flames(light: np.ndarray, flames: float, elapsed: float, wind: float):
+    """Add the flames to `light`: a teardrop of heat eroded by turbulence rising through it, so tongues lick up, split
+    and break off as wisps. Everything is continuous in `elapsed`, so the motion is smooth at any frame rate."""
+    if flames <= 0.02:
+        return
+    height = CAMPFIRE_FLAME_HEIGHT * (0.25 + 0.75 * flames) * (1 + 0.07 * math.sin(elapsed * 3.1) + 0.05 * math.sin(elapsed * 5.3 + 1.7))
+    width = CAMPFIRE_FLAME_WIDTH * (0.55 + 0.45 * flames)
+    xs, ys = CAMPFIRE_FLAME_X, CAMPFIRE_FLAME_Y
+    rise = np.clip((CAMPFIRE_BASE - ys) / height, 0, None)
+    large, small = CAMPFIRE_NOISE
+    # The flames lean with the wind and sway on their own, and rising eddies bend each tongue, more toward the tips.
+    sway = 0.45 * math.sin(elapsed * 1.7) + 0.3 * math.sin(elapsed * 2.9 + 0.7)
+    warp = (sample_noise(large, xs * 0.7 + 31, ys * 0.6 + elapsed * CAMPFIRE_RISE[0]) - 0.5) * 2.6
+    lean = min(wind, 20) * CAMPFIRE_WIND_LEAN * rise**1.5 + sway * rise**1.2 + warp * rise
+    across = (xs - CAMPFIRE_X - lean) / (width * np.clip(1 - 0.7 * rise, 0.2, 1))
+    body = np.clip(1 - across**2, 0, 1) * np.clip(1.1 - rise, 0, 1) ** 0.6
+    turbulence = 0.55 * sample_noise(large, xs * 0.9, ys * 0.8 + elapsed * CAMPFIRE_RISE[0]) + 0.45 * sample_noise(small, xs * 2.2 + 17, ys * 0.7 + elapsed * CAMPFIRE_RISE[1])
+    # Turbulence eats into the flames harder toward the tips, which breaks them into tongues and loose wisps; the
+    # small eddies are stretched upright, so the tongues split along the way the flames rise.
+    heat = body * (0.3 + 1.2 * turbulence) - (1 - turbulence) * (0.1 + 0.8 * rise)
+    # The fire is hottest low down, where it feeds on the logs.
+    heat = heat + 0.2 * body * np.clip(1 - 2 * rise, 0, 1)
+    heat = heat * (0.75 + 0.25 * campfire_flicker(elapsed))
+    index = np.clip((heat - CAMPFIRE_HEAT[0]) * (255 / (CAMPFIRE_HEAT[-1] - CAMPFIRE_HEAT[0])), 0, 255).astype(int)
+    rows = slice(CAMPFIRE_FLAME_ROWS[0], CAMPFIRE_FLAME_ROWS[-1] + 1)
+    columns = slice(CAMPFIRE_FLAME_COLUMNS[0], CAMPFIRE_FLAME_COLUMNS[-1] + 1)
+    light[rows, columns] = np.maximum(light[rows, columns], CAMPFIRE_RAMP[index])
+
+
+def campfire_coals(light: np.ndarray, coals: float, flames: float, elapsed: float):
+    """The bed of coals glows and pulses unevenly, each coal on its own slow rhythm."""
+    if coals <= 0:
+        return
+    xs, ys = CAMPFIRE_COAL_PIXELS[:, 0].astype(np.float32), CAMPFIRE_COAL_PIXELS[:, 1].astype(np.float32)
+    pulse = sample_noise(CAMPFIRE_NOISE[1], xs * 3.7, ys * 5.3 + elapsed * 1.3)
+    warmth = np.clip(0.25 + 0.75 * pulse * (0.6 + 0.4 * flames), 0, 1)[:, None]
+    colors = (CAMPFIRE_COAL[0] + (CAMPFIRE_COAL[1] - CAMPFIRE_COAL[0]) * warmth) * (coals * (0.4 + 0.5 * warmth))
+    light[CAMPFIRE_COAL_PIXELS[:, 1], CAMPFIRE_COAL_PIXELS[:, 0]] = np.maximum(light[CAMPFIRE_COAL_PIXELS[:, 1], CAMPFIRE_COAL_PIXELS[:, 0]], colors)
+
+
+def campfire_embers(flames: float, elapsed: float, seed: int, wind: float) -> list[tuple[float, float, float, float]]:
+    """(x, y, heat, brightness) of each ember in the air. Embers are numbered by when they leave the fire, and each
+    one's path is a pure function of its number, so any moment can be drawn without replaying the ones before it.
+    A smaller fire throws fewer embers, dropping them in a fixed order."""
+    embers = []
+    newest = math.floor(elapsed / CAMPFIRE_EMBER_INTERVAL)
+    oldest = math.floor((elapsed - CAMPFIRE_EMBER_LIFE[1]) / CAMPFIRE_EMBER_INTERVAL) - 1
+    # (launch time, ember number, hash salt, speed range, sideways spread)
+    launches = [(n * CAMPFIRE_EMBER_INTERVAL + unit_hash(seed, n, 501) * CAMPFIRE_EMBER_INTERVAL, n, 0, CAMPFIRE_EMBER_SPEED, 1.0) for n in range(oldest, newest + 1) if unit_hash(seed, n, 502) < CAMPFIRE_EMBER_CHANCE * flames]
+    # When a log pops it throws a quick burst of faster embers, spread wider.
+    for slot in range(math.floor((elapsed - CAMPFIRE_EMBER_LIFE[1]) / CAMPFIRE_POP_SECONDS), math.floor(elapsed / CAMPFIRE_POP_SECONDS) + 1):
+        if flames < 0.3 or unit_hash(seed, slot, 511) > CAMPFIRE_POP_CHANCE:
+            continue
+        at = (slot + 0.1 + 0.8 * unit_hash(seed, slot, 512)) * CAMPFIRE_POP_SECONDS
+        count = CAMPFIRE_POP_EMBERS[0] + math.floor(unit_hash(seed, slot, 513) * (CAMPFIRE_POP_EMBERS[1] - CAMPFIRE_POP_EMBERS[0] + 1))
+        launches += [(at + index * 0.03, slot * 16 + index, 50, CAMPFIRE_POP_SPEED, 2.5) for index in range(count)]
+    for start, n, salt, (slowest, fastest), spread in launches:
+        age = elapsed - start
+        life = CAMPFIRE_EMBER_LIFE[0] + (CAMPFIRE_EMBER_LIFE[1] - CAMPFIRE_EMBER_LIFE[0]) * unit_hash(seed, n, salt + 503)
+        if not 0 <= age < life:
+            continue
+        speed = slowest + (fastest - slowest) * unit_hash(seed, n, salt + 504)
+        phase = unit_hash(seed, n, salt + 505) * math.tau
+        x = CAMPFIRE_X + (unit_hash(seed, n, salt + 506) - 0.5) * 3 * (0.5 + 0.5 * flames)
+        x += ((unit_hash(seed, n, salt + 507) - 0.5) * 3.2 * spread + min(wind, 25) * SMOKE_WIND_DRIFT * 0.6) * age
+        x += 0.8 * math.sin(age * 3.1 + phase) * min(1.0, age)
+        y = CAMPFIRE_BASE - 2 - 2 * flames - speed * CAMPFIRE_EMBER_SLOW * (1 - math.exp(-age / CAMPFIRE_EMBER_SLOW))
+        heat = 1 - age / life
+        ceiling = min(1.0, max(0.0, (y - CAMPFIRE_EMBER_CEILING) / 3))
+        twinkle = 0.7 + 0.3 * math.sin(age * 15 + phase * 3)
+        brightness = (0.35 + 0.65 * heat) * twinkle * ceiling * min(1.0, age / 0.08) * min(1.0, heat / 0.15)
+        if brightness > 0.02:
+            embers.append((x, y, heat, brightness))
+    return embers
+
+
+def draw_campfire(image: Image.Image, palette: Palette):
+    """The coal bed's dark ashes; the logs, stones and the glow are drawn with the fire's light."""
+    ash = tuple(round(value * min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))) for value in CAMPFIRE_COLORS["k"])
+    paste_overlay(image, [(CAMPFIRE_COAL_PIXELS, ash, 1.0)])
+
+
+def firelit(colors: np.ndarray, illumination: float, glow: float) -> np.ndarray:
+    lit = colors * (illumination + (1 - illumination) * CAMPFIRE_SELF_LIGHT * glow)
+    return lit + (np.array(CAMPFIRE_LIGHT, dtype=np.float32) - lit) * (CAMPFIRE_SELF_WARMTH * glow)
+
+
+def draw_campfire_light(image: Image.Image, palette: Palette, state: tuple[float, float], night: float, elapsed: float, seed: int, wind: float) -> Image.Image:
+    """Firelight washes over the ground, the trunk and the leaves above; the coals, flames and embers glow over it and
+    over the sticks behind them, so they stay saturated, and the firelit front log and stones stand below the flames."""
+    flames, coals = state
+    glow = max(flames, 0.35 * coals) * campfire_flicker(elapsed) * (0.35 + 0.65 * night)
+    top, left = CAMPFIRE_REGION
+    pixels = np.array(image)
+    region = pixels[top:, left:].astype(np.float32)
+    region = np.round(region + (np.array(CAMPFIRE_LIGHT, dtype=np.float32) - region) * (CAMPFIRE_GLOW * glow))
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    region[CAMPFIRE_BACK[:, 1] - top, CAMPFIRE_BACK[:, 0] - left] = firelit(CAMPFIRE_BACK_COLORS, illumination, glow)
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    campfire_coals(light, coals, flames, elapsed)
+    campfire_flames(light, flames, elapsed, wind)
+    embers = campfire_embers(flames, elapsed, seed, wind)
+    if embers:
+        xs, ys, heats, weights = (np.array(values, dtype=np.float32) for values in zip(*embers))
+        colors = np.where((heats > 0.6)[:, None], EMBER_WARM + (EMBER_HOT - EMBER_WARM) * ((heats - 0.6) / 0.4)[:, None], EMBER_COOL + (EMBER_WARM - EMBER_COOL) * (heats / 0.6)[:, None])
+        splat(light, xs, ys, colors, weights)
+    # Laid over the scene as premultiplied light, like composite_light, within the fire's corner only.
+    light = np.clip(light[top:, left:], 0, 1)
+    region = region * (1 - light.max(axis=-1, keepdims=True)) + light * 255
+    region[CAMPFIRE_FRONT[:, 1] - top, CAMPFIRE_FRONT[:, 0] - left] = firelit(CAMPFIRE_FRONT_COLORS, illumination, glow)
+    pixels[top:, left:] = np.round(region).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
 @dataclass(frozen=True)
 class Summon:
     """An occasional event the lab can call up: it jumps the animation clock to the event's next natural start."""
@@ -4569,7 +4872,7 @@ SUMMONS = {
     "owl": Summon("Owl", "Owls come out after dark in dry, calm weather, but not on Halloween or while ornaments hang on the tree.", owl_allowed, lambda e, t, s: owl_state(e, t, s) is not None, 1.0, 0.5),
     "eagle": Summon("Eagle", "The eagle hunts by day in fair, dry, calm weather above freezing, with good visibility and not on Halloween.", eagle_allowed, lambda e, t, s: eagle_state(e, t, s) is not None, 1.0, 0.5),
     "dog": Summon("Dog", "The dog goes out in dry daylight, but not on Halloween.", dog_allowed, lambda e, t, s: dog_state(e, t, s)[0] > 0, 0.5, 0.25),
-    "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween and Thanksgiving and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
+    "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween and Thanksgiving, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
@@ -4680,6 +4983,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     # The umbrella stands on the pond's right bank, behind visitors that wander under it.
     if environment.beach:
         draw_beach_umbrella(image, palette)
+    campfire = campfire_state(environment)
+    if campfire is not None:
+        draw_campfire(image, palette)
     draw_wildlife(image, palette, environment, elapsed, seed)
     if thanksgiving:
         draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
@@ -4732,6 +5038,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         draw_ghost(image, night, elapsed, seed)
     if thanksgiving:
         image = draw_lantern_glow(image, night, elapsed)
+    # The campfire's light warms everything near it; its flames and embers are in front of the tree.
+    if campfire is not None:
+        image = draw_campfire_light(image, palette, campfire, holiday_darkness(environment), elapsed, seed, wind)
     # Christmas lights shine on top of the lamp's wash so they stay saturated.
     if "christmas_lights" in holidays:
         image = draw_christmas_lights(image, environment, elapsed)
