@@ -127,8 +127,6 @@ def select_difficulty(difficulty):
     difficulty = difficulty.casefold()
     with shared_config.shared_games_lock:
         shared_config.data_dict["flagquiz_selected_difficulty"] = difficulty
-        if shared_config.shared_mode.value == DisplayMode.FLAGQUIZ.value:
-            shared_config.shared_forced_sign_update.set()
     return {"ok": True, "difficulty": difficulty}
 
 
