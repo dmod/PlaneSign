@@ -97,6 +97,8 @@ WEATHER_PRESETS = (
     ("Fog", {"code": 741, "clouds": 70, "wind": 2, "rain": 0, "snow": 0, "temp": 50, "dew_point": 50, "visibility": 300}),
     ("Windy", {"code": 801, "clouds": 15, "wind": 28, "rain": 0, "snow": 0, "temp": 65, "dew_point": 45, "visibility": 10000}),
     ("Freezing and clear", {"code": 800, "clouds": 0, "wind": 4, "rain": 0, "snow": 0, "temp": 20, "dew_point": 8, "visibility": 10000}),
+    # Clear, cold, dry and calm: after sunset it lights the campfire.
+    ("Crisp night", {"code": 800, "clouds": 5, "wind": 3, "rain": 0, "snow": 0, "temp": 38, "dew_point": 24, "visibility": 10000}),
     ("Warm, calm evening", {"code": 800, "clouds": 5, "wind": 3, "rain": 0, "snow": 0, "temp": 80, "dew_point": 62, "visibility": 10000}),
     ("Beach day", {"code": 800, "clouds": 10, "wind": 7, "rain": 0, "snow": 0, "temp": 84, "dew_point": 62, "visibility": 10000}),
     ("Hot and muggy", {"code": 801, "clouds": 20, "wind": 6, "rain": 0, "snow": 0, "temp": 90, "dew_point": 75, "visibility": 10000}),
