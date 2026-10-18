@@ -56,6 +56,7 @@ var flagquiz_latest_state = null;
 var flagquiz_poll_in_progress = false;
 var flagquiz_answer_in_progress = false;
 var flagquiz_suggestion_timer = null;
+var flagquiz_selected_difficulty = null;
 var flagquiz_seen_answer_pulses = new Set();
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
@@ -672,10 +673,32 @@ async function flagquiz_request(endpoint, data) {
     return body;
 }
 
-function start_flagquiz(difficulty) {
+function select_flagquiz_difficulty(difficulty) {
+    flagquiz_selected_difficulty = difficulty;
+    flagquiz_error("");
+    render_flagquiz_difficulty_selection();
+    flagquiz_request("/games/flagquiz/difficulty", {
+        difficulty: difficulty
+    }).then(function () {
+        poll_flagquiz_state();
+    }).catch(function (error) {
+        flagquiz_error(error.message);
+    });
+}
+
+function render_flagquiz_difficulty_selection() {
+    document.querySelectorAll("[data-flagquiz-difficulty]").forEach(function (button) {
+        var selected = button.dataset.flagquizDifficulty === flagquiz_selected_difficulty;
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+    });
+}
+
+function start_flagquiz() {
+    var button = document.getElementById("flagquiz_start_button");
+    button.disabled = true;
     flagquiz_error("");
     flagquiz_request("/games/flagquiz/start", {
-        difficulty: difficulty,
+        difficulty: flagquiz_selected_difficulty || "easy",
         player_id: get_game_player_id()
     }).then(function () {
         set_current_mode_button("FLAGQUIZ");
@@ -685,6 +708,25 @@ function start_flagquiz(difficulty) {
         poll_flagquiz_state();
     }).catch(function (error) {
         flagquiz_error(error.message);
+    }).finally(function () {
+        button.disabled = false;
+    });
+}
+
+function end_flagquiz() {
+    var button = document.getElementById("flagquiz_end_button");
+    button.disabled = true;
+    flagquiz_error("");
+    flagquiz_request("/games/flagquiz/end", {}).then(function () {
+        if (flagquiz_latest_state) {
+            flagquiz_latest_state.end_requested = true;
+            render_flagquiz_state(flagquiz_latest_state);
+        }
+        poll_flagquiz_state();
+    }).catch(function (error) {
+        flagquiz_error(error.message);
+    }).finally(function () {
+        button.disabled = Boolean(flagquiz_latest_state && flagquiz_latest_state.end_requested);
     });
 }
 
@@ -747,15 +789,25 @@ function poll_flagquiz_state() {
 
 function render_flagquiz_state(state) {
     var game = document.getElementById("flagquiz_game");
-    game.hidden = !state.difficulty;
-    if (!state.difficulty) {
-        document.getElementById("flagquiz_question_progress").textContent = "Choose a difficulty to begin.";
-        return;
+    game.hidden = false;
+    if (!flagquiz_selected_difficulty) {
+        flagquiz_selected_difficulty = state.selected_difficulty || state.difficulty || "easy";
     }
+    render_flagquiz_difficulty_selection();
+    var startButton = document.getElementById("flagquiz_start_button");
+    var endButton = document.getElementById("flagquiz_end_button");
+    startButton.textContent = state.in_progress ? "Restart Game" : "Start Game";
+    endButton.hidden = !state.in_progress;
+    endButton.disabled = Boolean(state.end_requested);
+    endButton.textContent = state.end_requested ? "Ending After This Question" : "End Game";
 
     var current = state.current;
     var progress;
-    if (state.sudden_death_notice) {
+    if (!state.difficulty) {
+        progress = "Select a difficulty and press Start Game when everyone is ready.";
+    } else if (state.countdown !== null && state.countdown !== undefined) {
+        progress = "Starting in " + state.countdown + "...";
+    } else if (state.sudden_death_notice) {
         progress = "Sudden death begins in " + state.notice_seconds + "s · tied scores";
     } else if (state.complete) {
         progress = state.tie
@@ -777,7 +829,9 @@ function render_flagquiz_state(state) {
     }
 
     var feedback = document.getElementById("flagquiz_feedback");
-    if (state.complete && state.tie) {
+    if (!state.difficulty) {
+        feedback.textContent = "";
+    } else if (state.complete && state.tie) {
         feedback.textContent = "It's a tie!";
     } else if (state.complete && state.winner) {
         feedback.textContent = state.winner.name + " WINS! Accuracy: " + state.winner.accuracy + "%";

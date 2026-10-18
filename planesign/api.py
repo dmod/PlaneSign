@@ -547,6 +547,27 @@ def start_flagquiz():
     return jsonify(result)
 
 
+@app.route("/games/flagquiz/difficulty", methods=["POST"])
+def select_flagquiz_difficulty():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "JSON request data is required"}), 400
+    try:
+        result = flagquiz.select_difficulty(data.get("difficulty"))
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    return jsonify(result)
+
+
+@app.route("/games/flagquiz/end", methods=["POST"])
+def end_flagquiz():
+    try:
+        result = flagquiz.end_game()
+    except flagquiz.FlagQuizConflict as error:
+        return jsonify({"ok": False, "error": str(error)}), 409
+    return jsonify(result)
+
+
 @app.route("/games/flagquiz/state")
 def flagquiz_state():
     try:

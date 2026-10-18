@@ -258,6 +258,57 @@ body {
   margin: 8px 0;
 }
 
+.flagquiz_difficulty_button[aria-pressed="true"] {
+  background: #164e63;
+  color: #fff;
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.flagquiz_game_actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.flagquiz_start_button,
+.flagquiz_end_button {
+  min-height: 42px;
+  padding: 8px 18px;
+  border: 2px solid rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.flagquiz_start_button {
+  background: #25823b;
+}
+
+.flagquiz_start_button:hover {
+  background: #1c6b2f;
+}
+
+.flagquiz_end_button {
+  background: #b83232;
+}
+
+.flagquiz_end_button:hover {
+  background: #982727;
+}
+
+.flagquiz_start_button:disabled,
+.flagquiz_end_button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.flagquiz_end_button[hidden] {
+  display: none;
+}
+
 .flagquiz_name_label,
 .flagquiz_expert label {
   display: block;

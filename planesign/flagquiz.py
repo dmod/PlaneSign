@@ -19,6 +19,7 @@ EXPERT_ROUND_SECONDS = 20
 QUESTION_LIMIT = 25
 SUDDEN_DEATH_NOTICE_SECONDS = 3
 FIREWORK_SLOT_SECONDS = 0.82
+START_COUNTDOWN_SECONDS = 3
 WIDTH = 128
 HEIGHT = 32
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
@@ -120,6 +121,17 @@ def _round_seconds(difficulty):
     return EXPERT_ROUND_SECONDS if difficulty == "expert" else ROUND_SECONDS
 
 
+def select_difficulty(difficulty):
+    if not isinstance(difficulty, str) or difficulty.casefold() not in DIFFICULTIES:
+        raise ValueError("difficulty must be easy, hard, or expert")
+    difficulty = difficulty.casefold()
+    with shared_config.shared_games_lock:
+        shared_config.data_dict["flagquiz_selected_difficulty"] = difficulty
+        if shared_config.shared_mode.value == DisplayMode.FLAGQUIZ.value:
+            shared_config.shared_forced_sign_update.set()
+    return {"ok": True, "difficulty": difficulty}
+
+
 def start_game(difficulty, player_id):
     difficulty = difficulty.casefold() if isinstance(difficulty, str) else difficulty
     pool = _country_pool(difficulty)
@@ -135,6 +147,7 @@ def start_game(difficulty, player_id):
     players = games.get_players()
     scores = {pid: 0 for pid, record in players.items() if now - record["last_seen"] < games.ACTIVE_PLAYER_SECONDS}
     scores[player["id"]] = 0
+    countdown_until = now + START_COUNTDOWN_SECONDS
     victory_flag_codes = [country["code"] for country in load_countries()]
     random.shuffle(victory_flag_codes)
 
@@ -143,9 +156,10 @@ def start_game(difficulty, player_id):
         "question_codes": question_codes,
         "regular_question_count": regular_question_count,
         "index": 0,
-        "round_id": uuid.uuid4().hex,
-        "deadline": now + _round_seconds(difficulty),
-        "current": _make_question(question_codes[0], difficulty, pool),
+        "round_id": None,
+        "deadline": None,
+        "current": None,
+        "countdown_until": countdown_until,
         "answers": {},
         "scores": scores,
         "attempts": {player_id: 0 for player_id in scores},
@@ -154,9 +168,11 @@ def start_game(difficulty, player_id):
         "sudden_death_notice_until": None,
         "winner_id": None,
         "tie": False,
+        "end_requested": False,
         "victory_flag_codes": victory_flag_codes,
     }
     with shared_config.shared_games_lock:
+        shared_config.data_dict["flagquiz_selected_difficulty"] = difficulty
         shared_config.data_dict["flagquiz_state"] = state
         shared_config.shared_mode.value = DisplayMode.FLAGQUIZ.value
         shared_config.shared_forced_sign_update.set()
@@ -169,6 +185,27 @@ def _unique_leader_id(scores):
     highest_score = max(scores.values())
     leaders = [player_id for player_id, score in scores.items() if score == highest_score]
     return leaders[0] if len(leaders) == 1 else None
+
+
+def _finish_game(state):
+    state["current"] = None
+    state["countdown_until"] = None
+    state["deadline"] = None
+    state["round_id"] = None
+    state["sudden_death_notice_until"] = None
+    state["winner_id"] = _unique_leader_id(state["scores"])
+    state["tie"] = state["winner_id"] is None
+
+
+def _start_first_question(state, now):
+    state["countdown_until"] = None
+    state["round_id"] = uuid.uuid4().hex
+    state["deadline"] = now + _round_seconds(state["difficulty"])
+    state["current"] = _make_question(
+        state["question_codes"][state["index"]],
+        state["difficulty"],
+        _country_pool(state["difficulty"]),
+    )
 
 
 def _start_next_question(state, now):
@@ -220,6 +257,10 @@ def _advance(state, now, players, active_ids, timed_out):
     state["round_id"] = None
     state["deadline"] = None
 
+    if state.get("end_requested"):
+        _finish_game(state)
+        return
+
     if state["index"] >= state["regular_question_count"]:
         leader_id = _unique_leader_id(state["scores"])
         if leader_id is not None:
@@ -246,6 +287,12 @@ def _advance(state, now, players, active_ids, timed_out):
 
 def _advance_if_ready(state, players, now):
     if state["current"] is None:
+        countdown_until = state.get("countdown_until")
+        if countdown_until is not None:
+            if now >= countdown_until:
+                _start_first_question(state, now)
+                return True
+            return False
         notice_until = state.get("sudden_death_notice_until")
         if notice_until is not None and now >= notice_until:
             _start_next_question(state, now)
@@ -291,7 +338,10 @@ def _public_status(state, player_id, players, now):
         seconds_left = max(0, math.ceil(state["deadline"] - now))
     notice_until = state.get("sudden_death_notice_until")
     notice_seconds = max(0, math.ceil(notice_until - now)) if notice_until is not None else 0
+    countdown_until = state.get("countdown_until")
+    countdown = max(1, math.ceil(countdown_until - now)) if countdown_until is not None else None
     winner = _winner_summary(state, players, now)
+    complete = current is None and notice_until is None and countdown_until is None
 
     return {
         "ok": True,
@@ -300,7 +350,10 @@ def _public_status(state, player_id, players, now):
         "total": state["regular_question_count"],
         "round_id": state["round_id"],
         "seconds_left": seconds_left,
-        "complete": current is None and notice_until is None,
+        "complete": complete,
+        "in_progress": not complete,
+        "countdown": countdown,
+        "end_requested": state.get("end_requested", False),
         "sudden_death": state["sudden_death"],
         "sudden_death_notice": notice_until is not None,
         "notice_seconds": notice_seconds,
@@ -339,8 +392,23 @@ def get_game_status(player_id, player_name=None):
     with shared_config.shared_games_lock:
         players = dict(shared_config.data_dict.get("game_players", {}))
         state = shared_config.data_dict.get("flagquiz_state")
+        selected_difficulty = shared_config.data_dict.get("flagquiz_selected_difficulty")
         if state is None:
-            return {"ok": True, "difficulty": None, "complete": False, "current": None, "players": [], "player": player}
+            active_players = {
+                player_id: 0
+                for player_id, record in players.items()
+                if now - record["last_seen"] < games.ACTIVE_PLAYER_SECONDS
+            }
+            return {
+                "ok": True,
+                "difficulty": None,
+                "selected_difficulty": selected_difficulty,
+                "complete": False,
+                "in_progress": False,
+                "current": None,
+                "players": _player_summary(players, active_players, now),
+                "player": player,
+            }
 
         state = dict(state)
         state["scores"] = dict(state["scores"])
@@ -351,8 +419,32 @@ def get_game_status(player_id, player_name=None):
         _advance_if_ready(state, players, now)
         shared_config.data_dict["flagquiz_state"] = state
         status = _public_status(state, player["id"], players, now)
+        status["selected_difficulty"] = selected_difficulty
         status["player"] = player
         return status
+
+
+def end_game():
+    now = time.monotonic()
+    with shared_config.shared_games_lock:
+        state = shared_config.data_dict.get("flagquiz_state")
+        if state is None:
+            raise FlagQuizConflict("There is no flag quiz to end")
+
+        state = dict(state)
+        state["scores"] = dict(state["scores"])
+        state["answers"] = dict(state["answers"])
+        state["attempts"] = dict(state.get("attempts", {}))
+        players = dict(shared_config.data_dict.get("game_players", {}))
+        if state["current"] is None:
+            if state.get("winner_id") is None and not state.get("tie"):
+                _finish_game(state)
+        else:
+            state["end_requested"] = True
+            _advance_if_ready(state, players, now)
+        shared_config.data_dict["flagquiz_state"] = state
+        shared_config.shared_forced_sign_update.set()
+        return {"ok": True, "end_requested": state.get("end_requested", False)}
 
 
 def submit_answer(player_id, round_id, answer):
@@ -406,7 +498,15 @@ def get_sign_state():
     with shared_config.shared_games_lock:
         state = shared_config.data_dict.get("flagquiz_state")
         if state is None:
-            return {"difficulty": None, "question_number": 0, "total": 0, "current": None, "complete": False}
+            return {
+                "difficulty": None,
+                "selected_difficulty": shared_config.data_dict.get("flagquiz_selected_difficulty"),
+                "question_number": 0,
+                "total": 0,
+                "current": None,
+                "countdown": None,
+                "complete": False,
+            }
 
         state = dict(state)
         state["scores"] = dict(state["scores"])
@@ -416,15 +516,19 @@ def get_sign_state():
         if _advance_if_ready(state, players, now):
             shared_config.data_dict["flagquiz_state"] = state
         notice_until = state.get("sudden_death_notice_until")
+        countdown_until = state.get("countdown_until")
         return {
             "difficulty": state["difficulty"],
+            "selected_difficulty": shared_config.data_dict.get("flagquiz_selected_difficulty"),
             "question_number": state["index"] + 1 if state["current"] is not None else state["index"],
             "total": state["regular_question_count"],
             "current": state["current"],
-            "complete": state["current"] is None and notice_until is None,
+            "countdown": max(1, math.ceil(countdown_until - now)) if countdown_until is not None else None,
+            "complete": state["current"] is None and notice_until is None and countdown_until is None,
             "sudden_death": state["sudden_death"],
             "sudden_death_notice": notice_until is not None,
             "tie": state["tie"],
+            "end_requested": state.get("end_requested", False),
             "winner": _winner_summary(state, players, now),
             "victory_flag_codes": state["victory_flag_codes"],
         }
@@ -434,7 +538,7 @@ def get_sign_state():
 def _flag_image(code):
     with Image.open(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")) as image:
         image = image.convert("RGB")
-        if code != "NPL" and code != "OH":
+        if code != "NPL" and code != "states/OH":
             image = fix_black(image)
         return image
 
@@ -486,11 +590,17 @@ def _draw_outlined_text(sign, font, text, x, baseline, color):
     graphics.DrawText(sign.canvas, font, x, baseline, color, text)
 
 
-def _draw_loading(sign, elapsed):
+def _draw_loading(sign, elapsed, selected_difficulty=None):
     _draw_scrolling_flags(sign, elapsed)
-    text = "CHOOSE LEVEL"
+    text = f"{selected_difficulty.upper()} MODE" if selected_difficulty else "CHOOSE LEVEL"
     x = (WIDTH - len(text) * 6) // 2
     _draw_outlined_text(sign, sign.fontbig, text, x, 19, graphics.Color(46, 210, 255))
+
+
+def _draw_countdown(sign, countdown):
+    text = f"{countdown}..."
+    x = (WIDTH - len(text) * 9) // 2
+    _draw_outlined_text(sign, sign.fontreallybig, text, x, 24, graphics.Color(255, 225, 90))
 
 
 @lru_cache(maxsize=32)
@@ -646,10 +756,12 @@ def _draw_question(sign, state, elapsed=0.0):
     if state["current"] is None:
         if state.get("sudden_death_notice"):
             _draw_sudden_death_notice(sign)
+        elif state.get("countdown") is not None:
+            _draw_countdown(sign, state["countdown"])
         elif state["complete"]:
             _draw_victory(sign, state, elapsed)
         else:
-            _draw_loading(sign, elapsed)
+            _draw_loading(sign, elapsed, state.get("selected_difficulty"))
         return
 
     current = state["current"]
