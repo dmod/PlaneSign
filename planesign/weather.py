@@ -126,7 +126,7 @@ def refresh_weather(data_dict):
             data_dict["weather"] = weather_json
             data_dict["weather_fresh_until"] = time.time() + WEATHER_STALE_SECONDS
             data_dict["weather_status"] = "ready"
-            logging.info(f"Wx: {utilities.convert_unix_to_local_time(current['dt'])} {current['weather'][0]['description']} - Temp: {current['temp']} Clouds: {current['clouds']}% Wind: {current['wind_speed']}")
+            logging.info(f"Wx: {utilities.convert_unix_to_local_time(current['dt'])} - Temp: {current['temp']} Clouds: {current['clouds']}% Wind: {current['wind_speed']} Humidity: {current['humidity']}% - {current['weather'][0]['description']}")
             return WEATHER_POLL_SECONDS
         cod = weather_json.get("cod", weather_data.status_code)
         message = weather_json.get("message", "missing expected weather fields")
