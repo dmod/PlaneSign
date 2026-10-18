@@ -150,6 +150,7 @@ legend: . black
 - googleapis.com
 - ourairports.com
 - [datasets/country-codes](https://github.com/datasets/country-codes) (country names)
+- https://flagpedia.net
 - quickmaptools.com (state and county polygons)
 - [Natural Earth Vector](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson) (countries and water bodies)
 - [Timezone Boundary Builder](https://github.com/evansiroky/timezone-boundary-builder) (timezone boundaries bundled by tzfpy, ODbL licensed)
