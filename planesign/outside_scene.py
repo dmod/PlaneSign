@@ -3,6 +3,7 @@
 import math
 import os
 import random
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from datetime import date, datetime, timedelta
@@ -4561,19 +4562,22 @@ CAMPFIRE_BURN_DOWN_SECONDS = 15 * 60
 CAMPFIRE_COALS_SECONDS = 60
 # Only the evening's half of the night counts; after midnight the fire stays out until the next sunset.
 CAMPFIRE_EVENING_SECONDS = 12 * 3600
-# A campfire in the meadow between the pond and the maple. Nothing stands in front of the flames: a teepee of sticks
-# leans together behind them, showing only around their edges and through gaps between tongues, and a single log lies
-# along the ground below their base, with a stone at either side. Logs are ((end), (end), thickness, in front of the
-# flames); stones (x, y, radius); the coal bed (center, radii) glows behind the flames' base. Pixel centers are integers.
-CAMPFIRE_LOGS = (((89, 30), (97, 20), 1.5, False), ((101, 30), (93, 20), 1.5, False), ((88, 30.5), (102, 30.5), 2, True))
-# The top of each stick in the teepee is burnt black over this many px.
+# A low, uneven pile beside the pond: joined segments give each log a crooked silhouette. The rear log rides higher
+# and reaches past the front log at both ends, so the two cut ends on each side stagger and read as separate logs. The
+# front log stays below the flames so it cannot hide them. Logs are ((end), (end), thickness, in front of the flames);
+# an end that no other segment shares is a cut end. Stones are (x, y, radius); the coal bed (center, radii) glows
+# behind the flames' base. Pixel centers are integers.
+CAMPFIRE_LOGS = (((86, 27.0), (91, 26.6), 2.0, False), ((91, 26.6), (97, 27.6), 1.8, False), ((89, 29), (91, 25), 1.8, False), ((91, 25), (93, 24), 1.0, False), ((86.5, 29.4), (90, 30), 1.5, True), ((90, 30), (95, 29.4), 2.0, True))
+# Rear logs are burnt black where they pass through the flames, within this many px of the flames' axis.
 CAMPFIRE_CHARRED = 2.5
-CAMPFIRE_STONES = ((85, 31, 1.3), (105, 31, 1.3))
-CAMPFIRE_COAL_BED = ((95, 29), (4.5, 0.7))
-# Parts: B/b lit and shaded bark, k ash and charred wood; S/s lit and shaded stone; c coals.
-CAMPFIRE_COLORS = {"B": (124, 100, 80), "b": (80, 64, 52), "k": (38, 28, 24), "S": (132, 128, 122), "s": (84, 82, 82)}
+CAMPFIRE_STONES = ((85, 28.5, 0.8), (97, 30, 1.0))
+CAMPFIRE_COAL_BED = ((91, 28), (3.5, 0.7))
+# Parts: B/b lit and shaded bark, E end grain on a cut end, k ash and charred wood; S/s lit and shaded stone; c coals.
+# Picked by their graded result: a dark underside outlines each log against the firelit ground, and paler or warmer
+# end grain grades to stone gray or to the flames' gold.
+CAMPFIRE_COLORS = {"B": (150, 118, 86), "b": (58, 44, 36), "E": (214, 204, 186), "k": (38, 28, 24), "S": (132, 128, 122), "s": (84, 82, 82)}
 # The flames rise from this point, just above the front log.
-CAMPFIRE_X, CAMPFIRE_BASE = 95.0, 29.4
+CAMPFIRE_X, CAMPFIRE_BASE = 91.0, 28.4
 # Full-size flames: height and half-width at the base (px). Wind leans their tips right by this many px per mph.
 CAMPFIRE_FLAME_HEIGHT = 12.0
 CAMPFIRE_FLAME_WIDTH = 4.4
@@ -4639,21 +4643,30 @@ def campfire_pixels() -> tuple[dict[tuple[int, int], str], dict[tuple[int, int],
     """The campfire's pixels by part (see CAMPFIRE_COLORS): those behind the flames, then those in front of them."""
     back: dict[tuple[int, int], str] = {}
     front: dict[tuple[int, int], str] = {}
+    shared = Counter(point for start, end, *_ in CAMPFIRE_LOGS for point in (start, end))
     for (ax, ay), (bx, by), thickness, ahead in CAMPFIRE_LOGS:
         cells = front if ahead else back
-        length = math.hypot(bx - ax, by - ay)
-        dx, dy = (bx - ax) / length, (by - ay) / length
-        # The normal pointing up the screen (or toward the fire for an upright stick), toward the log's lit side.
-        nx, ny = (dy, -dx) if dx > 0 else (-dy, dx)
-        if abs(dx) < abs(dy):
-            nx, ny = (nx, ny) if nx * (CAMPFIRE_X - ax) > 0 else (-nx, -ny)
-        half = thickness / 2
-        for y in range(math.floor(min(ay, by) - thickness), math.ceil(max(ay, by) + thickness) + 1):
-            for x in range(math.floor(min(ax, bx) - thickness), math.ceil(max(ax, bx) + thickness) + 1):
-                along = (x - ax) * dx + (y - ay) * dy
-                across = (x - ax) * nx + (y - ay) * ny
-                if 0 <= along <= length and -half < across <= half:
-                    cells[x, y] = "k" if not ahead and along > length - CAMPFIRE_CHARRED else "B" if across > 0 else "b"
+        # A lying log is measured down each column and a standing one across each row, so it keeps an even thickness
+        # in pixels and its ends are cut square to the screen: a cut end shows as one clean column (or row) of end grain.
+        lying = abs(bx - ax) >= abs(by - ay)
+        (a, b), (c, d) = ((ax, bx), (ay, by)) if lying else ((ay, by), (ax, bx))
+        # The lit side faces up on a lying log and toward the fire on a standing one.
+        lit = -1 if lying else 1 if CAMPFIRE_X > ax else -1
+        first, last = (math.ceil(a), math.floor(b)) if a < b else (math.floor(a), math.ceil(b))
+        cuts = {first: shared[ax, ay] == 1, last: shared[bx, by] == 1}
+        for along in range(min(first, last), max(first, last) + 1):
+            middle = c + (d - c) * (along - a) / (b - a)
+            for across in range(math.floor(middle - thickness), math.ceil(middle + thickness) + 1):
+                side = (across - middle) * lit
+                if not -thickness / 2 < side <= thickness / 2:
+                    continue
+                x, y = (along, across) if lying else (across, along)
+                if not ahead and abs(x - CAMPFIRE_X) < CAMPFIRE_CHARRED:
+                    cells[x, y] = "k"
+                elif cuts.get(along):
+                    cells[x, y] = "E"
+                else:
+                    cells[x, y] = "B" if side > 0 else "b"
     (cx, cy), (rx, ry) = CAMPFIRE_COAL_BED
     for y in range(math.floor(cy - ry), math.ceil(cy + ry) + 1):
         for x in range(math.floor(cx - rx), math.ceil(cx + rx) + 1):
