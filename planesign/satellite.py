@@ -20,6 +20,83 @@ from rgbmatrix import graphics
 from urllib3.util.retry import Retry
 from utilities import KM_2_MI, direction_lookup, fix_black, get_distance, lookup_country_code, reverse_geocode
 
+USSR_CUTOFF = datetime(1991, 10, 26).date()
+SATELLITE_NAME_COUNTRY_PREFIXES = {
+    "USA": (
+        "AEROCUBE ",
+        "COMSTAR",
+        "DIRECTV",
+        "DMSP ",
+        "DOVE ",
+        "ECHOSTAR",
+        "ESSA ",
+        "EXPLORER",
+        "FLOCK",
+        "GALAXY",
+        "GLOBAL-",
+        "GLOBALSTAR",
+        "GOES ",
+        "HAWK-",
+        "INTELSAT",
+        "IRIDIUM",
+        "KUIPER",
+        "LANDSAT",
+        "LEASAT ",
+        "LEMUR 2",
+        "LES ",
+        "NAVSTAR",
+        "NOAA",
+        "OPS ",
+        "ORBCOMM",
+        "PRAETORIAN",
+        "SATCOM",
+        "SDA",
+        "SECOR ",
+        "SPACEBEE-",
+        "STARLINK",
+        "TIROS ",
+        "USA",
+        "WESTFORD NEEDLES",
+    ),
+    "RUS": ("COSMOS", "EKRAN", "EXPRESS", "GONETS", "GORIZONT", "KANOPUS", "MOLNIYA", "METEOR", "NADEZHDA", "OKEAN ", "RADIO ", "RADUGA", "RASSVET", "SITRO-", "YUZGU"),
+    "CHN": ("BEIDOU", "CENTISPACE", "CHINASAT", "FENGYUN", "GAOFEN", "GEESAT", "HJS-", "HULIANWANG", "JILIN", "QIANFAN", "SINOSAT", "SHIYAN", "TIANHUI", "TIANLIAN", "TIANMU", "TIANQI", "TIANZHOU", "YAOGAN", "YUNHAI"),
+    "GBR": ("INMARSAT", "O3B", "ONEWEB", "SKYNET "),
+    "EU": ("EUTE", "METEOSAT"),
+    "IND": ("GSAT ", "GSAT-", "INSAT ", "IRNSS", "IRS "),
+    "FRA": ("BRO-", "DIADEME", "KINEIS", "SPOT ", "TELECOM "),
+    "ITA": ("ION SCV", "IRIDE-", "PICO-", "UNISAT"),
+    "SAU": ("SAUDISAT", "SAUDICOMSAT"),
+    "TUR": ("CONNECTA", "TURKSAT"),
+    "CAN": ("ANIK ", "GHGSAT"),
+    "AUS": ("OPTUS", "SKYKRAFT"),
+    "ARG": ("NUSAT"),
+    "CHE": ("ASTROCAST"),
+    "LUX": ("ASTRA", "SES "),
+    "FIN": ("ICEYE"),
+    "NZL": ("SPACEBEENZ"),
+    "POL": ("STORK"),
+    "ISR": ("TEVEL"),
+    "BRA": ("FLORIPASAT")
+
+
+}
+DEBRIS_NAME_MARKERS = (" DEB", " R/B", " AKM", " ABM", "OBJECT ", "OBJECT-", "INTERSTAGE")
+ISS_FLAGS_WITHOUT_BLACK_FIX = {"states/OH", "NPL", "OCEAN", "IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "UNKNOWN", "NUKE"}
+
+
+def _country_from_satellite_name(sat_name, launch_date):
+    for code, prefixes in SATELLITE_NAME_COUNTRY_PREFIXES.items():
+        if sat_name.startswith(prefixes):
+            if code == "RUS" and datetime.strptime(launch_date, "%Y-%m-%d").date() < USSR_CUTOFF:
+                return "USR"
+            return code
+    return None
+
+
+def _is_trackable_satellite(satellite, hide_starlink):
+    name = satellite["satname"]
+    return name != "OBJECT" and not any(marker in name for marker in DEBRIS_NAME_MARKERS) and not (hide_starlink and "STARLINK" in name)
+
 
 class Star:
     def __init__(self, sign, x, y, period=None, minbright=None):
@@ -57,7 +134,7 @@ def get_country_code(rawname, date):
         if country == "EU" or country.find("ESA") != -1 or country.find("(EUTE)") != -1 or country.find("(EUME)") != -1:
             code = "EU"
         elif country == "USR" or country.find("USSR") != -1 or country.find("(CIS)") != -1:
-            if datetime.strptime(date, "%Y-%m-%d").date() < datetime(1991, 10, 26, 0, 0).date():
+            if datetime.strptime(date, "%Y-%m-%d").date() < USSR_CUTOFF:
                 code = "USR"
             else:
                 code = "RUS"
@@ -85,7 +162,7 @@ def get_country_code(rawname, date):
             code = lookup_country_code(country) or "UNKNOWN"
 
         if code == "UNKNOWN":
-            for paren in re.finditer(r'\((.*?)\)', country):
+            for paren in re.finditer(r"\((.*?)\)", country):
                 code = lookup_country_code(paren.group(1)) or "UNKNOWN"
                 if code != "UNKNOWN":
                     break
@@ -138,7 +215,7 @@ def gen_flag(code):
     return image
 
 
-def get_flag(selected, satellite_data, flag_cache):
+def get_flag(selected, satellite_by_norad, satellite_by_cospar, flag_cache):
     cache_key = (selected["satid"], selected["intDesignator"], selected["launchDate"], selected["satname"])
     image = flag_cache.get(cache_key)
     if image is not None:
@@ -147,146 +224,26 @@ def get_flag(selected, satellite_data, flag_cache):
 
     image = None
 
-    USA_names = [
-        "AEROCUBE ",
-        "COMSTAR",
-        "DIRECTV",
-        "DMSP ",
-        "DOVE ",
-        "ECHOSTAR",
-        "ESSA ",
-        "EXPLORER",
-        "FLOCK",
-        "GALAXY",
-        "GLOBAL-",
-        "GLOBALSTAR",
-        "GOES ",
-        "HAWK-",
-        "INTELSAT",
-        "IRIDIUM",
-        "KUIPER",
-        "LANDSAT",
-        "LEASAT ",
-        "LEMUR 2",
-        "LES ",
-        "NAVSTAR",
-        "NOAA",
-        "OPS ",
-        "ORBCOMM",
-        "PRAETORIAN",
-        "SATCOM",
-        "SDA",
-        "SECOR ",
-        "SPACEBEE-",
-        "STARLINK",
-        "TIROS ",
-        "USA",
-        "WESTFORD NEEDLES",
-    ]
+    code = ""
 
-    RUS_names = ["COSMOS", "EKRAN", "EXPRESS", "GONETS", "GORIZONT", "KANOPUS", "MOLNIYA", "METEOR", "NADEZHDA", "OKEAN ", "RADIO ", "RADUGA", "SITRO-", "YUZGU"]
-
-    CHN_names = ["BEIDOU", "CENTISPACE", "CHINASAT", "FENGYUN", "GAOFEN", "GEESAT", "HJS-", "HULIANWANG", "JILIN", "QIANFAN", "SINOSAT", "SHIYAN", "TIANHUI", "TIANLIAN", "TIANMU", "TIANQI", "TIANZHOU", "YAOGAN", "YUNHAI"]
-
-    GBR_names = ["INMARSAT", "O3B", "ONEWEB", "SKYNET "]
-
-    EU_names = ["EUTE", "METEOSAT"]
-
-    IND_names = ["GSAT ", "GSAT-", "INSAT ", "IRNSS", "IRS "]
-
-    FRA_names = ["BRO-", "DIADEME", "KINEIS", "SPOT ", "TELECOM "]
-
-    ITA_names = ["ION SCV", "IRIDE-", "PICO-", "UNISAT"]
-
-    SAU_names = ["SAUDISAT", "SAUDICOMSAT"]
-
-    TUR_names = ["CONNECTA", "TURKSAT"]
-
-    CAN_names = ["ANIK ", "GHGSAT"]
-
-    AUS_names = ["OPTUS", "SKYKRAFT"]
-
-    if satellite_data:
-        code = ""
-
+    if satellite_by_norad or satellite_by_cospar:
         sat_name = selected["satname"]
 
         # Search by NORAD ID
-        sat = [d for d in satellite_data if d["NORAD"] == selected["satid"]]
-
-        if len(sat) == 0:
+        sat = satellite_by_norad.get(selected["satid"])
+        if sat is None:
             # Fallback search by COSPAR ID
-            sat = [d for d in satellite_data if d["COSPAR"] == selected["intDesignator"]]
+            sat = satellite_by_cospar.get(selected["intDesignator"])
 
-        if len(sat) > 0:
-            code = get_country_code(sat[0]["country"], selected["launchDate"])
+        if sat is not None:
+            code = get_country_code(sat["country"], selected["launchDate"])
 
         # can't find in static file lookup, apply known cases
-        elif any(sat_name.startswith(prefix) for prefix in USA_names):
-            code = "USA"
-
-        elif any(sat_name.startswith(prefix) for prefix in RUS_names):
-            if datetime.strptime(selected["launchDate"], "%Y-%m-%d").date() < datetime(1991, 10, 26, 0, 0).date():
-                code = "USR"
-            else:
-                code = "RUS"
-
-        elif any(sat_name.startswith(prefix) for prefix in CHN_names):
-            code = "CHN"
-
-        elif any(sat_name.startswith(prefix) for prefix in GBR_names):
-            code = "GBR"
-
-        elif any(sat_name.startswith(prefix) for prefix in EU_names):
-            code = "EU"
-
-        elif any(sat_name.startswith(prefix) for prefix in IND_names):
-            code = "IND"
-
-        elif any(sat_name.startswith(prefix) for prefix in FRA_names):
-            code = "FRA"
-
-        elif any(sat_name.startswith(prefix) for prefix in ITA_names):
-            code = "ITA"
-
-        elif any(sat_name.startswith(prefix) for prefix in SAU_names):
-            code = "SAU"
-
-        elif any(sat_name.startswith(prefix) for prefix in TUR_names):
-            code = "TUR"
-
-        elif any(sat_name.startswith(prefix) for prefix in CAN_names):
-            code = "CAN"
-
-        elif any(sat_name.startswith(prefix) for prefix in AUS_names):
-            code = "AUS"
-
-        elif sat_name.find("NUSAT") == 0:
-            code = "ARG"
-
-        elif sat_name.find("ASTROCAST") == 0:
-            code = "CHE"
-
-        elif sat_name.find("ASTRA") == 0:
-            code = "LUX"
-
-        elif sat_name.find("ICEYE") == 0:
-            code = "FIN"
-
-        elif sat_name.find("SPACEBEENZ") == 0:
-            code = "NZL"
-
-        elif sat_name.find("STORK") == 0:
-            code = "POL"
-
-        elif sat_name.find("TEVEL") == 0:
-            code = "ISR"
-
-        elif sat_name.find("FLORIPASAT") == 0:
-            code = "BRA"
-
-        # Still can't find country: go scrape country from website
         else:
+            code = _country_from_satellite_name(sat_name, selected["launchDate"]) or ""
+
+        # Still can't find country: go scrape country from website.
+        if not code:
             try:
                 response = network.get("N2YO", f"https://www.n2yo.com/satellite/?s={selected['satid']}", timeout=2)
             except Exception:
@@ -295,18 +252,22 @@ def get_flag(selected, satellite_data, flag_cache):
             if response and response.status_code == requests.codes.ok:
                 soup = BeautifulSoup(response.content, "html.parser")
                 info = soup.find("div", {"id": "satinfo"})
-
-                fullcountry = info.find("b", text="Source").next_sibling[2:].strip()
-
-                code = get_country_code(fullcountry, selected["launchDate"])
-
-                if code != "":
-                    logging.info(f"Found country for satellite: {sat_name}\t{selected['satid']}\t{selected['intDesignator']}\t{code}")
-                    with open(f"{shared_config.datafiles_dir}/satsup.txt", "a+") as suppliment_satfile:
-                        suppliment_satfile.write(f"{sat_name}\t{selected['satid']}\t{selected['intDesignator']}\t{code}\n")
-                        satellite_data.append({"COSPAR": selected["intDesignator"], "NORAD": selected["satid"], "country": code})
+                source = info.find("b", string="Source") if info else None
+                country_text = source.next_sibling if source else None
+                if isinstance(country_text, str):
+                    fullcountry = country_text[2:].strip()
+                    code = get_country_code(fullcountry, selected["launchDate"])
+                    if code:
+                        logging.info(f"Found country for satellite: {sat_name}\t{selected['satid']}\t{selected['intDesignator']}\t{code}")
+                        with open(f"{shared_config.datafiles_dir}/satsup.txt", "a+") as suppliment_satfile:
+                            suppliment_satfile.write(f"{sat_name}\t{selected['satid']}\t{selected['intDesignator']}\t{code}\n")
+                        satellite = {"COSPAR": selected["intDesignator"], "NORAD": selected["satid"], "country": code}
+                        satellite_by_norad[satellite["NORAD"]] = satellite
+                        satellite_by_cospar[satellite["COSPAR"]] = satellite
+                    else:
+                        logging.warning(f"Couldn't find country for satellite: {sat_name}\t{selected['satid']}\t{selected['intDesignator']} from {fullcountry}")
                 else:
-                    logging.warning(f"Couldn't find country for satellite: {sat_name}\t{selected['satid']}\t{selected['intDesignator']} from {fullcountry}")
+                    logging.warning("Couldn't parse country for satellite %s (%s) from N2YO", sat_name, selected["satid"])
 
         # Try to find or generate flag from country code
         image = gen_flag(code)
@@ -325,6 +286,32 @@ def get_flag(selected, satellite_data, flag_cache):
 
     flag_cache[cache_key] = image
     if len(flag_cache) > 256:
+        flag_cache.popitem(last=False)
+    return image
+
+
+def _get_iss_flag(code, flag_cache):
+    image = flag_cache.get(code)
+    if image is not None:
+        flag_cache.move_to_end(code)
+        return image
+
+    try:
+        image = Image.open(f"{shared_config.icons_dir}/flags/{code}.png").convert("RGBA")
+        if code not in ISS_FLAGS_WITHOUT_BLACK_FIX:
+            image = fix_black(image)
+    except Exception:
+        logging.warning("Couldn't find flag for: %s", code)
+        image = Image.open(f"{shared_config.icons_dir}/flags/UNKNOWN.png").convert("RGBA")
+
+    width, height = image.size
+    if round(10 * width / height) < 15:
+        image = image.resize((round(10 * width / height), 10), Image.BICUBIC)
+    else:
+        image = image.resize((15, 10), Image.BICUBIC)
+
+    flag_cache[code] = image
+    if len(flag_cache) > 64:
         flag_cache.popitem(last=False)
     return image
 
@@ -395,6 +382,12 @@ def satellites(sign):
     except Exception:
         logging.exception("Can't read static satellite data")
 
+    satellite_by_norad = {}
+    satellite_by_cospar = {}
+    for satellite in satellite_data:
+        satellite_by_norad.setdefault(satellite["NORAD"], satellite)
+        satellite_by_cospar.setdefault(satellite["COSPAR"], satellite)
+
     elevation = 0
     with requests.Session() as s:
         s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=0.5, respect_retry_after_header=False)))
@@ -435,6 +428,8 @@ def satellites(sign):
     geotime = None
     prev_address = None
     prev_code = None
+    formatted_address = "Unknown"
+    code = "UNKNOWN"
     prev_datatime = None
     delta = None
     prev_trans = None
@@ -468,6 +463,7 @@ def satellites(sign):
     stars.append(Star(sign, random.randint(112, 127), random.randint(0, 12), random.randint(50, 150), 0))
 
     flag_cache = OrderedDict()
+    iss_flag_cache = OrderedDict()
 
     while shared_config.shared_mode.value == DisplayMode.SATELLITE.value:
         if shared_config.shared_satellite_mode.value == 1:
@@ -523,37 +519,27 @@ def satellites(sign):
                     polltime = t
 
                     if data and "above" in data:
-                        above = data["above"]
+                        sensor_location = (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+                        hide_starlink = shared_config.CONF["HIDE_STARLINK"].lower() == "true"
+                        above = []
+                        for item in data["above"]:
+                            if _is_trackable_satellite(item, hide_starlink):
+                                satellite = dict(item)
+                                satellite["dist"] = get_distance((item["satlat"], item["satlng"]), sensor_location)
+                                above.append(satellite)
 
-                        above = [dict(item, dist=get_distance((item["satlat"], item["satlng"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))), vel=math.sqrt(398600 / (6371.009 + item["satalt"]))) for item in above]
-
-                        # remove debris from results
-                        above = list(
-                            filter(
-                                lambda x: (
-                                    " DEB" not in x["satname"]
-                                    and " R/B" not in x["satname"]
-                                    and " AKM" not in x["satname"]
-                                    and " ABM" not in x["satname"]
-                                    and "OBJECT " not in x["satname"]
-                                    and "OBJECT-" not in x["satname"]
-                                    and x["satname"] != "OBJECT"
-                                    and (("STARLINK" not in x["satname"]) if shared_config.CONF["HIDE_STARLINK"].lower() == "true" else True)
-                                ),
-                                above,
-                            )
-                        )
-
-                        closest_list = sorted(above, key=lambda k: k["dist"])
-                        lowest_list = sorted(above, key=lambda k: k["satalt"])
-
-                        closest = closest_list[0]
-                        lowest = lowest_list[0]
-
-                        dupeflag = False
-                        if closest == lowest:
-                            dupeflag = True
-                            lowest = closest_list[random.randint(1, len(closest_list) - 1)]
+                        if above:
+                            closest = min(above, key=lambda satellite: satellite["dist"])
+                            lowest = min(above, key=lambda satellite: satellite["satalt"])
+                            dupeflag = closest == lowest
+                            if dupeflag:
+                                alternatives = [satellite for satellite in above if satellite is not closest]
+                                if alternatives:
+                                    lowest = random.choice(alternatives)
+                        else:
+                            closest = None
+                            lowest = None
+                            dupeflag = False
 
                         close_name = closest["satname"]
                         if close_name.find("STARLINK") != -1:
@@ -589,7 +575,7 @@ def satellites(sign):
                 sign.canvas.SetPixel(26, 14, 200, 10, 10)
                 sign.canvas.SetPixel(25, 15, 200, 10, 10)
 
-                flag = get_flag(closest, satellite_data, flag_cache)
+                flag = get_flag(closest, satellite_by_norad, satellite_by_cospar, flag_cache)
                 w, _ = flag.size
                 sign.canvas.SetImage(flag, round(55.5 - w / 2), 8)
 
@@ -634,7 +620,7 @@ def satellites(sign):
                 sign.canvas.SetPixel(91, 14, 200, 10, 10)
                 sign.canvas.SetPixel(90, 15, 200, 10, 10)
 
-                flag = get_flag(lowest, satellite_data, flag_cache)
+                flag = get_flag(lowest, satellite_by_norad, satellite_by_cospar, flag_cache)
                 w, _ = flag.size
                 sign.canvas.SetImage(flag, round(120.5 - w / 2), 8)
 
@@ -721,67 +707,47 @@ def satellites(sign):
                 if flyby["endUTC"] < now:
                     iss_flyby = None
 
+            pos = None
             if iss_pos:
-                for pos in iss_pos:
-                    if pos["timestamp"] > now:
+                for candidate in iss_pos:
+                    if candidate["timestamp"] > now:
                         break
+                    pos = candidate
 
-                if pos:
-                    if geotime is None or time.perf_counter() - geotime > geo_pollperiod:  # limit how often we check location
-                        geotime = time.perf_counter()
+            if pos:
+                if geotime is None or time.perf_counter() - geotime > geo_pollperiod:  # limit how often we check location
+                    geotime = time.perf_counter()
 
-                        # Perform reverse geocoding
-                        formatted_address, code = reverse_geocode(pos["satlatitude"], pos["satlongitude"])
+                    # Perform reverse geocoding
+                    formatted_address, code = reverse_geocode(pos["satlatitude"], pos["satlongitude"])
 
-                        if (formatted_address == "Unknown" or code == "UNKNOWN") and prev_address and prev_code:
-                            formatted_address = prev_address
-                            code = prev_code
-                            logging.debug(f"Using previous valid location data: {prev_address} ({prev_code})")
+                    if (formatted_address == "Unknown" or code == "UNKNOWN") and prev_address and prev_code:
+                        formatted_address = prev_address
+                        code = prev_code
+                        logging.debug(f"Using previous valid location data: {prev_address} ({prev_code})")
 
-                        if formatted_address and code:
-                            prev_address = formatted_address
-                            prev_code = code
+                    if formatted_address and code:
+                        prev_address = formatted_address
+                        prev_code = code
 
-                    iss_dist = get_distance((pos["satlatitude"], pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])))
-                    iss_alt = pos["sataltitude"] * KM_2_MI
-                    iss_vel = math.sqrt(398600 / (6371.009 + pos["sataltitude"])) * KM_2_MI
-                    # iss_dir = direction_lookup((pos["satlatitude"],pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]),float(shared_config.CONF["SENSOR_LON"])))
+                iss_dist = get_distance((pos["satlatitude"], pos["satlongitude"]), (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])))
+                iss_alt = pos["sataltitude"] * KM_2_MI
+                iss_vel = math.sqrt(398600 / (6371.009 + pos["sataltitude"])) * KM_2_MI
 
             else:
                 logging.error("No satellite position data found")
                 iss_dist = None
                 iss_alt = None
                 iss_vel = None
-                # iss_dir = None
 
             sign.canvas.SetImage(iss_image, 99, 11)
 
             for s in stars:
                 s.draw()
 
-            image = None
             if code:
-                try:
-                    image = Image.open(f"{shared_config.icons_dir}/flags/{code}.png").convert("RGBA")
-
-                    if code not in ["states/OH", "NPL", "OCEAN", "IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "UNKNOWN", "NUKE"]:
-                        image = fix_black(image)
-
-                except Exception:
-                    logging.warning(f"Couldn't find flag for: {code}")
-                    image = Image.open(f"{shared_config.icons_dir}/flags/UNKNOWN.png").convert("RGBA")
-
-            if image:
-                w, h = image.size
-
-                if round(10 * w / h) < 15:
-                    image = image.resize((round(10 * w / h), 10), Image.BICUBIC)
-                else:
-                    image = image.resize((15, 10), Image.BICUBIC)
-
-                w, _ = image.size
-
-                sign.canvas.SetImage(image.convert("RGB"), 128 - w, 0)
+                image = _get_iss_flag(code, iss_flag_cache)
+                sign.canvas.SetImage(image.convert("RGB"), 128 - image.width, 0)
 
             # If over Null Island, draw random noise for flag
             if code and code == "IMAG":
