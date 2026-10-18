@@ -75,11 +75,8 @@ class Canvas:
         """Paste a PIL Image onto the canvas, matching rgbmatrix SetImage behavior."""
         if image.mode != "RGB":
             raise ValueError("Currently, only RGB mode is supported for SetImage(). Please create images with mode 'RGB' or convert first with image = image.convert('RGB').")
-        img_width, img_height = image.size
-        for x in range(max(0, -offset_x), min(img_width, self._width - offset_x)):
-            for y in range(max(0, -offset_y), min(img_height, self._height - offset_y)):
-                r, g, b = image.getpixel((x, y))
-                self._image.putpixel((x + offset_x, y + offset_y), (r, g, b))
+        # paste clips at the canvas edges, like the hardware SetImage.
+        self._image.paste(image, (int(offset_x), int(offset_y)))
 
     def _get_rgba_bytes(self) -> bytes:
         """Return the canvas content as raw RGBA bytes for WebSocket streaming."""
