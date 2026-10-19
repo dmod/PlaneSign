@@ -1189,16 +1189,18 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
 
 
 def birds_allowed(environment: "OutsideEnvironment") -> bool:
-    """The songbird flock, or Thanksgiving's geese, fly by day in light weather, but not on Halloween or July 4."""
+    """The songbird flock and the geese fly by day in light weather, but not in a thunderstorm, on Halloween or on July 4."""
     rain, snow = precipitation(environment)
     sun_altitude = environment.sun_altitude
     holidays = holiday_features(environment)
-    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and HALLOWEEN not in holidays and HOTDOG not in holidays
+    code = environment.weather.code
+    thunderstorm = code is not None and 200 <= code < 300
+    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and not thunderstorm and HALLOWEEN not in holidays and HOTDOG not in holidays
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
-    """Deer, foxes and rabbits, then the songbird flock. Nothing comes out on Halloween; on Thanksgiving turkeys and geese
-    take their places."""
+    """Deer, foxes and rabbits, then the geese and the songbird flock. Nothing comes out on Halloween; on Thanksgiving
+    turkeys and geese take their places."""
     holidays = holiday_features(environment)
     if HALLOWEEN in holidays:
         return
@@ -1214,7 +1216,7 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
         for offset in (0, 12) if pair and species == "deer" else (0,):
             dx = x + offset
 
-            def px(local_x):
+            def px(local_x, dx=dx):
                 return dx + 5 - local_x if arrival < 1 else dx + local_x
 
             c = palette.animal
@@ -1245,15 +1247,16 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 d.line((px(2), 29, px(2), 27), fill=c)
                 d.point((px(-1), 30), fill=palette.trim)
     if birds_allowed(environment):
+        draw_geese(image, palette, environment, elapsed, seed)
         if thanksgiving:
-            draw_geese(image, palette, environment, elapsed, seed)
             return
         flock_age = (elapsed + seed % 30) % 85
         flock_start = elapsed - flock_age
-        # Small birds keep clear of the sky while an eagle is hunting or the skywriter is up.
+        # Small birds keep clear of the sky while an eagle is hunting, geese are passing or the skywriter is up.
         eagle_near = next(eagle_visits_present(environment, seed, flock_start, flock_start + 35), None) is not None
+        geese_near = next(geese_flights_present(environment, seed, flock_start, flock_start + 35), None) is not None
         skywriter_near = next(skywriter_shows_present(environment, seed, flock_start, flock_start + 35), None) is not None
-        if flock_age < 35 and not eagle_near and not skywriter_near:
+        if flock_age < 35 and not eagle_near and not geese_near and not skywriter_near:
             for index in range(3 if environment.season != "winter" else 2):
                 x = round(-12 + flock_age * 4.5 - index * 7)
                 y = 7 + index % 2 + round(math.sin(elapsed * 0.2 + index) * 1.5)
@@ -5118,9 +5121,12 @@ def draw_hotdog(image: Image.Image, palette: Palette, pose: HotdogPose | None):
     draw_standing_sprite(ImageDraw.Draw(image), hotdog_sprite(pose.arms, pose.legs), pose.x, HOTDOG_FEET_ROW - pose.lift, pose.facing, colors)
 
 
-# On Thanksgiving a skein of geese flying in a V takes the place of the small songbird flock.
+# Geese fly over in a V through the spring and fall migrations, (month, day, month, day) spans per hemisphere, with the
+# south's six months from the north's. On Thanksgiving they come over far more often and replace the songbird flock.
+GEESE_MIGRATIONS = {"north": ((2, 20, 4, 30), (9, 15, 11, 30)), "south": ((3, 15, 5, 31), (8, 20, 10, 31))}
 GEESE_SLOT_SECONDS = 75
 GEESE_CHANCE = 0.55
+GEESE_MIGRATION_CHANCE = 0.15
 GEESE_SPEED = 10
 GEESE_COUNT = (5, 7)
 # The leader's row; the V's arms then stay below the corner labels and above the treeline.
@@ -5133,28 +5139,55 @@ GEESE_FLAP_LAG = 0.7
 
 
 @lru_cache(maxsize=8)
-def geese_flight(slot: int, seed: int) -> tuple[float, float, int, int] | None:
-    """(start, end, heading, count) of the skein crossing in this slot, if any. Never spans two slots."""
+def geese_flight(slot: int, seed: int) -> tuple[float, float, int, int, float]:
+    """(start, end, heading, count, roll) of the skein that may cross in this slot. It crosses when `roll` falls under
+    the day's chance, so a quieter day's crossings are a subset of a busier day's. Never spans two slots."""
     rng = random.Random(seed * 2953 + slot * 70001 + 37)
-    if rng.random() > GEESE_CHANCE:
-        return None
+    roll = rng.random()
     count = rng.randint(*GEESE_COUNT)
     length = (count // 2 + 1) * GEESE_RANK_SPACING[0]
     duration = (WIDTH + 2 * length + 4) / GEESE_SPEED
     start = slot * GEESE_SLOT_SECONDS + rng.uniform(1, GEESE_SLOT_SECONDS - duration - 1)
-    return start, start + duration, rng.choice((-1, 1)), count
+    return start, start + duration, rng.choice((-1, 1)), count, roll
+
+
+def geese_migrating(environment: "OutsideEnvironment") -> bool:
+    day = environment.local_date
+    if day is None:
+        return False
+    return any((first_month, first_day) <= (day.month, day.day) <= (last_month, last_day) for first_month, first_day, last_month, last_day in GEESE_MIGRATIONS[environment.hemisphere])
+
+
+def geese_chance(environment: "OutsideEnvironment") -> float:
+    """The chance of a crossing per slot: high on Thanksgiving, occasional during a migration, and none otherwise or in
+    weather that grounds the other birds."""
+    if not birds_allowed(environment):
+        return 0.0
+    if THANKSGIVING in holiday_features(environment):
+        return GEESE_CHANCE
+    return GEESE_MIGRATION_CHANCE if geese_migrating(environment) else 0.0
+
+
+def geese_flights_present(environment: "OutsideEnvironment", seed: int, first: float, last: float):
+    """(start, end, heading, count) of crossings under way at any time in [first, last]; like the songbirds, the geese
+    keep clear of the eagle and the skywriter."""
+    chance = geese_chance(environment)
+    if chance <= 0:
+        return
+    for slot in range(math.floor(first / GEESE_SLOT_SECONDS), math.floor(last / GEESE_SLOT_SECONDS) + 1):
+        start, end, heading, count, roll = geese_flight(slot, seed)
+        if roll >= chance or start > last or end <= first:
+            continue
+        if next(eagle_visits_present(environment, seed, start, end), None) is not None:
+            continue
+        if next(skywriter_shows_present(environment, seed, start, end), None) is not None:
+            continue
+        yield start, end, heading, count
 
 
 def geese_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[float, float, int, int] | None:
-    """The skein crossing at `elapsed`, if any; like the songbirds, it keeps clear of the eagle and the skywriter."""
-    flight = geese_flight(math.floor(elapsed / GEESE_SLOT_SECONDS), seed)
-    if flight is None or not flight[0] <= elapsed < flight[1]:
-        return None
-    if next(eagle_visits_present(environment, seed, flight[0], flight[1]), None) is not None:
-        return None
-    if next(skywriter_shows_present(environment, seed, flight[0], flight[1]), None) is not None:
-        return None
-    return flight
+    """The skein crossing at `elapsed`, if any."""
+    return next(geese_flights_present(environment, seed, elapsed, elapsed), None)
 
 
 def draw_geese(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -5605,7 +5638,7 @@ SUMMONS = {
     "skywriter": Summon("Skywriting plane", "The skywriting plane flies in sunny daylight with a light wind, but not on Halloween, Christmas Eve or fireworks days.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
     "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
-    "geese": Summon("Geese", "Geese fly over by day on Thanksgiving in light weather.", lambda e: THANKSGIVING in holiday_features(e) and birds_allowed(e), lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
+    "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
     "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(t, s) is not None, 0.5, 0.25),
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(t, s) is not None, 0.5, 0.25),
