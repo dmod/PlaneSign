@@ -218,7 +218,6 @@ def page_options():
         "moon_phases": [{"label": label, "phase": phase} for label, phase in MOON_PHASES],
         "hemispheres": [{"name": name, "label": label} for name, label in HEMISPHERES.items()],
         "summons": [{"name": name, "label": summon.label, "requirement": summon.requirement} for name, summon in SUMMONS.items()],
-        "idle_minutes": outside.LAB_IDLE_SECONDS // 60,
         # The emulator's frame server, for the live preview; None on the physical panel.
         "preview_port": shared_config.ws_port if shared_config.emulated_display else None,
     }

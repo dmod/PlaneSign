@@ -112,6 +112,7 @@ FRAME_VIBRANCE = 0.25
 VIBRANCE_CHROMA = 0.16
 SRGB_TO_LINEAR = tuple(value / 255 / 12.92 if value <= 10 else ((value / 255 + 0.055) / 1.055) ** 2.4 for value in range(256))
 SRGB_TO_LINEAR_ARRAY = np.array(SRGB_TO_LINEAR)
+LUMINANCE_WEIGHTS = np.array([0.2126, 0.7152, 0.0722])
 LINEAR_TO_LMS = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]])
 LMS_TO_OKLAB = np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099], [0.0259040371, 0.7827717662, -0.8086757660]])
 OKLAB_TO_LMS = np.linalg.inv(LMS_TO_OKLAB)
@@ -262,11 +263,35 @@ INDEX["peak"] = len(MATERIALS) + 2
 INDEX["chimney"] = len(MATERIALS) + 3
 # One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
 MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 17), (77, 15), (80, 14), (83, 13), (86, 14), (89, 15), (92, 17), (96, 20), (100, 21), (106, 23), (127, 23))
-# The sunlit face runs from the summit down this spur to the foot of the mountain.
-MOUNTAIN_LIT_FACE = ((83, 13), (80, 14), (77, 15), (74, 17), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 15))
-# The mountain is darkened in linear light so it stands out from the bright horizon behind it;
-# its sunlit face is then lifted back toward the horizon color.
+MOUNTAIN_SUMMIT = min(MOUNTAIN, key=lambda point: point[1])
+# The east (left, sunrise) face runs from the summit down this spur to the foot of the mountain; the rest is the west face.
+MOUNTAIN_EAST_FACE = ((83, 13), (80, 14), (77, 15), (74, 17), (70, 20), (66, 22), (62, 23), (78, 23), (80, 19), (82, 15))
+# The mountain is darkened in linear light so it stands out from the bright horizon behind it; with the sun
+# down or hidden, its east face is then lifted back toward the horizon color.
 MOUNTAIN_SHADE, MOUNTAIN_LIT = 0.3, 0.16
+# A low sun rakes the mountain: the face toward it warms and the other falls into cool shadow. The effect ramps
+# in over the first pair of sun altitudes (degrees) and eases over the second, to MOUNTAIN_DAY_LIGHT of its
+# strength on the mountain (clouds lose it entirely) while the sun is high.
+SUN_RAKE_RISE, SUN_RAKE_FADE = (-4, 0), (6, 28)
+MOUNTAIN_DAY_LIGHT = 0.45
+MOUNTAIN_SUNLIT, MOUNTAIN_SHADOWED = 0.3, 0.45
+# The faces trade light gradually over this many columns of the sun's path, centered on the summit's column.
+MOUNTAIN_TERMINATOR = 24
+# Cloud cover that blocks direct sunlight, so overcast skies cast no shadows.
+SUN_BLOCK_COVER = 0.8
+# The mountain's shadow in the warm air on the side away from a low sun: strongest over the first pair of sun
+# altitudes and gone over the second. Its edge climbs (sun below the horizon) or sinks this many rows per column
+# per degree, it fades out SKY_SHADOW_LENGTH pixels from the mountain's outline, and it is weaker while the sun
+# is within SKY_SHADOW_ALIGN columns of the summit, where the shadow points at the viewer.
+SKY_SHADOW_RISE, SKY_SHADOW_FADE = (-8, -3), (3, 14)
+SKY_SHADOW_SLOPE = 0.06
+SKY_SHADOW_LENGTH = 48
+SKY_SHADOW_DEPTH = 0.7
+SKY_SHADOW_DIM = 0.5
+SKY_SHADOW_ALIGN = 24
+# Clouds turn their lit side toward the sun over this many columns either side of it.
+CLOUD_TERMINATOR = 16
+CLOUD_SHADOW_DEPTH = 1.3
 TREE_X, TREE_CANOPY_Y = 111, 15
 # Small conifers flanking the hut: (trunk x, base row, height); the apex is at row base - height.
 CONIFERS = ((4, 28, 12), (38, 25, 7))
@@ -391,7 +416,7 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         d.polygon([(0, 31), *points, (127, 31)], fill=INDEX[material])
 
     hill([*MOUNTAIN], "far")
-    d.polygon(MOUNTAIN_LIT_FACE, fill=INDEX["peak"])
+    d.polygon(MOUNTAIN_EAST_FACE, fill=INDEX["peak"])
     hill([(0, 23), (20, 22), (35, 23), (57, 22), (76, 23), (97, 22), (127, 23)], "hill")
     for x in range(0, 100, 4):
         height = 2 + grain(x, 24) % 3
@@ -633,14 +658,74 @@ def draw_moon(image: Image.Image, cx: int, cy: int, phase: float, lit_strength: 
     image.paste(Image.fromarray(linear_to_srgb_array(linear), "RGB"), box)
 
 
-@lru_cache(maxsize=96)
-def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
+@dataclass(frozen=True)
+class MountainFaces:
+    east: Color
+    west: Color
+    east_snow: Color
+    west_snow: Color
+
+
+def trapezoid(value: float, rise: tuple[float, float], fade: tuple[float, float]) -> float:
+    """0 below `rise`, easing to 1 across it, holding, then easing back to 0 across `fade`."""
+    return smoothstep(*rise, value) * (1 - smoothstep(*fade, value))
+
+
+def sun_color(altitude: float) -> Color:
+    return mix((255, 164, 94), (255, 235, 170), altitude / 20)
+
+
+def direct_sunlight(environment: "OutsideEnvironment") -> float:
+    """How much of the sun's direct light gets through: 1 under a clear sky, 0 when overcast or raining."""
+    rain, snow = precipitation(environment)
+    if rain or snow:
+        return 0.0
+    return max(0.0, 1 - cloud_cover(environment) / SUN_BLOCK_COVER)
+
+
+def sun_rake(environment: "OutsideEnvironment") -> float:
+    """How strongly a low sun models the scene; 0 with the sun high, down or hidden."""
+    altitude = environment.sun_altitude
+    return 0.0 if altitude is None else trapezoid(altitude, SUN_RAKE_RISE, SUN_RAKE_FADE) * direct_sunlight(environment)
+
+
+def mountain_light(environment: "OutsideEnvironment") -> float:
+    """How strongly the sun models the mountain's faces: fully while low, MOUNTAIN_DAY_LIGHT while high, 0 when down or hidden."""
+    altitude = environment.sun_altitude
+    if altitude is None:
+        return 0.0
+    high = smoothstep(*SUN_RAKE_FADE, altitude)
+    return smoothstep(*SUN_RAKE_RISE, altitude) * (1 - high * (1 - MOUNTAIN_DAY_LIGHT)) * direct_sunlight(environment)
+
+
+def mountain_faces(palette: Palette, environment: "OutsideEnvironment") -> MountainFaces:
     mountain = mix(palette.far, (0, 0, 0), MOUNTAIN_SHADE)
+    east, west = mix(mountain, palette.horizon, MOUNTAIN_LIT), mountain
+    east_snow, west_snow = palette.snowcap, mix(palette.snowcap, mountain, 0.35)
+    rake = mountain_light(environment)
+    if rake <= 0:
+        return MountainFaces(east, west, east_snow, west_snow)
+    # With the sun up the resting relief evens out, so the faces match as it passes over the summit.
+    even = smoothstep(*SUN_RAKE_RISE, environment.sun_altitude) * direct_sunlight(environment)
+    face, snow = mix(mountain, palette.horizon, MOUNTAIN_LIT / 2), mix(palette.snowcap, mountain, 0.175)
+    east, west, east_snow, west_snow = mix(east, face, even), mix(west, face, even), mix(east_snow, snow, even), mix(west_snow, snow, even)
+    sun = sun_color(environment.sun_altitude)
+    lit, shadow = mix(mountain, sun, MOUNTAIN_SUNLIT), mix(mountain, mix(palette.top, (0, 0, 0), 0.7), MOUNTAIN_SHADOWED)
+    lit_snow, shadow_snow = mix(palette.snowcap, sun, 0.35), mix(palette.snowcap, shadow, 0.55)
+    # 1 when the sun is well left of the summit (lighting the east face), 0 when well right of it.
+    toward_east = 1 - smoothstep(-MOUNTAIN_TERMINATOR / 2, MOUNTAIN_TERMINATOR / 2, celestial_x(environment.sun_azimuth) - MOUNTAIN_SUMMIT[0])
+    lit_east, lit_west = mix(shadow, lit, toward_east), mix(shadow, lit, 1 - toward_east)
+    snow_east, snow_west = mix(shadow_snow, lit_snow, toward_east), mix(shadow_snow, lit_snow, 1 - toward_east)
+    return MountainFaces(mix(east, lit_east, rake), mix(west, lit_west, rake), mix(east_snow, snow_east, rake), mix(west_snow, snow_west, rake))
+
+
+@lru_cache(maxsize=96)
+def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: MountainFaces):
     table = [0, 0, 0]
     for name in MATERIALS:
-        table.extend(mountain if name == "far" else getattr(palette, name))
+        table.extend(faces.west if name == "far" else getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
-    table.extend(mix(mountain, palette.horizon, MOUNTAIN_LIT))
+    table.extend(faces.east)
     table.extend(mix(palette.roof, palette.trim, 0.3))
     table.extend([0] * (768 - len(table)))
 
@@ -672,7 +757,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool):
             for x in range(WIDTH):
                 material = LAND.getpixel((x, y))
                 if material in (INDEX["far"], INDEX["peak"]) and y < summit + 2 + grain(x, y, 4) % 2:
-                    d.point((x, y), fill=palette.snowcap if material == INDEX["peak"] else mix(palette.snowcap, mountain, 0.35))
+                    d.point((x, y), fill=faces.east_snow if material == INDEX["peak"] else faces.west_snow)
     return land, foliage, wood
 
 
@@ -681,16 +766,77 @@ CELESTIAL_CENTER_X, CELESTIAL_SWING_X = 68.5, 89.5
 CELESTIAL_SET_Y, CELESTIAL_ZENITH_Y = 25.5, 2
 
 
-def celestial_position(altitude: float, azimuth: float) -> tuple[int, int]:
+def celestial_x(azimuth: float) -> float:
     # Half the azimuth from south keeps the mapping monotonic, so a setting body keeps moving
     # right past the tree instead of folding back at due west; due east and west land near the
     # edges, and the center is clamped so a summer sun slides down the edge rather than leaving.
     swing = math.sin(math.radians((azimuth % 360 - 180) / 2))
-    x = min(WIDTH - 2, max(1, CELESTIAL_CENTER_X + CELESTIAL_SWING_X * swing))
+    return min(WIDTH - 2, max(1, CELESTIAL_CENTER_X + CELESTIAL_SWING_X * swing))
+
+
+def celestial_position(altitude: float, azimuth: float) -> tuple[int, int]:
     # The square root spreads low altitudes out, so bodies visibly sink into the land and are
     # fully below the right-hand horizon (y=23) at SET_ALTITUDE.
     height = math.sqrt(max(0, altitude - SET_ALTITUDE) / (90 - SET_ALTITUDE))
-    return round(x), round(CELESTIAL_SET_Y - (CELESTIAL_SET_Y - CELESTIAL_ZENITH_Y) * height)
+    return round(celestial_x(azimuth)), round(CELESTIAL_SET_Y - (CELESTIAL_SET_Y - CELESTIAL_ZENITH_Y) * height)
+
+
+@lru_cache(maxsize=1)
+def mountain_ridge() -> np.ndarray:
+    """The mountain's top row in each column; infinite where there is no mountain."""
+    ridge = np.full(WIDTH, np.inf)
+    for (x0, y0), (x1, y1) in pairwise(MOUNTAIN):
+        if y0 < 23 or y1 < 23:
+            for x in range(x0, x1 + 1):
+                ridge[x] = min(ridge[x], y0 + (y1 - y0) * (x - x0) / (x1 - x0))
+    return ridge
+
+
+@lru_cache(maxsize=64)
+def mountain_shadow_shape(direction: int, slope: float) -> np.ndarray:
+    """The depth (0-1) of the mountain's shadow in the air, cast along rays that run `direction` (+1 rightward)
+    and sink `slope` rows per column. A sky pixel is shaded when its ray back toward the sun meets the mountain,
+    and the shadow thins away from the mountain's outline, as scattered light fills it in."""
+    ridge = mountain_ridge()
+    columns = np.flatnonzero(np.isfinite(ridge))
+    # Four samples per pixel row soften the edge without a dithered staircase.
+    rows = (CLOUD_ROWS[:, None] + np.array([-0.375, -0.125, 0.125, 0.375])[None, :]).ravel()
+    shape = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
+    for x in range(WIDTH):
+        distance = (x - columns) * direction
+        toward_sun = distance > 0
+        if not toward_sun.any():
+            continue
+        distance, tops = distance[toward_sun], ridge[columns[toward_sun]]
+        # Tracing back toward the sun from row y meets the mountain where y - slope * distance >= ridge.
+        hits = (rows[:, None] >= tops[None, :] + slope * distance[None, :]).any(axis=1)
+        outline = np.hypot(distance[None, :], np.maximum(0, tops[None, :] - rows[:, None])).min(axis=1)
+        depth = np.where(hits, np.clip(1 - outline / SKY_SHADOW_LENGTH, 0, 1), 0)
+        shape[:, x] = depth.reshape(HEIGHT, -1).mean(axis=1)
+    return shape
+
+
+def sky_shadow(environment: "OutsideEnvironment") -> np.ndarray | None:
+    """Per-pixel opacity of the mountain's shadow in the sky, or None when there is none."""
+    altitude = environment.sun_altitude
+    if altitude is None:
+        return None
+    offset = celestial_x(environment.sun_azimuth) - MOUNTAIN_SUMMIT[0]
+    strength = SKY_SHADOW_DEPTH * trapezoid(altitude, SKY_SHADOW_RISE, SKY_SHADOW_FADE) * direct_sunlight(environment) * smoothstep(0, SKY_SHADOW_ALIGN, abs(offset))
+    if strength < 0.01:
+        return None
+    slope = round(max(-0.6, min(0.6, altitude * SKY_SHADOW_SLOPE)) * 50) / 50
+    return mountain_shadow_shape(1 if offset < 0 else -1, slope) * strength
+
+
+def shade_sky(pixels: np.ndarray, shadow: np.ndarray, cool: Color) -> np.ndarray:
+    """Pull sRGB `pixels` toward a dimmer, cooler version of themselves: the air in the shadow keeps its
+    brightness gradient but loses the warm, directly sunlit glow."""
+    linear = SRGB_TO_LINEAR_ARRAY[np.clip(np.round(pixels), 0, 255).astype(np.intp)]
+    tint = SRGB_TO_LINEAR_ARRAY[list(cool)]
+    tint = tint / max(1e-4, float(tint @ LUMINANCE_WEIGHTS))
+    target = (linear @ LUMINANCE_WEIGHTS)[..., None] * SKY_SHADOW_DIM * tint
+    return linear_to_srgb_array(linear + (target - linear) * shadow[..., None]).astype(np.float32)
 
 
 CLOUD_TILE = 256
@@ -731,44 +877,50 @@ def periodic_noise(cell_x: int, cell_y: int, salt: int) -> np.ndarray:
 
 @lru_cache(maxsize=len(CLOUD_LAYERS))
 def cumulus(layer: CloudLayer) -> tuple[tuple[int, np.ndarray], ...]:
-    """Cloud tone patches, in the order clouds appear as cover rises: (base row, tile-wide tones)."""
+    """Cloud tone patches, in the order clouds appear as cover rises: (base row, tones) where tones stacks the
+    tile-wide tones lit from the upper left over the same cloud lit from the upper right."""
     rng = random.Random(layer.salt)
     clouds = []
     for _ in range(layer.count):
         width = rng.uniform(*layer.width)
         height = width * rng.uniform(0.26, 0.36)
         center, base = rng.uniform(0, CLOUD_TILE), rng.randint(*layer.base)
-        tones = np.full((HEIGHT, CLOUD_TILE), -1, dtype=np.int8)
         puffs = max(3, round(width / 6))
+        circles = []
         for index in range(puffs):
-            # Puffs rise into a dome over a flat base; later puffs overlap earlier ones, each with its own lit rim.
+            # Puffs rise into a dome over a flat base.
             radius = height * (0.55 + 0.45 * math.sin(math.pi * (index + 0.5) / puffs)) * rng.uniform(0.8, 1.1)
             px = center - width / 2 + (index + 0.5) * width / puffs + rng.uniform(-1.5, 1.5)
-            py = base - radius * 0.75
-            rows = np.arange(max(0, math.floor(py - radius)), min(HEIGHT, base + 1))
-            columns = np.arange(math.floor(px - radius), math.ceil(px + radius) + 1)
-            dx, dy = columns[None, :] - px, rows[:, None] - py
-            inside = dx * dx + dy * dy <= radius * radius
-            light = (dx * 0.6 + dy) / radius
-            patch = np.where(light < -0.8, 0, np.where(light < -0.35, 1, 2)).astype(np.int8)
-            view = tones[rows[0] : rows[-1] + 1]
-            wrapped = columns % CLOUD_TILE
-            view[:, wrapped] = np.where(inside, patch, view[:, wrapped])
-        cloud = tones >= 0
-        tones[cloud & (CLOUD_ROWS[:, None] == base)] = 3
+            circles.append((px, base - radius * 0.75, radius))
+        tones = np.full((2, HEIGHT, CLOUD_TILE), -1, dtype=np.int8)
+        for side, order in ((1, circles), (-1, circles[::-1])):
+            # Puffs nearer the light overlap the ones behind them, so each shows its own lit rim.
+            lit = tones[0 if side > 0 else 1]
+            for px, py, radius in order:
+                rows = np.arange(max(0, math.floor(py - radius)), min(HEIGHT, base + 1))
+                columns = np.arange(math.floor(px - radius), math.ceil(px + radius) + 1)
+                dx, dy = columns[None, :] - px, rows[:, None] - py
+                inside = dx * dx + dy * dy <= radius * radius
+                light = (side * dx * 0.6 + dy) / radius
+                patch = np.where(light < -0.8, 0, np.where(light < -0.35, 1, 2)).astype(np.int8)
+                view = lit[rows[0] : rows[-1] + 1]
+                wrapped = columns % CLOUD_TILE
+                view[:, wrapped] = np.where(inside, patch, view[:, wrapped])
+            lit[(lit >= 0) & (CLOUD_ROWS[:, None] == base)] = 3
         clouds.append((base, tones))
     return tuple(clouds)
 
 
 @lru_cache(maxsize=64)
 def cloud_tones(layer: CloudLayer, coverage: int) -> np.ndarray:
-    """Posterized tone per pixel: 0 rim light, 1 sunlit body, 2 body, 3 shadowed base; -1 is clear sky."""
+    """Posterized tone per pixel, lit from the left and from the right: 0 rim light, 1 sunlit body, 2 body,
+    3 shadowed base; -1 is clear sky."""
     clouds = cumulus(layer)
     shown = clouds[: round(len(clouds) * max(0, min(1, (coverage / 20 - 0.1) / 0.9)) ** 1.4)]
-    tones = np.full((HEIGHT, CLOUD_TILE), -1, dtype=np.int8)
+    tones = np.full((2, HEIGHT, CLOUD_TILE), -1, dtype=np.int8)
     # Higher (more distant) clouds first, so lower ones overlap them.
     for _, patch in sorted(shown, key=lambda cloud: cloud[0]):
-        tones = np.where(patch >= 0, patch, tones)
+        tones = np.where(patch[0] >= 0, patch, tones)
     return tones
 
 
@@ -784,22 +936,27 @@ def ceiling_tones(coverage: int) -> np.ndarray | None:
     streaks = periodic_noise(32, 2, 13) > 0.62
     tones = np.where(cloud, np.where(streaks, 1, 2), -1).astype(np.int8)
     tones[cloud & (rows >= edge[None, :] - 1)] = 3
-    return tones
+    # The flat ceiling has no sunward side, so both lightings match.
+    return np.stack((tones, tones))
 
 
-def cloud_palette(palette: Palette, haze: float, gloom: float) -> np.ndarray:
+def cloud_palette(palette: Palette, haze: float, gloom: float, rake: float = 0, sun: Color = (0, 0, 0)) -> np.ndarray:
     # The palette's snow color is a neutral, time-of-day-lit white: white-blue by day, pink at dusk, cool at night.
     light = mix(palette.snowcap, palette.horizon, 0.25)
     body = mix(palette.snowcap, palette.top, 0.45)
     shadow = mix(body, palette.roof, 0.45)
     tones = [light, mix(light, body, 0.5), body, shadow]
+    if rake > 0:
+        # A low sun warms the sunward rims and deepens the shaded undersides.
+        shade = mix(palette.top, palette.roof, 0.3)
+        tones = [mix(tones[0], sun, rake * 0.35), mix(tones[1], sun, rake * 0.18), mix(tones[2], shade, rake * 0.12), mix(tones[3], shade, rake * 0.3)]
     # Rain clouds darken from the base up; distant clouds fade toward the sky.
     tones = [mix(tone, mix(palette.top, palette.roof, 0.4), gloom * (0.35 + index * 0.2)) for index, tone in enumerate(tones)]
     return np.array([mix(tone, palette.middle, haze) for tone in tones], dtype=np.float32)
 
 
-def draw_cloudscape(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, glows: list[tuple[int, int, Color, float]], lightning: "tuple[LightningEvent, float] | None") -> np.ndarray:
-    """Draw the cloud layers and return the mask of cloud pixels."""
+def draw_cloudscape(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, glows: list[tuple[int, int, Color, float]], lightning: "tuple[LightningEvent, float] | None", shadow: np.ndarray | None = None) -> np.ndarray:
+    """Draw the cloud layers and return the mask of cloud pixels. `shadow` is the mountain's shadow in the sky."""
     covered = np.zeros((HEIGHT, WIDTH), dtype=bool)
     coverage = round(cloud_cover(environment) * 20)
     if coverage < 4:
@@ -808,21 +965,35 @@ def draw_cloudscape(image: Image.Image, environment: "OutsideEnvironment", palet
     # Overcast skies turn dull and gray; rain clouds darker still.
     gloom = 0.55 if rain or snow else 0.4 * max(0, min(1, (coverage / 20 - 0.7) / 0.3))
     wind = min(30, environment.weather.wind or 0)
+    altitude = environment.sun_altitude
+    rake, sun = sun_rake(environment), sun_color(altitude or 0)
+    # Clouds left of the sun take their right-lit tones; with the sun well down they keep the default left light.
+    if altitude is None:
+        sunward = np.zeros(WIDTH, dtype=np.float32)
+    else:
+        toward = np.clip((celestial_x(environment.sun_azimuth) - CLOUD_COLUMNS) / (2 * CLOUD_TERMINATOR) + 0.5, 0, 1)
+        sunward = (smoothstep(-6, -1, altitude) * toward * toward * (3 - 2 * toward)).astype(np.float32)
     pixels = np.asarray(image, dtype=np.float32).copy()
     layers = [(ceiling_tones(coverage), 0.05, 0.006, 0.2), *((cloud_tones(layer, coverage), layer.speed, layer.wind, layer.haze) for layer in CLOUD_LAYERS)]
     for tile, speed, drift, haze in layers:
         if tile is None:
             continue
         offset = int(elapsed * (speed + wind * drift)) % CLOUD_TILE
-        tones = np.take(tile, (CLOUD_COLUMNS + offset) % CLOUD_TILE, axis=1)
-        cloud = tones >= 0
+        lit_left, lit_right = np.take(tile, (CLOUD_COLUMNS + offset) % CLOUD_TILE, axis=2)
+        cloud = lit_left >= 0
         if not cloud.any():
             continue
-        colors = cloud_palette(palette, haze, gloom)[np.maximum(tones, 0)]
+        tone_colors = cloud_palette(palette, haze, gloom, rake, sun)
+        colors = tone_colors[np.maximum(lit_left, 0)]
+        colors += (tone_colors[np.maximum(lit_right, 0)] - colors) * sunward[None, :, None]
+        tones = np.where(sunward[None, :] >= 0.5, lit_right, lit_left)
         # Silver linings: cloud edges near the sun or moon catch its light.
         for cx, cy, color, strength in glows:
             glow = strength * np.exp(-(((CLOUD_COLUMNS[None, :] - cx) / 18) ** 2 + ((CLOUD_ROWS[:, None] - cy) / 7) ** 2))
             colors += (np.array(color, dtype=np.float32) - colors) * (glow * np.where(tones <= 1, 0.75, 0.3))[..., None]
+        if shadow is not None:
+            # Sunlit clouds outshine the clear air, so they lose more in the mountain's shadow.
+            colors = shade_sky(colors, np.minimum(1, shadow * CLOUD_SHADOW_DEPTH), palette.middle)
         if lightning is not None and lightning[1] >= 0:
             event, age = lightning
             base, local, spread = LIGHTNING_LIGHT[event.kind]
@@ -916,6 +1087,10 @@ def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, se
 
 def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Palette, elapsed: float, lightning: "tuple[LightningEvent, float] | None" = None, seed: int = 0, star_clearings: tuple[Box, ...] = ()) -> np.ndarray:
     """Draw the sky and return the mask of cloud pixels. Stars skip `star_clearings`; the sky color does not."""
+    # The mountain's shadow falls on the air and its clouds; stars and the moon shine through it unchanged.
+    shadow = sky_shadow(environment)
+    if shadow is not None:
+        image.paste(Image.fromarray(shade_sky(np.asarray(image, dtype=np.float32), shadow, palette.middle).astype(np.uint8), "RGB"))
     d = ImageDraw.Draw(image)
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
@@ -940,7 +1115,7 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     glows = []
     if altitude is not None and altitude > SET_ALTITUDE:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
-        sun = mix((255, 164, 94), (255, 235, 170), altitude / 20)
+        sun = sun_color(altitude)
         d.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=mix(palette.middle, sun, 0.23))
         d.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill=sun)
         glows.append((cx, cy, sun, 0.8))
@@ -957,11 +1132,12 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         image.paste(halo, (0, 0), halo)
         # Daylight scatters over the earthshine side, so it only shows once night falls.
         draw_moon(image, cx, cy, environment.moon_phase, strength, night * (1 - cover * 0.5))
-    clouds = draw_cloudscape(image, environment, palette, elapsed, glows, lightning)
+    clouds = draw_cloudscape(image, environment, palette, elapsed, glows, lightning, shadow)
     d = ImageDraw.Draw(image)
     wind = environment.weather.wind or 0
     # Thin streaks carry light cloud cover; the cloudscape takes over as the sky fills in.
     cloud_count = 1 + round(cover * 5) if cover < CLOUD_STREAK_MAX_COVER else 0
+    streaks = Image.new("L", (WIDTH, HEIGHT)) if shadow is not None and cloud_count else None
     for index in range(cloud_count):
         width = 16 + (index * 7) % 19
         x = round(((index * 37 + 12 + elapsed * (0.18 + min(30, wind) * 0.02)) % (128 + width)) - width)
@@ -975,6 +1151,13 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
         d.line((x + 3, y, x + width - 5, y), fill=color)
         d.line((x + 7, y - 1, x + width - 9, y - 1), fill=mix(color, palette.top, 0.1))
         d.line((x, y + 1, x + width, y + 1), fill=mix(color, palette.middle, 0.2))
+        if streaks is not None:
+            sd = ImageDraw.Draw(streaks)
+            for line in ((x + 3, y, x + width - 5, y), (x + 7, y - 1, x + width - 9, y - 1), (x, y + 1, x + width, y + 1)):
+                sd.line(line, fill=255)
+    if streaks is not None:
+        shaded = Image.fromarray(shade_sky(np.asarray(image, dtype=np.float32), shadow, palette.middle).astype(np.uint8), "RGB")
+        image.paste(shaded, (0, 0), streaks)
     return clouds
 
 
@@ -4946,7 +5129,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
-    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0)
+    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0, mountain_faces(palette, environment))
     image.paste(land, (0, 0), land)
     d = ImageDraw.Draw(image)
     for x, y, width, phase in RIPPLES:

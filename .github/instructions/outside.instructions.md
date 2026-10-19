@@ -22,6 +22,7 @@ Outside (`outside.py` drives it, `outside_scene.py` draws it) is a 128x32 pixel-
 - The clock label sits right above the chimney, so smoke fades out below `SMOKE_CEILING` at every wind speed.
 - Rain and snow are separate paths: rain falls as slanted streaks, snow as slow swaying flakes. Do not reuse one for the other. Winter alone does not imply snowfall.
 - Sun and moon use `celestial_position`, which stays monotonic in azimuth (it does not fold back at due west). Both bodies sink into the land before `SET_ALTITUDE`, and the sunset lands right of the tree.
+- Sun-driven lighting goes by the sun's screen column (`celestial_x`), not its compass side. The column picks the lit mountain face against the summit (all day, so the faces trade light as the sun passes over the peak), the cloud rims against each column, and the side the mountain's sky shadow falls on. All three need direct sun (`direct_sunlight`), so overcast skies and precipitation turn them off. The sky shadow is air that the sun does not reach: it shades the sky gradient and clouds, but not the stars or the moon, which shine through it. Apply it before they are drawn.
 
 ## Inputs
 - Weather is a snapshot of the existing OpenWeather worker, never a second feed. Missing readings stay unknown, not zero. An unknown reading suppresses the effects that need it; leaves, for example, need a known wind.
