@@ -1250,9 +1250,10 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
             return
         flock_age = (elapsed + seed % 30) % 85
         flock_start = elapsed - flock_age
-        # Small birds keep clear of the sky while an eagle is hunting.
+        # Small birds keep clear of the sky while an eagle is hunting or the skywriter is up.
         eagle_near = next(eagle_visits_present(environment, seed, flock_start, flock_start + 35), None) is not None
-        if flock_age < 35 and not eagle_near:
+        skywriter_near = next(skywriter_shows_present(environment, seed, flock_start, flock_start + 35), None) is not None
+        if flock_age < 35 and not eagle_near and not skywriter_near:
             for index in range(3 if environment.season != "winter" else 2):
                 x = round(-12 + flock_age * 4.5 - index * 7)
                 y = 7 + index % 2 + round(math.sin(elapsed * 0.2 + index) * 1.5)
@@ -1819,13 +1820,17 @@ def eagle_visits_between(seed: int, first: float, last: float):
 
 
 def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: float, last: float):
-    """Visits that actually happen: the dog is scared of the eagle, so it skips any visit near a dog outing."""
+    """Visits that actually happen: the dog is scared of the eagle, so it skips any visit near a dog outing, and it keeps
+    out of the sky while the skywriter is up."""
     if not eagle_allowed(environment):
         return
     dog_out = dog_allowed(environment)
     for visit in eagle_visits_between(seed, first, last):
-        if not dog_out or next(dog_outings_between(seed, visit.start - EAGLE_DOG_CLEARANCE, visit.end + EAGLE_DOG_CLEARANCE), None) is None:
-            yield visit
+        if dog_out and next(dog_outings_between(seed, visit.start - EAGLE_DOG_CLEARANCE, visit.end + EAGLE_DOG_CLEARANCE), None) is not None:
+            continue
+        if next(skywriter_shows_present(environment, seed, visit.start, visit.end), None) is not None:
+            continue
+        yield visit
 
 
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
@@ -2922,6 +2927,387 @@ def draw_santa(image: Image.Image, environment: "OutsideEnvironment", elapsed: f
                 point = (nose_x + dx, nose_y + dy)
                 if 0 <= point[0] < WIDTH and 0 <= point[1] < HEIGHT and point != (nose_x - santa.direction, nose_y):
                     d.point(point, fill=mix(image.getpixel(point), RUDOLPH_NOSE, 0.35 * night))
+
+
+SKYWRITER_SLOT_SECONDS = 420
+SKYWRITER_CHANCE = 0.6
+# Skywriting needs sunshine: the sun well up, a nearly clear sky, and a light, known wind that will not shred the smoke.
+SKYWRITER_SUN_ALTITUDE = 10
+SKYWRITER_MAX_COVER = 0.3
+SKYWRITER_MAX_WIND = 15
+SKYWRITER_MIN_VISIBILITY = 8000
+# Designs fill the open sky above the treeline, right of the chimney's smoke and left of the mountain.
+SKYWRITER_CENTER = (57, 7.5)
+SKYWRITER_CENTER_JITTER = 2
+# The plane enters and leaves level along these rows, below the corner labels, and turns in or out at gates this many
+# columns either side of the design's center, short of the labels' columns.
+SKYWRITER_ENTRY_ROWS = (10, 12)
+SKYWRITER_GATE = 22
+SKYWRITER_SPEED = 16
+# Turns between strokes are never tighter than this, so the plane loops around to start the next stroke.
+SKYWRITER_TURN = 9
+SKYWRITER_PATH_STEP = 0.2
+# Smoke leaves the tail, this far behind the plane's center.
+SKYWRITER_TAIL = 5
+SKYWRITER_PUFF_SPACING = 1.15
+SKYWRITER_PUFF_JITTER = 0.35
+# A fresh puff billows from the first radius toward the second over SKYWRITER_GROW_SECONDS, varying by SKYWRITER_LUMP.
+SKYWRITER_PUFF_RADIUS = (0.6, 1.3)
+SKYWRITER_GROW_SECONDS = 3.0
+SKYWRITER_LUMP = 0.35
+SKYWRITER_OPACITY = 0.95
+# Wind carries the design right at this many px/s per mph, so older strokes lean downwind like real skywriting.
+SKYWRITER_WIND_DRIFT = 0.015
+SKYWRITER_BILLOW = 0.3
+SKYWRITER_HOLD_SECONDS = 15
+SKYWRITER_FADE_SECONDS = 4
+# Puffs start fading up to this much later than the first, so the design breaks up instead of dimming evenly.
+SKYWRITER_FADE_STAGGER = 2
+# A fading puff spreads by this many pixels as it thins out.
+SKYWRITER_FADE_SPREAD = 0.6
+SKYWRITER_SUNLIT = (250, 249, 243)
+SKYWRITER_SHADE = (172, 180, 192)
+# The sunlit side is lighter and the far side darker by up to this fraction of the lit-to-shade range.
+SKYWRITER_SHADING = 0.45
+# Puffs get a slightly darker rim, which separates each puff from the one behind it.
+SKYWRITER_RIM = 0.3
+# The plane in side profile, upright and flying right, then nose down at 45 degrees: r fuselage and fin, w wing root,
+# c canopy, n white cowling, p propeller disc. The anchor is the fuselage's center. Climbs and dives are exact quarter
+# turns of these and leftward headings are mirror images, so the canopy always stays on top.
+SKYWRITER_PLANE = ("r..........", "rr....cc..p", "rrrrrrrrrnp", ".rrwwwwrrnp")
+SKYWRITER_PLANE_ANCHOR = (5, 2)
+SKYWRITER_PLANE_DIAGONAL = (".r........", ".rr.......", "rrrr......", ".rrrcc....", "..wrrrc...", "...wwrrn..", ".....rnn.p", "........p.", ".......p..")
+SKYWRITER_PLANE_DIAGONAL_ANCHOR = (4, 4)
+SKYWRITER_PLANE_COLORS = {"r": (214, 36, 34), "w": (140, 20, 22), "c": (34, 52, 74), "n": (246, 238, 226)}
+SKYWRITER_PROPELLER = (226, 226, 218)
+SKYWRITER_HEADINGS = 8
+
+
+def skywriter_arc(cx: float, cy: float, rx: float, ry: float, start: float, end: float) -> list[tuple[float, float]]:
+    """Points along an elliptical arc from `start` to `end` degrees, measured clockwise on screen from the right."""
+    steps = max(8, math.ceil(abs(end - start) / 3))
+    return [(cx + rx * math.cos(math.radians(start + (end - start) * i / steps)), cy + ry * math.sin(math.radians(start + (end - start) * i / steps))) for i in range(steps + 1)]
+
+
+def skywriter_curve(function: Callable[[float], tuple[float, float]], start: float, end: float, steps: int = 240) -> list[tuple[float, float]]:
+    return [function(start + (end - start) * i / steps) for i in range(steps + 1)]
+
+
+def heart_point(t: float) -> tuple[float, float]:
+    # The classic heart curve spans x ±16 and y -12 to 17; scaled to fill the design's rows.
+    return 0.52 * 16 * math.sin(t) ** 3, -0.47 * (13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)) - 1.2
+
+
+def star_outline() -> list[tuple[float, float]]:
+    points = []
+    for index in range(11):
+        radius = 7.6 if index % 2 == 0 else 3.4
+        angle = math.radians(-90 + index * 36)
+        points.append((radius * math.cos(angle), radius * math.sin(angle) + 0.7))
+    return points
+
+
+def infinity_point(t: float) -> tuple[float, float]:
+    scale = 1 + math.sin(t) ** 2
+    return 14 * math.cos(t) / scale, 1.35 * 14 * math.sin(t) * math.cos(t) / scale
+
+
+def spiral_point(t: float) -> tuple[float, float]:
+    radius = 0.5 + 6.6 * t / (3.5 * math.pi)
+    return radius * math.cos(t - math.pi / 2), radius * math.sin(t - math.pi / 2)
+
+
+def loop_point(t: float) -> tuple[float, float]:
+    # A prolate cycloid: the plane rolls forward through a loop at the top of every turn.
+    return 1.9 * t - 6 * math.sin(t) - 1.9 * 2 * math.pi, -6 * math.cos(t) + 0.5
+
+
+# Each design is a list of strokes in pixels from its center (y down), traced in order with smoke on;
+# the plane turns between strokes with the smoke off. The rotation alternates through them in this order.
+SKYWRITER_DESIGNS = {
+    "smiley": (skywriter_arc(0, 0, 6.8, 6.8, -90, 275), [(-2.3, -3.0), (-2.3, -1.7)], [(2.3, -3.0), (2.3, -1.7)], skywriter_arc(0, -0.6, 3.8, 3.6, 150, 30)),
+    "heart": (skywriter_curve(heart_point, 0, 2 * math.pi + 0.1),),
+    "star": (star_outline() + [star_outline()[1]],),
+    "infinity": (skywriter_curve(infinity_point, math.pi / 2, 2.5 * math.pi + 0.15),),
+    "spiral": (skywriter_curve(spiral_point, 0, 3.5 * math.pi),),
+    "hi": ([(-8, -6.5), (-8, 6.5)], [(-8, 0), (-2.5, 0)], [(-2.5, -6.5), (-2.5, 6.5)], [(2, -6.5), (7, -6.5)], [(4.5, -6.5), (4.5, 6.5)], [(2, 6.5), (7, 6.5)]),
+    "loops": (skywriter_curve(loop_point, -math.pi, 5 * math.pi, 480),),
+}
+
+
+def unit_vector(dx: float, dy: float) -> tuple[float, float]:
+    length = math.hypot(dx, dy)
+    return (dx / length, dy / length) if length > 1e-9 else (1.0, 0.0)
+
+
+def hermite(p0: tuple[float, float], m0: tuple[float, float], p1: tuple[float, float], m1: tuple[float, float], steps: int = 60) -> list[tuple[float, float]]:
+    points = []
+    for i in range(steps + 1):
+        u = i / steps
+        h00, h10, h01, h11 = 2 * u**3 - 3 * u**2 + 1, u**3 - 2 * u**2 + u, -2 * u**3 + 3 * u**2, u**3 - u**2
+        points.append((h00 * p0[0] + h10 * m0[0] + h01 * p1[0] + h11 * m1[0], h00 * p0[1] + h10 * m0[1] + h01 * p1[1] + h11 * m1[1]))
+    return points
+
+
+def turn(p0: tuple[float, float], heading0: tuple[float, float], p1: tuple[float, float], heading1: tuple[float, float]) -> list[tuple[float, float]]:
+    """A smooth smoke-off maneuver from one stroke's end to the next stroke's start, matching both headings."""
+    reach = max(math.dist(p0, p1), SKYWRITER_TURN)
+    return hermite(p0, (heading0[0] * reach, heading0[1] * reach), p1, (heading1[0] * reach, heading1[1] * reach))
+
+
+@dataclass(frozen=True, eq=False)
+class SkywriterShow:
+    start: float
+    end: float
+    design: str
+    # The flight path, sampled every SKYWRITER_PATH_STEP px from entry to exit.
+    path_x: np.ndarray
+    path_y: np.ndarray
+    # Puff centers, emission times after `start`, size lumps, billow phases and fade delays.
+    puff_x: np.ndarray
+    puff_y: np.ndarray
+    puff_emit: np.ndarray
+    puff_lump: np.ndarray
+    puff_phase: np.ndarray
+    puff_stagger: np.ndarray
+    # The design is finished `done` seconds after `start`; it then holds, and fades from `fade`.
+    done: float
+    fade: float
+    center: tuple[float, float]
+
+    def plane(self, age: float) -> tuple[float, float, float] | None:
+        """The plane's center and heading (radians, screen coordinates) `age` seconds into the show, or None once it has left."""
+        distance = age * SKYWRITER_SPEED
+        last = (len(self.path_x) - 1) * SKYWRITER_PATH_STEP
+        if not 0 <= distance <= last:
+            return None
+        stops = np.array([distance - 1.5, distance, distance + 1.5]) / SKYWRITER_PATH_STEP
+        indices = np.arange(len(self.path_x))
+        xs, ys = np.interp(stops, indices, self.path_x), np.interp(stops, indices, self.path_y)
+        return float(xs[1]), float(ys[1]), math.atan2(ys[2] - ys[0], xs[2] - xs[0])
+
+
+def skywriter_flight(design: str, center: tuple[float, float], entry_side: int, rng: random.Random) -> tuple[list[tuple[list[tuple[float, float]], bool]], int]:
+    """The plane's legs, each (points, smoking), from entry to exit, and the side it leaves by. It crosses the corners
+    level, below the labels, and only maneuvers between the gates on either side of the design."""
+    cx, cy = center
+    strokes = [[(cx + x, cy + y) for x, y in stroke] for stroke in SKYWRITER_DESIGNS[design]]
+    row = rng.uniform(*SKYWRITER_ENTRY_ROWS)
+    entry = (-12.0 if entry_side > 0 else WIDTH + 11.0, row)
+    gate = (cx - entry_side * SKYWRITER_GATE, row)
+    legs: list[tuple[list[tuple[float, float]], bool]] = [([entry, gate], False)]
+    position, heading = gate, (float(entry_side), 0.0)
+    for stroke in strokes:
+        first = unit_vector(stroke[1][0] - stroke[0][0], stroke[1][1] - stroke[0][1])
+        legs.append((turn(position, heading, stroke[0], first), False))
+        legs.append((stroke, True))
+        position, heading = stroke[-1], unit_vector(stroke[-1][0] - stroke[-2][0], stroke[-1][1] - stroke[-2][1])
+    exit_side = (1 if heading[0] > 0 else -1) if abs(heading[0]) > 0.3 else rng.choice((-1, 1))
+    row = rng.uniform(*SKYWRITER_ENTRY_ROWS)
+    gate = (cx + exit_side * SKYWRITER_GATE, row)
+    legs.append((turn(position, heading, gate, (float(exit_side), 0.0)), False))
+    legs.append(([gate, (WIDTH + 11.0 if exit_side > 0 else -12.0, row)], False))
+    return legs, exit_side
+
+
+@lru_cache(maxsize=8)
+def skywriter_show(slot: int, seed: int) -> SkywriterShow | None:
+    """A red stunt plane flies in, traces one design in puffy smoke, and leaves; the smoke holds, then breaks up.
+    Designs alternate from slot to slot. Never spans two slots."""
+    rng = random.Random(seed * 7919 + slot * 65537 + 41)
+    if rng.random() > SKYWRITER_CHANCE:
+        return None
+    names = tuple(SKYWRITER_DESIGNS)
+    design = names[(slot + seed) % len(names)]
+    center = (SKYWRITER_CENTER[0] + rng.uniform(-SKYWRITER_CENTER_JITTER, SKYWRITER_CENTER_JITTER), SKYWRITER_CENTER[1])
+    legs, _ = skywriter_flight(design, center, rng.choice((-1, 1)), rng)
+    # Lay the legs end to end, then resample the whole flight at an even step.
+    points, smoking, lengths = [], [], [0.0]
+    for leg, smoke in legs:
+        for a, b in pairwise(leg):
+            points.append(a)
+            smoking.append(smoke)
+            lengths.append(lengths[-1] + math.dist(a, b))
+    points.append(legs[-1][0][-1])
+    xs, ys = np.array([p[0] for p in points]), np.array([p[1] for p in points])
+    cumulative = np.array(lengths)
+    samples = np.arange(0, cumulative[-1], SKYWRITER_PATH_STEP)
+    path_x, path_y = np.interp(samples, cumulative, xs), np.interp(samples, cumulative, ys)
+    # Puffs every SKYWRITER_PUFF_SPACING px along the smoking legs, nudged across the path so the trail is lumpy.
+    puffs = []
+    for index, smoke in enumerate(smoking):
+        if not smoke:
+            continue
+        a, b = cumulative[index], cumulative[index + 1]
+        first = math.ceil(a / SKYWRITER_PUFF_SPACING)
+        for n in range(first, math.floor(b / SKYWRITER_PUFF_SPACING) + 1):
+            distance = n * SKYWRITER_PUFF_SPACING
+            fraction = (distance - a) / (b - a) if b > a else 0
+            x, y = xs[index] + (xs[index + 1] - xs[index]) * fraction, ys[index] + (ys[index + 1] - ys[index]) * fraction
+            across = unit_vector(ys[index + 1] - ys[index], xs[index] - xs[index + 1])
+            jitter = (unit_hash(n, seed, slot, 1) - 0.5) * 2 * SKYWRITER_PUFF_JITTER
+            puffs.append((x + across[0] * jitter, y + across[1] * jitter, (distance + SKYWRITER_TAIL) / SKYWRITER_SPEED, n))
+    flight = cumulative[-1] / SKYWRITER_SPEED
+    done = max(p[2] for p in puffs)
+    fade = done + SKYWRITER_HOLD_SECONDS
+    duration = max(flight, fade + SKYWRITER_FADE_STAGGER + SKYWRITER_FADE_SECONDS)
+    start = slot * SKYWRITER_SLOT_SECONDS + rng.uniform(5, SKYWRITER_SLOT_SECONDS - duration - 5)
+    ids = [p[3] for p in puffs]
+    return SkywriterShow(
+        start,
+        start + duration,
+        design,
+        path_x,
+        path_y,
+        np.array([p[0] for p in puffs], dtype=np.float32),
+        np.array([p[1] for p in puffs], dtype=np.float32),
+        np.array([p[2] for p in puffs], dtype=np.float32),
+        np.array([1 + SKYWRITER_LUMP * (unit_hash(n, seed, slot, 2) * 2 - 1) for n in ids], dtype=np.float32),
+        np.array([unit_hash(n, seed, slot, 3) * math.tau for n in ids], dtype=np.float32),
+        np.array([unit_hash(n, seed, slot, 4) * SKYWRITER_FADE_STAGGER for n in ids], dtype=np.float32),
+        done,
+        fade,
+        center,
+    )
+
+
+def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
+    """Sunny daylight with a light, known wind. The plane stays away when the sky is already busy: on Halloween, on
+    Christmas Eve while Santa crosses, and on fireworks days."""
+    w = environment.weather
+    rain, snow = precipitation(environment)
+    holidays = holiday_features(environment)
+    return (
+        environment.sun_altitude is not None
+        and environment.sun_altitude > SKYWRITER_SUN_ALTITUDE
+        and w.code in (800, 801)
+        and cloud_cover(environment) <= SKYWRITER_MAX_COVER
+        and rain == 0
+        and snow == 0
+        and w.wind is not None
+        and w.wind < SKYWRITER_MAX_WIND
+        and (w.visibility is None or w.visibility >= SKYWRITER_MIN_VISIBILITY)
+        and not holidays & {HALLOWEEN, "santa", "fireworks"}
+    )
+
+
+def skywriter_shows_present(environment: "OutsideEnvironment", seed: int, first: float, last: float):
+    """Shows under way at any time in [first, last] under the current conditions. The eagle and the songbird flock or
+    geese keep out of the sky while one is on, so nothing hides the plane or its design."""
+    if not skywriter_allowed(environment):
+        return
+    for slot in range(math.floor(first / SKYWRITER_SLOT_SECONDS), math.floor(last / SKYWRITER_SLOT_SECONDS) + 1):
+        show = skywriter_show(slot, seed)
+        if show is not None and show.start <= last and show.end > first:
+            yield show
+
+
+def skywriter_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[SkywriterShow, float] | None:
+    """The show under way at `elapsed` and how far into it, or None."""
+    show = next(skywriter_shows_present(environment, seed, elapsed, elapsed), None)
+    return None if show is None else (show, elapsed - show.start)
+
+
+def plane_cells(rows: tuple[str, ...], anchor: tuple[int, int], quarter_turns: int = 0, mirror: bool = False) -> tuple[tuple[int, int, str], ...]:
+    pixels = []
+    for row, line in enumerate(rows):
+        for column, part in enumerate(line):
+            if part == ".":
+                continue
+            dx, dy = column - anchor[0], row - anchor[1]
+            for _ in range(quarter_turns % 4):
+                dx, dy = -dy, dx
+            pixels.append((-dx if mirror else dx, dy, part))
+    return tuple(pixels)
+
+
+@lru_cache(maxsize=SKYWRITER_HEADINGS)
+def skywriter_plane_sprite(heading_index: int) -> tuple[tuple[int, int, str], ...]:
+    """The plane's pixels (dx, dy, part) for one of eight headings, clockwise from flying right. Quarter turns and
+    mirroring are exact, so the small sprite never breaks up the way a resampled one does."""
+    level, diagonal = (SKYWRITER_PLANE, SKYWRITER_PLANE_ANCHOR), (SKYWRITER_PLANE_DIAGONAL, SKYWRITER_PLANE_DIAGONAL_ANCHOR)
+    # (sprite, clockwise quarter turns, mirrored) per heading; a climb is a dive turned back a quarter.
+    return plane_cells(*{0: (*level, 0, False), 1: (*diagonal, 0, False), 2: (*level, 1, False), 3: (*diagonal, 0, True), 4: (*level, 0, True), 5: (*diagonal, 3, True), 6: (*level, 3, False), 7: (*diagonal, 3, False)}[heading_index])
+
+
+def skywriter_light(environment: "OutsideEnvironment", center: tuple[float, float]) -> tuple[float, float]:
+    """The unit direction from the design toward the sun on screen; straight up when the sun sits right behind it."""
+    if environment.sun_altitude is None:
+        return 0.0, -1.0
+    sx, sy = celestial_position(environment.sun_altitude, environment.sun_azimuth)
+    dx, dy = sx - center[0], sy - center[1]
+    return unit_vector(dx, dy) if math.hypot(dx, dy) > 3 else (0.0, -1.0)
+
+
+def draw_skywriter(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int) -> Image.Image:
+    state = skywriter_state(environment, elapsed, seed)
+    if state is None:
+        return image
+    show, age = state
+    shown = show.puff_emit <= age
+    if shown.any():
+        image = draw_skywriting_smoke(image, palette, environment, show, age, shown)
+    plane = show.plane(age)
+    if plane is not None:
+        x, y, heading = plane
+        index = round(heading / math.tau * SKYWRITER_HEADINGS) % SKYWRITER_HEADINGS
+        d = ImageDraw.Draw(image)
+        spin = 0.5 + 0.5 * math.sin(elapsed * 41)
+        for dx, dy, part in skywriter_plane_sprite(index):
+            px, py = round(x) + dx, round(y) + dy
+            if not (0 <= px < WIDTH and 0 <= py < HEIGHT):
+                continue
+            if part == "p":
+                # The spinning propeller is a faint, flickering disc.
+                d.point((px, py), fill=mix(image.getpixel((px, py)), SKYWRITER_PROPELLER, 0.3 + 0.35 * spin * unit_hash(dx, dy, math.floor(elapsed * 20))))
+            else:
+                d.point((px, py), fill=SKYWRITER_PLANE_COLORS[part])
+    return image
+
+
+def draw_skywriting_smoke(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", show: SkywriterShow, age: float, shown: np.ndarray) -> Image.Image:
+    """Puffy smoke: every puff billows out from the tail, drifts downwind, and is lit from the sun's side. Where puffs
+    overlap, the newer one is in front, so each keeps its own lit edge and rim."""
+    since = age - show.puff_emit[shown]
+    fading = np.clip((age - show.fade - show.puff_stagger[shown]) / SKYWRITER_FADE_SECONDS, 0, 1)
+    opacity = SKYWRITER_OPACITY * np.clip(since / 0.15, 0, 1) * (1 - fading) ** 1.5
+    keep = opacity > 0.01
+    if not keep.any():
+        return image
+    since, fading, opacity = since[keep], fading[keep], opacity[keep]
+    lump, phase = show.puff_lump[shown][keep], show.puff_phase[shown][keep]
+    low, high = SKYWRITER_PUFF_RADIUS
+    radius = (low + (high - low) * (1 - np.exp(-since / SKYWRITER_GROW_SECONDS))) * lump + SKYWRITER_FADE_SPREAD * fading
+    settle = np.clip(since / 4, 0, 1) * SKYWRITER_BILLOW
+    wind = min(SKYWRITER_MAX_WIND, environment.weather.wind or 0)
+    x = show.puff_x[shown][keep] + wind * SKYWRITER_WIND_DRIFT * since + np.sin(since * 0.6 + phase) * settle
+    y = show.puff_y[shown][keep] + np.cos(since * 0.5 + phase * 1.3) * settle
+    left, right = max(0, math.floor(float((x - radius).min())) - 1), min(WIDTH, math.ceil(float((x + radius).max())) + 2)
+    top, bottom = max(0, math.floor(float((y - radius).min())) - 1), min(HEIGHT, math.ceil(float((y + radius).max())) + 2)
+    if left >= right or top >= bottom:
+        return image
+    columns = np.arange(left, right, dtype=np.float32)[None, None, :] + 0.5
+    rows = np.arange(top, bottom, dtype=np.float32)[None, :, None] + 0.5
+    dx, dy = columns - x[:, None, None], rows - y[:, None, None]
+    distance = np.hypot(dx, dy)
+    r = radius[:, None, None]
+    # Each puff is a disc antialiased over one pixel, so it glides smoothly as it drifts.
+    cover = np.clip(r + 0.5 - distance, 0, 1) * opacity[:, None, None]
+    alpha = 1 - np.prod(1 - cover, axis=0)
+    # The densest puff over a pixel shades it; among equals, the newest, which is in front.
+    front = len(cover) - 1 - np.argmax(cover[::-1], axis=0)
+    pick = (front[None], np.arange(bottom - top)[None, :, None], np.arange(right - left)[None, None, :])
+    lx, ly = skywriter_light(environment, show.center)
+    front_radius = radius[front]
+    lit = np.clip((dx * lx + dy * ly)[pick][0] / front_radius, -1, 1)
+    rim = np.clip(distance[pick][0] - front_radius + 1.2, 0, 1)
+    tone = np.clip(0.75 + SKYWRITER_SHADING * lit - SKYWRITER_RIM * rim, 0, 1)
+    shade = np.array(mix(palette.middle, SKYWRITER_SHADE, 0.6), dtype=np.float32)
+    tint = shade + (np.array(SKYWRITER_SUNLIT, dtype=np.float32) - shade) * tone[..., None]
+    pixels = np.array(image, dtype=np.float32)
+    region = pixels[top:bottom, left:right]
+    region += (tint - region) * alpha[..., None]
+    return Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
 
 
 FIREWORK_SLOT_SECONDS = 0.7
@@ -4760,11 +5146,13 @@ def geese_flight(slot: int, seed: int) -> tuple[float, float, int, int] | None:
 
 
 def geese_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[float, float, int, int] | None:
-    """The skein crossing at `elapsed`, if any; like the songbirds, it keeps clear of the eagle."""
+    """The skein crossing at `elapsed`, if any; like the songbirds, it keeps clear of the eagle and the skywriter."""
     flight = geese_flight(math.floor(elapsed / GEESE_SLOT_SECONDS), seed)
     if flight is None or not flight[0] <= elapsed < flight[1]:
         return None
     if next(eagle_visits_present(environment, seed, flight[0], flight[1]), None) is not None:
+        return None
+    if next(skywriter_shows_present(environment, seed, flight[0], flight[1]), None) is not None:
         return None
     return flight
 
@@ -5214,6 +5602,7 @@ SUMMONS = {
     "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween and Thanksgiving, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
+    "skywriter": Summon("Skywriting plane", "The skywriting plane flies in sunny daylight with a light wind, but not on Halloween, Christmas Eve or fireworks days.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
     "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
     "geese": Summon("Geese", "Geese fly over by day on Thanksgiving in light weather.", lambda e: THANKSGIVING in holiday_features(e) and birds_allowed(e), lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
@@ -5269,6 +5658,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         image = composite_light(image, fireworks)
     if "santa" in holidays:
         draw_santa(image, environment, elapsed, seed)
+    # The skywriter flies high, in front of the clouds but behind the land.
+    image = draw_skywriter(image, palette, environment, elapsed, seed)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
