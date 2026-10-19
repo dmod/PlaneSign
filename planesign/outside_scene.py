@@ -373,8 +373,6 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
     altitude = 0 if altitude is None else altitude
     if altitude < 0:
         palette = blend_palette(NIGHT, DUSK, 1 - altitude / NIGHT_ALTITUDE)
-        illumination = moonlight(environment) * max(0, min(1, altitude / NIGHT_ALTITUDE))
-        palette = Palette(*(mix(getattr(palette, name), (106, 133, 157), illumination * (0.075 if name in ("top", "middle", "horizon") else 0.12)) for name in MATERIALS))
     else:
         palette = blend_palette(DUSK, DAY, altitude / 14)
     daylight = max(0.12, min(1, (altitude + 10) / 20))
