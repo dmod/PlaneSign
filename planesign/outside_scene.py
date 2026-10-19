@@ -1690,24 +1690,55 @@ EAGLE_STRIKE_Y = 25
 EAGLE_WATER_Y = 27
 EAGLE_SPLASH_SECONDS = 0.8
 EAGLE_RIPPLE_SECONDS = 2.2
+# |cos| of the orbit angle, i.e. how squarely the eagle crosses the view: above SIDE it shows its profile, above
+# SPREAD it is banking through a three-quarter view, and below that it flies straight away from or toward the viewer
+# with both wings outstretched.
+EAGLE_SIDE_VIEW = 0.8
+EAGLE_SPREAD_VIEW = 0.4
 EAGLE_DARK = (74, 50, 34)
 EAGLE_WHITE = (242, 240, 228)
 EAGLE_GOLD = (238, 182, 52)
-FISH_SILVER = (214, 226, 228)
 # Bald eagle facing right: d dark plumage, b body (anchor), w white head and tail, y beak and talons.
 EAGLE_SPRITES = {
-    "glide": ("d.......d", ".ddddddd.", "...wbwy.."),
-    "up": (".d.....d.", "..dd.dd..", "...wbwy.."),
-    "down": ("...wbwy..", "..dd.dd..", ".d.....d."),
-    "stoop": ("w...", ".dd.", "..bw", "...y"),
-    "flare": ("d...d..", ".d.d...", "..wbwy.", "...y..."),
+    # Profile: the near wing sweeps back over a long, low body.
+    "glide": ("....dd.......", ".....ddd..ww.", "wwdddddbddwwy"),
+    "up": ("...d.........", "....dd.......", ".....ddd..ww.", "wwdddddbddwwy"),
+    "down": ("..........ww.", "wwdddddbddwwy", "......dd.....", ".....d......."),
+    # Banking away or toward the viewer: the wings open out as the body foreshortens.
+    "three_back": ("d........w...", ".ddddddbdddd.", "..wwdddd....."),
+    "three_front": ("d........ww..", ".ddddddbdwwy.", "...ddddd....."),
+    # Flying straight away (white tail fan below) or straight toward the viewer (white head and beak above).
+    "back": ("d.......w.......d", ".dddddddbddddddd.", "...ddddwwwdddd..."),
+    "front": (".......www.......", "d......wyw......d", ".dddddddbddddddd.", "...ddddddddddd..."),
+    "stoop": ("ww......", "..dd....", "...dbd..", "....ddww", "......wy"),
+    "flare": ("..d.d....", "...dd....", "...dd..ww", "wwddbddww", ".....yy.."),
 }
 SPLASH_DROPS = ((-1.6, 13), (-0.8, 17), (0, 19), (0.8, 16), (1.7, 12), (-2.6, 9), (2.5, 10))
+# The eagle's quarry, a cartoon trout facing right: b slate-blue back, s silver flank, w white belly, e eye, t tail.
+# The back stays dark so the trout stands out against the blue pond. It is anchored at its middle.
+FISH_SPRITES = (("t..bbb..", ".tsssses", "t..www.."), ("...bbb..", "ttsssses", "...www.."))
+FISH_COLORS = {"b": (70, 100, 140), "s": (214, 228, 238), "w": (255, 255, 255), "e": (10, 14, 24), "t": (110, 146, 188)}
+# The fish surfaces this long before the eagle glides in, so the eagle's arrival is no surprise.
+FISH_LEAD_SECONDS = 6
+# It swims back and forth along the pond's middle row, its anchor between these columns (the pond's widest span).
+FISH_SWIM = (58, 73)
+FISH_ROW = 27
+FISH_SWIM_PERIOD = 9
+# It leaps clear of the water when it surfaces and every so often after, until shortly before the eagle stoops.
+FISH_HOP_EVERY = 6
+FISH_HOP_SECONDS = 0.9
+FISH_HOP_HEIGHT = 5
+FISH_HOP_CLEARANCE = 2
+FISH_RING_SECONDS = 1.2
+# How much of the pond's color tints the fish while it is under water.
+FISH_SUBMERGED = 0.1
 
 
 @dataclass(frozen=True)
 class EagleVisit:
+    # The fish surfaces at `start`; the eagle glides in at `arrive`.
     start: float
+    arrive: float
     soar: float
     dive: float
     strike: float
@@ -1719,17 +1750,42 @@ class EagleVisit:
     lap: float
     strike_x: float
     exit: tuple[float, float]
+    # Phase of the fish's swim, solved so that it is right under strike_x at the strike.
+    fish_phase: float
 
-    def orbit_point(self, t: float) -> tuple[float, float, float]:
-        """Position on the soaring circle and the sign of horizontal travel at time t."""
+    def orbit_point(self, t: float) -> tuple[float, float, float, float]:
+        """Position on the soaring circle, plus the cosine and sine of the orbit angle at time t. The cosine (times
+        `heading`) is the sign of horizontal travel; a positive sine means the eagle is heading away from the viewer."""
         cx, cy, ry = EAGLE_ORBIT
         angle = 2 * math.pi * (t - self.soar) / self.lap
-        return cx + self.heading * self.radius * math.sin(angle), cy - ry * math.cos(angle), self.heading * math.cos(angle)
+        return cx + self.heading * self.radius * math.sin(angle), cy - ry * math.cos(angle), self.heading * math.cos(angle), math.sin(angle)
+
+    def fish_x(self, t: float) -> tuple[float, int]:
+        """The swimming fish's anchor column and the way it faces."""
+        low, high = FISH_SWIM
+        angle = 2 * math.pi * (t - self.strike) / FISH_SWIM_PERIOD + self.fish_phase
+        return (low + high) / 2 + (high - low) / 2 * math.sin(angle), 1 if math.cos(angle) >= 0 else -1
+
+    def fish_leap(self, t: float) -> float | None:
+        """When the fish's latest leap at or before t began, or None if there is none: it leaps as it surfaces and every
+        FISH_HOP_EVERY seconds after, but only while a whole leap ends well before the eagle stoops."""
+        if t < self.start:
+            return None
+        leap = self.start + (t - self.start) // FISH_HOP_EVERY * FISH_HOP_EVERY
+        return leap if leap + FISH_HOP_SECONDS <= self.dive - FISH_HOP_CLEARANCE else None
+
+    def fish_hop(self, t: float) -> float | None:
+        """Progress (0 to 1) through a leap at time t, or None while the fish swims."""
+        leap = self.fish_leap(t)
+        if leap is None or t - leap >= FISH_HOP_SECONDS:
+            return None
+        return (t - leap) / FISH_HOP_SECONDS
 
 
 @lru_cache(maxsize=16)
 def eagle_visit(slot: int, seed: int) -> EagleVisit | None:
-    """Glide in, circle over the pond, stoop to snatch a fish, then labor away with it. Never spans two slots."""
+    """A fish surfaces in the pond; the eagle glides in, circles over the pond, stoops to snatch the fish, then labors
+    away with it. Never spans two slots."""
     rng = random.Random(seed * 4421 + slot * 65537 + 17)
     if rng.random() > EAGLE_VISIT_CHANCE:
         return None
@@ -1737,16 +1793,22 @@ def eagle_visit(slot: int, seed: int) -> EagleVisit | None:
     heading = rng.choice((-1, 1))
     entry = (-8 if heading > 0 else WIDTH + 7, rng.uniform(7, 9))
     start = slot * EAGLE_SLOT_SECONDS + rng.uniform(5, 60)
-    soar = start + math.dist(entry, (cx, cy - ry)) / EAGLE_GLIDE_SPEED
+    arrive = start + FISH_LEAD_SECONDS
+    soar = arrive + math.dist(entry, (cx, cy - ry)) / EAGLE_GLIDE_SPEED
     radius = rng.uniform(20, 26)
     lap = 2 * math.pi * radius / EAGLE_GLIDE_SPEED
     # Laps end at the far left or right of the circle, where the eagle turns and stoops toward the pond.
     dive = soar + lap * rng.choice((1.25, 1.75, 2.25))
     strike = dive + EAGLE_DIVE_SECONDS
     climb = strike + EAGLE_STRIKE_SECONDS
-    strike_x = rng.uniform(58, 73)
+    low, high = FISH_SWIM
+    strike_x = rng.uniform(low, high)
+    # Either branch of the arcsine puts the fish at strike_x; they differ in which way it is swimming.
+    reach = math.asin(max(-1.0, min(1.0, (strike_x - (low + high) / 2) / ((high - low) / 2))))
+    fish_phase = reach if rng.random() < 0.5 else math.pi - reach
     exit = (rng.choice((-8, WIDTH + 7)), rng.uniform(7, 10))
-    return EagleVisit(start, soar, dive, strike, climb, climb + abs(exit[0] - strike_x) / EAGLE_CLIMB_SPEED, heading, entry, radius, lap, strike_x, exit)
+    end = climb + abs(exit[0] - strike_x) / EAGLE_CLIMB_SPEED
+    return EagleVisit(start, arrive, soar, dive, strike, climb, end, heading, entry, radius, lap, strike_x, exit, fish_phase)
 
 
 def eagle_visits_between(seed: int, first: float, last: float):
@@ -1786,68 +1848,151 @@ def eagle_allowed(environment: "OutsideEnvironment") -> bool:
     )
 
 
-def eagle_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
-    """Return (visit, x, y, facing, pose, carrying a fish) or None while no eagle is about."""
+@dataclass(frozen=True)
+class EagleState:
+    visit: EagleVisit
+    # The eagle's body (x, y), the way it faces and its EAGLE_SPRITES pose; None until it glides in.
+    bird: tuple[float, float, int, str] | None
+    # The swimming fish's anchor (x, y) and facing, and its leap progress (None while swimming); None once caught.
+    fish: tuple[float, float, int, float | None] | None
+    carrying: bool
+
+
+def orbit_view(cosine: float, sine: float) -> str:
+    """The eagle's pose for a point on its soaring circle: profile while crossing, wings outstretched in the turns."""
+    if abs(cosine) >= EAGLE_SIDE_VIEW:
+        return "glide"
+    away = sine > 0
+    if abs(cosine) >= EAGLE_SPREAD_VIEW:
+        return "three_back" if away else "three_front"
+    return "back" if away else "front"
+
+
+def eagle_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> EagleState | None:
+    """The eagle and its fish at `elapsed`, or None while no visit is under way."""
     visit = next(eagle_visits_present(environment, seed, elapsed, elapsed), None)
     if visit is None:
         return None
     t = elapsed
+    fish = None
+    if t < visit.strike:
+        x, facing = visit.fish_x(t)
+        hop = visit.fish_hop(t)
+        lift = FISH_HOP_HEIGHT * 4 * hop * (1 - hop) if hop is not None else 0
+        fish = (x, FISH_ROW - lift, facing, hop)
+    if t < visit.arrive:
+        return EagleState(visit, None, fish, False)
     cx, cy, ry = EAGLE_ORBIT
     if t < visit.soar:
-        progress = (t - visit.start) / (visit.soar - visit.start)
+        progress = (t - visit.arrive) / (visit.soar - visit.arrive)
         x = visit.entry[0] + (cx - visit.entry[0]) * progress
         y = visit.entry[1] + (cy - ry - visit.entry[1]) * progress
-        return visit, x, y, visit.heading, "glide", False
+        return EagleState(visit, (x, y, visit.heading, "glide"), fish, False)
     if t < visit.dive:
-        x, y, travel = visit.orbit_point(t)
-        # A lazy wingbeat now and then between long glides.
+        x, y, travel, sine = visit.orbit_point(t)
+        pose = orbit_view(travel, sine)
+        # A lazy wingbeat now and then between long glides, seen while the eagle is in profile.
         beat = (t - visit.soar) % 7
-        pose = ("up", "glide", "down", "glide")[int(beat / 0.18) % 4] if beat < 0.72 else "glide"
-        return visit, x, y, 1 if travel >= 0 else -1, pose, False
+        if pose == "glide" and beat < 0.72:
+            pose = ("up", "glide", "down", "glide")[int(beat / 0.18) % 4]
+        return EagleState(visit, (x, y, 1 if travel >= 0 else -1, pose), fish, False)
+    x0, y0, travel, sine = visit.orbit_point(visit.dive)
+    toward_pond = 1 if visit.strike_x >= x0 else -1
     if t < visit.strike:
-        x0, y0, _ = visit.orbit_point(visit.dive)
         progress = (t - visit.dive) / EAGLE_DIVE_SECONDS
         x = x0 + (visit.strike_x - x0) * progress
         y = y0 + (EAGLE_STRIKE_Y - y0) * progress * progress
-        return visit, x, y, 1 if visit.strike_x >= x0 else -1, "stoop" if progress > 0.2 else "glide", False
-    x0, _, _ = visit.orbit_point(visit.dive)
-    toward_pond = 1 if visit.strike_x >= x0 else -1
+        # It finishes its turn, folds its wings and stoops.
+        if progress < 0.12:
+            pose = orbit_view(travel, sine)
+        elif progress < 0.25:
+            pose = "three_back" if sine > 0 else "three_front"
+        else:
+            pose = "stoop"
+        return EagleState(visit, (x, y, toward_pond, pose), fish, False)
     if t < visit.climb:
-        return visit, visit.strike_x, EAGLE_STRIKE_Y, toward_pond, "flare", False
+        return EagleState(visit, (visit.strike_x, EAGLE_STRIKE_Y, toward_pond, "flare"), None, True)
     progress = (t - visit.climb) / (visit.end - visit.climb)
     x = visit.strike_x + (visit.exit[0] - visit.strike_x) * progress
     y = EAGLE_STRIKE_Y + (visit.exit[1] - EAGLE_STRIKE_Y) * (1 - (1 - progress) ** 2)
     # Hard, quick wingbeats carrying the catch.
     pose = ("up", "glide", "down", "glide")[int((t - visit.climb) / 0.12) % 4]
-    return visit, x, y, 1 if visit.exit[0] > visit.strike_x else -1, pose, True
+    return EagleState(visit, (x, y, 1 if visit.exit[0] > visit.strike_x else -1, pose), None, True)
 
 
-def draw_eagle(image: Image.Image, palette: Palette, eagle, elapsed: float):
-    if eagle is None:
+def draw_pond_rings(image: Image.Image, palette: Palette, x: float, since: float, seconds: float, strength: float):
+    """Rings spreading across the pond from column x, `since` seconds after the water was broken."""
+    if not 0 <= since < seconds:
         return
-    visit, x, y, facing, pose, fish = eagle
     d = ImageDraw.Draw(image)
     water = mix(palette.glint, (240, 246, 246), 0.5)
+    fade = 1 - since / seconds
+    reach = 1.5 + since * 5
+    for dx, dy in ((-reach, 0), (reach, 0), (-reach * 0.7, 1), (reach * 0.7, 1)):
+        px, py = round(x + dx), EAGLE_WATER_Y + dy
+        if 0 <= px < WIDTH and LAND.getpixel((px, py)) == INDEX["water"]:
+            d.point((px, py), fill=mix(image.getpixel((px, py)), water, fade * strength))
+
+
+def draw_fish(image: Image.Image, palette: Palette, x: float, y: float, facing: int, elapsed: float, in_pond: bool):
+    """The cartoon fish, its tail flicking. In the pond, the part below the surface takes on the water's color and
+    nothing shows on the banks."""
+    rows = FISH_SPRITES[int(elapsed * 6) % 2]
+    anchor_y = len(rows) // 2
+    anchor_x = len(rows[anchor_y]) // 2
+    colors = FISH_COLORS
+    d = ImageDraw.Draw(image)
+    surface = WATER_ROWS[0] if in_pond else HEIGHT
+    for row, line in enumerate(rows):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            px = round(x) + (column - anchor_x) * (1 if facing >= 0 else -1)
+            py = round(y) + row - anchor_y
+            if not (0 <= px < WIDTH and 0 <= py < HEIGHT):
+                continue
+            color = colors[char]
+            if py >= surface:
+                if not WATER[py, px]:
+                    continue
+                color = mix(color, palette.water, FISH_SUBMERGED)
+            d.point((px, py), fill=color)
+
+
+def draw_pond_fish(image: Image.Image, palette: Palette, eagle: EagleState | None, elapsed: float):
+    """The fish swimming in the pond before the eagle takes it, and the rings where it breaks the surface."""
+    if eagle is None or eagle.fish is None:
+        return
+    visit = eagle.visit
+    # The water breaks where each leap leaves and re-enters it.
+    leap = visit.fish_leap(elapsed)
+    if leap is not None:
+        for moment in (leap, leap + FISH_HOP_SECONDS):
+            draw_pond_rings(image, palette, visit.fish_x(moment)[0], elapsed - moment, FISH_RING_SECONDS, 0.5)
+    x, y, facing, _ = eagle.fish
+    draw_fish(image, palette, x, y, facing, elapsed, True)
+
+
+def draw_eagle(image: Image.Image, palette: Palette, eagle: EagleState | None, elapsed: float):
+    if eagle is None or eagle.bird is None:
+        return
+    visit = eagle.visit
+    x, y, facing, pose = eagle.bird
+    d = ImageDraw.Draw(image)
     since_strike = elapsed - visit.strike
-    if 0 <= since_strike < EAGLE_RIPPLE_SECONDS:
-        # Rings spread across the pond from where the talons hit the water.
-        fade = 1 - since_strike / EAGLE_RIPPLE_SECONDS
-        reach = 1.5 + since_strike * 5
-        for dx, dy in ((-reach, 0), (reach, 0), (-reach * 0.7, 1), (reach * 0.7, 1)):
-            px, py = round(visit.strike_x + dx), EAGLE_WATER_Y + dy
-            if 0 <= px < WIDTH and LAND.getpixel((px, py)) == INDEX["water"]:
-                d.point((px, py), fill=mix(image.getpixel((px, py)), water, fade * 0.7))
+    draw_pond_rings(image, palette, visit.strike_x, since_strike, EAGLE_RIPPLE_SECONDS, 0.7)
+    if eagle.carrying:
+        # The catch hangs head-first below the talons, still wriggling; in the flare it is just leaving the water.
+        draw_fish(image, palette, x, y + 3, facing, elapsed, pose == "flare")
     lit = mix(EAGLE_DARK, palette.animal, 0.15)
     colors = {"d": lit, "b": lit, "w": mix(EAGLE_WHITE, palette.snowcap, 0.3), "y": EAGLE_GOLD}
     draw_sprite(image, EAGLE_SPRITES[pose], "b", x, y, facing, colors)
-    if fish:
-        # The catch hangs below the talons, its tail flicking.
+    if eagle.carrying and pose != "flare":
         bx, by = round(x), round(y)
-        flick = int(elapsed * 6) % 2
-        for px, py, color in ((bx, by + 1, EAGLE_GOLD), (bx, by + 2, FISH_SILVER), (bx - facing, by + 2 + flick, mix(FISH_SILVER, palette.water, 0.4)), (bx + facing, by + 2, FISH_SILVER)):
-            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
-                d.point((px, py), fill=color)
+        if 0 <= bx < WIDTH and 0 <= by + 1 < HEIGHT:
+            d.point((bx, by + 1), fill=EAGLE_GOLD)
     if 0 <= since_strike < EAGLE_SPLASH_SECONDS:
+        water = mix(palette.glint, (240, 246, 246), 0.5)
         fade = 1 - since_strike / EAGLE_SPLASH_SECONDS
         for vx, vy in SPLASH_DROPS:
             px = round(visit.strike_x + vx * since_strike * 4)
@@ -5137,6 +5282,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         for column in range(x + drift, x + width + drift + 1):
             if LAND.getpixel((column, y)) == INDEX["water"]:
                 d.point((column, y), fill=color)
+    # The eagle's fish swims in the pond, behind everything standing in front of it.
+    eagle = eagle_state(environment, elapsed, seed)
+    draw_pond_fish(image, palette, eagle, elapsed)
     # Fountains burn on the far bank, in front of the land; they and the fireworks shimmer on the pond.
     sparkle = fireworks
     if "fountains" in holidays:
@@ -5183,7 +5331,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_wildlife(image, palette, environment, elapsed, seed)
     if thanksgiving:
         draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
-    draw_eagle(image, palette, eagle_state(environment, elapsed, seed), elapsed)
+    draw_eagle(image, palette, eagle, elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     image = draw_smoke(image, palette, environment, elapsed, seed)
     image = draw_cannon_smoke(image, palette, cannon, wind)
