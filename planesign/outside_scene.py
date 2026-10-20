@@ -3332,8 +3332,17 @@ ABDUCTION_BEAM_GROW = 0.6
 ABDUCTION_LIFT = (5.5, 12.0)
 ABDUCTION_RETRACT_SECONDS = 0.6
 ABDUCTION_LEAVE = 13.5
-ABDUCTION_LEAVE_SECONDS = 1.0
-ABDUCTION_END = ABDUCTION_LEAVE + ABDUCTION_LEAVE_SECONDS
+# Once the deer is aboard, the saucer recedes toward ABDUCTION_VANISH in the night sky, shrinking with distance until it
+# is ABDUCTION_ZOOM_DEPTH times farther away, then vanishes in a star-like twinkle flash there.
+ABDUCTION_ZOOM_SECONDS = 2.2
+ABDUCTION_ZOOM_DEPTH = 24
+ABDUCTION_VANISH = (68.0, 5.0)
+ABDUCTION_FLASH_SECONDS = 1.8
+# Peak length of the flash's cross rays; the diagonal rays reach a little over half as far.
+ABDUCTION_FLASH_RAY = 10
+ABDUCTION_FLASH_COLOR = np.array((0.92, 1.0, 0.95), dtype=np.float32)
+ABDUCTION_FLASH = ABDUCTION_LEAVE + ABDUCTION_ZOOM_SECONDS
+ABDUCTION_END = ABDUCTION_FLASH + ABDUCTION_FLASH_SECONDS
 # The sun must be this far below the horizon at the event's clock time. It never climbs faster than SUN_MAX_CLIMB
 # degrees a second, so checking each frame against that bound keeps an event that started from vanishing partway.
 ABDUCTION_SUN_ALTITUDE = SET_ALTITUDE - 0.75
@@ -3354,6 +3363,8 @@ ABDUCTION_SPARKS = 6
 # A classic saucer: d glass dome with its green pilot a, h silver hull, r rim with chasing lights l, u underside.
 SAUCER = ("....ddddd....", "...dddaddd...", ".hhhhhhhhhhh.", "lrrlrrlrrlrrl", "..uuuuuuuuu..")
 SAUCER_ANCHOR = (6, 2)
+# Smaller saucers for the zoom into the distance, (smallest scale shown, rows, anchor), largest first.
+SAUCER_SIZES = ((0.7, SAUCER, SAUCER_ANCHOR), (0.45, ("...ddd...", ".hhhhhhh.", "lrlrlrlrl", "..uuuuu.."), (4, 1)), (0.28, ("..d..", "hhhhh", ".lrl."), (2, 1)), (0.14, ("hlh",), (1, 0)), (0.0, ("l",), (0, 0)))
 SAUCER_COLORS = {"d": (112, 186, 182), "a": (110, 235, 90), "h": (168, 174, 188), "r": (104, 110, 126), "u": (62, 66, 80)}
 SAUCER_LIGHTS = ((255, 70, 70), (255, 214, 64), (80, 255, 120), (90, 170, 255))
 
@@ -3434,20 +3445,43 @@ def abduction_starts(moment: datetime) -> list[datetime]:
     return sorted(starts, key=datetime.timestamp)
 
 
-def saucer_position(abduction: Abduction, age: float) -> tuple[float, float] | None:
-    """The saucer's anchor `age` seconds after the event's clock time: it swoops in from the upper left, hovers with a
-    gentle bob, then shoots straight up and away."""
+def saucer_position(abduction: Abduction, age: float) -> tuple[float, float, float] | None:
+    """The saucer's anchor and scale `age` seconds after the event's clock time: it swoops in from the upper left and
+    hovers with a gentle bob; then it recedes into the night sky, its path converging on ABDUCTION_VANISH as it shrinks
+    with distance, until it is gone."""
     hx, hy = abduction.hover
-    if not 0 <= age < ABDUCTION_END:
+    if not 0 <= age < ABDUCTION_FLASH:
         return None
     if age < ABDUCTION_SWOOP_SECONDS:
         u = age / ABDUCTION_SWOOP_SECONDS
-        return hx - 48 * (1 - u) ** 3, -6 + (hy + 6) * (1 - (1 - u) ** 2)
+        return hx - 48 * (1 - u) ** 3, -6 + (hy + 6) * (1 - (1 - u) ** 2), 1.0
     bob = math.sin((age - ABDUCTION_SWOOP_SECONDS) * 2.4) * 0.6
     if age < ABDUCTION_LEAVE:
-        return hx, hy + bob
-    u = (age - ABDUCTION_LEAVE) / ABDUCTION_LEAVE_SECONDS
-    return hx + 6 * u * u, hy + bob - 44 * u * u
+        return hx, hy + bob, 1.0
+    u = (age - ABDUCTION_LEAVE) / ABDUCTION_ZOOM_SECONDS
+    # Distance grows ever faster; on screen the saucer slows as it shrinks toward the vanishing point.
+    scale = 1 / (1 + ABDUCTION_ZOOM_DEPTH * u**3)
+    vx, vy = ABDUCTION_VANISH
+    return vx + (hx - vx) * scale, vy + (hy + bob - vy) * scale, scale
+
+
+def vanish_flash(age: float) -> np.ndarray | None:
+    """Where the saucer vanished, a star flares: a bright core with cross rays that shoot out and twinkle, and shorter
+    diagonal rays, fading after a quick peak. A (row, column, rgb) light array, or None outside the flash."""
+    t = (age - ABDUCTION_FLASH) / ABDUCTION_FLASH_SECONDS
+    if not 0 <= t < 1:
+        return None
+    peak = t / 0.06 if t < 0.06 else (1 - (t - 0.06) / 0.94) ** 1.3
+    reach = ABDUCTION_FLASH_RAY * (0.4 + 0.6 * smoothstep(0, 0.25, t))
+    twinkle = 0.85 + 0.15 * math.sin(age * 37)
+    vx, vy = ABDUCTION_VANISH
+    dx, dy = np.abs(FIREWORK_X - vx), np.abs(FIREWORK_Y - vy)
+    core = np.exp(-(dx * dx + dy * dy) / 1.6)
+    halo = 0.3 * np.exp(-np.hypot(dx, dy) / 2.2)
+    cross = np.exp(-2.5 * dy) * np.clip(1 - dx / reach, 0, 1) ** 0.7 + np.exp(-2.5 * dx) * np.clip(1 - dy / reach, 0, 1) ** 0.7
+    diagonal = np.exp(-3 * np.abs(dx - dy)) * np.clip(1 - (dx + dy) / (reach * 1.2), 0, 1) ** 0.8
+    strength = peak * np.clip(core + halo + twinkle * (cross + 0.6 * diagonal), 0, 1)
+    return strength[..., None] * ABDUCTION_FLASH_COLOR
 
 
 def abduction_beam(cx: float, top: int, extent: float, age: float) -> np.ndarray:
@@ -3480,11 +3514,12 @@ def abduction_beam(cx: float, top: int, extent: float, age: float) -> np.ndarray
     return light
 
 
-def draw_saucer(image: Image.Image, x: float, y: float, age: float, beam: float):
+def draw_saucer(image: Image.Image, x: float, y: float, scale: float, age: float, beam: float):
+    rows, anchor = next((rows, anchor) for smallest, rows, anchor in SAUCER_SIZES if scale >= smallest)
     d = ImageDraw.Draw(image)
-    left, top = round(x) - SAUCER_ANCHOR[0], round(y) - SAUCER_ANCHOR[1]
+    left, top = round(x) - anchor[0], round(y) - anchor[1]
     lights = 0
-    for row, line in enumerate(SAUCER):
+    for row, line in enumerate(rows):
         for column, part in enumerate(line):
             if part == ".":
                 continue
@@ -3503,7 +3538,7 @@ def draw_saucer(image: Image.Image, x: float, y: float, age: float, beam: float)
 
 def draw_abduction(image: Image.Image, palette: Palette, environment: "OutsideEnvironment") -> Image.Image:
     """The deer wander in and graze; the saucer swoops in, beams one deer up into its belly while the other bolts,
-    then shoots away."""
+    then zooms off into the stars and vanishes in a twinkle."""
     state = abduction_state(environment)
     if state is None:
         return image
@@ -3542,11 +3577,12 @@ def draw_abduction(image: Image.Image, palette: Palette, environment: "OutsideEn
                 layer = Image.fromarray(pixels, "RGBA")
                 image.paste(layer, (0, 0), layer)
     if saucer is None:
-        return image
+        flash = vanish_flash(age)
+        return image if flash is None else composite_light(image, flash)
     beam = min(1.0, max(0.0, (age - ABDUCTION_BEAM) / ABDUCTION_BEAM_GROW)) * (1 - min(1.0, max(0.0, (age - ABDUCTION_LIFT[1]) / ABDUCTION_RETRACT_SECONDS)))
     if beam > 0:
         image = composite_light(image, abduction_beam(saucer[0], belly + 1, beam, age))
-    draw_saucer(image, saucer[0], saucer[1], age, beam)
+    draw_saucer(image, *saucer, age, beam)
     return image
 
 
