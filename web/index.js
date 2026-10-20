@@ -832,12 +832,10 @@ function render_flagquiz_state(state) {
     }
 
     var feedback = document.getElementById("flagquiz_feedback");
+    var gameResult = document.getElementById("flagquiz_game_result");
+    gameResult.textContent = "";
     if (!state.difficulty) {
         feedback.textContent = "";
-    } else if (state.complete && state.tie) {
-        feedback.textContent = "It's a tie!";
-    } else if (state.complete && state.winner) {
-        feedback.textContent = state.winner.name + " WINS! Accuracy: " + state.winner.accuracy + "%";
     } else if (state.your_answer) {
         feedback.textContent = state.your_answer.correct ? "Your answer is correct!" : "Your answer is incorrect.";
     } else if (state.last_result) {
@@ -854,6 +852,13 @@ function render_flagquiz_state(state) {
         feedback.appendChild(resultMark);
     } else {
         feedback.textContent = state.complete ? "Quiz complete!" : "";
+    }
+    if (state.complete && state.tie) {
+        gameResult.textContent = "It's a tie!";
+    } else if (state.complete && state.winner) {
+        gameResult.textContent = state.winner.name + " WINS! Accuracy: " + state.winner.accuracy + "%";
+    } else {
+        gameResult.textContent = "";
     }
 
     var answers = document.getElementById("flagquiz_answers");
