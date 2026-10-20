@@ -345,6 +345,10 @@ body {
   object-fit: contain;
 }
 
+.flagquiz_flag[hidden] {
+  display: none;
+}
+
 .flagquiz_answers {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

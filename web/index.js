@@ -821,6 +821,9 @@ function render_flagquiz_state(state) {
     document.getElementById("flagquiz_question_progress").textContent = progress;
     var flag = document.getElementById("flagquiz_flag");
     flag.hidden = !current;
+    if (!current) {
+        flag.removeAttribute("src");
+    }
     if (current) {
         var imagePath = "api/games/flagquiz/flag/" + encodeURIComponent(current.code);
         if (flag.getAttribute("src") !== imagePath) {
@@ -842,7 +845,7 @@ function render_flagquiz_state(state) {
             return answer.id === get_game_player_id();
         });
         var wasCorrect = Boolean(personalResult && personalResult.correct);
-        feedback.textContent = "Question " + state.last_result.question_number + ": " + state.last_result.correct_name + " ";
+        feedback.textContent = "Previous Answer: " + state.last_result.correct_name + " ";
         var resultMark = document.createElement("span");
         resultMark.className = wasCorrect ? "flagquiz_result_correct" : "flagquiz_result_incorrect";
         resultMark.textContent = wasCorrect ? "✓" : "✕";
