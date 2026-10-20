@@ -11,7 +11,7 @@ RUN apt update && apt -y install --no-install-recommends \
   cmake \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/
 ENV UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /planesign

@@ -34,7 +34,7 @@
 			"packages": "python3-dev,build-essential,cmake,sudo"
 		},
 		// Keep in step with the uv image version in the Dockerfile: a different uv can rewrite uv.lock.
-		"ghcr.io/devcontainers-extra/features/uv:1.0.2": { "version": "0.13.0" },
+		"ghcr.io/devcontainers-extra/features/uv:1.0.2": { "version": "0.13.4" },
 		"ghcr.io/devcontainers/features/git:1": {},
 		"ghcr.io/devcontainers/features/node:2": {},
 		"ghcr.io/devcontainers/features/github-cli:1": {}
