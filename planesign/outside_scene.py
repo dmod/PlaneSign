@@ -1159,10 +1159,16 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     return clouds
 
 
+# Columns a visiting deer, fox or rabbit stops at (a partner deer stands 12 columns right). While the October pumpkins
+# sit on that spot, they stop on the pond's near bank instead, the partner still clear of the pumpkins.
+WILDLIFE_TARGETS = (86, 91, 96)
+WILDLIFE_PUMPKIN_TARGETS = (54, 58, 62)
+
+
 @lru_cache(maxsize=64)
 def wildlife_visit(slot: int, seed: int):
     rng = random.Random(seed + slot * 317)
-    return rng.random() < 0.8, rng.choice(("deer", "deer", "fox", "rabbit")), rng.uniform(4, 15), rng.uniform(50, 65), rng.choice((86, 91, 96)), rng.random() < 0.5
+    return rng.random() < 0.8, rng.choice(("deer", "deer", "fox", "rabbit")), rng.uniform(4, 15), rng.uniform(50, 65), rng.randrange(len(WILDLIFE_TARGETS)), rng.random() < 0.5
 
 
 def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
@@ -1175,7 +1181,8 @@ def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
 
 def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     """Return (species, visit age, duration, target x, pair) for the visit under way, or None. Deer, foxes and rabbits
-    stay away whenever their visit would overlap the dog's time outside or an alien abduction, which brings its own deer."""
+    stay away whenever their visit would overlap the dog's time outside, an alien abduction, which brings its own deer,
+    or the October skeleton's dance."""
     if not wildlife_allowed(environment):
         return None
     slot, age = divmod(elapsed, 100)
@@ -1187,7 +1194,9 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
         return None
     if abduction_overlaps(environment, visit - elapsed, visit + duration - elapsed):
         return None
-    return species, age - start, duration, target, pair
+    if skeleton_allowed(environment) and any(skeleton_visit_shown(environment, skeleton, seed, elapsed) for skeleton in skeleton_visits_between(seed, visit, visit + duration)):
+        return None
+    return species, age - start, duration, (WILDLIFE_PUMPKIN_TARGETS if PUMPKINS in holiday_features(environment) else WILDLIFE_TARGETS)[target], pair
 
 
 def birds_allowed(environment: "OutsideEnvironment") -> bool:
@@ -2723,6 +2732,9 @@ HOLIDAYS = {
     "cannon": ("Cannon", ((7, 4, 4),)),
     "fountains": ("Fountains", ((7, 4, 4),)),
     "hotdog": ("Hotdog mascot", ((7, 4, 4),)),
+    "pumpkins": ("Pumpkins", ((10, 1, 31),)),
+    "skeleton": ("Skeleton", ((10, 1, 31),)),
+    "witch": ("Witch", ((10, 1, 31),)),
     "halloween": ("Halloween", ((10, 31, 31),)),
     "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
 }
@@ -3043,6 +3055,30 @@ SKYWRITER_DESIGNS = {
     "hi": ([(-8, -6.5), (-8, 6.5)], [(-8, 0), (-2.5, 0)], [(-2.5, -6.5), (-2.5, 6.5)], [(2, -6.5), (7, -6.5)], [(4.5, -6.5), (4.5, 6.5)], [(2, 6.5), (7, 6.5)]),
     "loops": (skywriter_curve(loop_point, -math.pi, 5 * math.pi, 480),),
 }
+# Through October a witch on a broomstick flies the skywriter's shows instead of the plane, Halloween included. She
+# only ever writes "Boo" in dark smoke, then vanishes in a burst of sparks rather than flying off.
+WITCH = "witch"
+# A tall B (its stem, then both bumps in one stroke) and two lowercase o's on the same baseline.
+WITCH_DESIGN = (
+    [(-13, 6.5), (-13, -6.5), *skywriter_arc(-13, -3.25, 5.2, 3.25, -90, 90)[1:], *skywriter_arc(-13, 3.25, 5.8, 3.25, -90, 90)[1:]],
+    skywriter_arc(-1.2, 3.2, 3.4, 3.3, -90, 275),
+    skywriter_arc(9.2, 3.2, 3.4, 3.3, -90, 275),
+)
+# Flying right, the anchor at her middle: h hat, c cloak, f face and hand, b broomstick, y bristles, s boots.
+WITCH_SPRITE = ("....h.......", "....hh......", "...hhhh.....", "..hhhhhhh...", "...cfff.....", "..ccccf.....", "yybbbbbbbbbb", "yy..ss......")
+WITCH_ANCHOR = (5, 5)
+# She enters lower than the plane, so her taller hat clears the corner labels.
+WITCH_ENTRY_ROWS = (13, 14)
+# Rows her broom tilts per column into climbs and dives.
+WITCH_TILT = 0.5
+WITCH_COLORS = {"h": (54, 22, 74), "c": (74, 28, 98), "f": (112, 196, 78), "b": (122, 78, 40), "y": (214, 172, 76), "s": (24, 16, 26)}
+# Her smoke is sooty rather than white.
+WITCH_SMOKE_SUNLIT = (104, 98, 112)
+WITCH_SMOKE_SHADE = (30, 26, 36)
+WITCH_VANISH_SECONDS = 1.1
+WITCH_SPARKS = 10
+WITCH_SPARK_REACH = 6.0
+WITCH_SPARK_COLORS = ((150, 255, 110), (210, 120, 255), (255, 236, 150))
 
 
 def unit_vector(dx: float, dy: float) -> tuple[float, float]:
@@ -3097,12 +3133,14 @@ class SkywriterShow:
         return float(xs[1]), float(ys[1]), math.atan2(ys[2] - ys[0], xs[2] - xs[0])
 
 
-def skywriter_flight(design: str, center: tuple[float, float], entry_side: int, rng: random.Random) -> tuple[list[tuple[list[tuple[float, float]], bool]], int]:
-    """The plane's legs, each (points, smoking), from entry to exit, and the side it leaves by. It crosses the corners
-    level, below the labels, and only maneuvers between the gates on either side of the design."""
+def skywriter_flight(design: tuple[list[tuple[float, float]], ...], center: tuple[float, float], entry_side: int, rng: random.Random, vanish: bool = False) -> tuple[list[tuple[list[tuple[float, float]], bool]], int]:
+    """The flier's legs, each (points, smoking), from entry to exit, and the side it leaves by. It crosses the corners
+    level, below the labels, and only maneuvers between the gates on either side of the design. One that vanishes
+    flies on just far enough for its trailing smoke to finish the last stroke, and leaves no side (0)."""
+    rows = WITCH_ENTRY_ROWS if vanish else SKYWRITER_ENTRY_ROWS
     cx, cy = center
-    strokes = [[(cx + x, cy + y) for x, y in stroke] for stroke in SKYWRITER_DESIGNS[design]]
-    row = rng.uniform(*SKYWRITER_ENTRY_ROWS)
+    strokes = [[(cx + x, cy + y) for x, y in stroke] for stroke in design]
+    row = rng.uniform(*rows)
     entry = (-12.0 if entry_side > 0 else WIDTH + 11.0, row)
     gate = (cx - entry_side * SKYWRITER_GATE, row)
     legs: list[tuple[list[tuple[float, float]], bool]] = [([entry, gate], False)]
@@ -3112,6 +3150,9 @@ def skywriter_flight(design: str, center: tuple[float, float], entry_side: int, 
         legs.append((turn(position, heading, stroke[0], first), False))
         legs.append((stroke, True))
         position, heading = stroke[-1], unit_vector(stroke[-1][0] - stroke[-2][0], stroke[-1][1] - stroke[-2][1])
+    if vanish:
+        legs.append(([position, (position[0] + heading[0] * SKYWRITER_TAIL, position[1] + heading[1] * SKYWRITER_TAIL)], False))
+        return legs, 0
     exit_side = (1 if heading[0] > 0 else -1) if abs(heading[0]) > 0.3 else rng.choice((-1, 1))
     row = rng.uniform(*SKYWRITER_ENTRY_ROWS)
     gate = (cx + exit_side * SKYWRITER_GATE, row)
@@ -3121,16 +3162,17 @@ def skywriter_flight(design: str, center: tuple[float, float], entry_side: int, 
 
 
 @lru_cache(maxsize=8)
-def skywriter_show(slot: int, seed: int) -> SkywriterShow | None:
+def skywriter_show(slot: int, seed: int, witch: bool = False) -> SkywriterShow | None:
     """A red stunt plane flies in, traces one design in puffy smoke, and leaves; the smoke holds, then breaks up.
-    Designs alternate from slot to slot. Never spans two slots."""
+    Designs alternate from slot to slot. In October the witch flies the same slots instead, writes "Boo" and vanishes.
+    Never spans two slots."""
     rng = random.Random(seed * 7919 + slot * 65537 + 41)
     if rng.random() > SKYWRITER_CHANCE:
         return None
     names = tuple(SKYWRITER_DESIGNS)
-    design = names[(slot + seed) % len(names)]
+    design = "boo" if witch else names[(slot + seed) % len(names)]
     center = (SKYWRITER_CENTER[0] + rng.uniform(-SKYWRITER_CENTER_JITTER, SKYWRITER_CENTER_JITTER), SKYWRITER_CENTER[1])
-    legs, _ = skywriter_flight(design, center, rng.choice((-1, 1)), rng)
+    legs, _ = skywriter_flight(WITCH_DESIGN if witch else SKYWRITER_DESIGNS[design], center, rng.choice((-1, 1)), rng, witch)
     # Lay the legs end to end, then resample the whole flight at an even step.
     points, smoking, lengths = [], [], [0.0]
     for leg, smoke in legs:
@@ -3182,8 +3224,8 @@ def skywriter_show(slot: int, seed: int) -> SkywriterShow | None:
 
 
 def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
-    """Sunny daylight with a light, known wind. The plane stays away when the sky is already busy: on Halloween, on
-    Christmas Eve while Santa crosses, and on fireworks days."""
+    """Sunny daylight with a light, known wind. The plane stays away when the sky is already busy: on Christmas Eve while
+    Santa crosses, and on fireworks days. On Halloween the witch still flies; the ghost and the spider skip her shows."""
     w = environment.weather
     rain, snow = precipitation(environment)
     holidays = holiday_features(environment)
@@ -3197,17 +3239,19 @@ def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
         and w.wind is not None
         and w.wind < SKYWRITER_MAX_WIND
         and (w.visibility is None or w.visibility >= SKYWRITER_MIN_VISIBILITY)
-        and not holidays & {HALLOWEEN, "santa", "fireworks"}
+        and not holidays & {"santa", "fireworks"}
     )
 
 
 def skywriter_shows_present(environment: "OutsideEnvironment", seed: int, first: float, last: float):
     """Shows under way at any time in [first, last] under the current conditions. The eagle and the songbird flock or
-    geese keep out of the sky while one is on, so nothing hides the plane or its design."""
+    geese, and on Halloween the ghost and the spider, keep out of the sky while one is on, so nothing hides the flier or
+    its design."""
     if not skywriter_allowed(environment):
         return
+    witch = WITCH in holiday_features(environment)
     for slot in range(math.floor(first / SKYWRITER_SLOT_SECONDS), math.floor(last / SKYWRITER_SLOT_SECONDS) + 1):
-        show = skywriter_show(slot, seed)
+        show = skywriter_show(slot, seed, witch)
         if show is not None and show.start <= last and show.end > first:
             yield show
 
@@ -3254,30 +3298,76 @@ def draw_skywriter(image: Image.Image, palette: Palette, environment: "OutsideEn
     if state is None:
         return image
     show, age = state
+    witch = show.design == "boo"
     shown = show.puff_emit <= age
     if shown.any():
-        image = draw_skywriting_smoke(image, palette, environment, show, age, shown)
+        image = draw_skywriting_smoke(image, palette, environment, show, age, shown, (WITCH_SMOKE_SUNLIT, WITCH_SMOKE_SHADE) if witch else (SKYWRITER_SUNLIT, SKYWRITER_SHADE))
     plane = show.plane(age)
-    if plane is not None:
-        x, y, heading = plane
-        index = round(heading / math.tau * SKYWRITER_HEADINGS) % SKYWRITER_HEADINGS
-        d = ImageDraw.Draw(image)
-        spin = 0.5 + 0.5 * math.sin(elapsed * 41)
-        for dx, dy, part in skywriter_plane_sprite(index):
+    d = ImageDraw.Draw(image)
+    if plane is None:
+        if witch:
+            draw_witch_vanish(d, show, age)
+        return image
+    x, y, heading = plane
+    index = round(heading / math.tau * SKYWRITER_HEADINGS) % SKYWRITER_HEADINGS
+    if witch:
+        for dx, dy, part in witch_sprite(index):
             px, py = round(x) + dx, round(y) + dy
-            if not (0 <= px < WIDTH and 0 <= py < HEIGHT):
-                continue
-            if part == "p":
-                # The spinning propeller is a faint, flickering disc.
-                d.point((px, py), fill=mix(image.getpixel((px, py)), SKYWRITER_PROPELLER, 0.3 + 0.35 * spin * unit_hash(dx, dy, math.floor(elapsed * 20))))
-            else:
-                d.point((px, py), fill=SKYWRITER_PLANE_COLORS[part])
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=WITCH_COLORS[part])
+        return image
+    spin = 0.5 + 0.5 * math.sin(elapsed * 41)
+    for dx, dy, part in skywriter_plane_sprite(index):
+        px, py = round(x) + dx, round(y) + dy
+        if not (0 <= px < WIDTH and 0 <= py < HEIGHT):
+            continue
+        if part == "p":
+            # The spinning propeller is a faint, flickering disc.
+            d.point((px, py), fill=mix(image.getpixel((px, py)), SKYWRITER_PROPELLER, 0.3 + 0.35 * spin * unit_hash(dx, dy, math.floor(elapsed * 20))))
+        else:
+            d.point((px, py), fill=SKYWRITER_PLANE_COLORS[part])
     return image
 
 
-def draw_skywriting_smoke(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", show: SkywriterShow, age: float, shown: np.ndarray) -> Image.Image:
+@lru_cache(maxsize=SKYWRITER_HEADINGS)
+def witch_sprite(heading_index: int) -> tuple[tuple[int, int, str], ...]:
+    """The witch's pixels (dx, dy, part) for one of eight headings, clockwise from flying right. She tilts her broom up
+    to 45 degrees into climbs and dives, and stays upright (mirrored) flying left, so her hat always points up."""
+    level = plane_cells(WITCH_SPRITE, WITCH_ANCHOR)
+    mirror = heading_index in (3, 4, 5)
+    # Her nose is at +dx; the broom's tip drops into dives and lifts into climbs while she sits upright on it.
+    slope = WITCH_TILT if heading_index in (1, 2, 3) else -WITCH_TILT if heading_index in (5, 6, 7) else 0
+    cells = [(-dx if mirror else dx, dy + (round(dx * slope) if part in "bys" else 0), part) for dx, dy, part in level]
+    # She sits in front of her broom, which passes behind her when it tilts.
+    return tuple(sorted(cells, key=lambda cell: cell[2] not in "bys"))
+
+
+def draw_witch_vanish(d: ImageDraw.ImageDraw, show: SkywriterShow, age: float):
+    """Where her flight ends she vanishes in a ring of sparks that bursts outward and winks out."""
+    since = age - (len(show.path_x) - 1) * SKYWRITER_PATH_STEP / SKYWRITER_SPEED
+    if not 0 <= since < WITCH_VANISH_SECONDS:
+        return
+    progress = since / WITCH_VANISH_SECONDS
+    cx, cy = float(show.path_x[-1]), float(show.path_y[-1])
+    for spark in range(WITCH_SPARKS):
+        angle = math.tau * (spark + 0.5 * unit_hash(spark, round(show.start), 5)) / WITCH_SPARKS
+        reach = WITCH_SPARK_REACH * (0.6 + 0.4 * unit_hash(spark, round(show.start), 6)) * (1 - (1 - progress) ** 2)
+        # Sparks twinkle out at their own moments as the burst spreads.
+        if progress > 0.5 + 0.5 * unit_hash(spark, round(show.start), 7) or math.floor(since * 16 + spark) % 3 == 0:
+            continue
+        px, py = round(cx + math.cos(angle) * reach), round(cy + math.sin(angle) * reach * 0.8)
+        if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+            d.point((px, py), fill=WITCH_SPARK_COLORS[spark % len(WITCH_SPARK_COLORS)])
+    if progress < 0.25:
+        # A bright pop where she was.
+        for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
+            if 0 <= round(cx) + dx < WIDTH and 0 <= round(cy) + dy < HEIGHT:
+                d.point((round(cx) + dx, round(cy) + dy), fill=WITCH_SPARK_COLORS[2] if (dx, dy) == (0, 0) else WITCH_SPARK_COLORS[0])
+
+
+def draw_skywriting_smoke(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", show: SkywriterShow, age: float, shown: np.ndarray, colors: tuple[Color, Color]) -> Image.Image:
     """Puffy smoke: every puff billows out from the tail, drifts downwind, and is lit from the sun's side. Where puffs
-    overlap, the newer one is in front, so each keeps its own lit edge and rim."""
+    overlap, the newer one is in front, so each keeps its own lit edge and rim. `colors` are its sunlit and shaded tones."""
     since = age - show.puff_emit[shown]
     fading = np.clip((age - show.fade - show.puff_stagger[shown]) / SKYWRITER_FADE_SECONDS, 0, 1)
     opacity = SKYWRITER_OPACITY * np.clip(since / 0.15, 0, 1) * (1 - fading) ** 1.5
@@ -3312,8 +3402,9 @@ def draw_skywriting_smoke(image: Image.Image, palette: Palette, environment: "Ou
     lit = np.clip((dx * lx + dy * ly)[pick][0] / front_radius, -1, 1)
     rim = np.clip(distance[pick][0] - front_radius + 1.2, 0, 1)
     tone = np.clip(0.75 + SKYWRITER_SHADING * lit - SKYWRITER_RIM * rim, 0, 1)
-    shade = np.array(mix(palette.middle, SKYWRITER_SHADE, 0.6), dtype=np.float32)
-    tint = shade + (np.array(SKYWRITER_SUNLIT, dtype=np.float32) - shade) * tone[..., None]
+    sunlit, shaded = colors
+    shade = np.array(mix(palette.middle, shaded, 0.6), dtype=np.float32)
+    tint = shade + (np.array(sunlit, dtype=np.float32) - shade) * tone[..., None]
     pixels = np.array(image, dtype=np.float32)
     region = pixels[top:bottom, left:right]
     region += (tint - region) * alpha[..., None]
@@ -3349,8 +3440,10 @@ ABDUCTION_SUN_ALTITUDE = SET_ALTITUDE - 0.75
 SUN_MAX_CLIMB = 0.25 / 60
 ABDUCTION_MAX_WIND = 30
 # The abducted deer grazes at one of these columns, so the saucer hovering over it clears the tree; a partner grazes
-# ABDUCTION_PAIR_GAP columns right of it and bolts when the beam comes on.
+# ABDUCTION_PAIR_GAP columns right of it and bolts when the beam comes on. While the October pumpkins sit on that
+# spot, the deer graze on the pond's near bank instead.
 ABDUCTION_TARGETS = (80, 83, 86)
+ABDUCTION_PUMPKIN_TARGETS = (52, 55, 58)
 ABDUCTION_PAIR_CHANCE = 0.6
 ABDUCTION_PAIR_GAP = 12
 ABDUCTION_FLEE_SPEED = 16
@@ -3418,8 +3511,9 @@ def abduction_overlaps(environment: "OutsideEnvironment", first: float, last: fl
 
 @lru_cache(maxsize=16)
 def abduction_plan(at: int) -> tuple[int, bool]:
+    """(index into the target columns, whether a partner comes along) for the abduction at clock time `at`."""
     rng = random.Random(at * 7 + 13)
-    return rng.choice(ABDUCTION_TARGETS), rng.random() < ABDUCTION_PAIR_CHANCE
+    return rng.randrange(len(ABDUCTION_TARGETS)), rng.random() < ABDUCTION_PAIR_CHANCE
 
 
 def abduction_state(environment: "OutsideEnvironment") -> tuple[Abduction, float] | None:
@@ -3429,7 +3523,8 @@ def abduction_state(environment: "OutsideEnvironment") -> tuple[Abduction, float
     for at in abduction_times(environment.moment, 0, 0):
         if abduction_dark(environment, at):
             target, pair = abduction_plan(round(at))
-            return Abduction(at, target, pair), environment.moment.timestamp() - at
+            columns = ABDUCTION_PUMPKIN_TARGETS if PUMPKINS in holiday_features(environment) else ABDUCTION_TARGETS
+            return Abduction(at, columns[target], pair), environment.moment.timestamp() - at
     return None
 
 
@@ -4222,6 +4317,8 @@ def fountain_light(elapsed: float, seed: int, night: float) -> np.ndarray | None
 
 
 HALLOWEEN = "halloween"
+# The jack-o'-lanterns sit out and glow all October; only on Halloween does one now and then roll away.
+PUMPKINS = "pumpkins"
 # The night sky turns a bruised violet as dusk deepens.
 HALLOWEEN_SKY_TOP = (34, 10, 54)
 HALLOWEEN_SKY_MIDDLE = (60, 26, 78)
@@ -4581,10 +4678,13 @@ def ghost_along(path: tuple[np.ndarray, np.ndarray], progress: float) -> tuple[f
     return float(np.interp(s, distance, xy[:, 0])), float(np.interp(s, distance, xy[:, 1]))
 
 
-def ghost_state(elapsed: float, seed: int):
-    """Return (x, y, facing, pose, speed) or None while no ghost is about."""
+def ghost_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Return (x, y, facing, pose, speed) or None while no ghost is about. It skips any visit that would cross the
+    witch's skywriting."""
     visit = ghost_visit(math.floor(elapsed / GHOST_SLOT_SECONDS), seed)
     if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if next(skywriter_shows_present(environment, seed, visit.start, visit.end), None) is not None:
         return None
     if visit.arrive <= elapsed < visit.leave:
         held = elapsed - visit.arrive
@@ -4612,8 +4712,8 @@ def ghost_pixels(pose: str, frame: int, facing: int) -> tuple[np.ndarray, np.nda
 GHOST_TRAIL_COLOR = mix(GHOST_WHITE, GHOST_GLOW, 0.5)
 
 
-def draw_ghost(image: Image.Image, night: float, elapsed: float, seed: int):
-    ghost = ghost_state(elapsed, seed)
+def draw_ghost(image: Image.Image, environment: "OutsideEnvironment", night: float, elapsed: float, seed: int):
+    ghost = ghost_state(environment, elapsed, seed)
     if ghost is None:
         return
     x, y, facing, pose, speed = ghost
@@ -4622,7 +4722,7 @@ def draw_ghost(image: Image.Image, night: float, elapsed: float, seed: int):
     if pose == "fly":
         # Afterimages smear out behind it while it zooms.
         for back in range(GHOST_TRAIL, 0, -1):
-            past = ghost_state(elapsed - back * GHOST_TRAIL_SPACING, seed)
+            past = ghost_state(environment, elapsed - back * GHOST_TRAIL_SPACING, seed)
             if past is not None:
                 fade = 0.38 * (1 - back / (GHOST_TRAIL + 1)) * min(1, speed / 60)
                 groups.append((ghost_pixels(past[3], frame, past[2])[0] + (round(past[0]), round(past[1])), GHOST_TRAIL_COLOR, fade))
@@ -4739,10 +4839,13 @@ def spider_visit(slot: int, seed: int) -> SpiderVisit | None:
     return SpiderVisit(start, landed, landed + hang, landed + hang + climb_seconds, x, rest, landed + rng.uniform(3, hang - 2))
 
 
-def spider_state(elapsed: float, seed: int):
-    """Return (silk column, x, abdomen top row, pose) or None while the spider is away."""
+def spider_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
+    """Return (silk column, x, abdomen top row, pose) or None while the spider is away. It hangs where the witch writes,
+    so it skips any visit that would cross her skywriting."""
     visit = spider_visit(math.floor(elapsed / SPIDER_SLOT_SECONDS), seed)
     if visit is None or not visit.start <= elapsed < visit.end:
+        return None
+    if next(skywriter_shows_present(environment, seed, visit.start, visit.end), None) is not None:
         return None
     if elapsed < visit.landed:
         progress = (elapsed - visit.start) / SPIDER_DROP_SECONDS
@@ -4818,8 +4921,8 @@ def spider_pixels(pose: str) -> tuple[tuple[np.ndarray, Color], ...]:
     return (*parts, (np.array(sorted(glow), dtype=int).reshape(-1, 2), SPIDER_COLORS["r"]))
 
 
-def draw_spider(image: Image.Image, night: float, elapsed: float, seed: int):
-    spider = spider_state(elapsed, seed)
+def draw_spider(image: Image.Image, environment: "OutsideEnvironment", night: float, elapsed: float, seed: int):
+    spider = spider_state(environment, elapsed, seed)
     if spider is None:
         return
     silk, x, y, pose = spider
@@ -5394,6 +5497,227 @@ def draw_hotdog(image: Image.Image, palette: Palette, pose: HotdogPose | None):
     draw_standing_sprite(ImageDraw.Draw(image), hotdog_sprite(pose.arms, pose.legs), pose.x, HOTDOG_FEET_ROW - pose.lift, pose.facing, colors)
 
 
+# Through October a skeleton now and then jigs in along the front of the meadow, stops to dance or breakdance at a few
+# spots across the valley and jigs off the other side. It skips the dog's outings and alien abductions, and deer, foxes
+# and rabbits skip its visits.
+SKELETON = "skeleton"
+SKELETON_SLOT_SECONDS = 120
+SKELETON_CHANCE = 0.45
+SKELETON_SPEED = 9
+SKELETON_FEET_ROW = 31
+# Where it stops to dance, clear of the pumpkins: below the lamp, in front of the hut, on the pond's near bank and past
+# the tree. A visit dances at a few of them, in the order it passes them.
+SKELETON_SPOTS = (14, 34, 56, 72, 119)
+SKELETON_STOPS = (2, 3)
+SKELETON_DANCE_SECONDS = (4.0, 7.0)
+# At each spot it breakdances instead of dancing with this chance, and every visit breakdances at least once.
+SKELETON_BREAK_CHANCE = 0.5
+SKELETON_STEP_SECONDS = 0.18
+SKELETON_BEAT_SECONDS = 0.26
+# Facing the viewer: s skull, k eye and nose sockets, b bones. Arms are overlaid on the torso and the legs hang below.
+# The skull's other views show it turning while it spins on its head.
+SKELETON_SKULLS = {
+    "front": ("...sss...", "..sssss..", "..sksks..", "..sskss..", "...sss..."),
+    "right": ("...sss...", "..sssss..", "..sssks..", "..ssssk..", "...sss..."),
+    "back": ("...sss...", "..sssss..", "..sssss..", "..sssss..", "...sss..."),
+}
+SKELETON_SKULLS["left"] = tuple(row[::-1] for row in SKELETON_SKULLS["right"])
+SKELETON_TORSO = ("....b....", "..bbbbb..", "....b....", "...bbb...", "....b....", "...bbb...")
+# The left arm as (column, row) from the torso's top row, reaching up past the skull's sides; the right arm mirrors it.
+SKELETON_ARMS = {
+    "down": ((1, 2), (1, 3), (1, 4)),
+    "up": ((1, 0), (1, -1), (0, -2)),
+    "out": ((1, 1), (0, 1), (0, 2)),
+    "jazz": ((1, 2), (0, 1), (0, 0)),
+    "swing": ((1, 2), (0, 3)),
+}
+SKELETON_LEGS = {
+    "stand": ("...b.b...", "...b.b...", "..bb.bb.."),
+    "knees": ("..b...b..", "...b.b...", "..bb.bb.."),
+    "stride": ("..b...b..", ".b.....b.", "bb.....bb"),
+    "kick_l": ("..b..b...", ".b...b...", "b....bb.."),
+    "squat": (".b.....b.", "..bb.bb.."),
+}
+SKELETON_LEGS["kick_r"] = tuple(row[::-1] for row in SKELETON_LEGS["kick_l"])
+SKELETON_SKULL_COLOR = (238, 234, 214)
+SKELETON_BONE = (206, 202, 184)
+SKELETON_SOCKET = (16, 10, 22)
+# After dark the sockets smoulder a faint green.
+SKELETON_SOCKET_GLOW = (110, 255, 150)
+SKELETON_GLOW = 0.6
+# The dance, one move per beat: (left arm, right arm, legs, rows lifted, columns swayed, rows the skull pops up off
+# its neck). Knees knock, legs kick, then it jumps and its skull flies up and settles back.
+SKELETON_DANCE = (
+    ("up", "up", "knees", 0, 0, 0),
+    ("down", "down", "stand", 0, 0, 0),
+    ("up", "up", "knees", 1, 0, 0),
+    ("down", "down", "stand", 0, 0, 0),
+    ("up", "down", "kick_l", 0, -1, 0),
+    ("out", "out", "stand", 0, 0, 0),
+    ("down", "up", "kick_r", 0, 1, 0),
+    ("out", "out", "stand", 0, 0, 0),
+    ("jazz", "jazz", "knees", 0, -1, 0),
+    ("jazz", "jazz", "stand", 0, 0, 0),
+    ("jazz", "jazz", "knees", 0, 1, 0),
+    ("jazz", "jazz", "stand", 0, 0, 0),
+    ("up", "up", "stand", 1, 0, 2),
+    ("up", "up", "stand", 0, 0, 1),
+    ("down", "down", "knees", 0, 0, 0),
+    ("out", "out", "stand", 0, 0, 0),
+)
+# The breakdance, one move per tick: (left arm, right arm, legs, skull view, quarter turns counterclockwise, ticks held).
+# It toprocks, drops to a squat, backspins on the ground, kicks up onto its skull and spins, faster and faster, holds a
+# freeze, then rolls back onto its feet and throws its arms up.
+SKELETON_BREAK_TICK = 0.13
+SKELETON_HEADSPIN = (("up", "up", "kick_l", "front", 2), ("out", "out", "stride", "right", 2), ("up", "up", "kick_r", "back", 2), ("out", "out", "stand", "left", 2))
+SKELETON_BREAK = (
+    ("up", "up", "knees", "front", 0, 2),
+    ("down", "down", "stand", "front", 0, 2),
+    ("out", "out", "kick_l", "front", 0, 2),
+    ("out", "out", "kick_r", "front", 0, 2),
+    ("down", "down", "squat", "front", 0, 3),
+    *(("down", "up", "kick_r", "front", 1, 1), ("down", "jazz", "stand", "back", 1, 1), ("up", "down", "kick_l", "front", 3, 1), ("jazz", "down", "stand", "back", 3, 1)) * 3,
+    ("up", "up", "stand", "front", 2, 3),
+    *((*move, 2) for move in SKELETON_HEADSPIN),
+    *((*move, 1) for move in SKELETON_HEADSPIN * 4),
+    ("jazz", "up", "kick_l", "front", 2, 7),
+    ("out", "out", "squat", "front", 3, 2),
+    ("down", "down", "squat", "front", 0, 2),
+    ("up", "up", "stand", "front", 0, 7),
+)
+# One entry per tick.
+SKELETON_BREAK_FRAMES = tuple(move[:5] for move in SKELETON_BREAK for _ in range(move[5]))
+SKELETON_BREAK_SECONDS = len(SKELETON_BREAK_FRAMES) * SKELETON_BREAK_TICK
+
+
+@dataclass(frozen=True)
+class SkeletonVisit:
+    start: float
+    # The entry edge, each spot it dances at, then the exit edge.
+    path: tuple[float, ...]
+    # Seconds danced at each spot.
+    dances: tuple[float, ...]
+    # Whether it breakdances at each spot.
+    breaks: tuple[bool, ...]
+
+    @property
+    def end(self) -> float:
+        return self.start + sum(abs(b - a) for a, b in zip(self.path, self.path[1:])) / SKELETON_SPEED + sum(self.dances)
+
+
+@dataclass(frozen=True)
+class SkeletonPose:
+    x: float
+    lift: int
+    arms: tuple[str, str]
+    legs: str
+    pop: int
+    skull: str = "front"
+    turn: int = 0
+
+
+@lru_cache(maxsize=8)
+def skeleton_visit(slot: int, seed: int) -> SkeletonVisit | None:
+    """The skeleton's visit in this slot, if any; it never spans two slots."""
+    rng = random.Random(seed * 5303 + slot * 80021 + 89)
+    if rng.random() >= SKELETON_CHANCE:
+        return None
+    # It starts and ends just out of frame.
+    edges = (-6.0, WIDTH + 5.0)
+    rightward = rng.random() < 0.5
+    stops = sorted(rng.sample(SKELETON_SPOTS, rng.randint(*SKELETON_STOPS)), reverse=not rightward)
+    enter, leave = edges if rightward else edges[::-1]
+    breaks = [rng.random() < SKELETON_BREAK_CHANCE for _ in stops]
+    if not any(breaks):
+        breaks[rng.randrange(len(breaks))] = True
+    breaks = tuple(breaks)
+    dances = tuple(SKELETON_BREAK_SECONDS if breaking else rng.uniform(*SKELETON_DANCE_SECONDS) for breaking in breaks)
+    visit = SkeletonVisit(0.0, (enter, *stops, leave), dances, breaks)
+    return replace(visit, start=slot * SKELETON_SLOT_SECONDS + rng.uniform(0, SKELETON_SLOT_SECONDS - visit.end))
+
+
+def skeleton_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return SKELETON in holiday_features(environment) and rain < 3 and snow < 2
+
+
+def skeleton_visits_between(seed: int, first: float, last: float):
+    for slot in range(math.floor(first / SKELETON_SLOT_SECONDS), math.floor(last / SKELETON_SLOT_SECONDS) + 1):
+        visit = skeleton_visit(slot, seed)
+        if visit is not None and visit.start < last and visit.end > first:
+            yield visit
+
+
+def skeleton_visit_shown(environment: "OutsideEnvironment", visit: SkeletonVisit, seed: int, elapsed: float) -> bool:
+    """Whether a visit goes ahead: not while the dog is out or an abduction is on (`elapsed` is the animation clock at
+    the displayed moment)."""
+    if dog_allowed(environment) and next(dog_outings_between(seed, visit.start, visit.end), None) is not None:
+        return False
+    return not abduction_overlaps(environment, visit.start - elapsed, visit.end - elapsed)
+
+
+def skeleton_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> SkeletonPose | None:
+    if not skeleton_allowed(environment):
+        return None
+    visit = skeleton_visit(math.floor(elapsed / SKELETON_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end or not skeleton_visit_shown(environment, visit, seed, elapsed):
+        return None
+    age = elapsed - visit.start
+    for index, (origin, target) in enumerate(zip(visit.path, visit.path[1:])):
+        travel = abs(target - origin) / SKELETON_SPEED
+        if age < travel:
+            # A skipping jig between spots: arms swing in turn and it bobs a row on every other step.
+            step = math.floor(age / SKELETON_STEP_SECONDS) % 2
+            heading = 1 if target > origin else -1
+            return SkeletonPose(origin + heading * SKELETON_SPEED * age, step, (("swing", "down"), ("down", "swing"))[step], ("stride", "knees")[step], 0)
+        age -= travel
+        if index < len(visit.dances):
+            if age < visit.dances[index]:
+                if visit.breaks[index]:
+                    left, right, legs, skull, turn = SKELETON_BREAK_FRAMES[min(math.floor(age / SKELETON_BREAK_TICK), len(SKELETON_BREAK_FRAMES) - 1)]
+                    return SkeletonPose(target, 0, (left, right), legs, 0, skull, turn)
+                left, right, legs, lift, sway, pop = SKELETON_DANCE[math.floor(age / SKELETON_BEAT_SECONDS) % len(SKELETON_DANCE)]
+                return SkeletonPose(target + sway, lift, (left, right), legs, pop)
+            age -= visit.dances[index]
+    return None
+
+
+@lru_cache(maxsize=128)
+def skeleton_sprite(left: str, right: str, legs: str, pop: int, skull: str = "front", turn: int = 0) -> tuple[str, ...]:
+    """The upright skeleton, turned `turn` quarter turns counterclockwise, with blank rows trimmed so whatever is lowest
+    (feet, skull or side) rests on the ground."""
+    head = SKELETON_SKULLS[skull]
+    blank = "." * len(SKELETON_TORSO[0])
+    rows = [list(line) for line in (*head, *(blank,) * pop, *SKELETON_TORSO, *SKELETON_LEGS[legs])]
+    top = len(head) + pop
+    last = len(blank) - 1
+    for name, mirrored in ((left, False), (right, True)):
+        for column, row in SKELETON_ARMS[name]:
+            rows[top + row][last - column if mirrored else column] = "b"
+    for _ in range(turn % 4):
+        rows = [[line[len(rows[0]) - 1 - r] for line in rows] for r in range(len(rows[0]))]
+    lines = ["".join(line) for line in rows]
+    while lines and set(lines[-1]) == {"."}:
+        lines.pop()
+    while lines and set(lines[0]) == {"."}:
+        lines.pop(0)
+    return tuple(lines)
+
+
+def draw_skeleton(image: Image.Image, palette: Palette, pose: SkeletonPose | None, night: float):
+    if pose is None:
+        return
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    # The bones stay pale after dark, as if moonlit.
+    shade = 0.45 + 0.55 * illumination
+    colors = {
+        "s": tuple(round(value * shade) for value in SKELETON_SKULL_COLOR),
+        "b": tuple(round(value * shade) for value in SKELETON_BONE),
+        "k": mix(SKELETON_SOCKET, SKELETON_SOCKET_GLOW, SKELETON_GLOW * night),
+    }
+    draw_standing_sprite(ImageDraw.Draw(image), skeleton_sprite(*pose.arms, pose.legs, pose.pop, pose.skull, pose.turn), pose.x, SKELETON_FEET_ROW - pose.lift, 1, colors)
+
+
 # Geese fly over in a V through the spring and fall migrations, (month, day, month, day) spans per hemisphere, with the
 # south's six months from the north's. On Thanksgiving they come over far more often and replace the songbird flock.
 GEESE_MIGRATIONS = {"north": ((2, 20, 4, 30), (9, 15, 11, 30)), "south": ((3, 15, 5, 31), (8, 20, 10, 31))}
@@ -5496,8 +5820,8 @@ BEACH_WIND, BEACH_WIND_MARGIN = 15, 3
 BEACH_SUN_ALTITUDE, BEACH_SUN_MARGIN = 10, 2
 # Clear, few and scattered clouds; every other condition (drizzle, rain, storms, snow, haze, fog, heavy cloud) keeps it down.
 BEACH_CODES = frozenset({800, 801, 802})
-# The July 4 cannon, the Halloween jack-o'-lanterns and the Thanksgiving harvest display stand on the umbrella's spot.
-BEACH_HOLIDAYS = frozenset({"cannon", HALLOWEEN, THANKSGIVING})
+# The July 4 cannon, the October jack-o'-lanterns and the Thanksgiving harvest display stand on the umbrella's spot.
+BEACH_HOLIDAYS = frozenset({"cannon", PUMPKINS, THANKSGIVING})
 # A red and white striped beach umbrella leaning a little right, with "o" the foot of its pole at UMBRELLA_FOOT.
 # R and W are the lit panels, r and w their shaded rim, T the finial and P the pole.
 UMBRELLA_SPRITE = (
@@ -5649,7 +5973,7 @@ def crisp_weather(environment: "OutsideEnvironment", lit: bool) -> bool:
 
 def campfire_state(environment: "OutsideEnvironment") -> tuple[float, float] | None:
     """(flames, coals), each 0..1, while the campfire burns: on a crisp evening between sunset and local midnight, on
-    no holiday."""
+    no holiday (which includes all of October, while the pumpkins sit on its spot)."""
     altitude, left = environment.sun_altitude, environment.until_midnight
     if not environment.crisp or altitude is None or left is None or altitude >= SET_ALTITUDE or left > CAMPFIRE_EVENING_SECONDS:
         return None
@@ -5911,7 +6235,7 @@ SUMMONS = {
     "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween and Thanksgiving, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
-    "skywriter": Summon("Skywriting plane", "The skywriting plane flies in sunny daylight with a light wind, but not on Halloween, Christmas Eve or fireworks days.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
+    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve or fireworks days. In October a witch flies instead.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
     "abduction": Summon(
         "Alien abduction",
         "A saucer beams up a deer at 11:11 PM, 12:12, 1:11, 2:22, 3:33, 4:44 and 5:55 AM while the sun is down, in fair weather without fog or a gale, but not on Halloween, Thanksgiving or July 4 or while the campfire burns. Summoning moves the lab clock to the next one.",
@@ -5924,10 +6248,11 @@ SUMMONS = {
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
     "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
     "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
-    "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(t, s) is not None, 0.5, 0.25),
+    "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(e, t, s) is not None, 0.5, 0.25),
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
-    "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(t, s) is not None, 0.5, 0.25),
+    "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(e, t, s) is not None, 0.5, 0.25),
     "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
+    "skeleton": Summon("Skeleton", "The skeleton only dances in October, and not in a downpour or heavy snow.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
     "leaves": Summon("Falling leaves", "Leaves fall in autumn and blossom petals in spring, in dry weather with a known wind, but not on Halloween.", leaves_allowed, lambda e, t, s: bool(leaf_particles(e, t, s)), 0.5, 0.5),
 }
@@ -6014,12 +6339,14 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             fd.ellipse((x, 22 + index, x + 70, 25 + index), fill=(*palette.far, 90))
         image.paste(fog, (0, 0), fog)
     halloween = HALLOWEEN in holidays
+    pumpkins = PUMPKINS in holidays
     shadow = shadow_state(elapsed, seed) if halloween else None
     roll = jack_roll_state(elapsed, seed) if halloween else None
     if halloween:
         image = draw_halloween_mist(image, night, elapsed)
         # The lurking figure stands farther back than the pumpkins, which roll in front of it.
         draw_shadow_figure(image, shadow, elapsed)
+    if pumpkins:
         draw_jack_o_lanterns(image, palette, night, elapsed, roll)
     thanksgiving = THANKSGIVING in holidays
     if thanksgiving:
@@ -6060,13 +6387,15 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_leaves(image, palette, environment, elapsed, seed)
     # The mascot walks along the front of the meadow, in front of everything that stands on it, the tree included.
     draw_hotdog(image, palette, hotdog_state(environment, elapsed, seed))
+    # So does the October skeleton.
+    draw_skeleton(image, palette, skeleton_state(environment, elapsed, seed), night)
     if tree_ornaments_shown(environment):
         draw_tree_ornaments(image, night, elapsed)
     # The owl perches on the fixed branch, in front of the swaying foliage.
     draw_owl(image, palette, owl_state(environment, elapsed, seed))
     if halloween:
         draw_cobweb(image, night, elapsed, seed)
-        draw_spider(image, night, elapsed, seed)
+        draw_spider(image, environment, night, elapsed, seed)
     if rain > 0:
         draw_rain(image, rain, wind, elapsed)
     if snow > 0:
@@ -6085,10 +6414,11 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     if blast is not None:
         image = composite_light(image, blast)
     draw_cannon_ball(image, palette, cannon, night)
-    if halloween:
+    if pumpkins:
         image = draw_jack_o_lantern_glow(image, night, elapsed, roll)
+    if halloween:
         draw_shadow_eyes(image, shadow, night, elapsed)
-        draw_ghost(image, night, elapsed, seed)
+        draw_ghost(image, environment, night, elapsed, seed)
     if thanksgiving:
         image = draw_lantern_glow(image, night, elapsed)
     # The campfire's light warms everything near it; its flames and embers are in front of the tree.
