@@ -28,13 +28,11 @@ RUN apt update && apt -y install --no-install-recommends \
   nginx \
   openssl \
   ca-certificates \
-  curl \
   python3 \
-  libpython3.14 \
   mpg123 \
   alsa-utils \
   && apt clean \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* /usr/lib/python3.*/test
 
 WORKDIR /planesign
 
@@ -42,9 +40,9 @@ EXPOSE 80/tcp 443/tcp
 
 # Least to most frequently changed, so a source-only update downloads just the last layer.
 # Any layer after a changed one gets a new digest, even with identical files.
-COPY --from=builder /planesign/.venv /planesign/.venv
+COPY --from=builder --exclude=**/tests /planesign/.venv /planesign/.venv
 COPY datafiles datafiles
-COPY fonts fonts
+COPY fonts/4x6.* fonts/5x7.* fonts/6x13.* fonts/9x18B.* fonts/helvR12.* fonts/
 COPY icons icons
 COPY sounds sounds
 COPY --exclude=datafiles --exclude=fonts --exclude=icons --exclude=sounds . .

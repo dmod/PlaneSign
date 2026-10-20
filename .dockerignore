@@ -1,5 +1,6 @@
 .git
 .venv
+.ruff_cache
 vendor
 logs
 .data

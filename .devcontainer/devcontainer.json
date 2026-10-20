@@ -13,6 +13,10 @@
 	"containerEnv": {
 		"PLANESIGN_LOG_FILE": "logs/planesign-dev.log"
 	},
+	// The Docker daemon resolves bind-mount sources on the host, where the workspace is not at /workspaces.
+	"remoteEnv": {
+		"LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
+	},
 	// Run as Ubuntu's uid-1000 user so files written to the bind-mounted
 	// workspace stay owned by the Pi's pi user; root work goes through sudo.
 	"remoteUser": "ubuntu",
@@ -37,7 +41,11 @@
 		"ghcr.io/devcontainers-extra/features/uv:1.0.2": { "version": "0.13.4" },
 		"ghcr.io/devcontainers/features/git:1": {},
 		"ghcr.io/devcontainers/features/node:2": {},
-		"ghcr.io/devcontainers/features/github-cli:1": {}
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		// Uses the host's daemon (the Pi's, or Docker Desktop's on a Mac) rather than a nested one, so image
+		// builds share the host's layer cache and the production sign container can be stopped from here.
+		// The Compose plugin is still installed; "none" only skips the legacy standalone docker-compose.
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": { "dockerDashComposeVersion": "none" }
 	},
 	// A pinned uv version is resolved with `git ls-remote`, and the image has no git,
 	// so git must be installed before the uv feature runs.
