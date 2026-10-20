@@ -10,7 +10,7 @@ WEATHER_CITY_NAME=Severn
 #checkbox - Use 24-hour time
 MILITARY_TIME=false
 
-#checkbox - Scroll airport names
+#checkbox - Scroll the full name of the airport farthest from the sensor
 AIRPORT_SCROLL=true
 
 #checkbox - Hide Starlink satellites
@@ -48,6 +48,3 @@ N2YO_API_KEY=
 
 #text secret - Finnhub API key
 FINNHUB_API_KEY=
-
-#text - Airport codes that won't have their full names displayed, comma-separated
-IGNORE_AIRPORT_CODES=BWI,IAD,DCA

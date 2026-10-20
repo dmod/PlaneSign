@@ -252,34 +252,17 @@ def show_a_plane(sign, plane_to_show, scroll):
 
         prev_stats = plane_to_show
 
-        origin_distance = 0
-        if plane_to_show.origin_airport_iata and plane_to_show.origin_airport_iata not in shared_config.airport_codes_to_ignore:
-            origin_config = shared_config.code_to_airport.get(plane_to_show.origin_airport_iata)
-            if origin_config:
-                origin_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (origin_config[1], origin_config[2]))
-                logging.info(f"Origin is {origin_distance:.2f} miles away")
-
-        destination_distance = 0
-        if plane_to_show.destination_airport_iata and plane_to_show.destination_airport_iata not in shared_config.airport_codes_to_ignore:
-            destination_config = shared_config.code_to_airport.get(plane_to_show.destination_airport_iata)
-            if destination_config:
-                destination_distance = utilities.get_distance((float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"])), (destination_config[1], destination_config[2]))
-                logging.info(f"Destination is {destination_distance:.2f} miles away")
-
-        if origin_distance == 0 and destination_distance == 0:
-            friendly_name = ""
-        elif origin_distance != 0 and destination_distance == 0:
-            friendly_name = shorten_airport_name(origin_config[0], 14)
-        elif origin_distance == 0 and destination_distance != 0:
-            friendly_name = shorten_airport_name(destination_config[0], 14)
-        else:
-            if shared_config.CONF["AIRPORT_SCROLL"].lower() == "true":
-                friendly_name = f"{shorten_airport_name(origin_config[0], 10)} to {shorten_airport_name(destination_config[0], 10)}"
-            else:
-                if origin_distance > destination_distance:
-                    friendly_name = origin_config[0]
-                else:
-                    friendly_name = destination_config[0]
+        sensor_location = (float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
+        friendly_name = ""
+        furthest_distance = -1
+        for code in (plane_to_show.origin_airport_iata, plane_to_show.destination_airport_iata):
+            airport_config = shared_config.code_to_airport.get(code)
+            if airport_config:
+                distance = utilities.get_distance(sensor_location, (airport_config[1], airport_config[2]))
+                logging.info(f"Airport {code} is {distance:.2f} miles away")
+                if distance >= furthest_distance:
+                    furthest_distance = distance
+                    friendly_name = utilities.fix_chars(airport_config[0])
 
         logging.info("Full airport name from code: " + friendly_name)
 
@@ -296,7 +279,7 @@ def show_a_plane(sign, plane_to_show, scroll):
                 scroll.text = friendly_name
                 scroll.draw()
             else:
-                graphics.DrawText(sign.canvas, sign.font57, 2, 21, graphics.Color(200, 10, 10), friendly_name[:14])
+                graphics.DrawText(sign.canvas, sign.font57, 2, 21, graphics.Color(200, 10, 10), shorten_airport_name(friendly_name, 14)[:14])
             graphics.DrawText(sign.canvas, sign.font57, 37, 30, graphics.Color(0, 0, 200), formatted_flight)
             graphics.DrawText(sign.canvas, sign.font57, 2, 30, graphics.Color(180, 180, 180), plane_to_show.aircraft_code)
 

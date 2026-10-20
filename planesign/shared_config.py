@@ -88,7 +88,6 @@ arg_dict = None
 CONF = None
 
 code_to_airport = {}
-airport_codes_to_ignore = set()
 country_name_to_code = {}
 
 

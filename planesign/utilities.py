@@ -91,8 +91,6 @@ def read_config():
         logging.info(f"Detected timezone to be {local_tz}")
         shared_config.local_timezone = ZoneInfo(local_tz)
 
-    shared_config.airport_codes_to_ignore = set(shared_config.CONF["IGNORE_AIRPORT_CODES"].split(","))
-
 
 def acquire_lock(filepath):
     while True:
