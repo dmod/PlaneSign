@@ -253,9 +253,10 @@ main() {
   install_from_clone sign.conf.sample "$INSTALL_DIR/sign.conf.sample"
   install_from_clone compose.yaml "$COMPOSE_FILE"
 
-  # Persistent host directories, seeded from the same checkout. sketches is not
-  # tracked in the repository, so it is left empty for the runtime to populate.
-  for dir in datafiles sketches icons; do
+  # Persistent host directories, seeded from the same checkout. sketches and logs are not
+  # tracked in the repository, so they are left empty for the runtime to populate. Each must
+  # exist before `compose up`, or Docker creates the missing bind-mount source owned by root.
+  for dir in datafiles sketches icons logs; do
       install -d \
           -o "$RUN_USER" \
           -g "$RUN_GROUP" \

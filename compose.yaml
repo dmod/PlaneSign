@@ -11,3 +11,12 @@ services:
       - ./datafiles:/planesign/datafiles
       - ./sketches:/planesign/sketches
       - ./icons:/planesign/icons
+      - ./logs:/planesign/logs
+      # Log timestamps and the midnight log rotation follow the Pi's timezone instead of UTC.
+      - /etc/localtime:/etc/localtime:ro
+    # The app's own log is in ./logs; stdout only needs to cover recent history and crashes.
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"

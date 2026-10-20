@@ -5,7 +5,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 
 ## Documentation Policy
 - Update `README.md` ONLY when the project's installation instructions change. Do not update it for general operation, configuration, usage, display features, routine bug fixes, or as a changelog.
-- Agent guidance lives here and in `.github/instructions/`. Those scoped files load only for matching work: `outside.instructions.md` (Outside mode), `free-sketch.instructions.md` (the Free Sketch modal), `docker.instructions.md` (the image, installer and nginx) and `visual-verification.instructions.md` (screenshots, offline renders, layout comparisons). Put guidance for a single mode or area in a scoped file, not here.
+- Agent guidance lives here and in `.github/instructions/`. Those scoped files load only for matching work: `outside.instructions.md` (Outside mode), `free-sketch.instructions.md` (the Free Sketch modal), `docker.instructions.md` (the image, installer, compose file and nginx) and `visual-verification.instructions.md` (screenshots, offline renders, layout comparisons). Put guidance for a single mode or area in a scoped file, not here.
 - Record rules, constraints and their reasons: things an agent would get wrong that it cannot quickly find in the code. Do not record values or behavior the code already states, such as coordinates, sizes, timings, percentages or feature descriptions. Put a comment next to a non-obvious constant instead.
 - Never record session-specific process IDs, temporary paths, credentials, or speculative explanations.
 
@@ -18,6 +18,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`planesign/`** — Main application. Each display mode is its own module (e.g. `planes.py`, `weather.py`, `moon.py`), registered with the `@planesign_mode_handler(DisplayMode.X)` decorator from `modes.py`. The entry point imports the mode modules to populate the registry.
 - **`planesign/planesign.py`** — `PlaneSign` class: initializes the matrix, loads fonts, and runs the sign loop that dispatches to mode handlers.
 - **`planesign/shared_config.py`** — Shared multiprocessing state and the configuration loaded from `sign.conf`.
+- **Logging** — Every process logs through a `QueueHandler` into one queue, and the `LogWriter` process writes the log file. It drops root to the owner of the `logs/` folder before opening anything, so every log file it creates is `pi`-owned; its only `chown` hands over a current log left by an earlier root run, which it could not otherwise append to. It stops only on `stop_log_writer`'s `None` (or when the main process dies), so records from late in shutdown still reach the file; never stop it on the shutdown event. If it fails to start, the root logger gets no `QueueHandler`, because a queue with no reader fills its pipe and blocks every process's logging and exit. Start new worker processes as `Process(target=run_worker, args=(fn, ...))` in `__main__.py`, from the main thread: `run_worker` logs an uncaught exception instead of printing it only to stderr, which the classic install discards, and has the kernel kill the worker if the sign dies, a signal that fires when the starting *thread* exits. The devcontainer sets `PLANESIGN_LOG_FILE` to `logs/planesign-dev.log`, because the workspace is the Pi's `~/PlaneSign`, where the production container writes `logs/planesign.log`: two handlers rotating one file break each other's rollover.
 - **`planesign/api.py`** — Flask API on port 5055. nginx proxies `/api/` to it.
 - **`planesign/utilities.py`** — Shared drawing and math helpers. Center text with `get_centered_text_x_offset_value(font_width, text)` (the center is x=64).
 - **`planesign/psclock.py`** — The sign's wall clock: real time unless `--fake-time`, `--time-speed` or `/debug/clock` shifts it for testing.
@@ -150,7 +151,7 @@ uv run python planesign/__main__.py --web --api-port 5065 --ws-port 5066 \
 
 - nginx only proxies `/api/` to 5055. Call the other API directly (`curl http://127.0.0.1:5065/...`), capture frames from `http://127.0.0.1:5066/frame.png`, and preview at `http://localhost/display.html?ws_port=5066`.
 - `--config PATH` reads and saves settings in that file, so `/write_config` cannot touch `sign.conf`. Keep the copy in the session workspace (it holds API keys) and delete it afterwards. `--set KEY=VALUE` (repeatable) overrides a setting without changing any file.
-- Both instances share `logs/planesign.log`, `datafiles/` and `sketches/`. Stop the isolated instance when finished.
+- Both instances share the log file, `datafiles/` and `sketches/`. Stop the isolated instance when finished.
 
 ### Driving The Sign From The Terminal
 - Call the Flask API at `http://127.0.0.1:5055`: for example `/set_mode/<DISPLAYMODE_NAME>`, `/status`, and the mode endpoints in `planesign/api.py`. If `curl` is missing from an older container, use `.venv/bin/python -c "import urllib.request; ..."`.

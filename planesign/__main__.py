@@ -72,11 +72,18 @@ elif cli_args.web:
 
     sys.modules["rgbmatrix"] = emulated_matrix
 
+import atexit
+import ctypes
 import logging
+import logging.handlers
 import os
 import signal
 import sys
-from multiprocessing import Manager, Process, Queue
+import threading
+import traceback
+from multiprocessing import Pipe, Process, Queue, current_process
+from multiprocessing.managers import SyncManager
+from queue import Empty as QueueEmpty
 
 import api
 import cca
@@ -115,7 +122,22 @@ from modes import DisplayMode, defined_mode_handlers, startup_mode_names
 
 import planesign
 
-manager = Manager()
+main_pid = os.getpid()
+_PR_SET_PDEATHSIG = 1
+_libc = ctypes.CDLL(None, use_errno=True)
+
+
+def die_with_parent():
+    # A SIGKILL'd sign cannot stop its children, which would keep running and hold port 5055, so have
+    # the kernel kill them with it. The signal fires when the *thread* that started the child exits, so
+    # start every child from the main thread. Under Docker, PID 1 dying already ends the container.
+    _libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)
+    if os.getppid() != main_pid:  # the sign died before prctl took effect
+        os._exit(1)
+
+
+manager = SyncManager()
+manager.start(initializer=die_with_parent)
 shared_config.shared_games_lock = manager.RLock()
 shared_config.data_dict = manager.dict()
 shared_config.arg_dict = manager.dict()
@@ -138,36 +160,110 @@ signal.signal(signal.SIGTERM, exit_gracefully)
 
 
 def log_file_rotation_namer(default_name):
-    base_filename, ext, date = default_name.split(".")
-    return f"{base_filename}.{date}.{ext}"
+    # planesign.log.2026-10-19 -> planesign.2026-10-19.log, whatever dots the folders' names contain
+    base, date = default_name.rsplit(".", 1)
+    stem, ext = os.path.splitext(base)
+    return f"{stem}.{date}{ext}"
 
 
-def log_listener_process(queue):
+def open_log_file():
+    os.makedirs(os.path.dirname(os.path.abspath(shared_config.log_filename)), exist_ok=True)
+    handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight", backupCount=30)
+    handler.namer = log_file_rotation_namer
+    handler.setFormatter(logging.Formatter("%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s"))
+    return handler
+
+
+def drop_root_to_log_folder_owner():
+    # The sign runs as root for the panel driver, but logs/ belongs to pi. Writing as its owner keeps
+    # every log file, including each new one after a midnight rollover, editable over SSH and from
+    # the devcontainer. The folder may not exist yet; then its nearest existing parent decides.
+    folder = os.path.dirname(os.path.abspath(shared_config.log_filename))
+    while not os.path.isdir(folder):
+        folder = os.path.dirname(folder)
+    owner = os.stat(folder)
+    log_path = os.path.abspath(shared_config.log_filename)
+    # A log an earlier root run left behind could no longer be appended to.
+    if os.path.isfile(log_path) and os.stat(log_path).st_uid != owner.st_uid:
+        os.chown(log_path, owner.st_uid, owner.st_gid)
+    os.setgroups([])
+    os.setgid(owner.st_gid)
+    os.setuid(owner.st_uid)
+
+
+def run_log_writer(records, status):
+    # Ctrl+C reaches the whole process group; the writer must outlive the shutdown it is logging.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    root = logging.getLogger()
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    try:
+        if os.geteuid() == 0:
+            drop_root_to_log_folder_owner()
+        file_handler = open_log_file()
+    except Exception as error:  # noqa: BLE001 - reported to the sign, which falls back to the console
+        status.send(f"{type(error).__name__}: {error}")
+        return
+    status.send(None)
+    status.close()
 
-    os.makedirs(os.path.dirname(shared_config.log_filename), exist_ok=True)
-    log_handler = logging.handlers.TimedRotatingFileHandler(shared_config.log_filename, when="midnight", backupCount=90)
-    log_handler.namer = log_file_rotation_namer
-    log_handler.setFormatter(logging.Formatter("%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s"))
-
-    root.addHandler(log_handler)
-
+    # Only the None from stop_log_writer ends this loop, so records logged late in shutdown still
+    # reach the file. A record that cannot be unpickled must not end logging for the whole sign.
     while True:
         try:
-            record = queue.get(timeout=1)
-        except Exception:
-            if shared_config.shared_shutdown_event.is_set():
-                break
+            record = records.get(timeout=1)
+        except QueueEmpty:
+            # Not die_with_parent: a SIGKILL would drop the records still in the pipe, and dropping
+            # root clears the parent-death signal anyway.
+            if os.getppid() != main_pid:
+                return  # the sign died without stopping the writer
+            continue
+        except (EOFError, OSError):
+            return
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
             continue
         if record is None:
-            break
-        root.handle(record)
+            return
+        file_handler.handle(record)
 
 
+# Every process logs into this queue, and the LogWriter process writes the file without root.
+# If it cannot start, nothing may log into the queue: with no reader, the pipe fills up and blocks
+# every process's logging and its exit.
 logging_queue = Queue(-1)
-listener = Process(target=log_listener_process, args=(logging_queue,))
-listener.start()
+log_writer_status, log_writer_status_sender = Pipe(duplex=False)
+log_writer = Process(target=run_log_writer, args=(logging_queue, log_writer_status_sender), name="LogWriter", daemon=True)
+log_writer.start()
+log_writer_status_sender.close()
+if log_writer_status.poll(10):
+    try:
+        log_file_error = log_writer_status.recv()
+    except EOFError:
+        log_file_error = "the log writer exited while starting"
+else:
+    log_file_error = "the log writer did not start within 10 s"
+log_writer_status.close()
+if log_file_error is not None:
+    if log_writer.is_alive():
+        log_writer.kill()
+    log_writer.join(timeout=2)
+    log_writer = None
+
+
+def stop_log_writer():
+    if log_writer is None or os.getpid() != main_pid:
+        return
+    if log_writer.is_alive():
+        logging_queue.put(None)
+        log_writer.join(timeout=5)
+        if log_writer.is_alive():
+            log_writer.kill()
+            log_writer.join(timeout=2)
+    # Nothing reads the queue any more, so don't let records logged after this block interpreter exit.
+    logging_queue.cancel_join_thread()
+
+
+# Also covers a crash before the main try block below; atexit runs after sys.excepthook has logged it.
+atexit.register(stop_log_writer)
 
 _STANDARD_LOG_RECORD_KEYS = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
 
@@ -189,30 +285,76 @@ class SanitizingQueueHandler(logging.handlers.QueueHandler):
 
 queue_handler = SanitizingQueueHandler(logging_queue)
 
+
+class SuccessfulRequestFilter(logging.Filter):
+    # werkzeug logs every request at INFO with (request line, status, size) as args. The web UI's
+    # polling made those over half of all log lines, so only keep requests that failed.
+    def filter(self, record):
+        args = record.args
+        return not (isinstance(args, tuple) and len(args) == 3 and str(args[1])[:1] in ("1", "2", "3"))
+
+
+# The file keeps DEBUG; stdout (docker logs, the terminal) only needs INFO and up.
 console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
 console_formatter = logging.Formatter("%(asctime)s [%(levelname)s] - %(message)s")
 console_handler.setFormatter(console_formatter)
 
 root = logging.getLogger()
-root.addHandler(queue_handler)
+if log_writer is not None:
+    root.addHandler(queue_handler)
 root.addHandler(console_handler)
 root.setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fiona.ogrext").setLevel(logging.WARNING)
 logging.getLogger("websockets").setLevel(logging.WARNING)
+logging.getLogger("werkzeug").addFilter(SuccessfulRequestFilter())
+if log_file_error is not None:
+    logging.error(f"Cannot open {shared_config.log_filename} ({log_file_error}); logging to the console only")
+
+
+# Uncaught exceptions would otherwise go only to stderr, which the classic install discards.
+# Child processes inherit both hooks.
+def log_uncaught_exception(exc_type, exc_value, exc_tb):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+        return
+    logging.critical(f"Uncaught exception in {current_process().name}", exc_info=(exc_type, exc_value, exc_tb))
+
+
+def log_uncaught_thread_exception(args):
+    if issubclass(args.exc_type, SystemExit):
+        return
+    thread_name = args.thread.name if args.thread is not None else "an unknown thread"
+    logging.critical(f"Uncaught exception in {current_process().name} thread {thread_name}", exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+
+sys.excepthook = log_uncaught_exception
+threading.excepthook = log_uncaught_thread_exception
+
+
+def run_worker(target, *args):
+    die_with_parent()
+    # multiprocessing prints a worker's uncaught exception to stderr only, so log it here instead.
+    try:
+        target(*args)
+    except Exception:
+        logging.exception(f"{current_process().name} crashed; its data stops updating until the sign restarts")
+        sys.exit(1)
+
 
 utilities.read_static_airport_data()
 utilities.read_static_country_data()
 utilities.detect_usb_audio_device()
 
-api_server_process = Process(target=api.api_server, name="APIServer")
-plane_data_process = Process(target=planes.get_plane_data_worker, name="PlaneData", args=(shared_config.data_dict,))
-weather_data_process = Process(target=weather.get_weather_data_worker, name="WeatherData", args=(shared_config.data_dict,))
-tides_data_process = Process(target=tides.get_tides_data_worker, name="TidesData", args=(shared_config.data_dict,))
-nfl_data_process = Process(target=nfl.get_nfl_data_worker, name="NFLData", args=(shared_config.data_dict,))
-mlb_data_process = Process(target=mlb.get_mlb_data_worker, name="MLBData", args=(shared_config.data_dict,))
-outside_data_process = Process(target=outside.get_outside_data_worker, name="OutsideData", args=(shared_config.data_dict,))
+api_server_process = Process(target=run_worker, name="APIServer", args=(api.api_server,))
+plane_data_process = Process(target=run_worker, name="PlaneData", args=(planes.get_plane_data_worker, shared_config.data_dict))
+weather_data_process = Process(target=run_worker, name="WeatherData", args=(weather.get_weather_data_worker, shared_config.data_dict))
+tides_data_process = Process(target=run_worker, name="TidesData", args=(tides.get_tides_data_worker, shared_config.data_dict))
+nfl_data_process = Process(target=run_worker, name="NFLData", args=(nfl.get_nfl_data_worker, shared_config.data_dict))
+mlb_data_process = Process(target=run_worker, name="MLBData", args=(mlb.get_mlb_data_worker, shared_config.data_dict))
+outside_data_process = Process(target=run_worker, name="OutsideData", args=(outside.get_outside_data_worker, shared_config.data_dict))
 
 utilities.read_config()
 
@@ -230,6 +372,7 @@ if not startup_mode:
 
 workers = [(api_server_process, 5), (plane_data_process, 10), (weather_data_process, 10), (tides_data_process, 10), (nfl_data_process, 10), (mlb_data_process, 10), (outside_data_process, 5)]
 ps = None
+exit_code = 0
 try:
     for process, _ in workers:
         process.start()
@@ -237,6 +380,10 @@ try:
     defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
     shared_config.shared_mode.value = DisplayMode[startup_mode].value
     ps.sign_loop()
+except Exception:
+    # Logged here because the finally block stops the log writer before sys.excepthook would run.
+    logging.exception("The sign loop crashed")
+    exit_code = 1
 finally:
     logging.info("Shutting down sign and child processes...")
     shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
@@ -258,10 +405,7 @@ finally:
             if close_display is not None:
                 close_display()
     finally:
-        logging_queue.put(None)
-        listener.join(timeout=5)
-        if listener.is_alive():
-            listener.terminate()
-            listener.join(timeout=2)
+        stop_log_writer()
 
 print("Done.")
+sys.exit(exit_code)

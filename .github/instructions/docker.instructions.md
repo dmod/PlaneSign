@@ -1,6 +1,6 @@
 ---
-description: "Use when changing the Docker image, the installer or the nginx config: Dockerfile, docker_install_and_update.sh, docker_nginx_planesign.conf, .python-version. Covers the Python/venv linkage and Docker's repository format."
-applyTo: "Dockerfile, docker_install_and_update.sh, docker_nginx_planesign.conf, .python-version"
+description: "Use when changing the Docker image, the installer, the compose file or the nginx config: Dockerfile, docker_install_and_update.sh, compose.yaml, docker_nginx_planesign.conf, .python-version. Covers the Python/venv linkage, Docker's repository format, bind mounts and logging."
+applyTo: "Dockerfile, docker_install_and_update.sh, compose.yaml, docker_nginx_planesign.conf, .python-version"
 ---
 # Docker Image And Installer
 
@@ -14,3 +14,5 @@ applyTo: "Dockerfile, docker_install_and_update.sh, docker_nginx_planesign.conf,
 - The installer uses Docker's current Debian repository format (`docker.sources` and `docker.asc`). It removes its legacy `docker.list` before APT recovery when `docker.sources` already exists, and before configuring the modern repository.
 - The nginx config serves `web/` on 80/443 and proxies `/api/` to the Flask API on 5055, rewriting the `/api/` prefix away.
 - The `CMD` must `exec` Python. As PID 1, `sh` ignores `docker stop`'s SIGTERM, so the app never runs its shutdown and is SIGKILLed after the 90 s grace period with the panel still lit. Python as PID 1 doesn't reap orphaned grandchildren, so wait on every subprocess the app starts.
+- Anything the container must keep across updates is a bind mount from `~/PlaneSign` in `compose.yaml`: the installer recreates the container on every update, which discards files written anywhere else (the app's log used to live there). The installer must create each bind-mount source owned by `pi` before `compose up`, because Docker creates a missing source as root. For `logs/` this also decides the log writer's user: it drops root to the folder's owner.
+- Logs: the app's file log in the `logs/` bind mount is the durable record. Container stdout uses the `local` log driver with a size cap, since Docker's default `json-file` driver never rotates and the Pi runs from an SD card. nginx's `access_log` is off because nothing in the image rotates `/var/log/nginx`. nginx's error log stays a file: nginx points its own stderr at the main-context error log, so `error_log stderr` in the site config would still not reach `docker logs`.

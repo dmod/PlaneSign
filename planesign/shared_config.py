@@ -66,7 +66,7 @@ audio_device = None
 audio_card = None
 audio_mixer_control = None
 
-log_filename = "logs/planesign.log"
+log_filename = os.environ.get("PLANESIGN_LOG_FILE", "logs/planesign.log")
 icons_dir = "./icons"
 
 font_dir = "./fonts"
