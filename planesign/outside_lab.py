@@ -143,14 +143,7 @@ def changed():
 
 
 def set_lab_time(timestamp: float, speed: float | None = None):
-    clock = shared_config.shared_outside_lab_clock
-    with clock.get_lock():
-        if speed is None:
-            speed = clock[2] if clock[0] else 1.0
-        clock[:] = [timestamp, time.time(), speed]
-    # A jump lands the displayed moment itself on the chosen time, so drop any forecast offset.
-    shared_config.shared_outside_offset_minutes.value = 0
-    changed()
+    outside.set_lab_clock(timestamp, speed)
 
 
 def local_timestamp(day: date, hour: int, minute: int, tz) -> float:

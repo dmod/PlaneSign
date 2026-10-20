@@ -1175,7 +1175,7 @@ def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
 
 def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     """Return (species, visit age, duration, target x, pair) for the visit under way, or None. Deer, foxes and rabbits
-    stay away whenever their visit would overlap the dog's time outside."""
+    stay away whenever their visit would overlap the dog's time outside or an alien abduction, which brings its own deer."""
     if not wildlife_allowed(environment):
         return None
     slot, age = divmod(elapsed, 100)
@@ -1184,6 +1184,8 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
         return None
     visit = slot * 100 + start
     if dog_allowed(environment) and next(dog_outings_between(seed, visit, visit + duration), None) is not None:
+        return None
+    if abduction_overlaps(environment, visit - elapsed, visit + duration - elapsed):
         return None
     return species, age - start, duration, target, pair
 
@@ -1196,6 +1198,21 @@ def birds_allowed(environment: "OutsideEnvironment") -> bool:
     code = environment.weather.code
     thunderstorm = code is not None and 200 <= code < 300
     return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and not thunderstorm and HALLOWEEN not in holidays and HOTDOG not in holidays
+
+
+def draw_deer(d: ImageDraw.ImageDraw, px: Callable[[int], int], color: Color, tail: Color, leg: int, grazing: bool, lift: int = 0):
+    """A deer standing on the meadow's bottom rows, raised `lift` rows. `px` maps sprite columns to screen columns, so it
+    sets the deer's place and the way it faces."""
+    d.line((px(0), 28 - lift, px(5), 28 - lift), fill=color, width=2)
+    if grazing:
+        d.line((px(5), 28 - lift, px(7), 30 - lift), fill=color)
+    else:
+        d.line((px(5), 28 - lift, px(6), 26 - lift), fill=color)
+        d.line((px(6), 26 - lift, px(8), 26 - lift), fill=color)
+        d.point((px(6), 25 - lift), fill=color)
+    d.line((px(0), 29 - lift, px(-leg), 31 - lift), fill=color)
+    d.line((px(4), 29 - lift, px(4 + leg), 31 - lift), fill=color)
+    d.point((px(-1), 27 - lift), fill=tail)
 
 
 def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -1222,17 +1239,7 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
             c = palette.animal
             leg = int(elapsed * 2.5) % 2 if walking else 0
             if species == "deer":
-                d.line((px(0), 28, px(5), 28), fill=c, width=2)
-                grazing = not walking and math.sin(elapsed * 0.2) > 0.4
-                if grazing:
-                    d.line((px(5), 28, px(7), 30), fill=c)
-                else:
-                    d.line((px(5), 28, px(6), 26), fill=c)
-                    d.line((px(6), 26, px(8), 26), fill=c)
-                    d.point((px(6), 25), fill=c)
-                d.line((px(0), 29, px(-leg), 31), fill=c)
-                d.line((px(4), 29, px(4 + leg), 31), fill=c)
-                d.point((px(-1), 27), fill=palette.trim)
+                draw_deer(d, px, c, palette.trim, leg, not walking and math.sin(elapsed * 0.2) > 0.4)
             elif species == "fox":
                 c = mix(c, (192, 110, 58), 0.5)
                 d.line((px(0), 29, px(5), 29), fill=c, width=2)
@@ -3311,6 +3318,236 @@ def draw_skywriting_smoke(image: Image.Image, palette: Palette, environment: "Ou
     region = pixels[top:bottom, left:right]
     region += (tint - region) * alpha[..., None]
     return Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
+
+
+# An alien saucer beams up a deer at these local clock times through the night, (hour, minute), but never once the sun
+# is up. They are times on the displayed clock, so the label reads 11:11 PM as the saucer arrives.
+ABDUCTION_TIMES = ((23, 11), (0, 12), (1, 11), (2, 22), (3, 33), (4, 44), (5, 55))
+# Seconds from the event's clock time: the deer wander in and graze, then the saucer swoops in and beams one up.
+ABDUCTION_DEER_ARRIVE = -24.0
+ABDUCTION_WALK_SECONDS = 16.0
+ABDUCTION_SWOOP_SECONDS = 4.0
+ABDUCTION_BEAM = 4.5
+ABDUCTION_BEAM_GROW = 0.6
+ABDUCTION_LIFT = (5.5, 12.0)
+ABDUCTION_RETRACT_SECONDS = 0.6
+ABDUCTION_LEAVE = 13.5
+ABDUCTION_LEAVE_SECONDS = 1.0
+ABDUCTION_END = ABDUCTION_LEAVE + ABDUCTION_LEAVE_SECONDS
+# The sun must be this far below the horizon at the event's clock time. It never climbs faster than SUN_MAX_CLIMB
+# degrees a second, so checking each frame against that bound keeps an event that started from vanishing partway.
+ABDUCTION_SUN_ALTITUDE = SET_ALTITUDE - 0.75
+SUN_MAX_CLIMB = 0.25 / 60
+ABDUCTION_MAX_WIND = 30
+# The abducted deer grazes at one of these columns, so the saucer hovering over it clears the tree; a partner grazes
+# ABDUCTION_PAIR_GAP columns right of it and bolts when the beam comes on.
+ABDUCTION_TARGETS = (80, 83, 86)
+ABDUCTION_PAIR_CHANCE = 0.6
+ABDUCTION_PAIR_GAP = 12
+ABDUCTION_FLEE_SPEED = 16
+# The saucer's hull row while it hovers, below the corner labels; the beam reaches the meadow's bottom row.
+ABDUCTION_HOVER_ROW = 10
+ABDUCTION_GROUND = 31
+ABDUCTION_BEAM_HALF_WIDTH = (3.0, 7.0)
+ABDUCTION_BEAM_COLOR = np.array((0.35, 1.0, 0.45), dtype=np.float32)
+ABDUCTION_SPARKS = 6
+# A classic saucer: d glass dome with its green pilot a, h silver hull, r rim with chasing lights l, u underside.
+SAUCER = ("....ddddd....", "...dddaddd...", ".hhhhhhhhhhh.", "lrrlrrlrrlrrl", "..uuuuuuuuu..")
+SAUCER_ANCHOR = (6, 2)
+SAUCER_COLORS = {"d": (112, 186, 182), "a": (110, 235, 90), "h": (168, 174, 188), "r": (104, 110, 126), "u": (62, 66, 80)}
+SAUCER_LIGHTS = ((255, 70, 70), (255, 214, 64), (80, 255, 120), (90, 170, 255))
+
+
+@dataclass(frozen=True)
+class Abduction:
+    # The event's clock time, as a Unix timestamp.
+    at: float
+    target: int
+    pair: bool
+
+    @property
+    def hover(self) -> tuple[float, float]:
+        # Centered over the deer's body and head.
+        return self.target + 4.0, float(ABDUCTION_HOVER_ROW)
+
+
+def abduction_allowed(environment: "OutsideEnvironment") -> bool:
+    """Fair weather with deer about: no thunderstorm, steady rain or snow, fog or gale, and a meadow the deer may visit
+    (not Halloween, Thanksgiving or July 4, and not while the campfire burns). The clock and the sun are checked
+    separately, so the lab can tell whether tonight's weather allows one."""
+    w = environment.weather
+    rain, snow = precipitation(environment)
+    return w.code is not None and not 200 <= w.code < 300 and w.code not in (701, 711, 721, 741) and rain < 1.5 and snow < 1 and (w.visibility is None or w.visibility >= FOG_VISIBILITY) and (w.wind is None or w.wind < ABDUCTION_MAX_WIND) and wildlife_allowed(environment)
+
+
+def abduction_times(moment: datetime, first: float, last: float):
+    """Clock times of abductions whose window, from the deer's arrival to the saucer's exit, overlaps [first, last]
+    seconds from `moment`."""
+    now = moment.timestamp()
+    for days in (-1, 0, 1):
+        day = moment.date() + timedelta(days=days)
+        for hour, minute in ABDUCTION_TIMES:
+            at = datetime(day.year, day.month, day.day, hour, minute, tzinfo=moment.tzinfo).timestamp()
+            if at + ABDUCTION_DEER_ARRIVE <= now + last and at + ABDUCTION_END > now + first:
+                yield at
+
+
+def abduction_dark(environment: "OutsideEnvironment", at: float) -> bool:
+    """Whether the sun is sure to be down at clock time `at`, judged from its altitude now."""
+    altitude = environment.sun_altitude
+    return altitude is not None and environment.moment is not None and altitude + SUN_MAX_CLIMB * (at - environment.moment.timestamp()) < ABDUCTION_SUN_ALTITUDE
+
+
+def abduction_overlaps(environment: "OutsideEnvironment", first: float, last: float) -> bool:
+    """Whether an abduction is on at any time between `first` and `last` seconds from the displayed moment."""
+    if environment.moment is None or not abduction_allowed(environment):
+        return False
+    return any(abduction_dark(environment, at) for at in abduction_times(environment.moment, first, last))
+
+
+@lru_cache(maxsize=16)
+def abduction_plan(at: int) -> tuple[int, bool]:
+    rng = random.Random(at * 7 + 13)
+    return rng.choice(ABDUCTION_TARGETS), rng.random() < ABDUCTION_PAIR_CHANCE
+
+
+def abduction_state(environment: "OutsideEnvironment") -> tuple[Abduction, float] | None:
+    """The abduction under way at the displayed moment and the seconds since its clock time, or None."""
+    if environment.moment is None or not abduction_allowed(environment):
+        return None
+    for at in abduction_times(environment.moment, 0, 0):
+        if abduction_dark(environment, at):
+            target, pair = abduction_plan(round(at))
+            return Abduction(at, target, pair), environment.moment.timestamp() - at
+    return None
+
+
+def abduction_starts(moment: datetime) -> list[datetime]:
+    """The abduction clock times in the day after `moment`, soonest first, for the lab to try."""
+    starts = []
+    for days in (0, 1):
+        day = moment.date() + timedelta(days=days)
+        for hour, minute in ABDUCTION_TIMES:
+            at = datetime(day.year, day.month, day.day, hour, minute, tzinfo=moment.tzinfo)
+            if moment.timestamp() < at.timestamp() <= moment.timestamp() + 86400:
+                starts.append(at)
+    return sorted(starts, key=datetime.timestamp)
+
+
+def saucer_position(abduction: Abduction, age: float) -> tuple[float, float] | None:
+    """The saucer's anchor `age` seconds after the event's clock time: it swoops in from the upper left, hovers with a
+    gentle bob, then shoots straight up and away."""
+    hx, hy = abduction.hover
+    if not 0 <= age < ABDUCTION_END:
+        return None
+    if age < ABDUCTION_SWOOP_SECONDS:
+        u = age / ABDUCTION_SWOOP_SECONDS
+        return hx - 48 * (1 - u) ** 3, -6 + (hy + 6) * (1 - (1 - u) ** 2)
+    bob = math.sin((age - ABDUCTION_SWOOP_SECONDS) * 2.4) * 0.6
+    if age < ABDUCTION_LEAVE:
+        return hx, hy + bob
+    u = (age - ABDUCTION_LEAVE) / ABDUCTION_LEAVE_SECONDS
+    return hx + 6 * u * u, hy + bob - 44 * u * u
+
+
+def abduction_beam(cx: float, top: int, extent: float, age: float) -> np.ndarray:
+    """The tractor beam's light as a (row, column, rgb) array: a translucent green cone from the saucer to the ground,
+    brighter at its edges, with bands rising through it, a glowing pool where it lands and sparks drifting up."""
+    narrow, wide = ABDUCTION_BEAM_HALF_WIDTH
+    span = ABDUCTION_GROUND - top
+    bottom = top + (span + 1) * extent
+    xs, ys = FIREWORK_X, FIREWORK_Y
+    depth = np.clip((ys - top) / span, 0, 1)
+    half = narrow + (wide - narrow) * depth
+    offset = np.abs(xs - cx)
+    cover = np.clip(half + 0.5 - offset, 0, 1) * np.clip(bottom - ys, 0, 1) * (ys >= top)
+    edge = np.clip(1 - (half - offset), 0, 1)
+    bands = 0.5 + 0.5 * np.sin(ys * 1.2 + age * 10)
+    strength = (0.2 + 0.2 * edge + 0.08 * bands) * cover
+    landed = min(1.0, max(0.0, bottom - ABDUCTION_GROUND))
+    if landed > 0:
+        strength = strength + 0.3 * landed * np.clip(1 - ((xs - cx) / (wide + 2)) ** 2 - ((ys - ABDUCTION_GROUND) / 1.6) ** 2, 0, 1)
+    light = strength[..., None] * ABDUCTION_BEAM_COLOR
+    for index in range(ABDUCTION_SPARKS):
+        rise = (age * 8 + index * span / ABDUCTION_SPARKS) % span
+        y = round(min(bottom, ABDUCTION_GROUND) - rise)
+        if y < top:
+            continue
+        reach = narrow + (wide - narrow) * (y - top) / span - 1
+        x = round(cx + math.sin(index * 2.1 + age * 1.3) * reach * 0.8)
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+            light[y, x] += np.array((0.45, 0.6, 0.45), dtype=np.float32)
+    return light
+
+
+def draw_saucer(image: Image.Image, x: float, y: float, age: float, beam: float):
+    d = ImageDraw.Draw(image)
+    left, top = round(x) - SAUCER_ANCHOR[0], round(y) - SAUCER_ANCHOR[1]
+    lights = 0
+    for row, line in enumerate(SAUCER):
+        for column, part in enumerate(line):
+            if part == ".":
+                continue
+            if part == "l":
+                color = SAUCER_LIGHTS[(lights + math.floor(age * 6)) % len(SAUCER_LIGHTS)]
+                lights += 1
+            else:
+                color = SAUCER_COLORS[part]
+                # The beam lights the saucer's belly.
+                if part == "u" and beam > 0:
+                    color = mix(color, (110, 255, 140), 0.5 * beam)
+            px, py = left + column, top + row
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=color)
+
+
+def draw_abduction(image: Image.Image, palette: Palette, environment: "OutsideEnvironment") -> Image.Image:
+    """The deer wander in and graze; the saucer swoops in, beams one deer up into its belly while the other bolts,
+    then shoots away."""
+    state = abduction_state(environment)
+    if state is None:
+        return image
+    abduction, age = state
+    target = abduction.target
+    d = ImageDraw.Draw(image)
+    color, tail = palette.animal, palette.trim
+    saucer = saucer_position(abduction, age)
+    belly = round(saucer[1]) + len(SAUCER) - 1 - SAUCER_ANCHOR[1] if saucer is not None else None
+    walked = (age - ABDUCTION_DEER_ARRIVE) / ABDUCTION_WALK_SECONDS
+    if walked < 1:
+        # Walking in from the right, facing left like any arriving deer.
+        x = round(WIDTH + (target - WIDTH) * walked)
+        for offset in (0, ABDUCTION_PAIR_GAP) if abduction.pair else (0,):
+            draw_deer(d, lambda column, left=x + offset: left + 5 - column, color, tail, int(age * 2.5) % 2, False)
+    else:
+        if abduction.pair:
+            bolt = ABDUCTION_BEAM + 0.3
+            if age < bolt:
+                draw_deer(d, lambda column: target + ABDUCTION_PAIR_GAP + column, color, tail, 0, age < 0)
+            else:
+                x = round(target + ABDUCTION_PAIR_GAP + (age - bolt) * ABDUCTION_FLEE_SPEED)
+                if x < WIDTH + 2:
+                    draw_deer(d, lambda column: x + column, color, tail, int(age * 8) % 2, False)
+        if age < ABDUCTION_LIFT[1]:
+            # It grazes until the saucer comes, freezes in the beam, then kicks as it rises into the saucer's belly.
+            lifting = age >= ABDUCTION_LIFT[0] and belly is not None
+            if not lifting:
+                draw_deer(d, lambda column: target + column, color, tail, 0, age < 0)
+            else:
+                lift = round(smoothstep(*ABDUCTION_LIFT, age) * (ABDUCTION_GROUND - belly))
+                layer = Image.new("RGBA", (WIDTH, HEIGHT))
+                draw_deer(ImageDraw.Draw(layer), lambda column: target + column, (*color, 255), (*tail, 255), int(age * 5) % 2, False, lift)
+                pixels = np.array(layer)
+                pixels[: max(0, belly + 1), :, 3] = 0
+                layer = Image.fromarray(pixels, "RGBA")
+                image.paste(layer, (0, 0), layer)
+    if saucer is None:
+        return image
+    beam = min(1.0, max(0.0, (age - ABDUCTION_BEAM) / ABDUCTION_BEAM_GROW)) * (1 - min(1.0, max(0.0, (age - ABDUCTION_LIFT[1]) / ABDUCTION_RETRACT_SECONDS)))
+    if beam > 0:
+        image = composite_light(image, abduction_beam(saucer[0], belly + 1, beam, age))
+    draw_saucer(image, saucer[0], saucer[1], age, beam)
+    return image
 
 
 FIREWORK_SLOT_SECONDS = 0.7
@@ -5621,6 +5858,9 @@ class Summon:
     lead: float
     # Search resolution; shorter than the event's briefest appearance.
     step: float
+    # For events keyed to the displayed clock instead of the animation clock: the clock times, soonest first, at which
+    # the event could start after a given moment. The lab moves its clock to the first one the conditions allow.
+    clock_starts: Callable[[datetime], list[datetime]] | None = None
 
 
 def halloween_only(environment: "OutsideEnvironment") -> bool:
@@ -5636,6 +5876,15 @@ SUMMONS = {
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
     "skywriter": Summon("Skywriting plane", "The skywriting plane flies in sunny daylight with a light wind, but not on Halloween, Christmas Eve or fireworks days.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
+    "abduction": Summon(
+        "Alien abduction",
+        "A saucer beams up a deer at 11:11 PM, 12:12, 1:11, 2:22, 3:33, 4:44 and 5:55 AM while the sun is down, in fair weather without fog or a gale, but not on Halloween, Thanksgiving or July 4 or while the campfire burns. Summoning moves the lab clock to the next one.",
+        abduction_allowed,
+        lambda e, t, s: abduction_state(e) is not None,
+        -ABDUCTION_DEER_ARRIVE + 1,
+        0.5,
+        abduction_starts,
+    ),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
     "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
     "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
@@ -5753,6 +6002,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     if campfire is not None:
         draw_campfire(image, palette)
     draw_wildlife(image, palette, environment, elapsed, seed)
+    # The saucer hovers low over the meadow, so the tree and everything drawn after the wildlife stays in front of it.
+    image = draw_abduction(image, palette, environment)
     if thanksgiving:
         draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
     draw_eagle(image, palette, eagle, elapsed)

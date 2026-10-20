@@ -7,7 +7,7 @@ import signal
 import time
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from functools import lru_cache
+from functools import lru_cache, partial
 from zoneinfo import ZoneInfo
 
 import datasources
@@ -80,6 +80,8 @@ class OutsideEnvironment:
     until_midnight: float | None = None
     # "north" or "south": picks the constellations and, with the date, the season.
     hemisphere: str = "north"
+    # The displayed moment in sensor-local time, which times events keyed to the clock (the alien abduction).
+    moment: datetime | None = None
 
 
 def reading(value):
@@ -154,6 +156,19 @@ def lab_active(data_dict) -> bool:
 def bump_lab_version():
     with shared_config.shared_outside_lab_version.get_lock():
         shared_config.shared_outside_lab_version.value += 1
+
+
+def set_lab_clock(timestamp: float, speed: float | None = None):
+    """Run the lab clock from `timestamp`, keeping its speed unless one is given, and drop any forecast offset so the
+    displayed moment lands on it."""
+    clock = shared_config.shared_outside_lab_clock
+    with clock.get_lock():
+        if speed is None:
+            speed = clock[2] if clock[0] else 1.0
+        clock[:] = [timestamp, time.time(), speed]
+    shared_config.shared_outside_offset_minutes.value = 0
+    bump_lab_version()
+    shared_config.shared_outside_time_update.set()
 
 
 def clear_lab(data_dict, reason: str):
@@ -254,16 +269,16 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
     # Local midnight as an absolute time, so the count stays exact on DST days.
     until_midnight = datetime.combine(moment.date() + timedelta(days=1), datetime.min.time(), moment.tzinfo).timestamp() - moment.timestamp()
     if not isinstance(sky, dict):
-        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight)
+        return OutsideEnvironment(season, observed, "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight, moment=moment)
     positions = sky_snapshot(sky, moment.timestamp(), latitude, longitude)
     if positions is None:
-        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight)
+        return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight, moment=moment)
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
     sunrise = next((sunrise for sunrise in sky.get("sunrises", ()) if sunrise > moment.timestamp()), None)
     before_sunrise = sunrise is not None and datetime.fromtimestamp(sunrise, moment.tzinfo).date() == moment.date()
     environment = OutsideEnvironment(
-        season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere, until_midnight=until_midnight
+        season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere, until_midnight=until_midnight, moment=moment
     )
     return lab_moon(environment, moon_override)
 
@@ -426,17 +441,35 @@ def lab_paused() -> bool:
     return base != 0 and speed == 0
 
 
-def summon_jump(request, environment: OutsideEnvironment, elapsed: float, seed: int) -> tuple[float, dict]:
-    """Skip the animation clock to just before the requested event's next natural start; return the new elapsed and the result for the lab."""
+def environment_probe(timestamp: float, *, sky, weather, tz, latitude: float, longitude: float, crisp: bool, **overrides) -> OutsideEnvironment:
+    """The scene's conditions at another moment, under the current weather and lab overrides, for the lab's clock summons."""
+    probe = environment_snapshot(sky, weather, datetime.fromtimestamp(timestamp, tz), latitude, longitude, **overrides)
+    return replace(probe, crisp=crisp_weather(probe, crisp))
+
+
+def summon_jump(request, environment: OutsideEnvironment, elapsed: float, seed: int, environment_at) -> tuple[float, dict]:
+    """Skip the animation clock to just before the requested event's next natural start; return the new elapsed and the
+    result for the lab. An event keyed to the displayed clock moves the lab clock instead, to the first of its start
+    times whose conditions allow it; `environment_at(timestamp)` gives the scene's conditions at another moment."""
     name = request["event"]
+    summon = SUMMONS[name]
+    if summon.clock_starts is not None:
+        if environment.moment is None or not summon.allowed(environment):
+            return elapsed, {"id": request["id"], "error": summon.requirement}
+        for start in summon.clock_starts(environment.moment):
+            if summon.active(environment_at(start.timestamp() + 1), elapsed, seed):
+                set_lab_clock(start.timestamp() - summon.lead)
+                logger.info("Outside lab: summoned %s, moving the clock to %s", summon.label.lower(), start.strftime("%Y-%m-%d %H:%M"))
+                return elapsed, {"id": request["id"], "error": None}
+        return elapsed, {"id": request["id"], "error": f"No {summon.label.lower()} can happen in the next day under these conditions. {summon.requirement}"}
     try:
         start = summon_start(name, environment, elapsed, seed)
     except SummonUnavailable as error:
         # Right after a jump to a new date the sun and moon are unknown, which would rule out any event that needs them.
         message = "Astronomy is still loading for this time; try again in a moment." if environment.sky_status == "LOADING" else str(error)
         return elapsed, {"id": request["id"], "error": message}
-    target = max(elapsed, start - SUMMONS[name].lead)
-    logger.info("Outside lab: summoned %s, skipping %.0f s ahead", SUMMONS[name].label.lower(), target - elapsed)
+    target = max(elapsed, start - summon.lead)
+    logger.info("Outside lab: summoned %s, skipping %.0f s ahead", summon.label.lower(), target - elapsed)
     return target, {"id": request["id"], "error": None}
 
 
@@ -503,7 +536,10 @@ def outside(sign):
             environment = replace(environment, crisp=True)
         if pending_summon is not None:
             handled_summon = pending_summon["id"]
-            elapsed, result = summon_jump(pending_summon, environment, elapsed, seed)
+            environment_at = partial(
+                environment_probe, sky=sky, weather=weather, tz=tz, latitude=latitude, longitude=longitude, crisp=crisp, weather_offline=weather_offline, weather_pending=weather_pending, weather_override=weather_override, moon_override=moon_override, hemisphere_override=hemisphere_override
+            )
+            elapsed, result = summon_jump(pending_summon, environment, elapsed, seed, environment_at)
             started = frame_time - elapsed
             frozen = elapsed if paused else None
             shared_config.data_dict["outside_lab_summon_result"] = result
