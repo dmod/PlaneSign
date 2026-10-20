@@ -50,33 +50,11 @@ def get_config():
     with config_lock:
         utilities.read_config()
         conf = shared_config.CONF.copy()
-    sample = {}
-    sample["DATATYPES"] = []
-
-    with open("sign.conf.sample") as f:
-        lines = f.readlines()
-        lastline = None
-        for line in lines:
-            if line == "\n":
-                continue
-            if line[0] == "#":
-                lastline = line.rstrip()
-                continue
-            parts = line.split("=")
-            sample[parts[0]] = parts[1].rstrip()
-            if lastline:
-                comment_parts = lastline[1:].split(" ")
-                newdict = {}
-                newdict["id"] = parts[0]
-                newdict["type"] = comment_parts[0]
-                for i in range(len(comment_parts)):
-                    if comment_parts[i] == "min" and i + 1 < len(comment_parts):
-                        newdict["min"] = comment_parts[i + 1]
-                    if comment_parts[i] == "max" and i + 1 < len(comment_parts):
-                        newdict["max"] = comment_parts[i + 1]
-                if newdict["type"] == "select":
-                    newdict["options"] = CONFIG_SELECT_OPTIONS[parts[0]]()
-                sample["DATATYPES"].append(newdict)
+    sample, datatypes = shared_config.load_config_schema()
+    for datatype in datatypes:
+        if datatype["type"] == "select":
+            datatype["options"] = CONFIG_SELECT_OPTIONS[datatype["id"]]()
+    sample["DATATYPES"] = datatypes
 
     options_by_key = {datatype["id"]: datatype["options"] for datatype in sample["DATATYPES"] if "options" in datatype}
     for key in sample:
@@ -93,15 +71,17 @@ def get_config():
     return json.dumps(sample)
 
 
-@app.route("/write_config")
+@app.route("/write_config", methods=["POST"])
 def write_config():
+    values = request.get_json(silent=True)
+    defaults, _ = shared_config.load_config_schema()
+    if request.args or not isinstance(values, dict) or not values or any(key not in defaults or not isinstance(value, str) or "\n" in value or "\r" in value for key, value in values.items()):
+        logging.warning("Rejected invalid configuration payload")
+        return jsonify({"ok": False, "error": "Send configuration as a JSON object of known settings with single-line string values, without query parameters"}), 400
     try:
-        keys = list(request.args.keys())
-        vals = list(request.args.values())
-
         with config_lock:
             with open(shared_config.config_path, "w", encoding="utf-8") as f:
-                f.writelines(keys[i] + "=" + vals[i] + "\n" for i in range(len(keys)))
+                f.writelines(f"{key}={value}\n" for key, value in values.items())
                 f.flush()
                 os.fsync(f.fileno())
 

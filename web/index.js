@@ -279,18 +279,10 @@ window.onload = function () {
     document.getElementById("config").onsubmit = function (e) {
         e.preventDefault();
         var confdiv = document.getElementById("config");
-        var str = "";
-        for (let i = 0; i < confdiv.children.length - 1; i++) {
-            str += String(confdiv.children[i].children[0].textContent).slice(0, -2).replaceAll(' ', '_');
-            str += "=";
-            if (confdiv.children[i].children[1].type == "checkbox") {
-                str += String(confdiv.children[i].children[1].checked);
-            } else {
-                str += String(confdiv.children[i].children[1].value);
-            }
-            str += "&";
-        }
-        str = str.slice(0, -1);
+        var settings = {};
+        confdiv.querySelectorAll("input[name], select[name]").forEach(function (input) {
+            settings[input.name] = input.type == "checkbox" ? String(input.checked) : input.value;
+        });
 
         var btn = document.getElementById("submit_config_button");
         var originalHtml = btn.innerHTML;
@@ -298,7 +290,11 @@ window.onload = function () {
         btn.classList.remove("config-save-success");
         btn.classList.remove("config-save-error");
 
-        fetch("api/write_config?" + str)
+        fetch("api/write_config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(settings)
+        })
             .then(async (resp) => {
                 let body = null;
                 try {
@@ -2998,41 +2994,25 @@ function read_conf() {
                     var data = JSON.parse(value);
                     var itm = document.getElementById("linetemplate");
                     for (let i = 0; i < Object.keys(data).length; i++) {
-                        //console.log(Object.keys(data)[i]);
-                        //console.log(data[Object.keys(data)[i]])
                         //Skip extra junk in read_static_airport_data() dictionary not loaded from config file
                         if (String(Object.keys(data)[i]) == "DATATYPES" || String(Object.keys(data)[i]) == "ENDPOINT" || String(Object.keys(data)[i]) == "WEATHER_ENDPOINT") {
                             continue
                         }
 
-                        for (let j = 0; j < data.DATATYPES.length; j++) {
-                            if (data.DATATYPES[j].id == String(Object.keys(data)[i])) {
-                                form_type = data.DATATYPES[j].type;
-                                if (data.DATATYPES[j].hasOwnProperty('min')) {
-                                    form_min = data.DATATYPES[j].min
-                                } else {
-                                    form_min = null
-                                }
-                                if (data.DATATYPES[j].hasOwnProperty('max')) {
-                                    form_max = data.DATATYPES[j].max
-                                } else {
-                                    form_max = null
-                                }
-                                if (data.DATATYPES[j].hasOwnProperty('step')) {
-                                    form_step = data.DATATYPES[j].step
-                                } else {
-                                    form_step = null
-                                }
-                                form_options = data.DATATYPES[j].options || [];
-                                break
-                            } else {
-                                form_type = "text";
-                            }
-                        }
+                        var metadata = data.DATATYPES.find(function (item) {
+                            return item.id == String(Object.keys(data)[i]);
+                        });
+                        var form_type = metadata ? metadata.type : "text";
+                        var form_min = metadata ? metadata.min : null;
+                        var form_max = metadata ? metadata.max : null;
+                        var form_step = metadata ? metadata.step : null;
+                        var form_options = metadata ? metadata.options || [] : [];
+                        var form_secret = metadata && metadata.secret === true;
 
                         var cln = itm.cloneNode(true);
                         //cln.style="display:block";
                         cln.removeAttribute("style")
+                        cln.title = metadata ? metadata.description : "";
                         cln.childNodes[1].textContent = String(Object.keys(data)[i]).replaceAll('_', ' ') + ": ";
                         cln.childNodes[1].for = String(Object.keys(data)[i]);
                         if (form_type == "select") {
@@ -3048,6 +3028,10 @@ function read_conf() {
                             cln.replaceChild(select, cln.childNodes[2]);
                         } else {
                             cln.childNodes[2].type = form_type;
+                            if (form_secret) {
+                                cln.childNodes[2].autocomplete = "off";
+                                cln.childNodes[2].spellcheck = false;
+                            }
                         }
                         cln.childNodes[2].name = String(Object.keys(data)[i]);
                         cln.childNodes[2].id = String(Object.keys(data)[i]);
@@ -3075,14 +3059,13 @@ function read_conf() {
                     }
 
 
-                    console.log(xhr.responseText);
                     // Show the geolocation button if SENSOR_LAT/LON fields exist
                     if (document.getElementById("SENSOR_LAT") && document.getElementById("SENSOR_LON")) {
                         document.getElementById("geolocate_button").style.display = "";
                         console.log("[Geolocation] SENSOR_LAT and SENSOR_LON fields detected — showing geolocation button");
                     }
                 } else {
-                    console.log(xhr.responseText);
+                    console.error("Failed to load configuration: HTTP " + status);
                     // Oh no! There has been an error with the request!
                 }
             }

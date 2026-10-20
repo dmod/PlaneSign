@@ -92,6 +92,52 @@ airport_codes_to_ignore = set()
 country_name_to_code = {}
 
 
+def load_config_schema():
+    """Read defaults and '#type [secret] [min/max/step value] - description' metadata."""
+    defaults = {}
+    datatypes = []
+    metadata = None
+    with open("sign.conf.sample") as f:
+        for number, raw_line in enumerate(f, 1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                annotation, separator, description = line[1:].partition(" - ")
+                tokens = annotation.split()
+                if not separator or not description.strip() or not tokens or tokens[0] not in {"text", "checkbox", "select", "number", "range"}:
+                    raise ValueError(f"Invalid config metadata on line {number} of sign.conf.sample")
+                metadata = {"type": tokens[0], "secret": False, "description": description.strip()}
+                index = 1
+                while index < len(tokens):
+                    token = tokens[index]
+                    if token == "secret":
+                        metadata["secret"] = True
+                        index += 1
+                    elif token in {"min", "max", "step"} and index + 1 < len(tokens):
+                        metadata[token] = tokens[index + 1]
+                        index += 2
+                    else:
+                        raise ValueError(f"Invalid config metadata on line {number} of sign.conf.sample")
+                continue
+            key, separator, value = line.partition("=")
+            if not separator or not key or metadata is None or key in defaults:
+                raise ValueError(f"Invalid config setting on line {number} of sign.conf.sample")
+            defaults[key] = value
+            datatypes.append({"id": key, **metadata})
+            metadata = None
+    if metadata is not None:
+        raise ValueError("Config metadata has no setting in sign.conf.sample")
+    return defaults, datatypes
+
+
+def config_for_logging(conf):
+    """Copy config, exposing only presence markers for secret or unrecognized settings."""
+    _, datatypes = load_config_schema()
+    public_keys = {item["id"] for item in datatypes if not item["secret"]}
+    return {key: value if key in public_keys else "<set>" if value else "<unset>" for key, value in conf.items()}
+
+
 def load_config_values(*, log_settings=True):
     """Read configuration without importing a display driver or changing shared state."""
     conf = {}
@@ -106,15 +152,12 @@ def load_config_values(*, log_settings=True):
                 key, val = line.split("=", 1)
                 conf[key] = val.rstrip()
 
-    with open("sign.conf.sample") as f:
-        for line in f:
-            if line.isspace() or line.startswith("#"):
-                continue
-            key, val = line.split("=", 1)
-            if key not in conf:
-                if log_settings:
-                    logging.warning(f"WARNING! No setting for '{key}' found in {config_path}, using value '{val.rstrip()}' from sign.conf.sample")
-                conf[key] = val.rstrip()
+    defaults, _ = load_config_schema()
+    for key, value in defaults.items():
+        if key not in conf:
+            if log_settings:
+                logging.warning(f"WARNING! No setting for '{key}' found in {config_path}, using the default from sign.conf.sample")
+            conf[key] = value
 
     if config_overrides:
         if log_settings:

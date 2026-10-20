@@ -72,7 +72,8 @@ def read_config():
     for key in set(shared_config.CONF.keys()) - conf.keys():
         shared_config.CONF.pop(key, None)
 
-    logging.info("Config loaded: " + str(shared_config.CONF))
+    logging.info("Configuration loaded")
+    logging.debug("Config values: %s", shared_config.config_for_logging(conf))
 
     global logged_offline_mode
     offline = network.offline_mode(conf)

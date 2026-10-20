@@ -1,53 +1,53 @@
-#number min -90 max 90
+#number min -90 max 90 - Sensor latitude
 SENSOR_LAT=39.179191
 
-#number min -180 max 180
+#number min -180 max 180 - Sensor longitude
 SENSOR_LON=-76.668388
 
-#text
+#text - Weather location label
 WEATHER_CITY_NAME=Severn
 
-#checkbox
+#checkbox - Use 24-hour time
 MILITARY_TIME=false
 
-#checkbox
+#checkbox - Scroll airport names
 AIRPORT_SCROLL=true
 
-#checkbox
+#checkbox - Hide Starlink satellites
 HIDE_STARLINK=false
 
-#checkbox Disable third-party internet services (planes, weather, sports, etc.); the web controls keep working
+#checkbox - Disable reading of third-party internet API's (planes, weather, etc.)
 OFFLINE_MODE=false
 
-#select Mode shown after the welcome screen (applies at next start)
+#select - Startup mode shown after welcome screen (restart required)
 DEFAULT_MODE=PLANES_ALERT
 
-#range min 0 max 100
+#range min 0 max 100 - Startup brightness (%)
 DEFAULT_BRIGHTNESS=80
 
-#number min 0 max 100000
+#number min 0 max 100000 - Closest plane altitude limit (feet)
 CLOSEST_HEIGHT_LIMIT=10000
 
-#number min 0 max 100
+#number min 0 max 100 - Plane alert radius (miles)
 PLANE_ALERT_RADIUS=2
 
-#text RGB matrix mapping or adafruit-oled (restart required)
+#text - RGB mapping regular/adafruit-hat/adafruit-oled (restart required)
 PINOUT_HARDWARE_MAPPING=adafruit-hat
 
-#number min 0 max 5
+#number min 0 max 5 - GPIO slowdown (restart required)
 GPIO_SLOWDOWN=5
 
-#text
+#text - LED color order (restart required)
 RGB_SEQUENCE=RGB
 
-#text
+#text secret - OpenWeather API key
 OPENWEATHER_API_KEY=
 
-#text
+#text secret - N2YO API key
 N2YO_API_KEY=
 
-#text
+#text secret - Finnhub API key
 FINNHUB_API_KEY=
 
-#text
+#text - Airport codes that won't have their full names displayed, comma-separated
 IGNORE_AIRPORT_CODES=BWI,IAD,DCA
