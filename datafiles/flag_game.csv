@@ -8,6 +8,7 @@ AND,Andorra,True
 ARE,United Arab Emirates,True
 ARG,Argentina,True
 ARM,Armenia,True
+ASC,Ascension Island,False
 ASM,American Samoa,False
 ATA,Antarctica,False
 ATF,French Southern Terr.,False
@@ -241,6 +242,7 @@ SYR,Syria,True
 TAS,Tasmania,False
 TCA,Turks and Caicos Is.,False
 TCD,Chad,True
+TDC,Tristan da Cunha,False
 TGO,Togo,True
 THA,Thailand,True
 TJK,Tajikistan,True
