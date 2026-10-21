@@ -176,15 +176,3 @@
         transform: translateX(0);
     }
 }
-
-/*
-body .plane-switch {
-    margin: 12px 0;
-}
-*/
-
-.scaled {
-    transform: scale(2.9);
-    /* Equal to scaleX(0.7) scaleY(0.7) */
-    background-color: pink;
-}

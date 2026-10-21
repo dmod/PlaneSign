@@ -372,7 +372,7 @@ window.onload = function () {
             call_endpoint('/turn_on')
             call_endpoint("/get_mode", function (current_mode) {
                 if (current_mode && current_mode !== "0") {
-                    set_current_mode_button(current_mode);
+                    show_mode_controls(current_mode);
                 }
             });
         } else {
@@ -567,11 +567,6 @@ async function on_recording_ready(wav) {
     } catch (err) {
         report_audio_error(err);
     }
-}
-
-function submit_ticker() {
-    call_endpoint("/submit_ticker/" + encodeURIComponent(document.getElementById("ticker").value));
-    document.getElementById("ticker").value = "";
 }
 
 function call_endpoint(endpoint, callback, on_complete) {
@@ -1559,14 +1554,6 @@ function get_free_sketch_canvas_pixel(event) {
     return { x: x, y: y };
 }
 
-function get_free_sketch_brush_bounds(x, y) {
-    return {
-        x: x - Math.floor(free_sketch_brush_size / 2),
-        y: y - Math.floor(free_sketch_brush_size / 2),
-        size: free_sketch_brush_size
-    };
-}
-
 function clear_free_sketch_hover() {
     var hover_canvas = document.getElementById("free_sketch_hover_canvas");
     if (!hover_canvas) {
@@ -2002,74 +1989,62 @@ function request_possible_autofill_flights(query_string) {
 }
 
 function clear_user_resorts_list() {
-    user_resort_list = document.getElementById('user_resort_list');
-    while (user_resort_list.firstChild) {
-        user_resort_list.removeChild(user_resort_list.lastChild);
-    }
+    document.getElementById('user_resort_list').replaceChildren();
+}
+
+// Resort names come from the downloaded resort list, so they are added as text, never as HTML.
+function fill_resort_label(element, resort) {
+    element.append(resort['title'], document.createElement("br"), resort['region_en'] + " (" + resort['country_code'] + ")");
 }
 
 function get_saved_resorts() {
+    if (valid_resorts === null) {
+        // Saved resorts are looked up in the resort list, so wait for it to load first.
+        get_resorts(get_saved_resorts);
+        return;
+    }
+
     call_endpoint("/get_saved_resorts", function (value) {
-        saved_resorts = value.toString().split("\n");
-
-        tracked_resorts_div = document.getElementById('tracked_resorts');
-        user_resort_list = document.getElementById('user_resort_list');
+        var saved_resorts = value.toString().split("\n").filter((uuid) => uuid !== "");
+        var tracked_resorts_div = document.getElementById('tracked_resorts');
+        var user_resort_list = document.getElementById('user_resort_list');
         clear_user_resorts_list();
-        if (saved_resorts != "" && saved_resorts.length > 0) {
 
-            if (valid_resorts === null) {
-                // Should really call this asyncronously and wait for
-                // the response to continue...
-                get_resorts()
+        saved_resorts.forEach(uuid => {
+            var resort = Object.values(valid_resorts['resorts']).find((entry) => entry.uuid == uuid);
+            if (!resort) {
+                console.log("UUID: " + uuid + " not found in valid resorts data")
+                return;
             }
 
-            saved_resorts.forEach(uuid => {
+            var elem = document.createElement("div");
+            var inner = document.createElement("div");
+            fill_resort_label(inner, resort);
+            inner.setAttribute("class", "user-resort-name")
 
-                // Lookup data for this uuid
-                found_res = Object.values(valid_resorts['resorts']).filter((entry) => entry.uuid == uuid);
-
-                if (found_res.length == 0) {
-                    console.log("UUID: " + uuid + " not found in valid resorts data")
-                    return;
-                }
-                resort = found_res[0]
-
-                elem = document.createElement("div");
-
-                inner = document.createElement("div");
-
-                inner.innerHTML += resort['title'];
-                inner.innerHTML += "<br>";
-                inner.innerHTML += resort['region_en'] + " (" + resort['country_code'] + ")";
-                inner.setAttribute("class", "user-resort-name")
-
-                closebutton = document.createElement("div");
-                closebutton.setAttribute("class", "close");
-                closebutton.setAttribute("href", "")
-                closebutton.addEventListener("click", function (e) {
-                    call_endpoint('/delete_saved_resort/' + this.parentElement.getAttribute("uuid"), function () {
-                        setTimeout(get_saved_resorts, 500);
-                    })
-                });
-
-                elem.setAttribute("class", "user-resort-item");
-                elem.setAttribute("uuid", uuid)
-                elem.appendChild(inner);
-                elem.appendChild(closebutton);
-
-                user_resort_list.appendChild(elem);
+            var closebutton = document.createElement("div");
+            closebutton.setAttribute("class", "close");
+            closebutton.addEventListener("click", function () {
+                call_endpoint('/delete_saved_resort/' + encodeURIComponent(uuid), function () {
+                    setTimeout(get_saved_resorts, 500);
+                })
             });
-            tracked_resorts_div.hidden = false
-        }
-        else {
-            tracked_resorts_div.hidden = true
-        }
+
+            elem.setAttribute("class", "user-resort-item");
+            elem.appendChild(inner);
+            elem.appendChild(closebutton);
+
+            user_resort_list.appendChild(elem);
+        });
+        tracked_resorts_div.hidden = saved_resorts.length === 0;
     });
 }
 
 function save_current_resort() {
+    // The sign only saves the resort it is showing on its own, so switch to rotating detail afterwards.
     call_endpoint("/save_current_resort", function () {
-        setTimeout(get_saved_resorts, 500);
+        set_snow_mode(document.getElementById("Detail").value);
+        get_saved_resorts();
     });
 }
 
@@ -2081,7 +2056,7 @@ function close_resort_opts_list() {
     }
 }
 
-function get_resorts() {
+function get_resorts(on_loaded) {
     // Need to call this endpoint even if we already have
     // the valid_resorts already because the sign may have
     // been reset and this call is the ONLY trigger for the
@@ -2089,6 +2064,9 @@ function get_resorts() {
     call_endpoint("/get_resort_opts", function (value) {
         valid_resorts = JSON.parse(value)
         document.getElementById('resort_search').hidden = false
+        if (on_loaded) {
+            on_loaded();
+        }
     });
 }
 
@@ -2211,9 +2189,7 @@ function get_possible_autofill_resorts(query_string) {
 
     final_entries.forEach(resort => {
         b = document.createElement("div");
-        b.innerHTML += resort['title'];
-        b.innerHTML += "<br>";
-        b.innerHTML += resort['region_en'] + " (" + resort['country_code'] + ")";
+        fill_resort_label(b, resort);
 
         b.addEventListener("click", function (e) {
             close_resort_opts_list();
@@ -2269,7 +2245,7 @@ function get_possible_autofill_tickers(query_string) {
 
     bn_regex = new RegExp(`^\\w*${RegExp.escape(query_string)}\\w*\/USDT$`, "i");
     cb_regex = new RegExp(`^COINBASE:\\w*${RegExp.escape(query_string)}\\w*-USD$`, "i");
-    us_regex = us_regex = new RegExp(`${RegExp.escape(query_string)}`, "i");
+    us_regex = new RegExp(`${RegExp.escape(query_string)}`, "i");
 
     found_bn = Object.values(valid_tickers['bn']).filter((entry) => bn_regex.test(entry.displaySymbol));
     found_cb = Object.values(valid_tickers['cb']).filter((entry) => cb_regex.test(entry.symbol));
@@ -2401,59 +2377,13 @@ function get_possible_autofill_tickers(query_string) {
     found_tickers.forEach(ticker => {
         b = document.createElement("div");
 
-        if (ticker['description'].toUpperCase().startsWith("COINBASE ")) {
-            start_desc = ticker['description'].slice(9).toUpperCase().search(query_string);
-            if (start_desc > -1) {
-                start_desc += 9;
-            }
-        } else if (ticker['description'].toUpperCase().startsWith("BINANCE ")) {
-            start_desc = ticker['description'].slice(8).toUpperCase().search(query_string);
-            if (start_desc > -1) {
-                start_desc += 8;
-            }
-        }
-        else {
-            start_desc = ticker['description'].toUpperCase().search(query_string)
-        }
-
-        if (start_desc > -1) {
-            b.innerHTML += ticker['description'].toUpperCase().substring(0, start_desc);
-            b.innerHTML += "<strong>" + ticker['description'].toUpperCase().substr(start_desc, ls) + "</strong>";
-            b.innerHTML += ticker['description'].toUpperCase().substr(start_desc + ls);
-        }
-        else {
-            b.innerHTML += ticker['description'].toUpperCase();
-        }
-
-        b.innerHTML += "<br>";
-
-        if (ticker['symbol'].toUpperCase().startsWith("COINBASE:")) {
-            start_symb = ticker['symbol'].slice(9).toUpperCase().search(query_string);
-            if (start_symb > -1) {
-                start_symb += 9;
-            }
-        } else if (ticker['symbol'].toUpperCase().startsWith("BINANCE:")) {
-            start_symb = ticker['symbol'].slice(8).toUpperCase().search(query_string);
-            if (start_symb > -1) {
-                start_symb += 8;
-            }
-        }
-        else {
-            start_symb = ticker['symbol'].toUpperCase().search(query_string)
-        }
-
-        if (start_symb > -1) {
-            b.innerHTML += ticker['symbol'].substring(0, start_symb);
-            b.innerHTML += "<strong>" + ticker['symbol'].substr(start_symb, ls) + "</strong>";
-            b.innerHTML += ticker['symbol'].substr(start_symb + ls);
-        }
-        else {
-            b.innerHTML += ticker['symbol'];
-        }
+        append_ticker_match(b, ticker['description'].toUpperCase(), query_string, ["COINBASE ", "BINANCE "]);
+        b.appendChild(document.createElement("br"));
+        append_ticker_match(b, ticker['symbol'], query_string, ["COINBASE:", "BINANCE:"]);
 
         b.addEventListener("click", function (e) {
             close_all_ticker_lists();
-            document.getElementById("ticker").value = ""//  ticker['symbol']
+            document.getElementById("ticker").value = ""
             call_endpoint('/submit_ticker/' + ticker['symbol'])
         });
 
@@ -2466,6 +2396,21 @@ function get_possible_autofill_tickers(query_string) {
         b.setAttribute("class", classname);
         a.appendChild(b);
     });
+}
+
+// Appends text with the first match of query (after any exchange prefix) in bold. Ticker data comes
+// from Finnhub, so it is added as text; indexOf treats the query literally, unlike String.search.
+function append_ticker_match(element, text, query, prefixes) {
+    var upper = text.toUpperCase();
+    var prefix = prefixes.find((p) => upper.startsWith(p));
+    var start = upper.indexOf(query, prefix ? prefix.length : 0);
+    if (start < 0) {
+        element.append(text);
+        return;
+    }
+    var match = document.createElement("strong");
+    match.textContent = text.substring(start, start + query.length);
+    element.append(text.substring(0, start), match, text.substring(start + query.length));
 }
 
 function update_brightness_slider() {
@@ -2565,7 +2510,6 @@ function get_audio_support() {
     call_endpoint("/is_audio_supported", function (value) {
         value = JSON.parse(value);
         console.log("Is audio supported? " + value);
-        audio_supported = value;
         document.getElementById("mic_button").hidden = !value;
         document.getElementById("sounds_div").hidden = !value;
         if (value) {
@@ -2927,8 +2871,15 @@ function set_color_mode(color) {
     call_endpoint("/set_color_mode/" + color);
 }
 
-function set_countdown(datetime, msgstr) {
-    call_endpoint("/set_countdown/" + datetime + "/" + msgstr);
+function set_countdown() {
+    var date_input = document.getElementById('setdatetime');
+    if (!date_input.value) {
+        date_input.reportValidity();
+        return;
+    }
+    // The leading "a" keeps the message segment non-empty; the server strips it.
+    var message = 'a' + document.getElementById('countdown_message').value;
+    call_endpoint("/set_countdown/" + encodeURIComponent(date_input.value) + "/" + encodeURIComponent(message));
 }
 
 function show_options() {
@@ -2994,8 +2945,8 @@ function read_conf() {
                     var data = JSON.parse(value);
                     var itm = document.getElementById("linetemplate");
                     for (let i = 0; i < Object.keys(data).length; i++) {
-                        //Skip extra junk in read_static_airport_data() dictionary not loaded from config file
-                        if (String(Object.keys(data)[i]) == "DATATYPES" || String(Object.keys(data)[i]) == "ENDPOINT" || String(Object.keys(data)[i]) == "WEATHER_ENDPOINT") {
+                        // DATATYPES describes the form fields; it is not a setting itself.
+                        if (String(Object.keys(data)[i]) == "DATATYPES") {
                             continue
                         }
 
@@ -3010,7 +2961,6 @@ function read_conf() {
                         var form_secret = metadata && metadata.secret === true;
 
                         var cln = itm.cloneNode(true);
-                        //cln.style="display:block";
                         cln.removeAttribute("style")
                         cln.title = metadata ? metadata.description : "";
                         cln.childNodes[1].textContent = String(Object.keys(data)[i]).replaceAll('_', ' ') + ": ";
@@ -3085,36 +3035,64 @@ function update_sign_status() {
 
     call_endpoint("/get_mode", function (current_mode) {
         if (current_mode && current_mode !== "0") {
-            set_current_mode_button(current_mode);
-
-            // Unhide any special options for this mode. These are all currently placed
-            // as divs immediately after the mode button in the HTML
-            sib = document.getElementById(global_current_mode).nextElementSibling;
-            if (sib && sib.hidden) {
-                sib.hidden = false;
-            }
-
-            // Hide Finance search bar based on if we have ticker data
-            // yet or not
-            if (global_current_mode == "FINANCE") {
-                sib.hidden = (valid_tickers === null);
-            }
-
-            if (global_current_mode == "LIGHTNING") {
-                sync_lightning_controls();
-            }
-
-            if (global_current_mode == "NFL") {
-                get_nfl_games();
-            }
-
-            if (global_current_mode == "MLB") {
-                get_mlb_games();
-            }
-
-            if (global_current_mode == "FREE_SKETCH") {
-                open_free_sketch_modal();
-            }
+            show_mode_controls(current_mode);
         }
+    });
+
+    restore_mode_options();
+}
+
+// Marks the sign's current mode and opens its options, loading whatever data they need. Used when
+// the page loads and when the sign is switched back on, rather than when a mode button is clicked.
+function show_mode_controls(mode) {
+    set_current_mode_button(mode);
+    var button = document.getElementById(mode);
+    if (!button) {
+        return;
+    }
+
+    // Each mode's options sit in the element right after its button.
+    var options = button.nextElementSibling;
+    if (options && options.hidden && mode !== "FINANCE") {
+        options.hidden = false;
+    }
+
+    if (mode == "FINANCE") {
+        // Shows the search box once the ticker list has loaded.
+        get_tickers();
+    } else if (mode == "SNOW") {
+        get_resorts(get_saved_resorts);
+    } else if (mode == "LIGHTNING") {
+        sync_lightning_controls();
+    } else if (mode == "NFL") {
+        get_nfl_games();
+    } else if (mode == "MLB") {
+        get_mlb_games();
+    } else if (mode == "FLAGQUIZ") {
+        poll_flagquiz_state();
+    } else if (mode == "FREE_SKETCH") {
+        open_free_sketch_modal();
+    }
+}
+
+// Sets the option controls to what the sign is using, instead of the defaults in the HTML.
+function restore_mode_options() {
+    call_endpoint("/get_mode_options", function (response) {
+        var options = JSON.parse(response);
+        check_radio("cgolstyle", options.cgol_style);
+        check_radio("satellitestyle", options.satellite_mode);
+        check_radio("lightningmode", options.lightning_mode);
+        document.getElementById("lightning_slider").value = options.lightning_zoom;
+        sync_lightning_controls();
+        // A resort picked from the search shows statically, which has no radio, so none stays checked.
+        check_radio("snowmode", options.snow_mode);
+        document.getElementById("colormap").value = options.mandelbrot_color;
+        document.getElementById("mandelbrot_slider").value = options.mandelbrot_colorscale;
+    });
+}
+
+function check_radio(name, value) {
+    document.getElementsByName(name).forEach(function (radio) {
+        radio.checked = radio.value === String(value);
     });
 }

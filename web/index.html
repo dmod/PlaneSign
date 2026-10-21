@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=config-secrets-2">
+  <link rel="stylesheet" href="style.css?v=audit-fixes-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=config-secrets-2"></script>
+  <script src="index.js?v=audit-fixes-2"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -133,6 +133,48 @@
         </div>
       </fieldset>
 
+      <fieldset class="mode_selector_button_group">
+        <legend>Visuals</legend>
+        <button id="CGOL" class="mode_button" onclick="set_mode(this.id); document.getElementById('cgol_div').hidden = false">CGOL</button>
+        <div id="cgol_div" hidden>
+          <input type="radio" id="rainbowgol" name="cgolstyle" onclick="set_mode('CGOL')" value="1" checked="checked">
+          <label for="rainbowgol">Rainbow Rules</label>
+          <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode('CGOL')" value="2">
+          <label for="colorshift">Color Shifting</label>
+        </div>
+        <button id="MANDELBROT" class="mode_button" onclick="set_mode(this.id); document.getElementById('mandelbrot_div').hidden = false">Mandelbrot</button>
+        <div id="mandelbrot_div" hidden>
+          <label for="colormap">Colormap:</label>
+          <select name="colormap" id="colormap" onchange="set_mandelbrot_color(this.value);">
+            <option value="0">Rainbow</option>
+            <option value="1">Sunset</option>
+            <option value="2">Nova</option>
+            <option value="3">Vaporwave</option>
+            <option value="4">70's</option>
+            <option value="5">Pastel</option>
+            <option value="6">Neon</option>
+            <option value="7">Elemental</option>
+            <option value="8">Fire</option>
+            <option value="9">Greyscale</option>
+          </select>
+          <br>
+          <input id="mandelbrot_slider" type="range" min="0.1" max="3" step="0.1" value="3">
+        </div>
+        <button id="CCA" class="mode_button" onclick="set_mode(this.id)">CCA</button>
+        <button id="AQUARIUM" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
+        <button id="PLANTS" class="mode_button" onclick="set_mode(this.id)">Plants</button>
+        <button id="HALLOWEEN" class="mode_button" onclick="set_mode(this.id)">Halloween</button>
+        <div id="halloween_div" class="halloween_controls" hidden>
+          <label class="halloween_lightning_switch">
+            <span>Background lightning</span>
+            <input id="halloween_lightning_toggle" type="checkbox" checked onchange="set_halloween_lightning(this.checked)" role="switch">
+            <span class="halloween_lightning_slider" aria-hidden="true"></span>
+          </label>
+        </div>
+        <button id="FIREWORKS" class="mode_button" onclick="set_mode(this.id)">Fireworks</button>
+        <button id="SNOWFALL" class="mode_button" onclick="set_mode(this.id)">Let It Snow!</button>
+      </fieldset>
+
       <div class="device_info_box">
         <div class="device_info_header">Device Info</div>
         <div id="device_info_content" class="device_info_content">
@@ -189,7 +231,7 @@
           <input type="radio" id="ISS" name="satellitestyle" onclick="set_satellite_mode(this.value)" value="2">
           <label for="ISS">ISS</label>
         </div>
-        <button id="SNOW" class="mode_button" onclick="set_mode(this.id); get_resorts(); setTimeout(get_saved_resorts, 1000); document.getElementById('snow_div').hidden = false">Slope Conditions 🏂</button>
+        <button id="SNOW" class="mode_button" onclick="set_mode(this.id); get_resorts(get_saved_resorts); document.getElementById('snow_div').hidden = false">Slope Conditions 🏂</button>
         <div id="snow_div" style="position: relative;" hidden>
           <div id="tracked_resorts" hidden>
             <b style="padding-top: 5px;display: block;">Tracked Resorts</b>
@@ -204,7 +246,7 @@
           </div>
           <div id="resort_search" hidden>
             <input type="text" id="resort_searchbar" autocomplete="off" oninput="get_possible_autofill_resorts(this.value)"></input>
-            <button id="save_resort" onclick="save_current_resort(); set_snow_mode(getElementById('Detail').value)">
+            <button id="save_resort" onclick="save_current_resort()">
               Save
             </button>
           </div>
@@ -259,47 +301,11 @@
           <br>
           <input type="text" id="countdown_message"></input>
           <br>
-          <input type="datetime-local" id="setdatetime" name="setdatetime">
-          <input type="submit" onclick="set_countdown(document.getElementById('setdatetime').value,'a'+document.getElementById('countdown_message').value)" value="Submit">
+          <input type="datetime-local" id="setdatetime" name="setdatetime" required>
+          <input type="submit" onclick="set_countdown()" value="Submit">
         </div>
         <button id="WELCOME" class="mode_button" onclick="set_mode(this.id)">Welcome Intro</button>
-        <button id="CGOL" class="mode_button" onclick="set_mode(this.id); document.getElementById('cgol_div').hidden = false">CGOL</button>
-        <div id="cgol_div" hidden>
-          <input type="radio" id="rainbowgol" name="cgolstyle" onclick="set_mode('CGOL')" value="1" checked="checked">
-          <label for="rainbowgol">Rainbow Rules</label>
-          <input type="radio" id="colorshift" name="cgolstyle" onclick="set_mode('CGOL')" value="2">
-          <label for="colorshift">Color Shifting</label>
-        </div>
-        <button id="MANDELBROT" class="mode_button" onclick="set_mode(this.id); document.getElementById('mandelbrot_div').hidden = false">Mandelbrot</button>
-        <div id="mandelbrot_div" hidden>
-          <label for="colormap">Colormap:</label>
-          <select name="colormap" id="colormap" onchange="set_mandelbrot_color(this.value);">
-            <option value="0">Rainbow</option>
-            <option value="1">Sunset</option>
-            <option value="2">Nova</option>
-            <option value="3">Vaporwave</option>
-            <option value="4">70's</option>
-            <option value="5">Pastel</option>
-            <option value="6">Neon</option>
-            <option value="7">Elemental</option>
-            <option value="8">Fire</option>
-            <option value="9">Greyscale</option>
-          </select>
-          <br>
-          <input id="mandelbrot_slider" type="range" min="0.1" max="3" step="0.1" value="3">
-        </div>
-        <button id="CCA" class="mode_button" onclick="set_mode(this.id)">CCA</button>
-        <button id="AQUARIUM" class="mode_button" onclick="set_mode(this.id)">Aquarium</button>
-        <button id="PLANTS" class="mode_button" onclick="set_mode(this.id)">Plants</button>
-        <button id="HALLOWEEN" class="mode_button" onclick="set_mode(this.id)">Halloween</button>
-        <div id="halloween_div" class="halloween_controls" hidden>
-          <label class="halloween_lightning_switch">
-            <span>Background lightning</span>
-            <input id="halloween_lightning_toggle" type="checkbox" checked onchange="set_halloween_lightning(this.checked)" role="switch">
-            <span class="halloween_lightning_slider" aria-hidden="true"></span>
-          </label>
-        </div>
-        <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">Outside</button>
+        <button id="OUTSIDE" class="mode_button" onclick="set_mode(this.id)">🏠Outside🏠</button>
         <div id="outside_div" hidden>
           <div class="outside_timeline">
             <label for="outside_time_slider">Preview the next 24 hours</label>
@@ -314,11 +320,9 @@
           </div>
           <p id="outside_status" class="outside_status" role="status">Loading local sky and weather...</p>
         </div>
-        <button id="FIREWORKS" class="mode_button" onclick="set_mode(this.id)">Fireworks</button>
         <button id="HORSE_RACE" class="mode_button" onclick="set_mode(this.id)">Horse Race 🐎</button>
         <button id="FREE_SKETCH" class="mode_button" onclick="set_mode(this.id); open_free_sketch_modal()">Free Sketch</button>
         <button id="SANTA" class="mode_button" onclick="set_mode(this.id)">Christmas</button>
-        <button id="SNOWFALL" class="mode_button" onclick="set_mode(this.id)">Let It Snow!</button>
       </fieldset>
     </div>
 

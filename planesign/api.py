@@ -171,9 +171,14 @@ def set_color_mode(color):
     return ""
 
 
-@app.route("/set_countdown/<datetimestr>/<countdownmsg>")
+# The browser prefixes the message with one character so the segment is never empty; path: lets it contain "/".
+@app.route("/set_countdown/<datetimestr>/<path:countdownmsg>")
 def set_countdown(datetimestr, countdownmsg):
-    shared_config.data_dict["countdown_datetime"] = datetime.fromisoformat(datetimestr)
+    try:
+        countdown_datetime = datetime.fromisoformat(datetimestr)
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid countdown date"}), 400
+    shared_config.data_dict["countdown_datetime"] = countdown_datetime
     shared_config.data_dict["countdown_message"] = countdownmsg[1:].strip()
     shared_config.shared_forced_sign_update.set()
     return ""
@@ -592,6 +597,22 @@ def flagquiz_flag(code):
 @app.route("/get_mode")
 def get_mode():
     return DisplayMode(shared_config.shared_mode.value).name
+
+
+@app.route("/get_mode_options")
+def get_mode_options():
+    """Current per-mode settings, so a freshly loaded page shows what the sign is using."""
+    return jsonify(
+        {
+            "cgol_style": str(shared_config.arg_dict.get("style", "1")),
+            "satellite_mode": shared_config.shared_satellite_mode.value,
+            "lightning_mode": shared_config.shared_lightning_mode.value,
+            "lightning_zoom": shared_config.shared_lightning_zoomind.value,
+            "snow_mode": shared_config.shared_snow_mode.value,
+            "mandelbrot_color": shared_config.shared_mandelbrot_color.value,
+            "mandelbrot_colorscale": shared_config.shared_mandelbrot_colorscale.value,
+        }
+    )
 
 
 @app.route("/identify")
