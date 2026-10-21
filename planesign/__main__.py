@@ -111,6 +111,7 @@ import psclock
 import santa
 import satellite
 import shared_config
+import slime
 import snow
 import snowfall
 import tides

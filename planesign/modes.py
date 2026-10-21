@@ -38,6 +38,7 @@ class DisplayMode(Enum):
     OUTSIDE = auto()  # Animated local rural landscape
     HALLOWEEN = auto()  # Flickering Jack-o'-lantern display
     FLAGQUIZ = auto()  # Multiplayer flag quiz
+    SLIME = auto()  # Physarum slime mould network
 
 
 # Modes DEFAULT_MODE cannot start in: WELCOME and IDENTIFY hand off to another mode, and
