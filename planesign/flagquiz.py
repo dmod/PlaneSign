@@ -59,7 +59,7 @@ def normalize_country_tokens(value):
         (r"\bislands?\b|\bis\.?\b", "island"),
         (r"\bterritor(?:y|ies)\b|\bterr\.?\b", "territory"),
         (r"\bsouth\b|\bs\.?\b", "south"),
-        (r"\bsaint\b|\bst\.?\b", "saint"),
+        (r"\bsa?int\b|\bst\.?\b", "saint"),
     )
     for pattern, replacement in replacements:
         value = re.sub(pattern, replacement, value)
