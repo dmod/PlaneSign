@@ -5,9 +5,11 @@ import random
 import re
 import time
 import uuid
+from dataclasses import dataclass
 from functools import lru_cache
 
 import games
+import numpy as np
 import shared_config
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageDraw, ImageEnhance
@@ -18,14 +20,40 @@ ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
 QUESTION_LIMIT = 25
 SUDDEN_DEATH_NOTICE_SECONDS = 3
-FIREWORK_SLOT_SECONDS = 0.82
 START_COUNTDOWN_SECONDS = 3
 WIDTH = 128
 HEIGHT = 32
+FIREWORK_SLOT_SECONDS = 0.7
+FIREWORK_CHANCE = 0.9
+FIREWORK_FINALE_PERIOD = 75
+FIREWORK_FINALE_SECONDS = 7
+FIREWORK_MAX_SECONDS = 4.2
+FIREWORK_HORIZON = HEIGHT - 1
+FIREWORK_COLORS = ((255, 40, 40), (255, 190, 40), (40, 255, 90), (60, 130, 255), (200, 80, 255), (255, 255, 255), (255, 110, 200), (40, 230, 255))
+FIREWORK_WILLOW = (255, 176, 70)
+FIREWORK_GLITTER = (255, 244, 210)
+FIREWORK_ROCKET = (255, 214, 150)
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
 FLAG_IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "flags")
 DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0}
 LOADING_FLAG_HEIGHT = 10
+FIREWORK_X, FIREWORK_Y = np.meshgrid(np.arange(WIDTH, dtype=np.float32), np.arange(HEIGHT, dtype=np.float32))
+
+
+@dataclass(frozen=True, eq=False)
+class QuizFireworkShell:
+    launch: float
+    rise: float
+    origin: float
+    burst: tuple[float, float]
+    kind: str
+    life: float
+    gravity: float
+    radius: float
+    salt: int
+    angles: np.ndarray
+    speeds: np.ndarray
+    colors: np.ndarray
 
 
 class FlagQuizConflict(ValueError):
@@ -60,6 +88,11 @@ def normalize_country_tokens(value):
         (r"\bterritor(?:y|ies)\b|\bterr\.?\b", "territory"),
         (r"\bsouth\b|\bs\.?\b", "south"),
         (r"\bsa?int\b|\bst\.?\b", "saint"),
+        (r"\brep\.\b", "republic"),
+        (r"\bprin\.\b", "principality"),
+        (r"\bcabo\b", "cape"),
+        (r"\bcote\b", "coast"),
+        (r"\b(?:d')?ivoire\b", "ivory"),
     )
     for pattern, replacement in replacements:
         value = re.sub(pattern, replacement, value)
@@ -146,6 +179,7 @@ def start_game(difficulty, player_id):
     scores = {pid: 0 for pid, record in players.items() if now - record["last_seen"] < games.ACTIVE_PLAYER_SECONDS}
     scores[player["id"]] = 0
     countdown_until = now + START_COUNTDOWN_SECONDS
+    firework_seed = random.randrange(2**32)
     victory_flag_codes = [country["code"] for country in load_countries()]
     random.shuffle(victory_flag_codes)
 
@@ -167,6 +201,7 @@ def start_game(difficulty, player_id):
         "winner_id": None,
         "tie": False,
         "end_requested": False,
+        "firework_seed": firework_seed,
         "victory_flag_codes": victory_flag_codes,
     }
     with shared_config.shared_games_lock:
@@ -528,6 +563,7 @@ def get_sign_state():
             "tie": state["tie"],
             "end_requested": state.get("end_requested", False),
             "winner": _winner_summary(state, players, now),
+            "firework_seed": state.get("firework_seed", 0),
             "victory_flag_codes": state["victory_flag_codes"],
         }
 
@@ -602,86 +638,128 @@ def _draw_countdown(sign, countdown):
 
 
 @lru_cache(maxsize=32)
-def _firework_shell(slot):
-    rng = random.Random(0xF17E + slot * 104729)
-    palette = ((255, 75, 45), (255, 180, 50), (80, 170, 255), (230, 90, 255), (90, 255, 160), (255, 245, 190))
-    color = rng.choice(palette)
-    kind = rng.choice(("peony", "peony", "ring", "willow"))
-    count = rng.randint(30, 38)
-    radius = rng.uniform(8, 12)
-    angle_offset = rng.uniform(0, math.tau)
-    particles = []
-    for index in range(count):
-        angle = angle_offset + math.tau * index / count + rng.uniform(-0.08, 0.08)
-        spread = rng.uniform(0.82, 1.05) if rng.random() < 0.7 else rng.uniform(0.35, 0.65)
-        speed = radius * spread / 1.4
-        particle_color = (255, 248, 220) if rng.random() < 0.2 else color
-        particles.append((
-            angle,
-            speed,
-            rng.uniform(1.7, 2.2) if kind == "willow" else rng.uniform(1.5, 2.0),
-            particle_color,
-            rng.random(),
-            rng.uniform(4.0, 9.0),
-            rng.uniform(0.25, 0.85),
+def _firework_shells(slot, seed):
+    rng = random.Random(seed * 2741 + slot * 48611 + 31)
+    start = slot * FIREWORK_SLOT_SECONDS
+    finale = start % FIREWORK_FINALE_PERIOD >= FIREWORK_FINALE_PERIOD - FIREWORK_FINALE_SECONDS
+    count = rng.choice((1, 2, 2, 3)) if finale else int(rng.random() < FIREWORK_CHANCE)
+    shells = []
+    for _ in range(count):
+        kind = rng.choice(("peony", "peony", "ring", "willow", "crackle"))
+        radius = rng.uniform(4.5, 7.5) if kind != "ring" else rng.uniform(5, 7)
+        burst = (rng.uniform(10, 118), rng.uniform(radius + 5, 15))
+        stars = round(radius * (3.6 if kind != "ring" else 2.8))
+        angles = np.array([math.tau * (index + rng.uniform(-0.25, 0.25)) / stars for index in range(stars)], dtype=np.float32)
+        if kind == "ring":
+            speeds = np.full(stars, radius, dtype=np.float32)
+        else:
+            speeds = np.array([radius * (rng.uniform(0.85, 1.05) if rng.random() < 0.7 else rng.uniform(0.35, 0.65)) for _ in range(stars)], dtype=np.float32)
+        outer, inner = rng.sample(FIREWORK_COLORS, 2)
+        if kind == "willow":
+            colors = np.tile(np.array(FIREWORK_WILLOW, dtype=np.float32) / 255, (stars, 1))
+        else:
+            colors = np.where((speeds < radius * 0.7)[:, None], np.array(inner, dtype=np.float32) / 255, np.array(outer, dtype=np.float32) / 255)
+        life = rng.uniform(2.4, 2.9) if kind == "willow" else rng.uniform(1.5, 2.1)
+        shells.append(QuizFireworkShell(
+            launch=start + rng.uniform(0, FIREWORK_SLOT_SECONDS),
+            rise=rng.uniform(0.7, 1.1),
+            origin=burst[0] + rng.uniform(-4, 4),
+            burst=burst,
+            kind=kind,
+            life=life,
+            gravity=3.2 if kind == "willow" else 1.4,
+            radius=radius,
+            salt=rng.randrange(2**30),
+            angles=angles,
+            speeds=speeds,
+            colors=colors,
         ))
-    return (
-        slot * FIREWORK_SLOT_SECONDS + rng.uniform(0.05, 0.35),
-        rng.uniform(30, 112),
-        rng.uniform(9, 17),
-        rng.uniform(0.55, 0.85),
-        3.5 if kind == "willow" else 2.0,
-        tuple(particles),
-    )
+    return tuple(shells)
 
 
-def _add_firework_pixel(pixels, x, y, color, brightness):
-    x, y = round(x), round(y)
-    if not 0 <= x < WIDTH or not 0 <= y < HEIGHT or brightness < 0.025:
-        return
-    old = pixels[x, y]
-    pixels[x, y] = tuple(min(255, channel + round(value * brightness)) for channel, value in zip(old, color))
+def _firework_hash(*values):
+    value = 2166136261
+    for item in values:
+        value = ((value ^ (item & 0xFFFFFFFF)) * 16777619) & 0xFFFFFFFF
+    value ^= value >> 15
+    value = (value * 2246822519) & 0xFFFFFFFF
+    value ^= value >> 13
+    return value / 2**32
 
 
-def _draw_fireworks(image, elapsed):
-    pixels = image.load()
-    last_slot = math.floor(elapsed / FIREWORK_SLOT_SECONDS)
-    first_slot = math.floor((elapsed - 3.1) / FIREWORK_SLOT_SECONDS)
-    for slot in range(first_slot, last_slot + 1):
-        launch, burst_x, burst_y, rise, gravity, particles = _firework_shell(slot)
-        age = elapsed - launch
-        if age < 0 or age >= rise + 2.2:
-            continue
+def _splat_firework(light, xs, ys, colors, weights):
+    columns, rows = np.rint(xs).astype(int), np.rint(ys).astype(int)
+    keep = (columns >= 0) & (columns < WIDTH) & (rows >= 0) & (rows < HEIGHT) & (weights > 0.004)
+    np.add.at(light, (rows[keep], columns[keep]), colors[keep] * weights[keep, None])
 
-        if age < rise:
-            progress = age / rise
-            eased = 1 - (1 - progress) ** 1.4
-            rocket_x = 64 + (burst_x - 64) * eased
-            rocket_y = HEIGHT - 1 + (burst_y - (HEIGHT - 1)) * eased
-            for trail_step, brightness in ((0.0, 1.0), (0.09, 0.48), (0.18, 0.2)):
-                trail_progress = max(0, age - trail_step) / rise
-                trail_eased = 1 - (1 - trail_progress) ** 1.4
-                trail_x = 64 + (burst_x - 64) * trail_eased
-                trail_y = HEIGHT - 1 + (burst_y - (HEIGHT - 1)) * trail_eased
-                _add_firework_pixel(pixels, trail_x, trail_y, (255, 214, 150), brightness)
-            _add_firework_pixel(pixels, rocket_x, rocket_y, (255, 255, 235), 1.0)
-            continue
 
-        burst_age = age - rise
-        if burst_age < 0.09:
-            _add_firework_pixel(pixels, burst_x, burst_y, (255, 255, 235), 1.0 - burst_age / 0.09)
+def _firework_light(elapsed, seed):
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    for slot in range(math.floor((elapsed - FIREWORK_MAX_SECONDS) / FIREWORK_SLOT_SECONDS), math.floor(elapsed / FIREWORK_SLOT_SECONDS) + 1):
+        for shell in _firework_shells(slot, seed):
+            age = elapsed - shell.launch
+            if not 0 <= age < shell.rise + shell.life:
+                continue
+            burst_x, burst_y = shell.burst
+            if age < shell.rise:
+                for back, weight in ((0, 0.9), (0.05, 0.45), (0.1, 0.22), (0.15, 0.1)):
+                    progress = max(0, age - back) / shell.rise
+                    climb = 1 - (1 - progress) ** 2
+                    x = shell.origin + (burst_x - shell.origin) * climb + math.sin(age * 23 + shell.salt) * 0.4
+                    y = FIREWORK_HORIZON + (burst_y - FIREWORK_HORIZON) * climb
+                    _splat_firework(
+                        light,
+                        np.array([x]),
+                        np.array([y]),
+                        np.array([FIREWORK_ROCKET], dtype=np.float32) / 255,
+                        np.array([weight]),
+                    )
+                continue
 
-        for angle, speed, lifetime, color, phase, frequency, twinkle_depth in particles:
-            for trail_step, trail_weight in ((0.0, 1.0), (0.13, 0.48), (0.26, 0.22)):
-                particle_age = burst_age - trail_step
-                if not 0 <= particle_age < lifetime:
+            age -= shell.rise
+            fade = 1.0 if age < 0.15 else max(0.0, 1 - (age - 0.15) / (shell.life - 0.15)) ** 1.3
+            heat = max(0.0, 1 - age / 0.2)
+            colors = shell.colors + (1 - shell.colors) * heat * 0.8
+            glow = 0.42 * math.exp(-age / 0.3)
+            if glow > 0.01:
+                distance = (FIREWORK_X - burst_x) ** 2 + (FIREWORK_Y - burst_y) ** 2
+                tint = shell.colors.mean(axis=0) * 0.6 + 0.4
+                light += np.exp(-distance / (2 * (shell.radius * 1.3) ** 2))[..., None] * tint * glow
+
+            trail = 6 if shell.kind == "willow" else 3
+            for step in range(trail + 1):
+                particle_age = age - step * 0.05
+                if particle_age < 0:
+                    break
+                reach = shell.speeds * (1 - math.exp(-particle_age / 0.28))
+                xs = burst_x + reach * np.cos(shell.angles)
+                ys = burst_y + reach * np.sin(shell.angles) * 0.9 + shell.gravity * particle_age * particle_age
+                weights = np.full(len(xs), fade * (0.72 if shell.kind == "willow" else 0.5) ** step, dtype=np.float32)
+                if shell.kind == "crackle" and age > shell.life * 0.45:
+                    flicker = np.array([
+                        _firework_hash(shell.salt, index, math.floor(elapsed * 16))
+                        for index in range(len(xs))
+                    ], dtype=np.float32)
+                    glitter = np.array(FIREWORK_GLITTER, dtype=np.float32) / 255
+                    _splat_firework(light, xs, ys, np.tile(glitter, (len(xs), 1)), weights * (flicker > 0.45) * 1.3)
                     continue
-                fade = (1 - particle_age / lifetime) ** 1.45
-                twinkle = 1 - twinkle_depth * (0.5 - 0.5 * math.sin(math.tau * (elapsed * frequency + phase)))
-                distance = speed * particle_age
-                x = burst_x + math.cos(angle) * distance
-                y = burst_y + math.sin(angle) * distance * 0.72 + gravity * particle_age**2
-                _add_firework_pixel(pixels, x, y, color, fade * twinkle * trail_weight)
+                _splat_firework(light, xs, ys, colors, weights)
+            if age < 0.08:
+                _splat_firework(
+                    light,
+                    np.array([burst_x]),
+                    np.array([burst_y]),
+                    np.ones((1, 3), dtype=np.float32),
+                    np.array([1.0]),
+                )
+    return light
+
+
+def _draw_fireworks(image, elapsed, seed):
+    light = np.clip(_firework_light(elapsed, seed), 0, 1)
+    base = np.asarray(image, dtype=np.float32) / 255
+    composited = base * (1 - light.max(axis=-1, keepdims=True)) + light
+    image.paste(Image.fromarray(np.round(composited * 255).astype(np.uint8), "RGB"))
 
 
 @lru_cache(maxsize=256)
@@ -709,7 +787,7 @@ def _draw_raising_flag(draw, elapsed, flag_codes):
 
 def _draw_victory(sign, state, elapsed):
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-    _draw_fireworks(image, elapsed)
+    _draw_fireworks(image, elapsed, state.get("firework_seed", 0))
     draw = ImageDraw.Draw(image)
     _draw_raising_flag(draw, elapsed, state["victory_flag_codes"])
     sign.canvas.SetImage(image, 0, 0)
@@ -741,6 +819,18 @@ def _draw_sudden_death_notice(sign):
 
 
 def _fit_option(text, max_chars=20):
+    if len(text) <= max_chars:
+        return text
+    text = text.replace("and", "&")
+    if len(text) <= max_chars:
+        return text
+    text = text.replace("Islands", "Is.").replace("Island", "Is.")
+    if len(text) <= max_chars:
+        return text
+    text = text.replace("Saint", "St.")
+    if len(text) <= max_chars:
+        return text
+    text = text.replace("Southern", "S.").replace("Northern", "N.")
     if len(text) <= max_chars:
         return text
     words = text.split()
