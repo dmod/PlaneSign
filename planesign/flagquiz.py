@@ -715,18 +715,18 @@ def _draw_victory(sign, state, elapsed):
     sign.canvas.SetImage(image, 0, 0)
 
     winner = state.get("winner")
-    title = "FLAG CHAMPION!" if winner else "QUIZ COMPLETE!"
-    title_x = (WIDTH - len(title) * 5) // 2
+    title = "FLAG CHAMPION!" if winner and winner['accuracy'] > 0 else "QUIZ COMPLETE!"
+    title_x = (WIDTH - len(title) * 5) // 2 + 3
     title_color = graphics.Color(46, 210, 255) if int(elapsed * 3) % 2 == 0 else graphics.Color(255, 220, 80)
     _draw_outlined_text(sign, sign.font57, title, title_x, 9, title_color)
 
-    message = winner["name"] + " WINS!" if winner else "IT'S A TIE!"
-    message_x = (WIDTH - len(message) * 4) // 2
+    message = winner["name"] + " WINS!" if winner and winner['accuracy'] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
+    message_x = (WIDTH - len(message) * 4) // 2 + 3
     message_color = graphics.Color(255, 240, 150) if int(elapsed * 3) % 2 == 0 else graphics.Color(130, 255, 150)
     _draw_outlined_text(sign, sign.font46, message, message_x, 20, message_color)
-    if winner:
+    if winner and winner['accuracy'] > 0:
         accuracy = f"ACCURACY {winner['accuracy']}%"
-        accuracy_x = (WIDTH - len(accuracy) * 4) // 2
+        accuracy_x = (WIDTH - len(accuracy) * 4) // 2 + 3
         _draw_outlined_text(sign, sign.font46, accuracy, accuracy_x, 30, graphics.Color(130, 255, 150))
 
 
