@@ -322,6 +322,7 @@ window.onload = function () {
             .catch((err) => {
                 console.error("write_config failed:", err);
                 btn.classList.add("config-save-error");
+                alert("Settings not saved: " + err.message);
                 window.setTimeout(function () {
                     btn.classList.remove("config-save-error");
                 }, 2000);
@@ -347,7 +348,8 @@ window.onload = function () {
     }
 
     document.getElementById("custom_message").oninput = function () {
-        call_endpoint("/set_custom_message/" + encodeURIComponent(this.value));
+        // The leading "a" keeps the message segment non-empty; the server strips it.
+        call_endpoint("/set_custom_message/" + encodeURIComponent("a" + this.value));
     }
 
     document.getElementById("mandelbrot_slider").oninput = function () {
@@ -2989,6 +2991,7 @@ function read_conf() {
                             cln.childNodes[2].removeAttribute("value")
                             cln.childNodes[2].checked = (String(data[Object.keys(data)[i]]).toLowerCase() === 'true');
                         } else if (form_type == "number" || form_type == "range") {
+                            cln.childNodes[2].required = true;
                             if (form_step != null) {
                                 cln.childNodes[2].step = form_step;
                             } else {

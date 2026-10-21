@@ -463,18 +463,20 @@ class TextScroller:
         self.dr = ImageDraw.Draw(self.image)
 
     def set_text(self, dx, dy):
+        # The .pil bitmap fonts only cover Latin-1 and PIL raises on anything else, so draw those characters as "?".
+        text = self.text.encode("latin-1", "replace").decode("latin-1")
 
         if type(self.color) is tuple:
-            self.dr.text((dx, dy), self.text, font=self.font, fill=self.color)
+            self.dr.text((dx, dy), text, font=self.font, fill=self.color)
         else:
             if self.color == 0 or self.color == 5:
-                self.dr.text((dx, dy), self.text, font=self.font, fill=(3, 194, 255))
+                self.dr.text((dx, dy), text, font=self.font, fill=(3, 194, 255))
 
             if self.color == 1:
                 if self.colortimer + 0.1 < time.perf_counter():
                     self.colortimer = time.perf_counter()
                     self.tempcolor = random_rgb(rmin=10, gmin=10, bmin=10)
-                self.dr.text((dx, dy), self.text, font=self.font, fill=self.tempcolor)
+                self.dr.text((dx, dy), text, font=self.font, fill=self.tempcolor)
 
             if (self.color >= 2 and self.color <= 4) or self.color > 5:
                 if self.color == 2:
@@ -490,9 +492,9 @@ class TextScroller:
                     self.colortimer = time.perf_counter()
                     self.coloroffset = (self.coloroffset + 1) % len(colors)
 
-                self.dr.text((dx, dy), self.text, font=self.font, fill=colors[(0 + self.coloroffset) % len(colors)])
+                self.dr.text((dx, dy), text, font=self.font, fill=colors[(0 + self.coloroffset) % len(colors)])
                 if len(colors) > 1:
-                    for index, letter in enumerate(self.text):
+                    for index, letter in enumerate(text):
                         if index % len(colors) == 1:
                             self.dr.text((dx + self.fontw * index, dy), letter, font=self.font, fill=colors[(1 + self.coloroffset) % len(colors)])
                         if len(colors) > 2 and index % len(colors) == 2:

@@ -2,6 +2,7 @@ import glob
 import io
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -11,6 +12,7 @@ import threading
 import wave
 from datetime import datetime
 
+import lightning
 import mlb
 import network
 import nfl
@@ -44,6 +46,25 @@ config_lock = threading.Lock()
 # Choices for "#select" settings in sign.conf.sample, built here so the web UI never hardcodes them.
 CONFIG_SELECT_OPTIONS = {"DEFAULT_MODE": startup_mode_names}
 
+# Color modes 0-5 are the presets in custom_message.py; from 6 up a value is 6 + 0xRRGGBB from the color picker.
+CUSTOM_COLOR_OFFSET = 6
+MAX_COLOR_MODE = CUSTOM_COLOR_OFFSET + 0xFFFFFF
+# A pong paddle is 6 rows tall, so its top row can be at most 32 - 6.
+PONG_PADDLE_MAX_Y = 26
+
+
+def int_param(value, low, high):
+    """value as an int when it is a whole number from low to high, otherwise None."""
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    return number if low <= number <= high else None
+
+
+def bad_request(message):
+    return jsonify({"ok": False, "error": message}), 400
+
 
 @app.route("/get_config")
 def get_config():
@@ -71,13 +92,44 @@ def get_config():
     return json.dumps(sample)
 
 
+def config_value_error(datatype, value):
+    """Why value is not valid for a sign.conf.sample setting, or None. Saved values are parsed with float() or int()
+    without a fallback, some only at startup, so a bad one must never reach sign.conf."""
+    key, kind = datatype["id"], datatype["type"]
+    if kind == "checkbox":
+        return None if value in ("true", "false") else f"{key} must be true or false"
+    if kind == "select":
+        return None if value in CONFIG_SELECT_OPTIONS[key]() else f"{key} is not one of its choices"
+    if kind not in ("number", "range"):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return f"{key} must be a number"
+    low = float(datatype.get("min", "-inf"))
+    high = float(datatype.get("max", "inf"))
+    if not math.isfinite(number) or not low <= number <= high:
+        return f"{key} must be from {datatype.get('min', '-∞')} to {datatype.get('max', '∞')}"
+    # A range slider moves in whole steps of 1 unless the sample sets a step, matching the browser.
+    step = float(datatype.get("step", "1" if kind == "range" else "0"))
+    if step:
+        steps = (number - (low if math.isfinite(low) else 0)) / step
+        if not math.isclose(steps, round(steps), abs_tol=1e-9):
+            return f"{key} must be in steps of {datatype.get('step', '1')}"
+    return None
+
+
 @app.route("/write_config", methods=["POST"])
 def write_config():
     values = request.get_json(silent=True)
-    defaults, _ = shared_config.load_config_schema()
+    defaults, datatypes = shared_config.load_config_schema()
     if request.args or not isinstance(values, dict) or not values or any(key not in defaults or not isinstance(value, str) or "\n" in value or "\r" in value for key, value in values.items()):
         logging.warning("Rejected invalid configuration payload")
         return jsonify({"ok": False, "error": "Send configuration as a JSON object of known settings with single-line string values, without query parameters"}), 400
+    errors = [error for datatype in datatypes if datatype["id"] in values for error in [config_value_error(datatype, values[datatype["id"]])] if error]
+    if errors:
+        logging.warning("Rejected configuration: %s", "; ".join(errors))
+        return jsonify({"ok": False, "error": "; ".join(errors)}), 400
     try:
         with config_lock:
             with open(shared_config.config_path, "w", encoding="utf-8") as f:
@@ -166,7 +218,10 @@ def turn_off():
 
 @app.route("/set_color_mode/<color>")
 def set_color_mode(color):
-    shared_config.shared_color_mode.value = int(color)
+    color_mode = int_param(color, 0, MAX_COLOR_MODE)
+    if color_mode is None:
+        return bad_request(f"Color mode must be a whole number from 0 to {MAX_COLOR_MODE}")
+    shared_config.shared_color_mode.value = color_mode
     shared_config.shared_forced_sign_update.set()
     return ""
 
@@ -229,16 +284,16 @@ def set_free_sketch_pixel():
             r = int(data["r"])
             g = int(data["g"])
             b = int(data["b"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return jsonify({"ok": False, "error": "Expected integer x, y, r, g, b"}), 400
 
     try:
         brush_size = int(data.get("brush_size", 1))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
 
     brush_shape = data.get("brush_shape", "square")
-    if brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
+    if not isinstance(brush_shape, str) or brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
         brush_shape = "square"
 
     if not 0 <= x < 128 or not 0 <= y < 32:
@@ -276,16 +331,16 @@ def set_free_sketch_line():
             r = int(data["r"])
             g = int(data["g"])
             b = int(data["b"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return jsonify({"ok": False, "error": "Expected integer x0, y0, x1, y1, r, g, b"}), 400
 
     try:
         brush_size = int(data.get("brush_size", 1))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return jsonify({"ok": False, "error": "Brush size must be 1, 2, 3, 4, or 5"}), 400
 
     brush_shape = data.get("brush_shape", "square")
-    if brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
+    if not isinstance(brush_shape, str) or brush_shape not in FREE_SKETCH_BRUSH_SHAPES:
         brush_shape = "square"
 
     if not 0 <= x0 < 128 or not 0 <= y0 < 32 or not 0 <= x1 < 128 or not 0 <= y1 < 32:
@@ -324,7 +379,7 @@ def sync_free_sketch():
     # Validate all values are 0-255
     try:
         pixel_bytes = bytes([int(v) for v in pixels])
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return jsonify({"ok": False, "error": "Invalid pixel values"}), 400
 
     pixel_buffer = shared_config.free_sketch_pixels.get_obj()
@@ -428,11 +483,11 @@ def place_free_sketch_stamp():
     try:
         x = int(data["x"])
         y = int(data["y"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return jsonify({"ok": False, "error": "Expected integer x, y"}), 400
 
     category = data.get("category", "")
-    if category not in STAMP_CATEGORIES:
+    if not isinstance(category, str) or category not in STAMP_CATEGORIES:
         return jsonify({"ok": False, "error": "Invalid stamp category"}), 400
 
     if not 0 <= x < 128 or not 0 <= y < 32:
@@ -495,6 +550,8 @@ def serve_stamp_image(stamp_id):
 
 @app.route("/set_mode/<mode>")
 def set_mode(mode):
+    if mode not in DisplayMode.__members__:
+        return bad_request("Unknown mode")
     shared_config.shared_mode.value = DisplayMode[mode].value
     if request.args:
         shared_config.arg_dict.update(request.args)
@@ -559,7 +616,10 @@ def flagquiz_state():
         player_id = games.normalize_player_id(request.args.get("player_id"))
     except ValueError as error:
         return jsonify({"ok": False, "error": str(error)}), 400
-    status = flagquiz.get_game_status(player_id, request.args.get("name"))
+    try:
+        status = flagquiz.get_game_status(player_id, request.args.get("name"))
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
     return jsonify(status)
 
 
@@ -628,20 +688,29 @@ def identify():
 
 @app.route("/set_brightness/<brightness>")
 def set_brightness(brightness):
-    shared_config.shared_current_brightness.value = int(brightness)
+    value = int_param(brightness, 0, 100)
+    if value is None:
+        return bad_request("Brightness must be a whole number from 0 to 100")
+    shared_config.shared_current_brightness.value = value
     # shared_config.shared_forced_sign_update.set()
     return ""
 
 
 @app.route("/set_pong_player_1/<spot>")
 def set_pong_player1(spot):
-    shared_config.shared_pong_player1.value = int(spot)
+    value = int_param(spot, 0, PONG_PADDLE_MAX_Y)
+    if value is None:
+        return bad_request(f"Paddle position must be a whole number from 0 to {PONG_PADDLE_MAX_Y}")
+    shared_config.shared_pong_player1.value = value
     return ""
 
 
 @app.route("/set_pong_player_2/<spot>")
 def set_pong_player2(spot):
-    shared_config.shared_pong_player2.value = int(spot)
+    value = int_param(spot, 0, PONG_PADDLE_MAX_Y)
+    if value is None:
+        return bad_request(f"Paddle position must be a whole number from 0 to {PONG_PADDLE_MAX_Y}")
+    shared_config.shared_pong_player2.value = value
     return ""
 
 
@@ -671,9 +740,10 @@ def set_volume(volume):
 
 
 @app.route("/set_custom_message/", defaults={"message": ""})
-@app.route("/set_custom_message/<message>")
+# The browser prefixes the message with one character so the segment is never empty; path: lets it contain "/".
+@app.route("/set_custom_message/<path:message>")
 def set_custom_message(message):
-    shared_config.data_dict["custom_message"] = message
+    shared_config.data_dict["custom_message"] = message[1:]
     shared_config.shared_forced_sign_update.set()
     return ""
 
@@ -692,7 +762,10 @@ def get_resort_opts():
 
 @app.route("/snow_mode/<mode>")
 def set_snow_mode(mode):
-    shared_config.shared_snow_mode.value = int(mode)
+    try:
+        shared_config.shared_snow_mode.value = SnowMode(int(mode)).value
+    except ValueError:
+        return bad_request("Unknown snow mode")
     return ""
 
 
@@ -805,13 +878,19 @@ def set_mlb_game(game_id):
 
 @app.route("/lightning/<zi>")
 def set_zoom(zi):
-    shared_config.shared_lightning_zoomind.value = int(zi)
+    value = int_param(zi, 0, lightning.ZOOM_LEVELS - 1)
+    if value is None:
+        return bad_request(f"Zoom must be a whole number from 0 to {lightning.ZOOM_LEVELS - 1}")
+    shared_config.shared_lightning_zoomind.value = value
     return ""
 
 
 @app.route("/lightning_mode/<mode>")
 def set_lightning_mode(mode):
-    shared_config.shared_lightning_mode.value = int(mode)
+    value = int_param(mode, min(lightning.MAP_MODES), max(lightning.MAP_MODES))
+    if value is None:
+        return bad_request("Unknown lightning map mode")
+    shared_config.shared_lightning_mode.value = value
     return ""
 
 
@@ -828,19 +907,32 @@ def halloween_lightning(enabled):
 
 @app.route("/mandelbrot_color/<mode>")
 def set_mandelbrot_color(mode):
-    shared_config.shared_mandelbrot_color.value = int(mode)
+    # mandelbrot.py shows an unknown palette number in greyscale, so only the type needs checking.
+    value = int_param(mode, 0, 2**31 - 1)
+    if value is None:
+        return bad_request("Colormap must be a whole number")
+    shared_config.shared_mandelbrot_color.value = value
     return ""
 
 
 @app.route("/set_mandelbrot_colorscale/<mode>")
 def set_mandelbrot_colorscale(mode):
-    shared_config.shared_mandelbrot_colorscale.value = float(mode)
+    try:
+        value = float(mode)
+    except ValueError:
+        return bad_request("Color scale must be a number")
+    if not math.isfinite(value) or value <= 0:
+        return bad_request("Color scale must be a positive number")
+    shared_config.shared_mandelbrot_colorscale.value = value
     return ""
 
 
 @app.route("/satellite_mode/<mode>")
 def set_satellite_mode(mode):
-    shared_config.shared_satellite_mode.value = int(mode)
+    value = int_param(mode, 1, 2)
+    if value is None:
+        return bad_request("Satellite mode must be 1 (overhead) or 2 (ISS)")
+    shared_config.shared_satellite_mode.value = value
     return ""
 
 

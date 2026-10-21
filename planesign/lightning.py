@@ -25,6 +25,14 @@ USAlat = 38
 USAscale = 55
 global_map_ver = "V1"
 
+# Local map scales; the API rejects zoom indexes past ZOOM_LEVELS - 1, the web UI slider's max.
+MIN_ZOOM = 500
+MAX_ZOOM = 3200
+ZOOM_STEP = 300
+ZOOM_LEVELS = (MAX_ZOOM - MIN_ZOOM) // ZOOM_STEP + 1
+# Map views: 1 USA, 2 local, 3 closest strike.
+MAP_MODES = (1, 2, 3)
+
 
 @planesign_mode_handler(DisplayMode.LIGHTNING)
 def lightning(sign):
@@ -121,10 +129,10 @@ class LightningManager:
         self.sign = sign
         self.bgwidth = 64
         self.bgheight = 32
-        self.minzoom = 500
-        self.maxzoom = 3200
-        self.zoomstep = 300
-        self.numzooms = ((self.maxzoom - self.minzoom) // self.zoomstep) + 1
+        self.minzoom = MIN_ZOOM
+        self.maxzoom = MAX_ZOOM
+        self.zoomstep = ZOOM_STEP
+        self.numzooms = ZOOM_LEVELS
         self.zooms = np.linspace(self.minzoom, self.maxzoom, self.numzooms)
         self.background = None
         self.backgrounds = [None] * self.numzooms

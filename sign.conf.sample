@@ -34,7 +34,7 @@ PLANE_ALERT_RADIUS=2
 #text - RGB mapping regular/adafruit-hat/adafruit-oled (restart required)
 PINOUT_HARDWARE_MAPPING=adafruit-hat
 
-#number min 0 max 5 - GPIO slowdown (restart required)
+#number min 0 max 5 step 1 - GPIO slowdown (restart required)
 GPIO_SLOWDOWN=5
 
 #text - LED color order (restart required)
