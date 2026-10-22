@@ -27,6 +27,33 @@ def normalize_player_name(name):
     return name
 
 
+def _name_is_in_use(players, name, player_id=None):
+    name_key = name.casefold()
+    return any(
+        existing_id != player_id and str(player.get("name", "")).casefold() == name_key
+        for existing_id, player in players.items()
+    )
+
+
+def _random_player_name(players, player_id):
+    available = [
+        f"{adjective} {noun}"
+        for adjective in _NAME_ADJECTIVES
+        for noun in _NAME_NOUNS
+        if not _name_is_in_use(players, f"{adjective} {noun}")
+    ]
+    if available:
+        return random.choice(available)
+
+    identifier = player_id.replace("-", "")
+    candidate = f"Player {identifier[:8]}"
+    suffix = 1
+    while _name_is_in_use(players, candidate):
+        candidate = f"Player {identifier[:6]}-{suffix}"
+        suffix += 1
+    return candidate
+
+
 def register_player(player_id, name=None):
     player_id = normalize_player_id(player_id)
     if name is not None:
@@ -35,9 +62,11 @@ def register_player(player_id, name=None):
     with shared_config.shared_games_lock:
         players = dict(shared_config.data_dict.get("game_players", {}))
         player = players.get(player_id)
+        if name is not None and _name_is_in_use(players, name, player_id):
+            raise ValueError("That game name is already in use")
         if player is None:
             player = {
-                "name": name or f"{random.choice(_NAME_ADJECTIVES)} {random.choice(_NAME_NOUNS)}",
+                "name": name if name is not None else _random_player_name(players, player_id),
                 "last_seen": time.monotonic(),
             }
         else:
