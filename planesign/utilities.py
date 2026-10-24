@@ -6,6 +6,7 @@ import os
 import random
 import re
 import subprocess
+import threading
 import time
 import traceback
 import unicodedata
@@ -24,9 +25,11 @@ import requests
 import shapely
 import shared_config
 from PIL import Image, ImageDraw, ImageFont
+from pyproj import Geod
 from rgbmatrix import graphics
 from shapely.geometry import Point, shape
 from shapely.strtree import STRtree
+from shapely.validation import explain_validity
 from tzfpy import get_tz, get_tzs
 
 NUM_STEPS = 40
@@ -34,11 +37,11 @@ DEG_2_RAD = pi / 180.0
 KM_2_MI = 0.6214
 CM_2_IN = 0.3937008
 
-country_polys = None
-state_polys = None
-water_polys = None
+region_polys = None
 geojsons_loaded = False
 logged_offline_mode = None
+geod = Geod(ellps="WGS84")
+geojsons_lock = threading.Lock()
 
 from modes import DisplayMode, planesign_mode_handler
 
@@ -273,43 +276,80 @@ def lookup_country_code(name):
     return None
 
 
-class GeoJsonPolygons:
-    """Polygons from a static lon/lat GeoJSON file with CODE/NAME properties, indexed for point lookups."""
+def _geodesic_area(geometry):
+    area, _ = geod.geometry_area_perimeter(geometry)
+    return abs(area)
 
-    def __init__(self, path):
-        with open(path, encoding="utf-8") as f:
-            features = json.load(f)["features"]
 
-        self.geometries = [shape(feature["geometry"]) for feature in features]
+class GeoJsonRegions:
+    """Country, state, and water polygons in one spatial index."""
+
+    def __init__(self, datafiles_dir):
+        self.geometries = []
+        self.areas = []
+        self.properties = []
+        self.kinds = []
+
+        for kind, filename in (("country", "countries.geojson"), ("state", "states.geojson"), ("water", "water.geojson")):
+            path = f"{datafiles_dir}/{filename}"
+            with open(path, encoding="utf-8") as f:
+                features = json.load(f)["features"]
+
+            for feature in features:
+                geometry = shape(feature["geometry"])
+                if not geometry.is_valid:
+                    properties = feature["properties"]
+                    reason = explain_validity(geometry)
+                    geometry = shapely.make_valid(geometry)
+                    logging.warning("Repaired invalid geometry %s (%s) in %s: %s", properties["NAME"], properties["CODE"], path, reason)
+
+                properties = feature["properties"]
+                self.geometries.append(geometry)
+                self.areas.append(None)
+                self.properties.append((properties["CODE"], properties["NAME"]))
+                self.kinds.append(kind)
+
         shapely.prepare(self.geometries)
-        self.areas = [geometry.area for geometry in self.geometries]
-        self.properties = [(feature["properties"]["CODE"], feature["properties"]["NAME"]) for feature in features]
         self.tree = STRtree(self.geometries)
 
-    def lookup(self, point, smallest=True):
-        """Returns (CODE, NAME) of the polygon containing point, or None. Overlaps resolve to the smallest polygon, or the first in file order."""
+    def _area(self, index):
+        area = self.areas[index]
+        if area is None:
+            area = _geodesic_area(self.geometries[index])
+            self.areas[index] = area
+        return area
+
+    def lookup(self, point):
+        """Return the smallest containing region, or None."""
         matches = sorted(self.tree.query(point, predicate="within"))
         if not matches:
             return None
 
-        index = min(matches, key=lambda i: self.areas[i]) if smallest else matches[0]
-        return self.properties[index]
+        in_usa = any(self.kinds[index] == "country" and self.properties[index][0] == "USA" for index in matches)
+        eligible = [index for index in matches if self.kinds[index] != "state" or in_usa]
+        if not eligible:
+            return None
+
+        index = min(eligible, key=lambda i: (self._area(i), i))
+        return self.kinds[index], *self.properties[index]
 
 
 def read_geojsons():
-    global country_polys
-    global state_polys
-    global water_polys
+    global region_polys
     global geojsons_loaded
 
     if geojsons_loaded:
         return
 
-    # Load static geojson files for use in local reverse geocoding
-    country_polys = GeoJsonPolygons(f"{shared_config.datafiles_dir}/countries.geojson")
-    state_polys = GeoJsonPolygons(f"{shared_config.datafiles_dir}/states.geojson")
-    water_polys = GeoJsonPolygons(f"{shared_config.datafiles_dir}/water.geojson")
-    geojsons_loaded = True
+    with geojsons_lock:
+        if not geojsons_loaded:
+            region_polys = GeoJsonRegions(shared_config.datafiles_dir)
+            geojsons_loaded = True
+
+
+def preload_geojsons():
+    """Build the reverse-geocoding index while the sign displays its startup screen."""
+    threading.Thread(target=read_geojsons, name="GeoJSONLoader", daemon=True).start()
 
 
 def reverse_geocode(lat, lon):
@@ -322,45 +362,25 @@ def reverse_geocode(lat, lon):
 
     read_geojsons()
 
-    formatted_address = None
-    code = None
-
     point = Point(lon, lat)
+    region = region_polys.lookup(point)
 
-    # First check for point in countries (water is more probable but you'll miss small islands)
-    country = country_polys.lookup(point)
-
-    if country:
-        code, formatted_address = country
-
-        if code == "USA":
-            # Check for specific state
-            state = state_polys.lookup(point, smallest=False)
-
-            if state:
-                code = "states/" + state[0]
-                formatted_address = state[1]
-
-    else:
-        # We're in the water
-        water = water_polys.lookup(point)
-
-        if water:
-            water_code, formatted_address = water
-            code = "OCEAN"
-
-            # Special case codes
-            if water_code in ["NORTH", "IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "NEMO", "SHIP"]:
-                code = water_code
-
-    if formatted_address is None:
+    if region is None:
         formatted_address = "Unknown"
+        code = "UNKNOWN"
         logging.debug(f"Couldn't find reverse geocoding for lat/lon: ({lat},{lon})")
     else:
-        logging.info(f"Found location {formatted_address} for lat/lon ({lat},{lon}).")
+        kind, region_code, formatted_address = region
+        if kind == "state":
+            code = "states/" + region_code
+        elif kind == "water":
+            code = "OCEAN"
+            if region_code in ["NORTH", "IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "NEMO", "SHIP"]:
+                code = region_code
+        else:
+            code = region_code
 
-    if code is None:
-        code = "UNKNOWN"
+        logging.info(f"Found location {formatted_address} for lat/lon ({lat},{lon}).")
 
     return formatted_address, code
 

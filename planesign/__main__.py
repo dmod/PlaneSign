@@ -377,6 +377,7 @@ exit_code = 0
 try:
     for process, _ in workers:
         process.start()
+    utilities.preload_geojsons()
     ps = planesign.PlaneSign(defined_mode_handlers)
     defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
     shared_config.shared_mode.value = DisplayMode[startup_mode].value
