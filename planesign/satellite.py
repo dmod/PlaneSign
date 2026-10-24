@@ -81,7 +81,7 @@ SATELLITE_NAME_COUNTRY_PREFIXES = {
 
 }
 DEBRIS_NAME_MARKERS = (" DEB", " R/B", " AKM", " ABM", "OBJECT ", "OBJECT-", "INTERSTAGE")
-ISS_FLAGS_WITHOUT_BLACK_FIX = {"states/OH", "NPL", "OCEAN", "IMAG", "NEMO", "TRASH", "TRIANG", "TRENCH", "REEF", "UNKNOWN", "NUKE"}
+ISS_FLAGS_WITHOUT_BLACK_FIX = {"EYE", "HUT", "IMAG", "NEMO", "NPL", "NUKE", "OCEAN", "states/OH", "PIRATE", "RADIO", "REEF", "TRASH", "TRENCH", "TRIANG", "UNKNOWN"}
 
 
 def _country_from_satellite_name(sat_name, launch_date):
