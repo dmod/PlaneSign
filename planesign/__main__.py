@@ -359,6 +359,9 @@ outside_data_process = Process(target=run_worker, name="OutsideData", args=(outs
 
 utilities.read_config()
 
+if not shared_config.emulated_display and shared_config.audio_device is not None and shared_config.audio_mixer_control is not None:
+    utilities.set_usb_audio_volume(int(shared_config.CONF["DEFAULT_VOLUME"]))
+
 # After read_config, which sets the local timezone that --fake-time values without an offset are read in
 if cli_args.fake_time or cli_args.time_speed != 1:
     psclock.set_clock(psclock.parse_time(cli_args.fake_time) if cli_args.fake_time else psclock.time(), cli_args.time_speed)

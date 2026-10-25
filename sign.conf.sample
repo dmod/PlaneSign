@@ -25,6 +25,9 @@ DEFAULT_MODE=PLANES_ALERT
 #range min 0 max 100 - Startup brightness (%)
 DEFAULT_BRIGHTNESS=80
 
+#range min 0 max 100 - Startup audio volume (%)
+DEFAULT_VOLUME=35
+
 #number min 0 max 100000 - Closest plane altitude limit (feet)
 CLOSEST_HEIGHT_LIMIT=10000
 
