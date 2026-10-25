@@ -84,10 +84,10 @@ def load_countries():
 def normalize_country_tokens(value):
     value = value.casefold()
     replacements = (
-        (r"\bislands?\b|\bis\.?\b", "island"),
-        (r"\bterritor(?:y|ies)\b|\bterr\.?\b", "territory"),
-        (r"\bsouth\b|\bs\.?\b", "south"),
-        (r"\bsa?int\b|\bst\.?\b", "saint"),
+        (r"\bislands?\b|\bis\.\b", "island"),
+        (r"\bterritor(?:y|ies)\b|\bterr\.\b", "territory"),
+        (r"\bsouth\b|\bs\.\b", "south"),
+        (r"\bsa?int\b|\bst\.\b", "saint"),
         (r"\brep\.\b", "republic"),
         (r"\bprin\.\b", "principality"),
         (r"\bcabo\b", "cape"),
