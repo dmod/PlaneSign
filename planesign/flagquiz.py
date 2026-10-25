@@ -99,7 +99,7 @@ def normalize_country_tokens(value):
     return re.findall(r"[^\W_]+", value, flags=re.UNICODE)
 
 
-def get_country_suggestions(query, limit=12):
+def get_country_suggestions(query, limit=20):
     query_tokens = normalize_country_tokens(query)
     if not query_tokens:
         return []
