@@ -18,7 +18,7 @@ from utilities import fix_black, rainbow_pen_color
 
 ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
-QUESTION_LIMIT = 5
+QUESTION_LIMIT = 25
 SUDDEN_DEATH_NOTICE_SECONDS = 3
 START_COUNTDOWN_SECONDS = 3
 WIDTH = 128
@@ -823,17 +823,20 @@ def _draw_perfect_crown(draw, x, y, elapsed):
     pulse = max(0.0, 1.0 - period / 0.34)
     bright = elapsed < 1.5 or pulse > 0
     crown = (
-        "Y.....Y",
-        "YY...YY",
-        "YYYYYYY",
-        ".YYYYY.",
-        "..YYY..",
+        "Y...Y...Y",
+        "YY..Y..YY",
+        "YYYYYYYYY",
+        ".YJYJYJY.",
+        ".YYYYYYY.",
+        "..YYYYY..",
     )
     gold = (255, 205, 55) if not bright else (255, 229, 115)
     for row, pattern in enumerate(crown):
         for column, pixel in enumerate(pattern):
             if pixel == "Y":
                 draw.point((x + column, y + row), fill=(255, 250, 190) if bright and row == 0 else gold)
+            elif pixel == "J":
+                draw.point((x + column, y + row), fill=(255, 70, 55))
     if elapsed < 1.5:
         sparkle = (255, 255, 235) if int(elapsed * 12) % 2 == 0 else (255, 220, 100)
         for sx, sy in ((x - 2, y + 1), (x + 3, y - 2), (x + 9, y + 1)):
@@ -861,7 +864,7 @@ def _draw_victory(sign, state, elapsed):
     message = winner["name"] + " WINS!" if winner and winner["accuracy"] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
     message_x = (WIDTH - len(message) * 4) // 2 + 3
     if perfect:
-        _draw_perfect_crown(draw, message_x - 9, 15, elapsed)
+        _draw_perfect_crown(draw, message_x - 11, 15, elapsed)
     sign.canvas.SetImage(image, 0, 0)
 
     title = "PERFECT GAME!" if perfect else "FLAG CHAMPION!" if winner and winner['accuracy'] > 0 else "QUIZ COMPLETE!"
