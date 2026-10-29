@@ -36,6 +36,7 @@ FIREWORK_ROCKET = (255, 214, 150)
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
 FLAG_IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "flags")
 DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0}
+DIFFICULTY_LEVELS = {"easy": 0, "hard": 1, "expert": 2}
 LOADING_FLAG_HEIGHT = 10
 FIREWORK_X, FIREWORK_Y = np.meshgrid(np.arange(WIDTH, dtype=np.float32), np.arange(HEIGHT, dtype=np.float32))
 
@@ -66,19 +67,30 @@ def load_countries():
     seen_codes = set()
     with open(FLAG_GAME_FILE, newline="", encoding="utf-8") as csv_file:
         for line, row in enumerate(csv.reader(csv_file), 1):
+            if not row or not row[0].strip() or row[0].lstrip().startswith("#"):
+                continue
             if len(row) != 3:
                 raise ValueError(f"Invalid flag quiz CSV row {line}: expected 3 columns")
-            code, name, easy = (value.strip() for value in row)
-            code = code.upper()
+            code, name, difficulty = (value.strip() for value in row)
+            code = normalize_country_code(code)
+            difficulty = difficulty.casefold()
             if not code or not name or code in seen_codes:
                 raise ValueError(f"Invalid or duplicate flag quiz entry on row {line}")
+            if difficulty not in DIFFICULTY_LEVELS:
+                raise ValueError(f"Invalid flag quiz difficulty on row {line}: expected Easy, Hard, or Expert")
             if not os.path.isfile(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")):
                 raise FileNotFoundError(f"Flag image not found for {code} (CSV row {line})")
             seen_codes.add(code)
-            countries.append({"code": code, "name": name, "easy": easy.casefold() == "true"})
+            countries.append({"code": code, "name": name, "difficulty": difficulty})
     if not countries:
         raise ValueError("Flag quiz data contains no countries")
     return tuple(countries)
+
+
+def normalize_country_code(code):
+    if code.casefold().startswith("states/"):
+        return "states/" + code.split("/", 1)[1].upper()
+    return code.upper()
 
 
 def normalize_country_tokens(value):
@@ -117,10 +129,8 @@ def get_country_suggestions(query, limit=20):
 def _country_pool(difficulty):
     if difficulty not in DIFFICULTIES:
         raise ValueError("difficulty must be easy, hard, or expert")
-    countries = load_countries()
-    if difficulty == "easy":
-        countries = tuple(country for country in countries if country["easy"])
-    return countries
+    max_level = DIFFICULTY_LEVELS[difficulty]
+    return tuple(country for country in load_countries() if DIFFICULTY_LEVELS[country["difficulty"]] <= max_level)
 
 
 def _make_question(code, difficulty, pool):

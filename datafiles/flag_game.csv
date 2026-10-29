@@ -1,282 +1,333 @@
-ABW,Aruba,False
-AFG,Afghanistan,True
-AGO,Angola,True
-AIA,Anguilla,False
-ALA,Aland Islands,False
-ALB,Albania,True
-AND,Andorra,True
-ARE,United Arab Emirates,True
-ARG,Argentina,True
-ARM,Armenia,True
-ASC,Ascension Island,False
-ASM,American Samoa,False
-ATA,Antarctica,False
-ATF,French Southern Terr.,False
-ATG,Antigua and Barbuda,True
-AUS,Australia,True
-AUT,Austria,True
-AZE,Azerbaijan,True
-AZO,Azores,False
-BAL,Balearic Islands,False
-BDI,Burundi,True
-BEL,Belgium,True
-BEN,Benin,True
-BES,Bonaire,False
-BFA,Burkina Faso,True
-BGD,Bangladesh,True
-BGR,Bulgaria,True
-BHR,Bahrain,True
-BHS,Bahamas,True
-BIH,Bosnia and Herzegovina,True
-BLM,St. Barths,False
-BLR,Belarus,True
-BLZ,Belize,True
-BMU,Bermuda,False
-BOL,Bolivia,True
-BRA,Brazil,True
-BRB,Barbados,True
-BRN,Brunei,True
-BTN,Bhutan,True
-BWA,Botswana,True
-CAF,Central African Rep.,True
-CAN,Canada,True
-CCK,Cocos (Keeling) Is.,False
-CHE,Switzerland,True
-CHL,Chile,True
-CHN,China,True
-CIV,Ivory Coast,True
-CMA,Crimea,False
-CMR,Cameroon,True
-CNY,Canary Islands,False
-COD,DR Congo,True
-COG,Congo,True
-COK,Cook Islands,False
-COL,Colombia,True
-COM,Comoros,True
-COR,Corsica,False
-CPV,Cabo Verde,True
-CRI,Costa Rica,True
-CTA,Ceuta,False
-CUB,Cuba,True
-CUW,Curacao,False
-CXR,Christmas Island,False
-CYM,Cayman Islands,False
-CYP,Cyprus,True
-CZE,Czechia,True
-DEU,Germany,True
-DJI,Djibouti,True
-DMA,Dominica,True
-DNK,Denmark,True
-DOM,Dominican Republic,True
-DZA,Algeria,True
-EAS,Easter Island,False
-ECU,Ecuador,True
-EGY,Egypt,True
-ENG,England,False
-ERI,Eritrea,True
-ESH,Western Sahara,True
-ESP,Spain,True
-EST,Estonia,True
-ETH,Ethiopia,True
-EU,European Union,True
-FIN,Finland,True
-FJI,Fiji,True
-FLK,Falkland Islands,False
-FMT,Formentera,False
-FRA,France,True
-FRO,Faroe Islands,False
-FSM,Micronesia,True
-GAB,Gabon,True
-GBR,United Kingdom,True
-GEO,Georgia,True
-GGY,Guernsey,False
-GHA,Ghana,True
-GIB,Gibraltar,False
-GIN,Guinea,True
-GLP,Guadeloupe,False
-GMB,Gambia,True
-GNB,Guinea-Bissau,True
-GNQ,Equatorial Guinea,True
-GPG,Galapagos Islands,False
-GRC,Greece,True
-GRD,Grenada,True
-GRL,Greenland,False
-GTM,Guatemala,True
-GUF,French Guiana,False
-GUM,Guam,False
-GUY,Guyana,True
-HGL,Heligoland,False
-HKG,Hong Kong,False
-HND,Honduras,True
-HRV,Croatia,True
-HTI,Haiti,True
-HUN,Hungary,True
-IBZ,Ibiza,False
-IDN,Indonesia,True
-IMN,Isle of Man,False
-IND,India,True
-IOT,British Indian Ocean Terr.,False
-IRL,Ireland,True
-IRN,Iran,True
-IRQ,Iraq,True
-ISL,Iceland,True
-ISR,Israel,True
-ITA,Italy,True
-JAM,Jamaica,True
-JEY,Jersey,False
-JFI,Juan Fernandez Is.,False
-JOR,Jordan,True
-JPN,Japan,True
-KAZ,Kazakhstan,True
-KEN,Kenya,True
-KGO,Kaliningrad Oblast,False
-KGZ,Kyrgyzstan,True
-KHM,Cambodia,True
-KIR,Kiribati,True
-KNA,St. Kitts and Nevis,True
-KOR,South Korea,True
-KWT,Kuwait,True
-LAO,Laos,True
-LBN,Lebanon,True
-LBR,Liberia,True
-LBY,Libya,True
-LCA,St. Lucia,True
-LIE,Liechtenstein,True
-LKA,Sri Lanka,True
-LSO,Lesotho,True
-LTU,Lithuania,True
-LUX,Luxembourg,True
-LVA,Latvia,True
-MAC,Macau,False
-MAD,Madeira,False
-MAL,Mallorca,False
-MAR,Morocco,True
-MCO,Monaco,True
-MDA,Moldova,True
-MDG,Madagascar,True
-MDV,Maldives,True
-MEN,Menorca,False
-MEX,Mexico,True
-MHL,Marshall Islands,True
-MKD,North Macedonia,True
-MLA,Melilla,False
-MLI,Mali,True
-MLT,Malta,True
-MMR,Myanmar,True
-MNE,Montenegro,True
-MNG,Mongolia,True
-MNP,Northern Mariana Is.,False
-MOZ,Mozambique,True
-MRT,Mauritania,True
-MSR,Montserrat,False
-MTA,Mount Athos,False
-MTQ,Martinique,False
-MUS,Mauritius,True
-MWI,Malawi,True
-MYS,Malaysia,True
-MYT,Mayotte,False
-NAM,Namibia,True
-NATO,NATO,False
-NCL,New Caledonia,False
-NER,Niger,True
-NFK,Norfolk Island,False
-NGA,Nigeria,True
-NIC,Nicaragua,True
-NIR,Northern Ireland,False
-NIU,Niue,False
-NLD,Netherlands,True
-NOR,Norway,True
-NPL,Nepal,True
-NRU,Nauru,True
-NVZ,Novaya Zemlya,False
-NZL,New Zealand,True
-OMN,Oman,True
-PAK,Pakistan,True
-PAN,Panama,True
-PCN,Pitcairn Islands,False
-PER,Peru,True
-PHL,Philippines,True
-PLW,Palau,True
-PNG,Papua New Guinea,True
-POL,Poland,True
-PRI,Puerto Rico,False
-PRK,North Korea,True
-PRT,Portugal,True
-PRY,Paraguay,True
-PSE,Palestine,True
-PSL,Prin. of Sealand,False
-PYF,French Polynesia,False
-QAT,Qatar,True
-REU,Reunion,False
-ROU,Romania,True
-RUS,Russia,True
-RWA,Rwanda,True
-SAB,Saba,False
-SAR,Sardinia,False
-SAU,Saudi Arabia,True
-SCT,Scotland,False
-SDN,Sudan,True
-SEN,Senegal,True
-SEU,St. Eustatius,False
-SGP,Singapore,True
-SGS,S. Georgia and S. Sandwich Is.,False
-SHN,St. Helena,False
-SIC,Sicily,False
-SLB,Solomon Islands,True
-SLE,Sierra Leone,True
-SLV,El Salvador,True
-SMR,San Marino,True
-SOM,Somalia,True
-SPM,St. Pierre and Miquelon,False
-SRB,Serbia,True
-SSD,South Sudan,True
-STP,Sao Tome and Principe,True
-SUR,Suriname,True
-SVK,Slovakia,True
-SVN,Slovenia,True
-SVP,Sevastopol,False
-SWE,Sweden,True
-SWZ,Eswatini,True
-SXM,St. Maarten,False
-SYC,Seychelles,True
-SYR,Syria,True
-TAS,Tasmania,False
-TCA,Turks and Caicos Is.,False
-TCD,Chad,True
-TDC,Tristan da Cunha,False
-TGO,Togo,True
-THA,Thailand,True
-TJK,Tajikistan,True
-TKL,Tokelau,False
-TKM,Turkmenistan,True
-TLS,East Timor,True
-TON,Tonga,True
-TTO,Trinidad and Tobago,True
-TUN,Tunisia,True
-TUR,Turkey,True
-TUV,Tuvalu,True
-TWN,Taiwan,True
-TZA,Tanzania,True
-UGA,Uganda,True
-UKR,Ukraine,True
-UN,United Nations,True
-URY,Uruguay,True
-USA,United States,True
-USR,USSR,False
-UZB,Uzbekistan,True
-VAT,Vatican,True
-VCT,St. Vincent and the Grenadines,True
-VEN,Venezuela,True
-VGB,British Virgin Islands,False
-VIR,US Virgin Islands,False
-VNM,Vietnam,True
-VUT,Vanuatu,True
-WLF,Wallis and Futuna Islands,False
-WLS,Wales,False
-WSM,Samoa,True
-XKX,Kosovo,True
-YEM,Yemen,True
-ZAF,South Africa,True
-ZMB,Zambia,True
-ZWE,Zimbabwe,True
-ZZB,Zanzibar,False
+ABW,Aruba,Hard
+AFG,Afghanistan,Easy
+AGO,Angola,Easy
+AIA,Anguilla,Hard
+ALA,Aland Islands,Hard
+ALB,Albania,Easy
+AND,Andorra,Easy
+ARE,United Arab Emirates,Easy
+ARG,Argentina,Easy
+ARM,Armenia,Easy
+ASC,Ascension Island,Hard
+ASM,American Samoa,Hard
+ATA,Antarctica,Hard
+ATF,French Southern Terr.,Hard
+ATG,Antigua and Barbuda,Easy
+AUS,Australia,Easy
+AUT,Austria,Easy
+AZE,Azerbaijan,Easy
+AZO,Azores,Hard
+BAL,Balearic Islands,Hard
+BDI,Burundi,Easy
+BEL,Belgium,Easy
+BEN,Benin,Easy
+BES,Bonaire,Hard
+BFA,Burkina Faso,Easy
+BGD,Bangladesh,Easy
+BGR,Bulgaria,Easy
+BHR,Bahrain,Easy
+BHS,Bahamas,Easy
+BIH,Bosnia and Herzegovina,Easy
+BLM,St. Barths,Hard
+BLR,Belarus,Easy
+BLZ,Belize,Easy
+BMU,Bermuda,Hard
+BOL,Bolivia,Easy
+BRA,Brazil,Easy
+BRB,Barbados,Easy
+BRN,Brunei,Easy
+BTN,Bhutan,Easy
+BWA,Botswana,Easy
+CAF,Central African Rep.,Easy
+CAN,Canada,Easy
+CCK,Cocos (Keeling) Is.,Hard
+CHE,Switzerland,Easy
+CHL,Chile,Easy
+CHN,China,Easy
+CIV,Ivory Coast,Easy
+CMA,Crimea,Hard
+CMR,Cameroon,Easy
+CNY,Canary Islands,Hard
+COD,DR Congo,Easy
+COG,Congo,Easy
+COK,Cook Islands,Hard
+COL,Colombia,Easy
+COM,Comoros,Easy
+COR,Corsica,Hard
+CPV,Cabo Verde,Easy
+CRI,Costa Rica,Easy
+CTA,Ceuta,Hard
+CUB,Cuba,Easy
+CUW,Curacao,Hard
+CXR,Christmas Island,Hard
+CYM,Cayman Islands,Hard
+CYP,Cyprus,Easy
+CZE,Czechia,Easy
+DEU,Germany,Easy
+DJI,Djibouti,Easy
+DMA,Dominica,Easy
+DNK,Denmark,Easy
+DOM,Dominican Republic,Easy
+DZA,Algeria,Easy
+EAS,Easter Island,Hard
+ECU,Ecuador,Easy
+EGY,Egypt,Easy
+ENG,England,Hard
+ERI,Eritrea,Easy
+ESH,Western Sahara,Easy
+ESP,Spain,Easy
+EST,Estonia,Easy
+ETH,Ethiopia,Easy
+EU,European Union,Easy
+FIN,Finland,Easy
+FJI,Fiji,Easy
+FLK,Falkland Islands,Hard
+FMT,Formentera,Hard
+FRA,France,Easy
+FRO,Faroe Islands,Hard
+FSM,Micronesia,Easy
+GAB,Gabon,Easy
+GBR,United Kingdom,Easy
+GEO,Georgia,Easy
+GGY,Guernsey,Hard
+GHA,Ghana,Easy
+GIB,Gibraltar,Hard
+GIN,Guinea,Easy
+GLP,Guadeloupe,Hard
+GMB,Gambia,Easy
+GNB,Guinea-Bissau,Easy
+GNQ,Equatorial Guinea,Easy
+GPG,Galapagos Islands,Hard
+GRC,Greece,Easy
+GRD,Grenada,Easy
+GRL,Greenland,Hard
+GTM,Guatemala,Easy
+GUF,French Guiana,Hard
+GUM,Guam,Hard
+GUY,Guyana,Easy
+HGL,Heligoland,Hard
+HKG,Hong Kong,Hard
+HND,Honduras,Easy
+HRV,Croatia,Easy
+HTI,Haiti,Easy
+HUN,Hungary,Easy
+IBZ,Ibiza,Hard
+IDN,Indonesia,Easy
+IMN,Isle of Man,Hard
+IND,India,Easy
+IOT,British Indian Ocean Terr.,Hard
+IRL,Ireland,Easy
+IRN,Iran,Easy
+IRQ,Iraq,Easy
+ISL,Iceland,Easy
+ISR,Israel,Easy
+ITA,Italy,Easy
+JAM,Jamaica,Easy
+JEY,Jersey,Hard
+JFI,Juan Fernandez Is.,Hard
+JOR,Jordan,Easy
+JPN,Japan,Easy
+KAZ,Kazakhstan,Easy
+KEN,Kenya,Easy
+KGO,Kaliningrad Oblast,Hard
+KGZ,Kyrgyzstan,Easy
+KHM,Cambodia,Easy
+KIR,Kiribati,Easy
+KNA,St. Kitts and Nevis,Easy
+KOR,South Korea,Easy
+KWT,Kuwait,Easy
+LAO,Laos,Easy
+LBN,Lebanon,Easy
+LBR,Liberia,Easy
+LBY,Libya,Easy
+LCA,St. Lucia,Easy
+LIE,Liechtenstein,Easy
+LKA,Sri Lanka,Easy
+LSO,Lesotho,Easy
+LTU,Lithuania,Easy
+LUX,Luxembourg,Easy
+LVA,Latvia,Easy
+MAC,Macau,Hard
+MAD,Madeira,Hard
+MAL,Mallorca,Hard
+MAR,Morocco,Easy
+MCO,Monaco,Easy
+MDA,Moldova,Easy
+MDG,Madagascar,Easy
+MDV,Maldives,Easy
+MEN,Menorca,Hard
+MEX,Mexico,Easy
+MHL,Marshall Islands,Easy
+MKD,North Macedonia,Easy
+MLA,Melilla,Hard
+MLI,Mali,Easy
+MLT,Malta,Easy
+MMR,Myanmar,Easy
+MNE,Montenegro,Easy
+MNG,Mongolia,Easy
+MNP,Northern Mariana Is.,Hard
+MOZ,Mozambique,Easy
+MRT,Mauritania,Easy
+MSR,Montserrat,Hard
+MTA,Mount Athos,Hard
+MTQ,Martinique,Hard
+MUS,Mauritius,Easy
+MWI,Malawi,Easy
+MYS,Malaysia,Easy
+MYT,Mayotte,Hard
+NAM,Namibia,Easy
+NATO,NATO,Hard
+NCL,New Caledonia,Hard
+NER,Niger,Easy
+NFK,Norfolk Island,Hard
+NGA,Nigeria,Easy
+NIC,Nicaragua,Easy
+NIR,Northern Ireland,Hard
+NIU,Niue,Hard
+NLD,Netherlands,Easy
+NOR,Norway,Easy
+NPL,Nepal,Easy
+NRU,Nauru,Easy
+NVZ,Novaya Zemlya,Hard
+NZL,New Zealand,Easy
+OMN,Oman,Easy
+PAK,Pakistan,Easy
+PAN,Panama,Easy
+PCN,Pitcairn Islands,Hard
+PER,Peru,Easy
+PHL,Philippines,Easy
+PLW,Palau,Easy
+PNG,Papua New Guinea,Easy
+POL,Poland,Easy
+PRI,Puerto Rico,Hard
+PRK,North Korea,Easy
+PRT,Portugal,Easy
+PRY,Paraguay,Easy
+PSE,Palestine,Easy
+PSL,Prin. of Sealand,Hard
+PYF,French Polynesia,Hard
+QAT,Qatar,Easy
+REU,Reunion,Hard
+ROU,Romania,Easy
+RUS,Russia,Easy
+RWA,Rwanda,Easy
+SAB,Saba,Hard
+SAR,Sardinia,Hard
+SAU,Saudi Arabia,Easy
+SCT,Scotland,Hard
+SDN,Sudan,Easy
+SEN,Senegal,Easy
+SEU,St. Eustatius,Hard
+SGP,Singapore,Easy
+SGS,S. Georgia and S. Sandwich Is.,Hard
+SHN,St. Helena,Hard
+SIC,Sicily,Hard
+SLB,Solomon Islands,Easy
+SLE,Sierra Leone,Easy
+SLV,El Salvador,Easy
+SMR,San Marino,Easy
+SOM,Somalia,Easy
+SPM,St. Pierre and Miquelon,Hard
+SRB,Serbia,Easy
+SSD,South Sudan,Easy
+STP,Sao Tome and Principe,Easy
+SUR,Suriname,Easy
+SVK,Slovakia,Easy
+SVN,Slovenia,Easy
+SVP,Sevastopol,Hard
+SWE,Sweden,Easy
+SWZ,Eswatini,Easy
+SXM,St. Maarten,Hard
+SYC,Seychelles,Easy
+SYR,Syria,Easy
+TAS,Tasmania,Hard
+TCA,Turks and Caicos Is.,Hard
+TCD,Chad,Easy
+TDC,Tristan da Cunha,Hard
+TGO,Togo,Easy
+THA,Thailand,Easy
+TJK,Tajikistan,Easy
+TKL,Tokelau,Hard
+TKM,Turkmenistan,Easy
+TLS,East Timor,Easy
+TON,Tonga,Easy
+TTO,Trinidad and Tobago,Easy
+TUN,Tunisia,Easy
+TUR,Turkey,Easy
+TUV,Tuvalu,Easy
+TWN,Taiwan,Easy
+TZA,Tanzania,Easy
+UGA,Uganda,Easy
+UKR,Ukraine,Easy
+UN,United Nations,Easy
+URY,Uruguay,Easy
+USA,United States,Easy
+USR,USSR,Hard
+UZB,Uzbekistan,Easy
+VAT,Vatican,Easy
+VCT,St. Vincent and the Grenadines,Easy
+VEN,Venezuela,Easy
+VGB,British Virgin Islands,Hard
+VIR,US Virgin Islands,Hard
+VNM,Vietnam,Easy
+VUT,Vanuatu,Easy
+WLF,Wallis and Futuna Islands,Hard
+WLS,Wales,Hard
+WSM,Samoa,Easy
+XKX,Kosovo,Easy
+YEM,Yemen,Easy
+ZAF,South Africa,Easy
+ZMB,Zambia,Easy
+ZWE,Zimbabwe,Easy
+ZZB,Zanzibar,Hard
+states/AL,Alabama,Expert
+states/AK,Alaska,Expert
+states/AZ,Arizona,Expert
+states/AR,Arkansas,Expert
+states/CA,California,Expert
+states/CO,Colorado,Expert
+#states/CT,Connecticut,Expert
+states/DE,Delaware,Expert
+states/DC,Washington DC,Expert
+states/FL,Florida,Expert
+states/GA,Georgia (state),Expert
+states/HI,Hawaii,Expert
+#states/ID,Idaho,Expert
+states/IL,Illinois,Expert
+states/IN,Indiana,Expert
+states/IA,Iowa,Expert
+#states/KS,Kansas,Expert
+#states/KY,Kentucky,Expert
+#states/LA,Louisiana,Expert
+#states/ME,Maine,Expert
+states/MD,Maryland,Expert
+states/MA,Massachusetts,Expert
+#states/MI,Michigan,Expert
+states/MN,Minnesota,Expert
+states/MS,Mississippi,Expert
+states/MO,Missouri,Expert
+#states/MT,Montana,Expert
+#states/NE,Nebraska,Expert
+#states/NV,Nevada,Expert
+#states/NH,New Hampshire,Expert
+states/NJ,New Jersey,Expert
+states/NM,New Mexico,Expert
+#states/NY,New York,Expert
+states/NC,North Carolina,Expert
+#states/ND,North Dakota,Expert
+states/OH,Ohio,Expert
+states/OK,Oklahoma,Expert
+#states/OR,Oregon,Expert
+#states/PA,Pennsylvania,Expert
+states/RI,Rhode Island,Expert
+states/SC,South Carolina,Expert
+#states/SD,South Dakota,Expert
+states/TN,Tennessee,Expert
+states/TX,Texas,Expert
+states/UT,Utah,Expert
+#states/VT,Vermont,Expert
+#states/VA,Virginia,Expert
+states/WA,Washington,Expert
+states/WV,West Virginia,Expert
+#states/WI,Wisconsin,Expert
+states/WY,Wyoming,Expert

@@ -646,10 +646,10 @@ def flagquiz_suggestions():
     return jsonify({"ok": True, "results": flagquiz.get_country_suggestions(request.args.get("q", ""))})
 
 
-@app.route("/games/flagquiz/flag/<code>")
+@app.route("/games/flagquiz/flag/<path:code>")
 def flagquiz_flag(code):
-    code = code.upper()
-    if not code.isalnum() or code not in {country["code"] for country in flagquiz.load_countries()}:
+    code = flagquiz.normalize_country_code(code)
+    if code not in {country["code"] for country in flagquiz.load_countries()}:
         return jsonify({"ok": False, "error": "Unknown flag"}), 404
     return send_from_directory(flagquiz.FLAG_IMAGE_DIR, f"{code}.png", mimetype="image/png")
 
