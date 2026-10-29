@@ -566,6 +566,11 @@ def get_sign_state():
             "question_number": state["index"] + 1 if state["current"] is not None else state["index"],
             "total": state["regular_question_count"],
             "current": state["current"],
+            "time_remaining_fraction": (
+                max(0.0, min(1.0, (state["deadline"] - now) / _round_seconds(state["difficulty"])))
+                if state["current"] is not None and state["deadline"] is not None
+                else 0.0
+            ),
             "countdown": max(1, math.ceil(countdown_until - now)) if countdown_until is not None else None,
             "complete": state["current"] is None and notice_until is None and countdown_until is None,
             "sudden_death": state["sudden_death"],
@@ -849,6 +854,19 @@ def _fit_option(text, max_chars=20):
     return " ".join(words) + "..." if words else text[:max_chars - 3] + "..."
 
 
+def _draw_question_timer(sign, time_remaining_fraction):
+    remaining_pixels = math.ceil(max(0.0, min(1.0, time_remaining_fraction)) * WIDTH)
+    if remaining_pixels:
+        graphics.DrawLine(
+            sign.canvas,
+            0,
+            HEIGHT - 1,
+            remaining_pixels - 1,
+            HEIGHT - 1,
+            graphics.Color(255, 0, 0),
+        )
+
+
 def _draw_question(sign, state, elapsed=0.0):
     sign.canvas.Clear()
     if state["current"] is None:
@@ -876,6 +894,7 @@ def _draw_question(sign, state, elapsed=0.0):
         header_x = (40 - len(header) * 4) // 2
         graphics.DrawText(sign.canvas, sign.font46, header_x, 18, header_label_color, difficulty_mark)
         graphics.DrawText(sign.canvas, sign.font46, header_x + 8, 18, question_number_color, question_number)
+        _draw_question_timer(sign, state["time_remaining_fraction"])
         return
 
     flag.thumbnail((42, 20), Image.Resampling.LANCZOS)
@@ -892,6 +911,7 @@ def _draw_question(sign, state, elapsed=0.0):
     for option, baseline in zip(options, baselines):
         label = _fit_option(f"{option['key']}. {option['name']}")
         graphics.DrawText(sign.canvas, sign.font46, 48, baseline, graphics.Color(255, 255, 255), label)
+    _draw_question_timer(sign, state["time_remaining_fraction"])
 
 
 @planesign_mode_handler(DisplayMode.FLAGQUIZ)
