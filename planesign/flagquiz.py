@@ -14,11 +14,11 @@ import shared_config
 from modes import DisplayMode, planesign_mode_handler
 from PIL import Image, ImageDraw, ImageEnhance
 from rgbmatrix import graphics
-from utilities import fix_black
+from utilities import fix_black, rainbow_pen_color
 
 ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
-QUESTION_LIMIT = 25
+QUESTION_LIMIT = 5
 SUDDEN_DEATH_NOTICE_SECONDS = 3
 START_COUNTDOWN_SECONDS = 3
 WIDTH = 128
@@ -30,6 +30,7 @@ FIREWORK_FINALE_SECONDS = 7
 FIREWORK_MAX_SECONDS = 4.2
 FIREWORK_HORIZON = HEIGHT - 1
 FIREWORK_COLORS = ((255, 40, 40), (255, 190, 40), (40, 255, 90), (60, 130, 255), (200, 80, 255), (255, 255, 255), (255, 110, 200), (40, 230, 255))
+PERFECT_FIREWORK_COLORS = ((255, 188, 50), (255, 218, 90), (255, 244, 180), (255, 255, 255))
 FIREWORK_WILLOW = (255, 176, 70)
 FIREWORK_GLITTER = (255, 244, 210)
 FIREWORK_ROCKET = (255, 214, 150)
@@ -578,6 +579,7 @@ def get_sign_state():
             "tie": state["tie"],
             "end_requested": state.get("end_requested", False),
             "winner": _winner_summary(state, players, now),
+            "attempts": state["attempts"],
             "firework_seed": state.get("firework_seed", 0),
             "victory_flag_codes": state["victory_flag_codes"],
         }
@@ -653,15 +655,19 @@ def _draw_countdown(sign, countdown):
 
 
 @lru_cache(maxsize=32)
-def _firework_shells(slot, seed):
+def _firework_shells(slot, seed, perfect=False):
     rng = random.Random(seed * 2741 + slot * 48611 + 31)
     start = slot * FIREWORK_SLOT_SECONDS
     finale = start % FIREWORK_FINALE_PERIOD >= FIREWORK_FINALE_PERIOD - FIREWORK_FINALE_SECONDS
-    count = rng.choice((1, 2, 2, 3)) if finale else int(rng.random() < FIREWORK_CHANCE)
+    if perfect:
+        count = rng.choice((2, 3, 3, 4)) if finale else rng.choice((1, 2, 2, 3))
+    else:
+        count = rng.choice((1, 2, 2, 3)) if finale else int(rng.random() < FIREWORK_CHANCE)
+    colors_available = PERFECT_FIREWORK_COLORS if perfect else FIREWORK_COLORS
     shells = []
     for _ in range(count):
         kind = rng.choice(("peony", "peony", "ring", "willow", "crackle"))
-        radius = rng.uniform(4.5, 7.5) if kind != "ring" else rng.uniform(5, 7)
+        radius = rng.uniform(5.5, 8.5) if perfect and kind != "ring" else rng.uniform(4.5, 7.5) if kind != "ring" else rng.uniform(5, 7)
         burst = (rng.uniform(10, 118), rng.uniform(radius + 5, 15))
         stars = round(radius * (3.6 if kind != "ring" else 2.8))
         angles = np.array([math.tau * (index + rng.uniform(-0.25, 0.25)) / stars for index in range(stars)], dtype=np.float32)
@@ -669,9 +675,10 @@ def _firework_shells(slot, seed):
             speeds = np.full(stars, radius, dtype=np.float32)
         else:
             speeds = np.array([radius * (rng.uniform(0.85, 1.05) if rng.random() < 0.7 else rng.uniform(0.35, 0.65)) for _ in range(stars)], dtype=np.float32)
-        outer, inner = rng.sample(FIREWORK_COLORS, 2)
+        outer, inner = rng.sample(colors_available, 2)
         if kind == "willow":
-            colors = np.tile(np.array(FIREWORK_WILLOW, dtype=np.float32) / 255, (stars, 1))
+            willow = (255, 214, 110) if perfect else FIREWORK_WILLOW
+            colors = np.tile(np.array(willow, dtype=np.float32) / 255, (stars, 1))
         else:
             colors = np.where((speeds < radius * 0.7)[:, None], np.array(inner, dtype=np.float32) / 255, np.array(outer, dtype=np.float32) / 255)
         life = rng.uniform(2.4, 2.9) if kind == "willow" else rng.uniform(1.5, 2.1)
@@ -708,10 +715,10 @@ def _splat_firework(light, xs, ys, colors, weights):
     np.add.at(light, (rows[keep], columns[keep]), colors[keep] * weights[keep, None])
 
 
-def _firework_light(elapsed, seed):
+def _firework_light(elapsed, seed, perfect=False):
     light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
     for slot in range(math.floor((elapsed - FIREWORK_MAX_SECONDS) / FIREWORK_SLOT_SECONDS), math.floor(elapsed / FIREWORK_SLOT_SECONDS) + 1):
-        for shell in _firework_shells(slot, seed):
+        for shell in _firework_shells(slot, seed, perfect):
             age = elapsed - shell.launch
             if not 0 <= age < shell.rise + shell.life:
                 continue
@@ -770,8 +777,8 @@ def _firework_light(elapsed, seed):
     return light
 
 
-def _draw_fireworks(image, elapsed, seed):
-    light = np.clip(_firework_light(elapsed, seed), 0, 1)
+def _draw_fireworks(image, elapsed, seed, perfect=False):
+    light = np.clip(_firework_light(elapsed, seed, perfect), 0, 1)
     base = np.asarray(image, dtype=np.float32) / 255
     composited = base * (1 - light.max(axis=-1, keepdims=True)) + light
     image.paste(Image.fromarray(np.round(composited * 255).astype(np.uint8), "RGB"))
@@ -784,11 +791,22 @@ def _resized_winner_flag(code):
     return source.resize((width, 10), Image.Resampling.LANCZOS)
 
 
-def _draw_raising_flag(draw, elapsed, flag_codes):
+def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False):
     pole_x = 3
-    draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=(150, 150, 165))
-    draw.point((pole_x - 1, 0), fill=(245, 205, 75))
-    draw.point((pole_x + 1, 0), fill=(245, 205, 75))
+    pole_color = (212, 164, 52) if ornate else (150, 150, 165)
+    draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=pole_color)
+    if ornate:
+        draw.line((pole_x - 1, 4, pole_x - 1, HEIGHT - 1), fill=(255, 220, 100))
+        draw.line((pole_x + 1, 4, pole_x + 1, HEIGHT - 1), fill=(112, 78, 28))
+        for band_y in (8, 16, 24):
+            draw.point((pole_x - 1, band_y), fill=(255, 236, 150))
+            draw.point((pole_x, band_y), fill=(255, 196, 55))
+            draw.point((pole_x + 1, band_y), fill=(150, 102, 30))
+        draw.polygon(((pole_x, 0), (pole_x - 2, 2), (pole_x - 1, 4), (pole_x, 3), (pole_x + 1, 4), (pole_x + 2, 2)), fill=(255, 202, 55))
+        draw.point((pole_x, 1), fill=(255, 255, 220))
+    else:
+        draw.point((pole_x - 1, 0), fill=(245, 205, 75))
+        draw.point((pole_x + 1, 0), fill=(245, 205, 75))
 
     flag_index = int(elapsed / 2.5) % len(flag_codes)
     flag = _resized_winner_flag(flag_codes[flag_index])
@@ -800,27 +818,68 @@ def _draw_raising_flag(draw, elapsed, flag_codes):
             draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
 
 
+def _draw_perfect_crown(draw, x, y, elapsed):
+    period = elapsed % 2.0
+    pulse = max(0.0, 1.0 - period / 0.34)
+    bright = elapsed < 1.5 or pulse > 0
+    crown = (
+        "Y.....Y",
+        "YY...YY",
+        "YYYYYYY",
+        ".YYYYY.",
+        "..YYY..",
+    )
+    gold = (255, 205, 55) if not bright else (255, 229, 115)
+    for row, pattern in enumerate(crown):
+        for column, pixel in enumerate(pattern):
+            if pixel == "Y":
+                draw.point((x + column, y + row), fill=(255, 250, 190) if bright and row == 0 else gold)
+    if elapsed < 1.5:
+        sparkle = (255, 255, 235) if int(elapsed * 12) % 2 == 0 else (255, 220, 100)
+        for sx, sy in ((x - 2, y + 1), (x + 3, y - 2), (x + 9, y + 1)):
+            draw.point((sx, sy), fill=sparkle)
+            if int(elapsed * 8) % 2 == 0:
+                draw.point((sx, sy + 1), fill=(255, 204, 70))
+    elif pulse > 0.55:
+        draw.point((x - 1, y + 2), fill=(255, 231, 130))
+        draw.point((x + 7, y + 2), fill=(255, 231, 130))
+
+
 def _draw_victory(sign, state, elapsed):
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-    _draw_fireworks(image, elapsed, state.get("firework_seed", 0))
+    winner = state.get("winner")
+    winner_attempts = state.get("attempts", {}).get(winner["id"], 0) if winner else 0
+    perfect = bool(
+        winner
+        and state["difficulty"] == "expert"
+        and winner_attempts
+        and winner["score"] == winner_attempts
+    )
+    _draw_fireworks(image, elapsed, state.get("firework_seed", 0), perfect)
     draw = ImageDraw.Draw(image)
-    _draw_raising_flag(draw, elapsed, state["victory_flag_codes"])
+    _draw_raising_flag(draw, elapsed, state["victory_flag_codes"], perfect)
+    message = winner["name"] + " WINS!" if winner and winner["accuracy"] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
+    message_x = (WIDTH - len(message) * 4) // 2 + 3
+    if perfect:
+        _draw_perfect_crown(draw, message_x - 9, 15, elapsed)
     sign.canvas.SetImage(image, 0, 0)
 
-    winner = state.get("winner")
-    title = "FLAG CHAMPION!" if winner and winner['accuracy'] > 0 else "QUIZ COMPLETE!"
+    title = "PERFECT GAME!" if perfect else "FLAG CHAMPION!" if winner and winner['accuracy'] > 0 else "QUIZ COMPLETE!"
     title_x = (WIDTH - len(title) * 5) // 2 + 3
     title_color = graphics.Color(46, 210, 255) if int(elapsed * 3) % 2 == 0 else graphics.Color(255, 220, 80)
     _draw_outlined_text(sign, sign.font57, title, title_x, 9, title_color)
 
-    message = winner["name"] + " WINS!" if winner and winner['accuracy'] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
-    message_x = (WIDTH - len(message) * 4) // 2 + 3
     message_color = graphics.Color(255, 240, 150) if int(elapsed * 3) % 2 == 0 else graphics.Color(130, 255, 150)
     _draw_outlined_text(sign, sign.font46, message, message_x, 20, message_color)
     if winner and winner['accuracy'] > 0:
         accuracy = f"ACCURACY {winner['accuracy']}%"
         accuracy_x = (WIDTH - len(accuracy) * 4) // 2 + 3
-        _draw_outlined_text(sign, sign.font46, accuracy, accuracy_x, 30, graphics.Color(130, 255, 150))
+        accuracy_color = (
+            graphics.Color(*rainbow_pen_color(round(elapsed * 60)))
+            if perfect
+            else graphics.Color(130, 255, 150)
+        )
+        _draw_outlined_text(sign, sign.font46, accuracy, accuracy_x, 30, accuracy_color)
 
 
 def _draw_sudden_death_notice(sign):
