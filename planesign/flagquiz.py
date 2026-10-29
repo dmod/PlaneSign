@@ -857,6 +857,7 @@ def _draw_victory(sign, state, elapsed):
         and state["difficulty"] == "expert"
         and winner_attempts
         and winner["score"] == winner_attempts
+        and winner["score"] >= QUESTION_LIMIT
     )
     _draw_fireworks(image, elapsed, state.get("firework_seed", 0), perfect)
     draw = ImageDraw.Draw(image)
