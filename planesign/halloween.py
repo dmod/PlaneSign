@@ -14,6 +14,8 @@ HEIGHT = 32
 PUMPKIN_COLORS = ((184, 59, 12), (205, 76, 9), (165, 48, 18), (219, 91, 12), (183, 96, 42), (199, 80, 24), (172, 64, 16), (188, 106, 18))
 PUMPKIN_WIDTH_RANGE = (13, 29)
 MIN_DRAWABLE_EYE_PIXELS = 3
+MIN_DRAWABLE_MOUTH_PIXELS = 6
+MIN_RELATIVE_MOUTH_PIXEL_RATIO = 0.8
 FACE_ASSET_DIR = Path(shared_config.icons_dir) / "halloween"
 IMAGE_EXTENSIONS = Image.registered_extensions()
 FACE_ASSETS = {
@@ -279,8 +281,8 @@ def create_pumpkins(assets):
             "mouth_flip_left_right": random.choice((False, True)),
             "mouth_flip_top_bottom": random.choice((False, True)),
             "nose": nose,
-            "mouth": mouth,
         }
+        pumpkin["mouth"] = choose_drawable_mouth(pumpkin, assets)
         pumpkin["eyes"] = choose_drawable_eyes(pumpkin, assets)
         pumpkins.append(pumpkin)
         x += body_width + gap
@@ -424,6 +426,21 @@ def positioned_face_feature(pumpkin, asset, vertical_position, feature_height):
     feature_y = body_top + round(body_height * vertical_position)
     feature_y = min(max(body_top + 1, feature_y), pumpkin["bottom"] - feature.height - 1)
     return feature, feature_x, feature_y
+
+
+def choose_drawable_mouth(pumpkin, assets):
+    body_mask = pumpkin_body_mask(pumpkin)
+    candidates = list(FACE_ASSETS["mouth"])
+    random.shuffle(candidates)
+    for asset_name in candidates:
+        feature, x, y = positioned_face_feature(pumpkin, assets["mouth"][asset_name], 0.64, 0.27)
+        original_pixel_ratio = sum(pixel > 0 for pixel in assets["mouth"][asset_name].getchannel("A").getdata()) / (assets["mouth"][asset_name].width * assets["mouth"][asset_name].height)
+        scaled_pixel_ratio = sum(pixel > 0 for pixel in feature.getchannel("A").getdata()) / (feature.width * feature.height)
+        body_region = body_mask.crop((x, y, x + feature.width, y + feature.height))
+        visible_pixels = ImageChops.multiply(feature.getchannel("A"), body_region)
+        if sum(pixel > 0 for pixel in visible_pixels.getdata()) >= MIN_DRAWABLE_MOUTH_PIXELS and scaled_pixel_ratio >= MIN_RELATIVE_MOUTH_PIXEL_RATIO * original_pixel_ratio:
+            return asset_name
+    raise ValueError(f"No Halloween mouth asset has at least {MIN_DRAWABLE_MOUTH_PIXELS} drawable pixels for pumpkin width {pumpkin['width']}")
 
 
 def choose_drawable_eyes(pumpkin, assets):
