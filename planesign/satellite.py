@@ -276,6 +276,10 @@ def get_flag(selected, satellite_by_norad, satellite_by_cospar, flag_cache):
         image = Image.open(f"{shared_config.icons_dir}/flags/UNKNOWN.png").convert("RGB")
     elif code != "NPL":
         image = fix_black(image)
+    elif code == "NPL":
+        bg = Image.new("RGB", image.size, (0, 0, 0))
+        bg.paste(image, (0, 0), image)
+        image = bg.convert("RGB")
 
     w, h = image.size
 
@@ -300,6 +304,10 @@ def _get_iss_flag(code, flag_cache):
         image = Image.open(f"{shared_config.icons_dir}/flags/{code}.png").convert("RGBA")
         if code not in ISS_FLAGS_WITHOUT_BLACK_FIX:
             image = fix_black(image)
+        elif code == "NPL" or code == "states/OH":
+            bg = Image.new("RGB", image.size, (0, 0, 0))
+            bg.paste(image, (0, 0), image)
+            image = bg.convert("RGB")
     except Exception:
         logging.warning("Couldn't find flag for: %s", code)
         image = Image.open(f"{shared_config.icons_dir}/flags/UNKNOWN.png").convert("RGBA")
