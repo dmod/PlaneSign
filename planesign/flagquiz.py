@@ -588,8 +588,11 @@ def get_sign_state():
 @lru_cache(maxsize=1)
 def _flag_image(code):
     with Image.open(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")) as image:
-        image = image.convert("RGB")
-        if code != "NPL" and code != "states/OH":
+        if code == "NPL" or code == "states/OH":
+            bg = Image.new("RGB", image.size, (0, 0, 0))
+            bg.paste(image, (0, 0), image)
+            image = bg.convert("RGB")
+        else:
             image = fix_black(image)
         return image
 
@@ -952,7 +955,7 @@ def _draw_question(sign, state, elapsed=0.0):
 
     flag = _flag_image(current["code"]).copy()
     if state["difficulty"] == "expert":
-        flag.thumbnail((46, 28), Image.Resampling.LANCZOS)
+        flag.thumbnail((42, 20), Image.Resampling.LANCZOS)
         sign.canvas.SetImage(flag, (WIDTH - flag.width) // 2, (HEIGHT - flag.height) // 2)
         header_x = (40 - len(header) * 4) // 2
         graphics.DrawText(sign.canvas, sign.font46, header_x, 18, header_label_color, difficulty_mark)
