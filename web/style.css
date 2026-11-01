@@ -251,11 +251,21 @@ body {
 }
 
 .flagquiz_difficulties,
-.flagquiz_name_control {
+.flagquiz_name_control,
+.flagquiz_study_actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin: 8px 0;
+}
+
+.flagquiz_study_actions {
+  justify-content: flex-start;
+}
+
+.flagquiz_study_actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .flagquiz_difficulty_button[aria-pressed="true"] {

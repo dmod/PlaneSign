@@ -56,6 +56,7 @@ var flagquiz_latest_state = null;
 var flagquiz_poll_in_progress = false;
 var flagquiz_answer_in_progress = false;
 var flagquiz_suggestion_timer = null;
+var flagquiz_study_suggestion_timer = null;
 var flagquiz_selected_difficulty = null;
 var flagquiz_seen_answer_pulses = new Set();
 
@@ -686,6 +687,39 @@ function render_flagquiz_difficulty_selection() {
     });
 }
 
+function select_flagquiz_study(code) {
+    flagquiz_error("");
+    var panel = document.getElementById("flagquiz_study_panel");
+    panel.hidden = false;
+    flagquiz_request("/games/flagquiz/study", code === undefined ? {} : { code: code })
+        .then(function () {
+            poll_flagquiz_state();
+        })
+        .catch(function (error) {
+            flagquiz_error(error.message);
+        });
+}
+
+function flagquiz_study_action(action) {
+    flagquiz_error("");
+    flagquiz_request("/games/flagquiz/study", { action: action })
+        .then(function () {
+            poll_flagquiz_state();
+        })
+        .catch(function (error) {
+            flagquiz_error(error.message);
+        });
+}
+
+function render_flagquiz_study_selection(study) {
+    var button = document.querySelector("[data-flagquiz-study]");
+    var selected = Boolean(study && study.active);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    document.getElementById("flagquiz_study_panel").hidden = !selected;
+    document.getElementById("flagquiz_study_pause").disabled = !selected || !study.cycling;
+    document.getElementById("flagquiz_study_pause").textContent = study && study.paused ? "Unpause" : "Pause";
+}
+
 function start_flagquiz() {
     var button = document.getElementById("flagquiz_start_button");
     button.disabled = true;
@@ -787,6 +821,7 @@ function render_flagquiz_state(state) {
         flagquiz_selected_difficulty = state.selected_difficulty || state.difficulty || "easy";
     }
     render_flagquiz_difficulty_selection();
+    render_flagquiz_study_selection(state.study);
     var startButton = document.getElementById("flagquiz_start_button");
     var endButton = document.getElementById("flagquiz_end_button");
     startButton.textContent = state.in_progress ? "Restart Game" : "Start Game";
@@ -796,7 +831,11 @@ function render_flagquiz_state(state) {
 
     var current = state.current;
     var progress;
-    if (!state.difficulty) {
+    if (state.study && state.study.active && !state.in_progress) {
+        progress = state.study.cycling
+            ? "Study mode · Flag " + state.study.position + " / " + state.study.total
+            : "Study mode · " + state.study.name;
+    } else if (!state.difficulty) {
         progress = "Select a difficulty and press Start Game when everyone is ready.";
     } else if (state.countdown !== null && state.countdown !== undefined) {
         progress = "Starting in " + state.countdown + "...";
@@ -813,15 +852,17 @@ function render_flagquiz_state(state) {
     }
     document.getElementById("flagquiz_question_progress").textContent = progress;
     var flag = document.getElementById("flagquiz_flag");
-    flag.hidden = !current;
-    if (!current) {
+    var displayCountry = current || (!state.in_progress && state.study && state.study.active ? state.study : null);
+    flag.hidden = !displayCountry;
+    if (!displayCountry) {
         flag.removeAttribute("src");
     }
-    if (current) {
-        var imagePath = "api/games/flagquiz/flag/" + encodeURIComponent(current.code);
+    if (displayCountry) {
+        var imagePath = "api/games/flagquiz/flag/" + encodeURIComponent(displayCountry.code);
         if (flag.getAttribute("src") !== imagePath) {
             flag.src = imagePath;
         }
+        flag.alt = current ? "Current quiz flag" : displayCountry.name + " flag";
     }
 
     var feedback = document.getElementById("flagquiz_feedback");
@@ -970,6 +1011,39 @@ function get_flagquiz_suggestions(query) {
                     option.addEventListener("click", function () {
                         document.getElementById("flagquiz_expert_input").value = country.name;
                         submit_flagquiz_answer(country.code, option);
+                    });
+                    list.appendChild(option);
+                });
+            })
+            .catch(function (error) {
+                flagquiz_error(error.message);
+            });
+    }, 180);
+}
+
+function get_flagquiz_study_suggestions(query) {
+    clearTimeout(flagquiz_study_suggestion_timer);
+    var list = document.getElementById("flagquiz_study_suggestions");
+    list.replaceChildren();
+    if (query.trim().length < 1) {
+        return;
+    }
+
+    flagquiz_study_suggestion_timer = setTimeout(function () {
+        flagquiz_request("/games/flagquiz/suggestions?q=" + encodeURIComponent(query))
+            .then(function (response) {
+                if (document.getElementById("flagquiz_study_input").value !== query) {
+                    return;
+                }
+                response.results.forEach(function (country) {
+                    var option = document.createElement("button");
+                    option.type = "button";
+                    option.className = "flagquiz_suggestion";
+                    option.textContent = country.name;
+                    option.addEventListener("click", function () {
+                        document.getElementById("flagquiz_study_input").value = country.name;
+                        list.replaceChildren();
+                        select_flagquiz_study(country.code);
                     });
                     list.appendChild(option);
                 });

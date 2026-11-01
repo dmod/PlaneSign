@@ -601,6 +601,21 @@ def select_flagquiz_difficulty():
     return jsonify(result)
 
 
+@app.route("/games/flagquiz/study", methods=["POST"])
+def select_flagquiz_study():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "JSON request data is required"}), 400
+    try:
+        if "action" in data:
+            result = flagquiz.study_action(data["action"])
+        else:
+            result = flagquiz.select_study(data.get("code"))
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    return jsonify(result)
+
+
 @app.route("/games/flagquiz/end", methods=["POST"])
 def end_flagquiz():
     try:
@@ -649,7 +664,7 @@ def flagquiz_suggestions():
 @app.route("/games/flagquiz/flag/<path:code>")
 def flagquiz_flag(code):
     code = flagquiz.normalize_country_code(code)
-    if code not in {country["code"] for country in flagquiz.load_countries()}:
+    if code not in {country["code"] for country in flagquiz.load_flag_entries()}:
         return jsonify({"ok": False, "error": "Unknown flag"}), 404
     return send_from_directory(flagquiz.FLAG_IMAGE_DIR, f"{code}.png", mimetype="image/png")
 

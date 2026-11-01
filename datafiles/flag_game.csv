@@ -286,48 +286,48 @@ states/AZ,Arizona,Expert
 states/AR,Arkansas,Expert
 states/CA,California,Expert
 states/CO,Colorado,Expert
-#states/CT,Connecticut,Expert
+states/CT,Connecticut,None
 states/DE,Delaware,Expert
 states/DC,Washington DC,Expert
 states/FL,Florida,Expert
 states/GA,Georgia (state),Expert
 states/HI,Hawaii,Expert
-#states/ID,Idaho,Expert
+states/ID,Idaho,None
 states/IL,Illinois,Expert
 states/IN,Indiana,Expert
 states/IA,Iowa,Expert
-#states/KS,Kansas,Expert
-#states/KY,Kentucky,Expert
-#states/LA,Louisiana,Expert
-#states/ME,Maine,Expert
+states/KS,Kansas,None
+states/KY,Kentucky,None
+states/LA,Louisiana,None
+states/ME,Maine,None
 states/MD,Maryland,Expert
 states/MA,Massachusetts,Expert
-#states/MI,Michigan,Expert
+states/MI,Michigan,None
 states/MN,Minnesota,Expert
 states/MS,Mississippi,Expert
 states/MO,Missouri,Expert
-#states/MT,Montana,Expert
-#states/NE,Nebraska,Expert
-#states/NV,Nevada,Expert
-#states/NH,New Hampshire,Expert
+states/MT,Montana,None
+states/NE,Nebraska,None
+states/NV,Nevada,None
+states/NH,New Hampshire,None
 states/NJ,New Jersey,Expert
 states/NM,New Mexico,Expert
-#states/NY,New York,Expert
+states/NY,New York,None
 states/NC,North Carolina,Expert
-#states/ND,North Dakota,Expert
+states/ND,North Dakota,None
 states/OH,Ohio,Expert
 states/OK,Oklahoma,Expert
-#states/OR,Oregon,Expert
-#states/PA,Pennsylvania,Expert
+states/OR,Oregon,None
+states/PA,Pennsylvania,None
 states/RI,Rhode Island,Expert
 states/SC,South Carolina,Expert
-#states/SD,South Dakota,Expert
+states/SD,South Dakota,None
 states/TN,Tennessee,Expert
 states/TX,Texas,Expert
 states/UT,Utah,Expert
-#states/VT,Vermont,Expert
-#states/VA,Virginia,Expert
+states/VT,Vermont,None
+states/VA,Virginia,None
 states/WA,Washington,Expert
 states/WV,West Virginia,Expert
-#states/WI,Wisconsin,Expert
+states/WI,Wisconsin,None
 states/WY,Wyoming,Expert

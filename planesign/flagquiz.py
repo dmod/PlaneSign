@@ -21,6 +21,7 @@ EXPERT_ROUND_SECONDS = 20
 QUESTION_LIMIT = 25
 SUDDEN_DEATH_NOTICE_SECONDS = 3
 START_COUNTDOWN_SECONDS = 3
+STUDY_FLAG_SECONDS = 3
 WIDTH = 128
 HEIGHT = 32
 FIREWORK_SLOT_SECONDS = 0.7
@@ -63,7 +64,7 @@ class FlagQuizConflict(ValueError):
 
 
 @lru_cache(maxsize=1)
-def load_countries():
+def load_flag_entries():
     countries = []
     seen_codes = set()
     with open(FLAG_GAME_FILE, newline="", encoding="utf-8") as csv_file:
@@ -77,15 +78,20 @@ def load_countries():
             difficulty = difficulty.casefold()
             if not code or not name or code in seen_codes:
                 raise ValueError(f"Invalid or duplicate flag quiz entry on row {line}")
-            if difficulty not in DIFFICULTY_LEVELS:
-                raise ValueError(f"Invalid flag quiz difficulty on row {line}: expected Easy, Hard, or Expert")
+            if difficulty not in DIFFICULTY_LEVELS and difficulty != "none":
+                raise ValueError(f"Invalid flag quiz difficulty on row {line}: expected Easy, Hard, Expert, or None")
             if not os.path.isfile(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")):
                 raise FileNotFoundError(f"Flag image not found for {code} (CSV row {line})")
             seen_codes.add(code)
             countries.append({"code": code, "name": name, "difficulty": difficulty})
-    if not countries:
+    if not any(country["difficulty"] != "none" for country in countries):
         raise ValueError("Flag quiz data contains no countries")
     return tuple(countries)
+
+
+@lru_cache(maxsize=1)
+def load_countries():
+    return tuple(country for country in load_flag_entries() if country["difficulty"] != "none")
 
 
 def normalize_country_code(code):
@@ -118,7 +124,7 @@ def get_country_suggestions(query, limit=20):
         return []
 
     suggestions = []
-    for country in load_countries():
+    for country in load_flag_entries():
         country_tokens = normalize_country_tokens(country["name"])
         if all(any(token.startswith(query_token) for token in country_tokens) for query_token in query_tokens):
             suggestions.append({"code": country["code"], "name": country["name"]})
@@ -174,6 +180,115 @@ def select_difficulty(difficulty):
     return {"ok": True, "difficulty": difficulty}
 
 
+def select_study(code=None):
+    countries = load_flag_entries()
+    country_by_code = {country["code"]: country for country in countries}
+    if code is not None:
+        if not isinstance(code, str):
+            raise ValueError("code must be a flag code")
+        code = normalize_country_code(code)
+        if code not in country_by_code:
+            raise ValueError("Unknown flag")
+
+    now = time.monotonic()
+    cycle_codes = tuple(country["code"] for country in load_countries())
+    with shared_config.shared_games_lock:
+        shared_config.data_dict["flagquiz_study"] = {
+            "code": code,
+            "codes": cycle_codes,
+            "seed": random.randrange(2**32),
+            "cycle": 0,
+            "index": 0,
+            "last_advance": now,
+            "paused": False,
+        }
+    return {"ok": True, "code": code}
+
+
+def study_action(action):
+    if action not in ("next", "previous", "toggle_pause"):
+        raise ValueError("Unknown study action")
+
+    now = time.monotonic()
+    with shared_config.shared_games_lock:
+        study = shared_config.data_dict.get("flagquiz_study")
+        if not study:
+            raise ValueError("Study mode is not selected")
+        _advance_study(study, now)
+        if action == "toggle_pause":
+            if study["code"] is not None:
+                raise ValueError("Pause is only available while cycling flags")
+            if study["paused"]:
+                study["last_advance"] = now
+                study["paused"] = False
+            else:
+                study["paused"] = True
+        else:
+            codes = study["codes"]
+            if study["code"] is not None:
+                current_index = next((index for index, code in enumerate(_study_order(study["seed"], study["cycle"], codes)) if code == study["code"]), study["index"])
+                study["index"] = current_index
+                study["code"] = None
+            direction = 1 if action == "next" else -1
+            study["index"] += direction
+            if study["index"] >= len(codes):
+                study["cycle"] += 1
+                study["index"] = 0
+            elif study["index"] < 0:
+                study["cycle"] -= 1
+                study["index"] = len(codes) - 1
+            study["last_advance"] = now
+        shared_config.data_dict["flagquiz_study"] = study
+    return {"ok": True, "action": action}
+
+
+@lru_cache(maxsize=32)
+def _study_order(seed, cycle, codes):
+    order = list(codes)
+    random.Random(seed + cycle * 1103515245).shuffle(order)
+    return tuple(order)
+
+
+def _advance_study(study, now):
+    if study["code"] is not None or study["paused"]:
+        return False
+    elapsed_steps = int(max(0.0, now - study["last_advance"]) / STUDY_FLAG_SECONDS)
+    if elapsed_steps:
+        cycle, study["index"] = divmod(study["index"] + elapsed_steps, len(study["codes"]))
+        study["cycle"] += cycle
+        study["last_advance"] += elapsed_steps * STUDY_FLAG_SECONDS
+        return True
+    return False
+
+
+def _study_status(now):
+    study = shared_config.data_dict.get("flagquiz_study")
+    if not study:
+        return {"active": False}
+
+    codes = tuple(study["codes"])
+    if _advance_study(study, now):
+        shared_config.data_dict["flagquiz_study"] = study
+    cycling = study["code"] is None
+    if cycling:
+        code = _study_order(study["seed"], study["cycle"], codes)[study["index"]]
+        position = study["index"] + 1
+    else:
+        code = study["code"]
+        position = None
+
+    country = next(country for country in load_flag_entries() if country["code"] == code)
+    return {
+        "active": True,
+        "code": code,
+        "name": country["name"],
+        "cycling": cycling,
+        "paused": study["paused"],
+        "position": position,
+        "total": len(codes),
+    }
+
+
 def start_game(difficulty, player_id):
     difficulty = difficulty.casefold() if isinstance(difficulty, str) else difficulty
     pool = _country_pool(difficulty)
@@ -217,6 +332,7 @@ def start_game(difficulty, player_id):
     }
     with shared_config.shared_games_lock:
         shared_config.data_dict["flagquiz_selected_difficulty"] = difficulty
+        shared_config.data_dict["flagquiz_study"] = None
         shared_config.data_dict["flagquiz_state"] = state
         shared_config.shared_mode.value = DisplayMode.FLAGQUIZ.value
         shared_config.shared_forced_sign_update.set()
@@ -437,6 +553,7 @@ def get_game_status(player_id, player_name=None):
         players = dict(shared_config.data_dict.get("game_players", {}))
         state = shared_config.data_dict.get("flagquiz_state")
         selected_difficulty = shared_config.data_dict.get("flagquiz_selected_difficulty")
+        study = _study_status(now)
         if state is None:
             active_players = {
                 player_id: 0
@@ -450,6 +567,7 @@ def get_game_status(player_id, player_name=None):
                 "complete": False,
                 "in_progress": False,
                 "current": None,
+                "study": study,
                 "players": _player_summary(players, active_players, now),
                 "player": player,
             }
@@ -464,6 +582,7 @@ def get_game_status(player_id, player_name=None):
         shared_config.data_dict["flagquiz_state"] = state
         status = _public_status(state, player["id"], players, now)
         status["selected_difficulty"] = selected_difficulty
+        status["study"] = study
         status["player"] = player
         return status
 
@@ -515,7 +634,7 @@ def submit_answer(player_id, round_id, answer):
 
         current = state["current"]
         if state["difficulty"] == "expert":
-            valid_answer = isinstance(answer, str) and any(country["code"] == answer for country in _country_pool("expert"))
+            valid_answer = isinstance(answer, str) and any(country["code"] == answer for country in load_flag_entries())
             if not valid_answer:
                 raise ValueError("Select a country from the suggestions")
             correct = answer == current["code"]
@@ -545,6 +664,7 @@ def get_sign_state():
             return {
                 "difficulty": None,
                 "selected_difficulty": shared_config.data_dict.get("flagquiz_selected_difficulty"),
+                "study": _study_status(now),
                 "question_number": 0,
                 "total": 0,
                 "current": None,
@@ -564,6 +684,7 @@ def get_sign_state():
         return {
             "difficulty": state["difficulty"],
             "selected_difficulty": shared_config.data_dict.get("flagquiz_selected_difficulty"),
+            "study": _study_status(now),
             "question_number": state["index"] + 1 if state["current"] is not None else state["index"],
             "total": state["regular_question_count"],
             "current": state["current"],
@@ -656,6 +777,38 @@ def _draw_countdown(sign, countdown):
     text = f"{countdown}..."
     x = (WIDTH - len(text) * 9) // 2
     _draw_outlined_text(sign, sign.fontreallybig, text, x, 24, graphics.Color(255, 225, 90))
+
+
+def _study_name_lines(name, max_chars=19):
+    lines = []
+    line = ""
+    for word in name.split():
+        while len(word) > max_chars:
+            if line:
+                lines.append(line)
+                line = ""
+            lines.append(word[:max_chars])
+            word = word[max_chars:]
+        if line and len(line) + len(word) + 1 > max_chars:
+            lines.append(line)
+            line = ""
+        line = f"{line} {word}".strip()
+    if line:
+        lines.append(line)
+    return lines
+
+
+def _draw_study(sign, study):
+    image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
+    flag = _flag_image(study["code"]).convert("RGB")
+    flag.thumbnail((42, 22), Image.Resampling.LANCZOS)
+    image.paste(flag, (2, (HEIGHT - flag.height) // 2))
+    sign.canvas.SetImage(image, 0, 0)
+
+    header = f"STUDY {study['position']}/{study['total']}" if study["cycling"] else "STUDY"
+    graphics.DrawText(sign.canvas, sign.font46, 49, 6, graphics.Color(46, 210, 255), header)
+    for index, line in enumerate(_study_name_lines(study["name"])[:4]):
+        graphics.DrawText(sign.canvas, sign.font46, 49, 13 + index * 6, graphics.Color(255, 255, 255), line)
 
 
 @lru_cache(maxsize=32)
@@ -941,6 +1094,8 @@ def _draw_question(sign, state, elapsed=0.0):
             _draw_sudden_death_notice(sign)
         elif state.get("countdown") is not None:
             _draw_countdown(sign, state["countdown"])
+        elif state.get("study", {}).get("active"):
+            _draw_study(sign, state["study"])
         elif state["complete"]:
             _draw_victory(sign, state, elapsed)
         else:

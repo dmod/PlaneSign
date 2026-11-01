@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=audit-fixes-4">
+  <link rel="stylesheet" href="style.css?v=flagquiz-study-2">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=audit-fixes-4"></script>
+  <script src="index.js?v=flagquiz-study-2"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -103,6 +103,20 @@
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="easy" aria-pressed="false" onclick="select_flagquiz_difficulty('easy')">Easy · 3 choices</button>
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="hard" aria-pressed="false" onclick="select_flagquiz_difficulty('hard')">Hard · 4 choices</button>
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="expert" aria-pressed="false" onclick="select_flagquiz_difficulty('expert')">Expert</button>
+            <button type="button" class="flagquiz_difficulty_button" data-flagquiz-study aria-pressed="false" onclick="select_flagquiz_study()">Study</button>
+          </div>
+          <div id="flagquiz_study_panel" class="flagquiz_expert" hidden>
+            <div class="flagquiz_study_actions" role="group" aria-label="Study flag controls">
+              <button type="button" class="flagquiz_difficulty_button" onclick="select_flagquiz_study()">Cycle all flags</button>
+              <button id="flagquiz_study_previous" type="button" class="flagquiz_difficulty_button" onclick="flagquiz_study_action('previous')">Previous</button>
+              <button id="flagquiz_study_next" type="button" class="flagquiz_difficulty_button" onclick="flagquiz_study_action('next')">Next</button>
+              <button id="flagquiz_study_pause" type="button" class="flagquiz_difficulty_button" onclick="flagquiz_study_action('toggle_pause')" disabled>Pause</button>
+            </div>
+            <label for="flagquiz_study_input">Find a flag to display</label>
+            <div class="flagquiz_autocomplete">
+              <input id="flagquiz_study_input" type="text" autocomplete="off" oninput="get_flagquiz_study_suggestions(this.value)">
+              <div id="flagquiz_study_suggestions" class="flagquiz_suggestions"></div>
+            </div>
           </div>
           <div class="flagquiz_game_actions">
             <button id="flagquiz_start_button" type="button" class="flagquiz_start_button" onclick="start_flagquiz()">Start Game</button>
