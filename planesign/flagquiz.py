@@ -588,6 +588,7 @@ def get_sign_state():
 @lru_cache(maxsize=1)
 def _flag_image(code):
     with Image.open(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")) as image:
+        image = image.convert("RGBA")
         if code == "NPL" or code == "states/OH":
             bg = Image.new("RGB", image.size, (0, 0, 0))
             bg.paste(image, (0, 0), image)
