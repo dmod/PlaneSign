@@ -843,48 +843,81 @@ def _study_name_lines(name, max_chars=19):
 
 def _draw_study(sign, study):
     comparison = study.get("comparison")
+    font_width = sign.font46.CharacterWidth(ord("A"))
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
     if comparison:
         left_flag = _flag_image(study["code"]).convert("RGB")
-        left_flag.thumbnail((29, 22), Image.Resampling.LANCZOS)
-        image.paste(left_flag, (0, (HEIGHT - left_flag.height) // 2))
         right_flag = _flag_image(comparison["code"]).convert("RGB")
-        right_flag.thumbnail((29, 22), Image.Resampling.LANCZOS)
-        image.paste(right_flag, (WIDTH - right_flag.width, (HEIGHT - right_flag.height) // 2))
+        right_x = WIDTH - right_flag.width
+        image.paste(left_flag, (0, (HEIGHT - left_flag.height) // 2))
+        image.paste(right_flag, (right_x, (HEIGHT - right_flag.height) // 2))
     else:
         flag = _flag_image(study["code"]).convert("RGB")
-        flag.thumbnail((42, 22), Image.Resampling.LANCZOS)
-        image.paste(flag, (2, (HEIGHT - flag.height) // 2))
+        image.paste(flag, (0, (HEIGHT - flag.height) // 2))
     sign.canvas.SetImage(image, 0, 0)
 
     if comparison:
-        left_lines = _study_comparison_lines(study["name"], left=True)
-        right_lines = _study_comparison_lines(comparison["name"], left=False)
+        name_area_width = max(0, right_x - left_flag.width)
+        max_chars = name_area_width // font_width
+        left_lines = _study_comparison_lines(study["name"], left=True, max_chars=max_chars)
+        right_lines = _study_comparison_lines(comparison["name"], left=False, max_chars=max_chars)
         for line, baseline in zip(left_lines, (11, 17)):
-            x = (WIDTH - len(line) * 4) // 2
+            x = left_flag.width + (name_area_width - len(line) * font_width) // 2
             graphics.DrawText(sign.canvas, sign.font46, x, baseline, graphics.Color(255, 255, 255), line)
         for line, baseline in zip(right_lines, (24, 30)):
-            x = (WIDTH - len(line) * 4) // 2
+            x = left_flag.width + (name_area_width - len(line) * font_width) // 2
             graphics.DrawText(sign.canvas, sign.font46, x, baseline, graphics.Color(255, 255, 255), line)
         return
 
+    name_area_width = WIDTH - flag.width
+    max_chars = name_area_width // font_width
     header = f"STUDY {study['position']}/{study['total']}" if study["cycling"] else "STUDY"
-    graphics.DrawText(sign.canvas, sign.font46, 49, 6, graphics.Color(46, 210, 255), header)
-    for index, line in enumerate(_study_name_lines(study["name"])[:4]):
-        graphics.DrawText(sign.canvas, sign.font46, 49, 13 + index * 6, graphics.Color(255, 255, 255), line)
+    header_x = flag.width + (name_area_width - len(header) * font_width) // 2
+    graphics.DrawText(sign.canvas, sign.font46, header_x, 6, graphics.Color(46, 210, 255), header)
+    lines = _study_name_lines(study["name"], max_chars)
+    if len(lines) > 4:
+        lines = lines[:4]
+        lines[-1] = lines[-1][:max(0, max_chars - 3)] + "..."
+    for index, line in enumerate(lines):
+        x = flag.width + (name_area_width - len(line) * font_width) // 2
+        graphics.DrawText(sign.canvas, sign.font46, x, 12 + index * 6, graphics.Color(255, 255, 255), line)
 
 
-def _study_comparison_lines(name, left):
-    available = 13
-    lines = _study_name_lines(name, available)
-    if len(lines) > 2:
-        lines = lines[:2]
-        lines[1] = lines[1][:available - 3] + "..."
+def _study_comparison_lines(name, left, max_chars):
+    if max_chars < 3:
+        return ("<" if left else ">",)
+
+    capacities = (max_chars - 2, max_chars) if left else (max_chars, max_chars - 2)
+    words = name.split()
+    lines = []
+    for capacity in capacities:
+        line = ""
+        while words:
+            word = words[0]
+            separator = 1 if line else 0
+            available = capacity - len(line) - separator
+            if len(word) <= available:
+                line = f"{line} {word}".strip()
+                words.pop(0)
+            elif line:
+                break
+            else:
+                line = word[:capacity]
+                words[0] = word[capacity:]
+                if not words[0]:
+                    words.pop(0)
+                break
+        if line != "":
+            lines.append(line)
+
+    if words:
+        content_limit = capacities[-1]
+        lines[-1] = lines[-1][:max(0, content_limit - 3)] + "..."
     if left:
         lines[0] = "< " + lines[0]
     else:
         lines[-1] += " >"
-    return tuple(lines[:2])
+    return tuple(lines)
 
 
 @lru_cache(maxsize=32)
