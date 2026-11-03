@@ -867,8 +867,11 @@ function render_flagquiz_state(state) {
 
     var feedback = document.getElementById("flagquiz_feedback");
     var gameResult = document.getElementById("flagquiz_game_result");
+    var studyVisible = Boolean(state.study && state.study.active && !state.in_progress);
     gameResult.textContent = "";
-    if (!state.difficulty) {
+    if (studyVisible) {
+        feedback.textContent = state.study.name;
+    } else if (!state.difficulty) {
         feedback.textContent = "";
     } else if (state.your_answer) {
         feedback.textContent = state.your_answer.correct ? "Your answer is correct!" : "Your answer is incorrect.";
@@ -887,9 +890,9 @@ function render_flagquiz_state(state) {
     } else {
         feedback.textContent = state.complete ? "Quiz complete!" : "";
     }
-    if (state.complete && state.tie) {
+    if (!studyVisible && state.complete && state.tie) {
         gameResult.textContent = "It's a tie!";
-    } else if (state.complete && state.winner) {
+    } else if (!studyVisible && state.complete && state.winner) {
         gameResult.textContent = state.winner.name + " WINS! Accuracy: " + state.winner.accuracy + "%";
     } else {
         gameResult.textContent = "";
