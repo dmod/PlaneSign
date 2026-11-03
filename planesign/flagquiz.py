@@ -191,18 +191,55 @@ def select_study(code=None):
             raise ValueError("Unknown flag")
 
     now = time.monotonic()
-    cycle_codes = tuple(country["code"] for country in load_countries())
     with shared_config.shared_games_lock:
-        shared_config.data_dict["flagquiz_study"] = {
-            "code": code,
-            "codes": cycle_codes,
-            "seed": random.randrange(2**32),
-            "cycle": 0,
-            "index": 0,
-            "last_advance": now,
-            "paused": False,
-        }
+        study = shared_config.data_dict.get("flagquiz_study")
+        if code is None:
+            study = _new_study_state(now)
+        elif study:
+            study = dict(study)
+            _advance_study(study, now)
+            order = _study_order(study["seed"], study["cycle"], study["codes"])
+            if code in order:
+                study["index"] = order.index(code)
+            study["code"] = code
+            study["last_advance"] = now
+        else:
+            study = _new_study_state(now)
+            study["code"] = code
+        shared_config.data_dict["flagquiz_study"] = study
     return {"ok": True, "code": code}
+
+
+def _new_study_state(now):
+    return {
+        "code": None,
+        "compare_code": None,
+        "codes": tuple(country["code"] for country in load_countries()),
+        "seed": random.randrange(2**32),
+        "cycle": 0,
+        "index": 0,
+        "last_advance": now,
+        "paused": False,
+    }
+
+
+def select_study_comparison(code):
+    if code is not None:
+        if not isinstance(code, str):
+            raise ValueError("code must be a flag code")
+        code = normalize_country_code(code)
+        if code not in {country["code"] for country in load_flag_entries()}:
+            raise ValueError("Unknown flag")
+
+    now = time.monotonic()
+    with shared_config.shared_games_lock:
+        study = shared_config.data_dict.get("flagquiz_study")
+        if not study:
+            study = _new_study_state(now)
+        else:
+            study = dict(study)
+        shared_config.data_dict["flagquiz_study"] = {**study, "compare_code": code}
+    return {"ok": True, "compare_code": code}
 
 
 def study_action(action):
@@ -278,10 +315,16 @@ def _study_status(now):
         position = None
 
     country = next(country for country in load_flag_entries() if country["code"] == code)
+    compare_code = study.get("compare_code")
+    comparison = None
+    if compare_code is not None:
+        compared_country = next(country for country in load_flag_entries() if country["code"] == compare_code)
+        comparison = {"code": compared_country["code"], "name": compared_country["name"]}
     return {
         "active": True,
         "code": code,
         "name": country["name"],
+        "comparison": comparison,
         "cycling": cycling,
         "paused": study["paused"],
         "position": position,
@@ -799,16 +842,47 @@ def _study_name_lines(name, max_chars=19):
 
 
 def _draw_study(sign, study):
+    comparison = study.get("comparison")
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-    flag = _flag_image(study["code"]).convert("RGB")
-    flag.thumbnail((42, 22), Image.Resampling.LANCZOS)
-    image.paste(flag, (2, (HEIGHT - flag.height) // 2))
+    if comparison:
+        left_flag = _flag_image(study["code"]).convert("RGB")
+        left_flag.thumbnail((29, 22), Image.Resampling.LANCZOS)
+        image.paste(left_flag, (0, (HEIGHT - left_flag.height) // 2))
+        right_flag = _flag_image(comparison["code"]).convert("RGB")
+        right_flag.thumbnail((29, 22), Image.Resampling.LANCZOS)
+        image.paste(right_flag, (WIDTH - right_flag.width, (HEIGHT - right_flag.height) // 2))
+    else:
+        flag = _flag_image(study["code"]).convert("RGB")
+        flag.thumbnail((42, 22), Image.Resampling.LANCZOS)
+        image.paste(flag, (2, (HEIGHT - flag.height) // 2))
     sign.canvas.SetImage(image, 0, 0)
+
+    if comparison:
+        left_lines = _study_comparison_lines(study["name"], left=True)
+        right_lines = _study_comparison_lines(comparison["name"], left=False)
+        for line, baseline in zip(left_lines, (11, 17)):
+            graphics.DrawText(sign.canvas, sign.font46, 32, baseline, graphics.Color(255, 255, 255), line)
+        for line, baseline in zip(right_lines, (24, 30)):
+            graphics.DrawText(sign.canvas, sign.font46, 32, baseline, graphics.Color(255, 255, 255), line)
+        return
 
     header = f"STUDY {study['position']}/{study['total']}" if study["cycling"] else "STUDY"
     graphics.DrawText(sign.canvas, sign.font46, 49, 6, graphics.Color(46, 210, 255), header)
     for index, line in enumerate(_study_name_lines(study["name"])[:4]):
         graphics.DrawText(sign.canvas, sign.font46, 49, 13 + index * 6, graphics.Color(255, 255, 255), line)
+
+
+def _study_comparison_lines(name, left):
+    available = 13
+    lines = _study_name_lines(name, available)
+    if len(lines) > 2:
+        lines = lines[:2]
+        lines[1] = lines[1][:available - 3] + "..."
+    if left:
+        lines[0] = "< " + lines[0]
+    else:
+        lines[-1] += " >"
+    return tuple(lines[:2])
 
 
 @lru_cache(maxsize=32)

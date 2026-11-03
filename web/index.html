@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=flagquiz-study-2">
+  <link rel="stylesheet" href="style.css?v=flagquiz-study-3">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=flagquiz-study-3"></script>
+  <script src="index.js?v=flagquiz-study-4"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -112,10 +112,21 @@
               <button id="flagquiz_study_next" type="button" class="flagquiz_difficulty_button" onclick="flagquiz_study_action('next')">Next</button>
               <button id="flagquiz_study_pause" type="button" class="flagquiz_difficulty_button" onclick="flagquiz_study_action('toggle_pause')" disabled>Pause</button>
             </div>
-            <label for="flagquiz_study_input">Find a flag to display</label>
-            <div class="flagquiz_autocomplete">
-              <input id="flagquiz_study_input" type="text" autocomplete="off" oninput="get_flagquiz_study_suggestions(this.value)">
-              <div id="flagquiz_study_suggestions" class="flagquiz_suggestions"></div>
+            <div class="flagquiz_study_searches">
+              <div>
+                <label for="flagquiz_study_input">Left flag</label>
+                <div class="flagquiz_autocomplete">
+                  <input id="flagquiz_study_input" type="text" autocomplete="off" oninput="get_flagquiz_study_suggestions(this.value, 'left')">
+                  <div id="flagquiz_study_suggestions" class="flagquiz_suggestions"></div>
+                </div>
+              </div>
+              <div>
+                <label for="flagquiz_study_compare_input">Compare with</label>
+                <div class="flagquiz_autocomplete">
+                  <input id="flagquiz_study_compare_input" type="text" autocomplete="off" oninput="get_flagquiz_study_suggestions(this.value, 'right')">
+                  <div id="flagquiz_study_compare_suggestions" class="flagquiz_suggestions"></div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="flagquiz_game_actions">
@@ -130,7 +141,10 @@
           <p id="flagquiz_error" class="flagquiz_error" role="alert"></p>
           <section id="flagquiz_game" class="flagquiz_game">
             <p id="flagquiz_question_progress" class="flagquiz_progress" role="status"></p>
-            <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
+            <div id="flagquiz_flag_display" class="flagquiz_flag_display">
+              <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
+              <img id="flagquiz_compare_flag" class="flagquiz_flag flagquiz_compare_flag" alt="" hidden>
+            </div>
             <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
             <div id="flagquiz_expert" class="flagquiz_expert" hidden>
               <label for="flagquiz_expert_input">Country name</label>

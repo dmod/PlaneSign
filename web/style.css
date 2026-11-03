@@ -268,6 +268,34 @@ body {
   opacity: 0.55;
 }
 
+.flagquiz_study_searches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.flagquiz_study_searches label {
+  display: block;
+  margin: 8px 0 4px;
+}
+
+.flagquiz_flag_display {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.flagquiz_flag_display.is-comparing {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.flagquiz_flag_display.is-comparing .flagquiz_flag {
+  flex: 0 1 48%;
+  max-width: 48%;
+  margin: 8px 0;
+}
+
 .flagquiz_difficulty_button[aria-pressed="true"] {
   background: #164e63;
   color: #fff;

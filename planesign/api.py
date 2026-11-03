@@ -609,6 +609,8 @@ def select_flagquiz_study():
     try:
         if "action" in data:
             result = flagquiz.study_action(data["action"])
+        elif "compare_code" in data:
+            result = flagquiz.select_study_comparison(data["compare_code"])
         else:
             result = flagquiz.select_study(data.get("code"))
     except ValueError as error:
