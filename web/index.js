@@ -714,6 +714,19 @@ function flagquiz_study_action(action) {
         });
 }
 
+function clear_flagquiz_study_comparison() {
+    flagquiz_error("");
+    document.getElementById("flagquiz_study_compare_input").value = "";
+    document.getElementById("flagquiz_study_compare_suggestions").replaceChildren();
+    flagquiz_request("/games/flagquiz/study", { compare_code: null })
+        .then(function () {
+            poll_flagquiz_state();
+        })
+        .catch(function (error) {
+            flagquiz_error(error.message);
+        });
+}
+
 function render_flagquiz_study_selection(study) {
     var button = document.querySelector("[data-flagquiz-study]");
     var selected = Boolean(study && study.active);
@@ -721,6 +734,7 @@ function render_flagquiz_study_selection(study) {
     document.getElementById("flagquiz_study_panel").hidden = !selected;
     document.getElementById("flagquiz_study_pause").disabled = !selected || !study.cycling;
     document.getElementById("flagquiz_study_pause").textContent = study && study.paused ? "Unpause" : "Pause";
+    document.getElementById("flagquiz_study_compare_clear").hidden = !selected || !study.comparison;
     if (selected) {
         var leftInput = document.getElementById("flagquiz_study_input");
         var rightInput = document.getElementById("flagquiz_study_compare_input");

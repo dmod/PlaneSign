@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=flagquiz-study-3">
+  <link rel="stylesheet" href="style.css?v=flagquiz-study-4">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=flagquiz-study-4"></script>
+  <script src="index.js?v=flagquiz-study-5"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -122,9 +122,12 @@
               </div>
               <div>
                 <label for="flagquiz_study_compare_input">Compare with</label>
-                <div class="flagquiz_autocomplete">
-                  <input id="flagquiz_study_compare_input" type="text" autocomplete="off" oninput="get_flagquiz_study_suggestions(this.value, 'right')">
-                  <div id="flagquiz_study_compare_suggestions" class="flagquiz_suggestions"></div>
+                <div class="flagquiz_study_compare_control">
+                  <div class="flagquiz_autocomplete">
+                    <input id="flagquiz_study_compare_input" type="text" autocomplete="off" oninput="get_flagquiz_study_suggestions(this.value, 'right')">
+                    <div id="flagquiz_study_compare_suggestions" class="flagquiz_suggestions"></div>
+                  </div>
+                  <button id="flagquiz_study_compare_clear" type="button" class="flagquiz_study_compare_clear" onclick="clear_flagquiz_study_comparison()" aria-label="Exit comparison and remove right flag" title="Exit comparison" hidden>&times;</button>
                 </div>
               </div>
             </div>

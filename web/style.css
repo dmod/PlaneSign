@@ -279,6 +279,39 @@ body {
   margin: 8px 0 4px;
 }
 
+.flagquiz_study_compare_control {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.flagquiz_study_compare_control .flagquiz_autocomplete {
+  flex: 1;
+  min-width: 0;
+}
+
+.flagquiz_study_compare_clear {
+  flex: none;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid #8a2424;
+  border-radius: 4px;
+  background: #b83232;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.flagquiz_study_compare_clear:hover {
+  background: #982727;
+}
+
+.flagquiz_study_compare_clear[hidden] {
+  display: none;
+}
+
 .flagquiz_flag_display {
   display: flex;
   justify-content: center;

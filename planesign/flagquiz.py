@@ -861,9 +861,11 @@ def _draw_study(sign, study):
         left_lines = _study_comparison_lines(study["name"], left=True)
         right_lines = _study_comparison_lines(comparison["name"], left=False)
         for line, baseline in zip(left_lines, (11, 17)):
-            graphics.DrawText(sign.canvas, sign.font46, 32, baseline, graphics.Color(255, 255, 255), line)
+            x = (WIDTH - len(line) * 4) // 2
+            graphics.DrawText(sign.canvas, sign.font46, x, baseline, graphics.Color(255, 255, 255), line)
         for line, baseline in zip(right_lines, (24, 30)):
-            graphics.DrawText(sign.canvas, sign.font46, 32, baseline, graphics.Color(255, 255, 255), line)
+            x = (WIDTH - len(line) * 4) // 2
+            graphics.DrawText(sign.canvas, sign.font46, x, baseline, graphics.Color(255, 255, 255), line)
         return
 
     header = f"STUDY {study['position']}/{study['total']}" if study["cycling"] else "STUDY"
