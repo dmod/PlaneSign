@@ -261,6 +261,7 @@ INDEX = {name: index + 1 for index, name in enumerate(MATERIALS)}
 INDEX["hill"] = len(MATERIALS) + 1
 INDEX["peak"] = len(MATERIALS) + 2
 INDEX["chimney"] = len(MATERIALS) + 3
+INDEX["glass"] = len(MATERIALS) + 4
 # One prominent peak right of center keeps the rest of the horizon low so the night sky stays open.
 MOUNTAIN = ((62, 23), (66, 22), (70, 20), (74, 17), (77, 15), (80, 14), (83, 13), (86, 14), (89, 15), (92, 17), (96, 20), (100, 21), (106, 23), (127, 23))
 MOUNTAIN_SUMMIT = min(MOUNTAIN, key=lambda point: point[1])
@@ -294,18 +295,25 @@ CLOUD_TERMINATOR = 16
 CLOUD_SHADOW_DEPTH = 1.3
 TREE_X, TREE_CANOPY_Y = 111, 15
 # Small conifers flanking the hut: (trunk x, base row, height); the apex is at row base - height.
-CONIFERS = ((4, 28, 12), (38, 25, 7))
-HUT_ROOF = ((19, 20), (27, 15), (28, 15), (36, 20))
-HUT_DOOR = (26, 21, 29, 25)
-HUT_KNOB = (28, 23)
+CONIFERS = ((4, 28, 12), (39, 25, 7))
+# The hut stands on row 26, just above the fence posts, between the lamp's lens (x <= 18) and the right conifer.
+HUT_WALLS = (20, 20, 35, 26)
+HUT_ROOF = ((18, 20), (27, 14), (28, 14), (37, 20))
+# Snow settles along the roof's top edge, above the eave line.
+HUT_SNOW = ((18, 19), (27, 14), (28, 14), (37, 19))
+HUT_DOOR = (26, 22, 29, 26)
+HUT_KNOB = (28, 24)
+HUT_WINDOWS = ((22, 21, 24, 23), (31, 21, 33, 23))
 # A small stone chimney on the right roof slope: body box, cap row, and the flue mouth the smoke leaves from.
-CHIMNEY = (31, 14, 32, 17)
-CHIMNEY_CAP = (31, 13, 32, 13)
-CHIMNEY_FLUE = (31.5, 12.5)
+CHIMNEY = (32, 15, 33, 18)
+CHIMNEY_CAP = (32, 14, 33, 14)
+CHIMNEY_FLUE = (32.5, 13.5)
+# The windows are lit while the yard lamp is; lit glass spills WINDOW_HALO of its light onto the wall around it.
+WINDOW_LIGHT = (255, 196, 112)
+WINDOW_HALO = 0.12
 LAMP_POST_X = 14
 LAMP_LENS = (17, 17)
 LAMP_GROUND_Y = 26
-LAMP_SECONDS = 3 * 3600
 LAMP_WARMUP_SECONDS = 40
 # Sun altitude (degrees) at which the scene palette becomes pure night.
 NIGHT_ALTITUDE = -10
@@ -423,20 +431,24 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         else:
             d.polygon([(x, 24 - height), (x - 2, 24), (x + 2, 24)], fill=INDEX["ridge"])
     hill([(0, 26), (29, 25), (51, 27), (82, 25), (110, 26), (127, 25)], "field")
-    # Wood hut: plank walls with corner posts, a shingled roof and a front door with a knob.
-    d.rectangle((21, 20, 34, 25), fill=INDEX["hut"])
-    for y in (22, 24):
-        d.line((21, y, 34, y), fill=INDEX["trunk"])
-    d.line((21, 20, 21, 25), fill=INDEX["trunk"])
-    d.line((34, 20, 34, 25), fill=INDEX["trunk"])
+    # Wood hut: plank walls with corner posts, a shingled roof, a front door with a knob and a window either side.
+    left, top, right, bottom = HUT_WALLS
+    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+    for y in range(top + 2, bottom + 1, 2):
+        d.line((left, y, right, y), fill=INDEX["trunk"])
+    d.line((left, top, left, bottom), fill=INDEX["trunk"])
+    d.line((right, top, right, bottom), fill=INDEX["trunk"])
     d.polygon(HUT_ROOF, fill=INDEX["shingle"])
-    for y in (17, 19):
-        inset = math.ceil((20 - y) * 8 / 5)
-        d.line((19 + inset, y, 36 - inset, y), fill=INDEX["trunk"])
+    (eave_left, eave), (ridge_left, ridge), _, (eave_right, _) = HUT_ROOF
+    for y in (ridge + 2, ridge + 4):
+        inset = math.ceil((eave - y) * (ridge_left - eave_left) / (eave - ridge))
+        d.line((eave_left + inset, y, eave_right - inset, y), fill=INDEX["trunk"])
     d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
-    d.line((19, 20, 36, 20), fill=INDEX["trunk"])
+    d.line((eave_left, eave, eave_right, eave), fill=INDEX["trunk"])
     d.rectangle(CHIMNEY, fill=INDEX["chimney"])
     d.rectangle(CHIMNEY_CAP, fill=INDEX["roof"])
+    for window in HUT_WINDOWS:
+        d.rectangle(window, fill=INDEX["glass"])
     d.rectangle(HUT_DOOR, fill=INDEX["door"])
     d.point(HUT_KNOB, fill=INDEX["trim"])
     # Yard lamp: a post with an arm reaching toward the hut and a hood that shines down.
@@ -515,6 +527,9 @@ LAND, LEAFY_TREE, BARE_TREE = geometry()
 CHIMNEY_MASK = Image.new("L", (WIDTH, HEIGHT), 0)
 ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY, fill=255)
 ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY_CAP, fill=255)
+# Wall pixels beside the window glass, which catch some of its light; the roof's eave above them stays dark.
+WINDOW_GLASS = {(x, y) for x0, y0, x1, y1 in HUT_WINDOWS for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+WINDOW_HALO_PIXELS = tuple(sorted({(x + dx, y + dy) for x, y in WINDOW_GLASS for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if y + dy > HUT_ROOF[0][1]} - WINDOW_GLASS))
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
 # The Big Dipper (Ursa Major) right of the mountain, projected from the real stars at 0.7 px per degree in its
@@ -717,14 +732,26 @@ def mountain_faces(palette: Palette, environment: "OutsideEnvironment") -> Mount
     return MountainFaces(mix(east, lit_east, rake), mix(west, lit_west, rake), mix(east_snow, snow_east, rake), mix(west_snow, snow_west, rake))
 
 
+def window_light(environment: "OutsideEnvironment", elapsed: float, seed: int) -> float:
+    """How brightly the hut's windows glow: they keep the yard lamp's schedule and, on Halloween, flicker with it. In
+    steps of a sixteenth, so the lit landscape stays cached."""
+    level = lamp_level(environment)
+    if level > 0 and HALLOWEEN in holiday_features(environment):
+        level *= lamp_flicker(elapsed, seed)
+    return round(level * 16) / 16
+
+
 @lru_cache(maxsize=96)
-def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: MountainFaces):
+def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: MountainFaces, lit: float = 0.0):
     table = [0, 0, 0]
     for name in MATERIALS:
         table.extend(faces.west if name == "far" else getattr(palette, name))
     table.extend(mix(palette.far, palette.ridge, 0.6))
     table.extend(faces.east)
     table.extend(mix(palette.roof, palette.trim, 0.3))
+    # Window glass reflects the sky; lit from inside, it takes the window light instead.
+    glass = mix(mix(mix(palette.middle, palette.top, 0.4), (0, 0, 0), 0.35), WINDOW_LIGHT, lit)
+    table.extend(glass)
     table.extend([0] * (768 - len(table)))
 
     def colorize(mask):
@@ -737,13 +764,18 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: Mo
     land = colorize(LAND)
     foliage = None if bare else colorize(TREE_FOLIAGE)
     wood = colorize(BARE_TREE if bare else TREE_WOOD)
+    if lit > 0:
+        pixels = land.load()
+        for x, y in WINDOW_HALO_PIXELS:
+            pixels[x, y] = (*mix(pixels[x, y][:3], WINDOW_LIGHT, WINDOW_HALO * lit), 255)
     if snow:
         d = ImageDraw.Draw(land)
         for x in range(128):
-            if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"], INDEX["hut"], INDEX["door"]):
+            # The hut's bottom row is on this row too.
+            if grain(x, 26, 1) < 25 and LAND.getpixel((x, 26)) not in (0, INDEX["water"]) and not HUT_WALLS[0] <= x <= HUT_WALLS[2]:
                 d.point((x, 26), fill=palette.grass)
         chimney = land.copy()
-        d.line((19, 19, 27, 15, 28, 15, 36, 19), fill=palette.trim)
+        d.line(HUT_SNOW, fill=palette.trim)
         # The roof's snow stops at the chimney, which carries its own cap of snow.
         land.paste(chimney, (0, 0), CHIMNEY_MASK)
         d.line((CHIMNEY_CAP[0], CHIMNEY_CAP[1] - 1, CHIMNEY_CAP[2], CHIMNEY_CAP[1] - 1), fill=palette.trim)
@@ -2413,11 +2445,12 @@ def draw_leaves(image: Image.Image, palette: Palette, environment: "OutsideEnvir
 
 
 def lamp_level(environment: "OutsideEnvironment") -> float:
-    """The yard lamp comes on once the sky is pure night, warming up over 40 s, and switches off three hours later."""
-    since = environment.since_nightfall
-    if since is None or not 0 <= since < LAMP_SECONDS:
+    """The yard lamp comes on once the sky is pure night, warming up over 40 s, and switches off at local midnight.
+    Only a nightfall since local noon counts, so a nightfall after midnight (high-latitude summer) leaves it off."""
+    since, left = environment.since_nightfall, environment.until_midnight
+    if since is None or left is None or not 0 <= since < 12 * 3600 - left:
         return 0.0
-    return min(1.0, since / LAMP_WARMUP_SECONDS, (LAMP_SECONDS - since) / 20)
+    return min(1.0, since / LAMP_WARMUP_SECONDS, left / 20)
 
 
 def lamp_light_mask() -> np.ndarray:
@@ -4612,12 +4645,17 @@ def draw_jack_o_lantern_glow(image: Image.Image, night: float, elapsed: float, r
     return Image.fromarray(pixels, "RGB")
 
 
-def halloween_lamp(night: float, elapsed: float, seed: int) -> float:
+def lamp_flicker(elapsed: float, seed: int) -> float:
+    """Halloween's failing power: a hum with dropouts, shared by the lamp and the hut's windows."""
     hum = 0.84 + 0.09 * math.sin(elapsed * 23.7) + 0.07 * math.sin(elapsed * 37.1 + 1.3)
     stormy = unit_hash(seed, math.floor(elapsed / LAMP_FLICKER_SLOT_SECONDS), 91) < LAMP_FLICKER_CHANCE
     if unit_hash(seed, math.floor(elapsed * LAMP_FLICKER_RATE), 93) < LAMP_DROPOUT_CHANCE[stormy]:
         hum *= LAMP_DROPOUT_LEVEL
-    return (LAMP_HALLOWEEN_DAYLIGHT + (1 - LAMP_HALLOWEEN_DAYLIGHT) * night) * hum
+    return hum
+
+
+def halloween_lamp(night: float, elapsed: float, seed: int) -> float:
+    return (LAMP_HALLOWEEN_DAYLIGHT + (1 - LAMP_HALLOWEEN_DAYLIGHT) * night) * lamp_flicker(elapsed, seed)
 
 
 @dataclass(frozen=True, eq=False)
@@ -5303,8 +5341,7 @@ def pilgrims_out(environment: "OutsideEnvironment") -> bool:
     if THANKSGIVING not in holiday_features(environment) or altitude is None:
         return False
     rain, snow = precipitation(environment)
-    since = environment.since_nightfall
-    return rain < 3 and snow < 2 and (altitude > NIGHT_ALTITUDE or (since is not None and 0 <= since < LAMP_SECONDS))
+    return rain < 3 and snow < 2 and (altitude > NIGHT_ALTITUDE or lamp_level(environment) > 0)
 
 
 def pilgrim_pose(index: int, elapsed: float, seed: int) -> str:
@@ -6306,7 +6343,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
-    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0, mountain_faces(palette, environment))
+    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0, mountain_faces(palette, environment), window_light(environment, elapsed, seed))
     image.paste(land, (0, 0), land)
     d = ImageDraw.Draw(image)
     for x, y, width, phase in RIPPLES:

@@ -29,8 +29,9 @@ WEATHER_CACHE_SECONDS = 7200
 WEATHER_CODES = frozenset(WEATHER_DESCRIPTIONS)
 SKY_SAMPLE_SECONDS = 60
 SKY_PRELOAD_SECONDS = 26 * 3600
-# Past samples let the scene know when night last fell (the yard lamp burns for three hours after nightfall).
-SKY_HISTORY_SECONDS = 4 * 3600
+# Past samples let the scene know when night last fell: the yard lamp burns from a nightfall as early as local noon
+# until midnight.
+SKY_HISTORY_SECONDS = 12 * 3600
 SKY_REFRESH_MARGIN_SECONDS = 1800
 SKY_FIELDS = ("sun_altitude", "sun_azimuth", "moon_altitude", "moon_azimuth", "moon_phase")
 LAB_IDLE_SECONDS = 15 * 60
