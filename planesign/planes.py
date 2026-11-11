@@ -11,12 +11,13 @@ from modes import DisplayMode, planesign_mode_handler
 from rgbmatrix import graphics
 
 FR24_FEED_URL = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js"
-FR24_HEADERS = {"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Origin": "https://www.flightradar24.com", "Referer": "https://www.flightradar24.com/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"}
+FR24_HEADERS = {"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Origin": "https://www.flightradar24.com", "Referer": "https://www.flightradar24.com/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:157.0) Gecko/20100101 Firefox/157.0"}
 FR24_PARAMS = {"faa": "1", "satellite": "1", "mlat": "1", "flarm": "1", "adsb": "1", "gnd": "1", "air": "1", "vehicles": "1", "estimated": "1", "maxage": "14400", "gliders": "1", "stats": "1", "limit": "5000"}
 FR24_WORLD_BOUNDS = "85,-85,-180,180"
 FR24_RETRY_DELAY = 2
 FR24_FEED_ATTEMPTS = 3
 FR24_POLL_INTERVAL = 7
+FR24_THROTTLE_BACKOFF_CAP = 60
 
 # The only modes that read the worker's plane data; the worker sends no FR24 requests while any other mode shows.
 # TRACK_A_FLIGHT makes its own requests and is not listed.
@@ -311,12 +312,18 @@ def clear_plane_data(data_dict):
 
 
 def refresh_plane_data(data_dict, bounds):
+    """Poll FR24 once and publish the results. Returns True if FR24 rate-limited the request."""
+    throttled = False
     try:
         try:
             flights = get_flights(bounds)
             data_dict["planes_status"] = "ready"
         except Exception as error:
-            if network.is_offline_error(error):
+            if isinstance(error, requests.HTTPError) and error.response is not None and error.response.status_code == 429:
+                logging.warning("FR24 rate-limited the plane data request (HTTP 429)")
+                data_dict["planes_status"] = "error"
+                throttled = True
+            elif network.is_offline_error(error):
                 network.log_unreachable("FlightRadar24", error)
                 data_dict["planes_status"] = "offline"
             else:
@@ -364,6 +371,7 @@ def refresh_plane_data(data_dict, bounds):
             logging.warning("No flights found")
     except Exception:
         logging.exception("Error getting FR24 data...")
+    return throttled
 
 
 def get_plane_data_worker(data_dict):
@@ -374,6 +382,7 @@ def get_plane_data_worker(data_dict):
     bounds = f"{float(shared_config.CONF['SENSOR_LAT']) + 2},{float(shared_config.CONF['SENSOR_LAT']) - 2},{float(shared_config.CONF['SENSOR_LON']) - 2},{float(shared_config.CONF['SENSOR_LON']) + 2}"
     wake = shared_config.shared_plane_data_wake
     polling = False
+    throttled = 0
 
     while not shared_config.shutdown_in_progress():
         # Clear before reading the mode: a plane mode that starts after this either is seen by the
@@ -390,6 +399,7 @@ def get_plane_data_worker(data_dict):
         if not polling:
             logging.info(f"Requesting FR24 data for {DisplayMode(shared_config.shared_mode.value).name}")
             polling = True
-        refresh_plane_data(data_dict, bounds)
-        if network.wait(FR24_POLL_INTERVAL):
+        throttled = throttled + 1 if refresh_plane_data(data_dict, bounds) else 0
+        delay = network.retry_delay(throttled, 2 * FR24_POLL_INTERVAL, FR24_THROTTLE_BACKOFF_CAP) if throttled else FR24_POLL_INTERVAL
+        if network.wait(delay):
             break
