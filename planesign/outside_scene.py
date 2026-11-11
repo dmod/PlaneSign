@@ -6369,9 +6369,10 @@ VESUVIUS_FLOW_PATHS = (
 )
 VESUVIUS_FLOW_ASH = (150, 138, 126)
 VESUVIUS_FLOW_GLOW = np.array((1.0, 0.5, 0.18), dtype=np.float32)
-# Volcanic lightning in the ash: one chance per slot for a bolt that flickers through a few quick strokes. It crawls
+# Volcanic lightning in the ash: one chance per slot for a bolt that flickers through a few quick strokes, scaled by the
+# column's strength, so a full column throws 20 bolts a minute. It crawls
 # through the umbrella and deck, runs up the column, or strikes down to the mountain: (kind, weight).
-VESUVIUS_BOLT_SLOT, VESUVIUS_BOLT_CHANCE = 1.0, 0.55
+VESUVIUS_BOLT_SLOT, VESUVIUS_BOLT_CHANCE = 3.0, 1.0
 VESUVIUS_BOLT_KINDS = (("cloud", 0.45), ("column", 0.25), ("ground", 0.3))
 VESUVIUS_BOLT_STROKES = (2, 4)
 VESUVIUS_BOLT_AFTER = 8.0

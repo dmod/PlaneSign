@@ -62,10 +62,13 @@
     #presets { margin-bottom: 8px; }
     .card > .controls { margin-top: 2px; }
     .card > .note { margin-top: 6px; }
-    #holidays { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
-    .holiday { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 4px 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
-    .holiday span { min-width: 0; }
-    .holiday div { display: flex; gap: 4px; flex: none; }
+    #holidays { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 6px; }
+    .holiday { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 7px 8px 8px; border: 1px solid var(--line); border-radius: 6px; }
+    .holiday_title { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+    .holiday_title b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .holiday_title small { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .holiday .chips { gap: 4px; }
+    .holiday button { padding: 2px 8px; font-size: 12px; }
     @media (max-width: 480px), (max-height: 700px) {
         #status { position: static; box-shadow: none; }
     }
@@ -362,20 +365,31 @@ function build() {
 }
 
 function renderHolidays(holidays) {
-    const key = JSON.stringify(holidays);
+    const key = JSON.stringify([holidays, lastState?.military_time]);
     if (key === holidayKey) return;
     holidayKey = key;
     const box = el('holidays');
     box.replaceChildren();
     for (const holiday of holidays) {
-        const row = document.createElement('div');
-        row.className = 'holiday';
-        const name = document.createElement('span');
-        name.textContent = holiday.label;
+        const card = document.createElement('div');
+        card.className = 'holiday';
+        card.title = holiday.features;
+        const title = document.createElement('div');
+        title.className = 'holiday_title';
+        const date = document.createElement('small');
+        date.textContent = holiday.date;
+        const name = document.createElement('b');
+        name.textContent = holiday.name;
+        title.append(date, name);
         const times = document.createElement('div');
-        for (const time of holiday.times) times.append(button(time.label, () => call('/outside/lab/time', {at: time.at})));
-        row.append(name, times);
-        box.append(row);
+        times.className = 'chips';
+        for (const time of holiday.times) {
+            const b = button(time.label, () => call('/outside/lab/time', {at: time.at}));
+            b.title = clockLabel(minutesOf(time.at), lastState?.military_time);
+            times.append(b);
+        }
+        card.append(title, times);
+        box.append(card);
     }
 }
 
@@ -399,7 +413,8 @@ function render(state) {
         state.wind_mph == null ? null : Math.round(state.wind_mph) + ' mph',
     ];
     el('s_weather').textContent = `${parts.filter(Boolean).join(', ')} [${state.weather}]`;
-    el('s_holidays').textContent = state.holidays.length ? state.holidays.join(', ') : 'none';
+    el('s_holidays').textContent = state.holiday_name ?? 'none';
+    el('s_holidays').title = state.holiday_features.join(', ');
     el('s_clock').textContent = state.sign_clock;
     const lab = state.lab;
     el('b_time').textContent = lab.time ? (lab.speed === 0 ? 'lab time paused' : `lab time ×${lab.speed}`) : 'live time';

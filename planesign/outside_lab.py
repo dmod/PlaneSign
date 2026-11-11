@@ -13,6 +13,7 @@ import math
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from datetime import time as clock_time
 
 import outside
 import psclock
@@ -33,14 +34,27 @@ SUN_EVENTS = {
     "sunset": ("Sunset", -0.833, False, 20),
     "nightfall": ("Nightfall (lamp on)", NIGHT_ALTITUDE, False, 1),
 }
-HOLIDAY_TIMES = (("Day", 12, 0), ("Night", 21, 30))
+HOLIDAY_TIMES = (("Day", clock_time(12)), ("Night", clock_time(21, 30)))
 # Holidays that last the night also get a shortcut into the small hours of the next morning.
-HOLIDAY_NIGHT_TIME = ("Before dawn", 3, 0)
+HOLIDAY_NIGHT_TIME = ("Before dawn", clock_time(3))
 # The Christmas window candles burn from midnight until sunrise on the shown date.
-HOLIDAY_CANDLE_TIME = ("Window candles", 3, 0)
-# Vesuvius day's phases: the morning smoke, the minute of rumbling before the noon blast, the fires and flows after dark,
-# and the last of it before midnight.
-VESUVIUS_TIMES = (("Morning smoke", 10, 0), ("Eruption", 11, 59), ("Fire and flows", 21, 0), ("Dying down", 23, 0))
+HOLIDAY_CANDLE_TIME = ("Candles", clock_time(3))
+# Vesuvius day's phases: the morning smoke, the rumble before the noon blast, the fires and flows after dark, and the
+# last of it before midnight. The rumble's shake (outside_scene.vesuvius_shake) ramps up from 40 s before noon but first
+# moves the frame about 20 s before it, so the eruption shortcut lands 3 s before that.
+VESUVIUS_TIMES = (("Smoke", clock_time(10)), ("Eruption", clock_time(11, 59, 37)), ("Flows", clock_time(21)), ("Fading", clock_time(23)))
+# Short names for a day's holiday: the first feature here that the day has names it. Days whose features are all
+# missing here fall back to their first feature's HOLIDAYS label.
+HOLIDAY_NAMES = (
+    (VESUVIUS, "Vesuvius"),
+    ("halloween", "Halloween"),
+    ("thanksgiving", "Thanksgiving"),
+    ("santa", "Christmas Eve"),
+    ("christmas_lights", "Christmas"),
+    ("flag", "Independence"),
+    ("pumpkins", "Spooky season"),
+    ("fireworks", "New Year"),
+)
 # How long a sun event jump waits for the astronomy worker to cover a newly selected day.
 SKY_WAIT_SECONDS = 20
 # Moon positions the lab can place the moon at: name -> (label, altitude, azimuth). Each lands in open sky
@@ -187,24 +201,34 @@ def find_sun_event(name: str, sky, start: float, end: float) -> float | None:
     return None
 
 
+def holiday_name(features) -> str | None:
+    for feature, name in HOLIDAY_NAMES:
+        if feature in features:
+            return name
+    return next((label for feature, (label, _) in HOLIDAYS.items() if feature in features), None)
+
+
 def holiday_shortcuts(year: int):
     shortcuts = []
     for moment in sorted({holiday_span_start(span, year) for _, spans in HOLIDAYS.values() for span in spans}):
         environment = outside.OutsideEnvironment("", outside.OutsideWeather("LIVE"), "READY", local_date=moment)
-        labels = [HOLIDAYS[feature][0] for feature in HOLIDAYS if feature in outside.holiday_features(environment)]
-        times = [(label, moment, hour, minute) for label, hour, minute in HOLIDAY_TIMES]
+        features = outside.holiday_features(environment)
+        labels = [HOLIDAYS[feature][0] for feature in HOLIDAYS if feature in features]
+        times = [(label, datetime.combine(moment, at)) for label, at in HOLIDAY_TIMES]
         if (moment.month, moment.day) in HOLIDAY_NIGHTS:
-            label, hour, minute = HOLIDAY_NIGHT_TIME
-            times.append((label, moment + timedelta(days=1), hour, minute))
-        if WINDOW_CANDLE_HOLIDAY in outside.holiday_features(environment):
-            label, hour, minute = HOLIDAY_CANDLE_TIME
-            times.append((label, moment, hour, minute))
-        if VESUVIUS in outside.holiday_features(environment):
-            times.extend((label, moment, hour, minute) for label, hour, minute in VESUVIUS_TIMES)
-            times.sort(key=lambda time: time[1:])
+            label, at = HOLIDAY_NIGHT_TIME
+            times.append((label, datetime.combine(moment + timedelta(days=1), at)))
+        if WINDOW_CANDLE_HOLIDAY in features:
+            label, at = HOLIDAY_CANDLE_TIME
+            times.append((label, datetime.combine(moment, at)))
+        if VESUVIUS in features:
+            times.extend((label, datetime.combine(moment, at)) for label, at in VESUVIUS_TIMES)
+            times.sort(key=lambda time: time[1])
         shortcuts.append({
-            "label": f"{moment:%b} {moment.day}: {', '.join(labels)}",
-            "times": [{"label": label, "at": f"{day.isoformat()}T{hour:02d}:{minute:02d}"} for label, day, hour, minute in times],
+            "date": f"{moment:%b} {moment.day}",
+            "name": holiday_name(features),
+            "features": ", ".join(labels),
+            "times": [{"label": label, "at": at.isoformat()} for label, at in times],
         })
     return shortcuts
 
@@ -236,6 +260,8 @@ def state():
         # The readings the sign is showing, in the weather form's units; None is an unknown reading.
         "weather_form": {"code": status["condition_code"], **{name: None if status[f.status_key] is None else status[f.status_key] / f.scale for name, f in WEATHER_FIELDS.items()}},
         "summons_allowed": {name: summon.allowed(environment) for name, summon in SUMMONS.items()},
+        "holiday_name": holiday_name(status["holidays"]),
+        "holiday_features": [label for feature, (label, _) in HOLIDAYS.items() if feature in status["holidays"]],
         # Follows the shown year, so it is sent with every state.
         "holiday_shortcuts": holiday_shortcuts(displayed_moment(tz).year),
     }

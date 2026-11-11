@@ -110,7 +110,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - Validate runtime and display changes by running the app with `--web` and inspecting the rendered matrix. Syntax and diagnostic checks may supplement this, but do not replace it. Documentation-only edits need no run.
 - For screenshots, offline frame rendering and layout comparisons, see `.github/instructions/visual-verification.instructions.md`.
 
-1. Check for an existing emulator or debugger before starting another. The API uses port 5055 and the frame server 5056. Reuse a suitable instance, restarting it to load Python changes. Do not terminate unrelated or user-managed processes without approval; if one holds the default ports, start an isolated instance instead (see "Running An Isolated Instance").
+1. Check for an existing emulator before starting another (`ps -eo pid,args | grep __main__.py`). The API uses port 5055 and the frame server 5056. A running instance does not load your Python or template changes, so to test them, stop any old `--web` emulator, even one started by the user or an earlier session, and start a fresh one; no approval is needed. Kill its `__main__.py` process (the one whose parent is not another `__main__.py`), then wait until `ps` shows no `__main__.py` processes before starting the new one: its worker processes can hold 5056 for a few seconds, and a new instance that cannot bind it runs without a frame server. Leave the production container and `sudo` hardware runs alone unless asked.
 2. From the repository root, run the following command, or use the Web Display launch configuration. `--help` lists the testing flags (`--mode`, `--fake-time`, `--time-speed`, `--config`, `--set`, `--api-port`, `--ws-port`):
 
 	```bash
