@@ -6,14 +6,12 @@ requires-python = ">=3.12"
 dependencies = [
     "adafruit-circuitpython-ssd1305>=1.4.4",
     "beautifulsoup4>=4.15.0",
-    "favicon>=0.7.0",
-    "finnhub-python>=2.4.28",
     "flask>=3.1.3",
     "numpy>=2.4.4",
     "pillow>=12.3.0",
-    "pyproj>=3.6",
     "requests>=2.34.2",
     "rgbmatrix",
+    # Not imported directly: on a Pi 4 the OLED driver's Blinka pin layer imports it.
     "RPi.GPIO>=0.7.1; sys_platform == 'linux' and platform_machine == 'aarch64'",
     "shapely>=2.1.2",
     "skyfield>=1.54",

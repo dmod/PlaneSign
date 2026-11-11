@@ -34,7 +34,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`sign.conf`** — Runtime config (key=value, `#` comments). Defaults are in `sign.conf.sample`.
 
 ## Network And Offline Mode
-- Send every third-party request through `network.get(service, url, session=..., **kwargs)`, which applies a default `(5, 20)` timeout. For libraries that make their own requests (Finnhub's client and WebSocket, Blitzortung's WebSocket, `favicon`), call `network.require_online(service)` first. Save files with `network.download` (atomic replace), and fetch images with `utilities.download_image`.
+- Send every third-party request through `network.get(service, url, session=..., **kwargs)`, which applies a default `(5, 20)` timeout. For libraries that make their own connections (the Finnhub and Blitzortung WebSockets), call `network.require_online(service)` first. Save files with `network.download` (atomic replace), and fetch images with `utilities.download_image`.
 - `OFFLINE_MODE` is read live from `CONF`, so saving it applies without a restart. `OfflineModeError` subclasses `requests.ConnectionError`, so offline mode and a real outage take the same code path and look identical on the sign. The Flask API, frame server and local files keep working offline.
 - Retry policy stays with each service, because providers impose different limits. Use `retry_delay` for capped backoff, and `OfflineToggle().changed()` to retry immediately when the setting flips. `is_offline_error` treats DNS failures, refused connections and connect timeouts as offline; read timeouts and HTTP errors are not.
 - Log failures with `log_unreachable`, which never logs the request URL; URLs can carry API keys.

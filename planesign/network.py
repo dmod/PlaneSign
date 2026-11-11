@@ -98,7 +98,7 @@ DEFAULT_TIMEOUT = (5, 20)
 def get(service, url, *, session=None, **kwargs):
     """GET from a third-party `service`, honoring offline mode, with a (connect, read) timeout unless one is given.
 
-    Libraries that make their own requests (Finnhub's client, skyfield's Loader, websocket-client, favicon)
+    Libraries that make their own connections (skyfield's Loader, websocket-client)
     still need an explicit require_online() before they are called.
     """
     require_online(service)

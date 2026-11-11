@@ -4,7 +4,6 @@ import re
 import time
 from threading import Lock, Thread
 
-import finnhub
 import network
 import psclock
 import requests
@@ -17,6 +16,39 @@ from rgbmatrix import graphics
 from utilities import convert_unix_to_local_time, download_image, getFavicon, improcess
 
 
+class FinnhubError(requests.RequestException):
+    """Finnhub answered with an error status."""
+
+
+class FinnhubClient:
+    """The Finnhub REST calls the sign makes, sent through network.get for offline mode and timeouts."""
+
+    API_URL = "https://api.finnhub.io/api/v1"
+
+    def __init__(self, api_key):
+        self.session = Session()
+        # A header rather than the token query parameter, so the key never appears in a URL that an error message logs.
+        self.session.headers.update({"Accept": "application/json", "X-Finnhub-Token": api_key})
+
+    def get(self, path, **params):
+        response = network.get("Finnhub", self.API_URL + path, session=self.session, params=params)
+        if not response.ok:
+            raise FinnhubError(f"{path} returned HTTP {response.status_code}: {response.text[:200]}")
+        return response.json()
+
+    def quote(self, symbol):
+        return self.get("/quote", symbol=symbol)
+
+    def company_profile(self, symbol):
+        return self.get("/stock/profile2", symbol=symbol)
+
+    def stock_symbols(self, exchange):
+        return self.get("/stock/symbol", exchange=exchange)
+
+    def crypto_symbols(self, exchange):
+        return self.get("/crypto/symbol", exchange=exchange)
+
+
 def update_global_lists(client=None):
 
     if client == None:
@@ -24,11 +56,10 @@ def update_global_lists(client=None):
             logging.error("Finnhub API key is not configured. Finance mode will not function.")
             return [], [], []
         else:
-            client = finnhub.Client(api_key=shared_config.CONF["FINNHUB_API_KEY"])
+            client = FinnhubClient(shared_config.CONF["FINNHUB_API_KEY"])
 
     if "us_symbols" not in shared_config.data_dict:
         try:
-            network.require_online("Finnhub")
             # Halve the number of symbols by only saving "Common Stock" types (filters out ETFs, preferred shares, etc)
             us_symbols = client.stock_symbols("US")
             us_symbols = list(filter(lambda x: x["type"] == "Common Stock", us_symbols))
@@ -46,7 +77,6 @@ def update_global_lists(client=None):
 
     if "cb_symbols" not in shared_config.data_dict:
         try:
-            network.require_online("Finnhub")
             cb_symbols = client.crypto_symbols("COINBASE")
             cb_symbols = list(filter(lambda x: cbpat.match(x["symbol"]), cb_symbols))
             shared_config.data_dict["cb_symbols"] = cb_symbols
@@ -60,7 +90,6 @@ def update_global_lists(client=None):
 
     if "bn_symbols" not in shared_config.data_dict:
         try:
-            network.require_online("Finnhub")
             bn_symbols = client.crypto_symbols("BINANCE")
             bn_symbols = list(filter(lambda x: bnpat.match(x["displaySymbol"]), bn_symbols))
             shared_config.data_dict["bn_symbols"] = bn_symbols
@@ -130,7 +159,7 @@ def show_finance(self):
     self.canvas = self.matrix.SwapOnVSync(self.canvas)
     self.canvas.Clear()
 
-    client = finnhub.Client(api_key=shared_config.CONF["FINNHUB_API_KEY"])
+    client = FinnhubClient(shared_config.CONF["FINNHUB_API_KEY"])
 
     update_global_lists(client)
 
@@ -346,7 +375,7 @@ Open Price={self.open_price}"
                     logging.debug(f"Got logo from CoinMarketCap for crypto {self.display_ticker}.")
             else:
                 # self.type == "STOCK"
-                profile = self.client.company_profile2(symbol=self.ticker)
+                profile = self.client.company_profile(self.ticker)
                 if "logo" in profile and profile["logo"] != "":
                     logo = getLogo(headers, profile["logo"])
                     if logo is None:

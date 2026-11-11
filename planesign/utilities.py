@@ -10,22 +10,22 @@ import threading
 import time
 import traceback
 import unicodedata
+from collections import namedtuple
 from datetime import UTC, datetime
 from functools import cmp_to_key
 from itertools import pairwise
 from math import cos, pi, sin
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from zoneinfo import ZoneInfo
 
-import favicon
 import network
 import numpy as np
 import psclock
 import requests
 import shapely
 import shared_config
+from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
-from pyproj import Geod
 from rgbmatrix import graphics
 from shapely.geometry import Point, shape
 from shapely.strtree import STRtree
@@ -40,7 +40,6 @@ CM_2_IN = 0.3937008
 region_polys = None
 geojsons_loaded = False
 logged_offline_mode = None
-geod = Geod(ellps="WGS84")
 geojsons_lock = threading.Lock()
 
 from modes import DisplayMode, planesign_mode_handler
@@ -276,9 +275,10 @@ def lookup_country_code(name):
     return None
 
 
-def _geodesic_area(geometry):
-    area, _ = geod.geometry_area_perimeter(geometry)
-    return abs(area)
+def _area(geometry):
+    """Area on a sphere, in steradians, from the Lambert cylindrical equal-area projection. Containing regions are nested
+    and differ in size by orders of magnitude, so this ranks them as well as a geodesic area on the ellipsoid would."""
+    return shapely.transform(geometry, lambda coords: np.column_stack((np.radians(coords[:, 0]), np.sin(np.radians(coords[:, 1]))))).area
 
 
 class GeoJsonRegions:
@@ -315,7 +315,7 @@ class GeoJsonRegions:
     def _area(self, index):
         area = self.areas[index]
         if area is None:
-            area = _geodesic_area(self.geometries[index])
+            area = _area(self.geometries[index])
             self.areas[index] = area
         return area
 
@@ -876,6 +876,41 @@ def download_image(service, url, **kwargs):
         return None
 
 
+FAVICON_LINK_RELS = {"icon", "shortcut icon", "apple-touch-icon", "apple-touch-icon-precomposed"}
+FAVICON_META_NAMES = {"msapplication-tileimage", "og:image"}
+FAVICON_SIZE = re.compile(r"(\d{2,4})\s*[x\u00d7]\s*(\d{2,4})", re.IGNORECASE)
+Favicon = namedtuple("Favicon", ["url", "width", "height", "format"])
+
+
+def find_favicons(website, headers):
+    """Icons a site's homepage declares in its link and meta tags, plus its /favicon.ico, largest first.
+
+    Sizes come from a tag's sizes attribute (its largest entry) or a size in the file name, and are 0 when unknown.
+    """
+    response = network.get("website favicons", website, headers=headers, timeout=10)
+    response.raise_for_status()
+    # Not checked first: a missing one fails to download and the next icon is tried.
+    icons = {Favicon(urljoin(response.url, "/favicon.ico"), 0, 0, "ico")}
+    for tag in BeautifulSoup(response.text, "html.parser").find_all(["link", "meta"]):
+        if tag.name == "link":
+            rels = [rel.lower() for rel in tag.get_attribute_list("rel") if rel]
+            if " ".join(rels) not in FAVICON_LINK_RELS and not FAVICON_LINK_RELS.intersection(rels):
+                continue
+            href = tag.get("href")
+        else:
+            if (tag.get("name") or tag.get("property") or "").lower() not in FAVICON_META_NAMES:
+                continue
+            href = tag.get("content")
+        href = (href or "").strip()
+        if not href or href.startswith("data:"):
+            continue
+        url = urljoin(response.url, href)
+        sizes = [(int(w), int(h)) for w, h in FAVICON_SIZE.findall(tag.get("sizes") or "")] or [(int(w), int(h)) for w, h in FAVICON_SIZE.findall(href)][:1]
+        width, height = max(sizes, default=(0, 0))
+        icons.add(Favicon(url, width, height, os.path.splitext(urlparse(url).path)[1][1:].lower()))
+    return sorted(icons, key=lambda icon: (-(icon.width + icon.height), icon.url))
+
+
 def getFavicon(website, headers=None):
     network.require_online("website favicons")
 
@@ -885,7 +920,7 @@ def getFavicon(website, headers=None):
         headers = {key: value for key, value in headers.items() if key.lower() != "host"}
     try:
         logging.debug(f"getFavicon: fetching icons for {website}")
-        icons = favicon.get(website, headers=headers, timeout=10)
+        icons = find_favicons(website, headers)
         logging.debug(f"getFavicon: found {len(icons)} icons for {website}")
     except Exception as e:
         logging.warning(f"getFavicon: failed for {website}: {e}")
@@ -904,8 +939,7 @@ def getFavicon(website, headers=None):
         elif not name1.startswith((f, i)) and name2.startswith((f, i)):
             return 1
         else:
-            # Deprioritize the "default" favicon (favicon library just guesses
-            # this url and sometimes it is a janky placeholder image)
+            # Deprioritize the guessed /favicon.ico (sometimes a janky placeholder image)
             domain = urlparse(website).netloc
             default = domain + "/favicon.ico"
             url1 = item1.url
