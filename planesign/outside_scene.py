@@ -2776,6 +2776,17 @@ HOLIDAY_NIGHTS = frozenset({(7, 4)})
 CHRISTMAS_COLORS = ((255, 28, 28), (24, 255, 64), (40, 96, 255), (255, 172, 16), (255, 52, 196))
 TOPPER_GOLD = (255, 206, 60)
 TOPPER_CORE = (255, 250, 214)
+# Through the Christmas lights season, once the windows go dark at midnight, a candle burns in each one until sunrise.
+# Each catches this many seconds after midnight (someone going from window to window), its flame growing over
+# WINDOW_CANDLE_CATCH_SECONDS; candle_flicker drives them under these flame indices.
+WINDOW_CANDLE_HOLIDAY = "christmas_lights"
+WINDOW_CANDLE_LIGHTING = (4.0, 9.5)
+WINDOW_CANDLE_CATCH_SECONDS = 1.5
+WINDOW_CANDLE_FLAMES = (20, 21)
+WINDOW_CANDLE_WAX = (236, 226, 204)
+WINDOW_CANDLE_HOLDER = (176, 134, 60)
+# Candlelight on the dark glass and frame; muted, because the frame grade clips CANDLE_GLOW there to flat red.
+WINDOW_CANDLE_SPILL = (255, 200, 140)
 
 
 def christmas_bulbs() -> tuple[tuple[int, int], ...]:
@@ -2850,6 +2861,44 @@ def draw_christmas_lights(image: Image.Image, environment: "OutsideEnvironment",
                 point = (x + dx, y + dy)
                 d.point(point, fill=mix(image.getpixel(point), TOPPER_CORE, 0.7 * strength))
     return image
+
+
+def window_candles(environment: "OutsideEnvironment") -> tuple[float, ...] | None:
+    """How far each window's candle has caught (0..1) between midnight and sunrise in the Christmas season, else None."""
+    moment = environment.moment
+    if WINDOW_CANDLE_HOLIDAY not in holiday_features(environment) or not environment.before_sunrise or moment is None or lamp_level(environment) > 0:
+        return None
+    clock = moment.hour * 3600 + moment.minute * 60 + moment.second + moment.microsecond / 1e6
+    return tuple(max(0.0, min(1.0, (clock - start) / WINDOW_CANDLE_CATCH_SECONDS)) for start in WINDOW_CANDLE_LIGHTING)
+
+
+def draw_window_candles(image: Image.Image, candles: tuple[float, ...], elapsed: float):
+    """A candle on a brass holder in each dark window: its flame flickers and gutters, a draft leans its warmth from
+    side to side, and it faintly lights the wax, the glass and the frame around it."""
+    pixels = image.load()
+
+    def light(point: tuple[int, int], color: Color, amount: float):
+        pixels[point] = mix(pixels[point], color, amount)
+
+    for (x0, y0, x1, y1), caught, index in zip(HUT_WINDOWS, candles, WINDOW_CANDLE_FLAMES):
+        if caught <= 0:
+            continue
+        flame = candle_flicker(index, elapsed) * caught
+        lean = 0.6 * math.sin(elapsed * 0.9 + index * 2.1) + 0.4 * math.sin(elapsed * 2.3 + index)
+        cx = (x0 + x1) // 2
+        for x in range(x0, x1 + 1):
+            for y in range(y0, y1 + 1):
+                if x == cx:
+                    continue
+                side = lean if x > cx else -lean
+                # Strongest beside the flame and on the side it leans toward, fading down the glass.
+                light((x, y), WINDOW_CANDLE_SPILL, flame * (0.3 + 0.2 * side) * (1 - 0.35 * (y - y0)))
+        light((cx, y0), mix(CANDLE_GLOW, CANDLE_FLAME, 0.3 + 0.7 * flame), 0.55 + 0.45 * caught * min(1.0, flame + 0.2))
+        light((cx, y0 + 1), mix(WINDOW_CANDLE_WAX, CANDLE_FLAME, 0.25), 0.35 + 0.5 * flame)
+        light((cx, y1), WINDOW_CANDLE_HOLDER, 0.25 + 0.35 * flame)
+        # A faint spill on the frame and the wall around the window.
+        for point in ((x0 - 1, y0), (x1 + 1, y0), (x0 - 1, y0 + 1), (x1 + 1, y0 + 1), (cx, y1 + 1)):
+            light(point, WINDOW_CANDLE_SPILL, 0.08 * flame)
 
 
 def tree_ornaments_shown(environment: "OutsideEnvironment") -> bool:
@@ -6345,6 +6394,10 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     # The mountain keeps its snow all winter, even between snowfalls.
     land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0, mountain_faces(palette, environment), window_light(environment, elapsed, seed))
     image.paste(land, (0, 0), land)
+    # Christmas candles stand in the dark windows; anything outside passes in front of them.
+    candles = window_candles(environment)
+    if candles is not None:
+        draw_window_candles(image, candles, elapsed)
     d = ImageDraw.Draw(image)
     for x, y, width, phase in RIPPLES:
         wave = 0.5 + 0.5 * math.sin(elapsed * 0.8 + phase)

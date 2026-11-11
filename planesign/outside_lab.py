@@ -19,7 +19,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, holiday_span_start
+from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, WINDOW_CANDLE_HOLIDAY, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -36,6 +36,8 @@ SUN_EVENTS = {
 HOLIDAY_TIMES = (("Day", 12, 0), ("Night", 21, 30))
 # Holidays that last the night also get a shortcut into the small hours of the next morning.
 HOLIDAY_NIGHT_TIME = ("Before dawn", 3, 0)
+# The Christmas window candles burn from midnight until sunrise on the shown date.
+HOLIDAY_CANDLE_TIME = ("Window candles", 3, 0)
 # How long a sun event jump waits for the astronomy worker to cover a newly selected day.
 SKY_WAIT_SECONDS = 20
 # Moon positions the lab can place the moon at: name -> (label, altitude, azimuth). Each lands in open sky
@@ -191,6 +193,9 @@ def holiday_shortcuts(year: int):
         if (moment.month, moment.day) in HOLIDAY_NIGHTS:
             label, hour, minute = HOLIDAY_NIGHT_TIME
             times.append((label, moment + timedelta(days=1), hour, minute))
+        if WINDOW_CANDLE_HOLIDAY in outside.holiday_features(environment):
+            label, hour, minute = HOLIDAY_CANDLE_TIME
+            times.append((label, moment, hour, minute))
         shortcuts.append({
             "label": f"{moment:%b} {moment.day}: {', '.join(labels)}",
             "times": [{"label": label, "at": f"{day.isoformat()}T{hour:02d}:{minute:02d}"} for label, day, hour, minute in times],
