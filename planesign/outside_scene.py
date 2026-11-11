@@ -399,6 +399,12 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
     if HALLOWEEN in holiday_features(environment):
         eerie = holiday_darkness(environment)
         palette = replace(palette, top=mix(palette.top, HALLOWEEN_SKY_TOP, eerie * 0.55), middle=mix(palette.middle, HALLOWEEN_SKY_MIDDLE, eerie * 0.45))
+    # Vesuvius's ash darkens the sky and dims the land, in steps so the cached palettes and landscapes are reused.
+    ash = round(vesuvius_ash(environment) * 24) / 24
+    if ash > 0:
+        top, middle, horizon = VESUVIUS_ASH_SKY
+        palette = replace(palette, top=mix(palette.top, top, ash * VESUVIUS_ASH_SKY_MIX), middle=mix(palette.middle, middle, ash * VESUVIUS_ASH_SKY_MIX), horizon=mix(palette.horizon, horizon, ash * VESUVIUS_ASH_SKY_MIX))
+        palette = Palette(*(mix(getattr(palette, name), VESUVIUS_ASH_HAZE, ash * VESUVIUS_ASH_LAND_MIX) for name in MATERIALS))
     dim = cloud_cover(environment) * (WEATHER_DIM_PRECIPITATION if rain or snow else WEATHER_DIM_CLOUDS)
     return graded_palette(Palette(*(mix(getattr(palette, name), (45, 60, 75), dim) for name in MATERIALS)))
 
@@ -689,11 +695,11 @@ def sun_color(altitude: float) -> Color:
 
 
 def direct_sunlight(environment: "OutsideEnvironment") -> float:
-    """How much of the sun's direct light gets through: 1 under a clear sky, 0 when overcast or raining."""
+    """How much of the sun's direct light gets through: 1 under a clear sky, 0 when overcast, raining or under Vesuvius's ash."""
     rain, snow = precipitation(environment)
     if rain or snow:
         return 0.0
-    return max(0.0, 1 - cloud_cover(environment) / SUN_BLOCK_COVER)
+    return max(0.0, 1 - cloud_cover(environment) / SUN_BLOCK_COVER) * (1 - vesuvius_ash(environment))
 
 
 def sun_rake(environment: "OutsideEnvironment") -> float:
@@ -1084,10 +1090,10 @@ def shooting_star_state(elapsed: float, seed: int) -> ShootingStar | None:
 
 
 def starlight(environment: "OutsideEnvironment") -> float:
-    """How strongly stars show: 0 in daylight, dimmed by cloud cover and moonlight."""
+    """How strongly stars show: 0 in daylight, dimmed by cloud cover, moonlight and Vesuvius's ash."""
     altitude = environment.sun_altitude
     night = max(0, min(1, -(altitude + 4) / 7)) if altitude is not None else 0
-    return night * (1 - cloud_cover(environment) * 0.92) * (1 - moonlight(environment) * 0.25)
+    return night * (1 - cloud_cover(environment) * 0.92) * (1 - moonlight(environment) * 0.25) * (1 - vesuvius_ash(environment))
 
 
 def draw_shooting_star(image: Image.Image, elapsed: float, visibility: float, seed: int, clearings: tuple[Box, ...] = ()):
@@ -1145,10 +1151,12 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
     glows = []
     if altitude is not None and altitude > SET_ALTITUDE:
         cx, cy = celestial_position(altitude, environment.sun_azimuth)
-        sun = sun_color(altitude)
-        d.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=mix(palette.middle, sun, 0.23))
+        # Through Vesuvius's ash the sun shows as a dim red disk.
+        ash = vesuvius_ash(environment)
+        sun = mix(sun_color(altitude), VESUVIUS_ASH_SUN, ash)
+        d.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=mix(palette.middle, sun, 0.23 * (1 - 0.6 * ash)))
         d.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill=sun)
-        glows.append((cx, cy, sun, 0.8))
+        glows.append((cx, cy, sun, 0.8 * (1 - 0.7 * ash)))
     if environment.moon_altitude is not None and environment.moon_altitude > SET_ALTITUDE:
         cx, cy = celestial_position(environment.moon_altitude, environment.moon_azimuth)
         phase = math.radians(environment.moon_phase)
@@ -1204,11 +1212,11 @@ def wildlife_visit(slot: int, seed: int):
 
 
 def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
-    """Nothing comes out on Halloween, turkeys take the meadow on Thanksgiving, the hotdog mascot has it to himself on
-    July 4, animals keep away from a burning campfire, and heavy rain or snow keeps them away."""
+    """Nothing comes out on Halloween or while Vesuvius erupts, turkeys take the meadow on Thanksgiving, the hotdog mascot
+    has it to himself on July 4, animals keep away from a burning campfire, and heavy rain or snow keeps them away."""
     holidays = holiday_features(environment)
     rain, snow = precipitation(environment)
-    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and HOTDOG not in holidays and rain < 3 and snow < 2 and campfire_state(environment) is None
+    return HALLOWEEN not in holidays and THANKSGIVING not in holidays and HOTDOG not in holidays and VESUVIUS not in holidays and rain < 3 and snow < 2 and campfire_state(environment) is None
 
 
 def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
@@ -1232,13 +1240,14 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
 
 
 def birds_allowed(environment: "OutsideEnvironment") -> bool:
-    """The songbird flock and the geese fly by day in light weather, but not in a thunderstorm, on Halloween or on July 4."""
+    """The songbird flock and the geese fly by day in light weather, but not in a thunderstorm, on Halloween, on July 4 or
+    on Vesuvius day."""
     rain, snow = precipitation(environment)
     sun_altitude = environment.sun_altitude
     holidays = holiday_features(environment)
     code = environment.weather.code
     thunderstorm = code is not None and 200 <= code < 300
-    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and not thunderstorm and HALLOWEEN not in holidays and HOTDOG not in holidays
+    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and not thunderstorm and HALLOWEEN not in holidays and HOTDOG not in holidays and VESUVIUS not in holidays
 
 
 def draw_deer(d: ImageDraw.ImageDraw, px: Callable[[int], int], color: Color, tail: Color, leg: int, grazing: bool, lift: int = 0):
@@ -1403,9 +1412,9 @@ def dog_outing(slot: int, seed: int) -> DogOuting | None:
 
 
 def dog_allowed(environment: "OutsideEnvironment") -> bool:
-    """Dry daylight only, and the dog stays in on Halloween."""
+    """Dry daylight only, and the dog stays in on Halloween and while Vesuvius erupts."""
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0 and HALLOWEEN not in holiday_features(environment)
+    return environment.sun_altitude is not None and environment.sun_altitude > -0.833 and rain == 0 and snow == 0 and not holiday_features(environment) & {HALLOWEEN, VESUVIUS}
 
 
 def dog_outings_between(seed: int, first: float, last: float):
@@ -1663,7 +1672,7 @@ def owl_blinks(window: int, seed: int) -> tuple[float, ...]:
 
 def owl_allowed(environment: "OutsideEnvironment") -> bool:
     rain, snow = precipitation(environment)
-    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and HALLOWEEN not in holiday_features(environment) and HOTDOG not in holiday_features(environment) and not tree_ornaments_shown(environment)
+    return environment.sun_altitude is not None and environment.sun_altitude < OWL_SUN_ALTITUDE and rain == 0 and snow < 1 and (environment.weather.wind or 0) < 25 and not holiday_features(environment) & {HALLOWEEN, HOTDOG, VESUVIUS} and not tree_ornaments_shown(environment)
 
 
 def owl_flight(origin: tuple[float, float], target: tuple[float, float], progress: float, age: float):
@@ -1886,14 +1895,13 @@ def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: fl
 
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
     """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond. The ghost owns
-    Halloween's sky, and the eagle stays away on July 4."""
+    Halloween's sky, and the eagle stays away on July 4 and Vesuvius day."""
     w = environment.weather
     rain, snow = precipitation(environment)
     return (
         environment.sun_altitude is not None
         and environment.sun_altitude > EAGLE_SUN_ALTITUDE
-        and HALLOWEEN not in holiday_features(environment)
-        and HOTDOG not in holiday_features(environment)
+        and not holiday_features(environment) & {HALLOWEEN, HOTDOG, VESUVIUS}
         and w.code in (800, 801, 802, 803)
         and cloud_cover(environment) <= 0.75
         and rain == 0
@@ -2134,7 +2142,7 @@ def firefly_activity(environment: "OutsideEnvironment") -> float:
     """0..1: warm, calm, dry summer evenings only, from dusk until a couple of hours after nightfall."""
     w = environment.weather
     altitude = environment.sun_altitude
-    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None or HALLOWEEN in holiday_features(environment):
+    if environment.season != "summer" or altitude is None or w.code is None or w.temperature is None or holiday_features(environment) & {HALLOWEEN, VESUVIUS}:
         return 0.0
     rain, snow = precipitation(environment)
     if rain > 0 or snow > 0 or (w.wind or 0) >= FIREFLY_MAX_WIND or w.temperature < FIREFLY_MIN_TEMPERATURE:
@@ -2754,6 +2762,8 @@ def holiday_darkness(environment: "OutsideEnvironment") -> float:
 CHRISTMAS_LAST_DAY = 26
 # US Thanksgiving, the fourth Thursday of November, always falls on November 22-28 (weekday 3 is Thursday).
 THANKSGIVING_SPAN = (11, 22, 28, 3)
+# The anniversary of the eruption of Vesuvius in AD 79, the date Pliny the Younger's letters give.
+VESUVIUS = "vesuvius"
 # Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day[, weekday])
 # spans). A span with a weekday covers only that weekday within its days. The Outside lab builds its holiday shortcuts
 # from this table.
@@ -2770,6 +2780,7 @@ HOLIDAYS = {
     "witch": ("Witch", ((10, 1, 31),)),
     "halloween": ("Halloween", ((10, 31, 31),)),
     "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
+    VESUVIUS: ("Vesuvius eruption", ((8, 24, 24),)),
 }
 # (month, day) of holidays whose whole scene stays up through the following night, until sunrise the next morning.
 HOLIDAY_NIGHTS = frozenset({(7, 4)})
@@ -3307,7 +3318,7 @@ def skywriter_show(slot: int, seed: int, witch: bool = False) -> SkywriterShow |
 
 def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
     """Sunny daylight with a light, known wind. The plane stays away when the sky is already busy: on Christmas Eve while
-    Santa crosses, and on fireworks days. On Halloween the witch still flies; the ghost and the spider skip her shows."""
+    Santa crosses, on fireworks days and on Vesuvius day. On Halloween the witch still flies; the ghost and the spider skip her shows."""
     w = environment.weather
     rain, snow = precipitation(environment)
     holidays = holiday_features(environment)
@@ -3321,7 +3332,7 @@ def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
         and w.wind is not None
         and w.wind < SKYWRITER_MAX_WIND
         and (w.visibility is None or w.visibility >= SKYWRITER_MIN_VISIBILITY)
-        and not holidays & {"santa", "fireworks"}
+        and not holidays & {"santa", "fireworks", VESUVIUS}
     )
 
 
@@ -5906,8 +5917,9 @@ BEACH_WIND, BEACH_WIND_MARGIN = 15, 3
 BEACH_SUN_ALTITUDE, BEACH_SUN_MARGIN = 10, 2
 # Clear, few and scattered clouds; every other condition (drizzle, rain, storms, snow, haze, fog, heavy cloud) keeps it down.
 BEACH_CODES = frozenset({800, 801, 802})
-# The July 4 cannon, the October jack-o'-lanterns and the Thanksgiving harvest display stand on the umbrella's spot.
-BEACH_HOLIDAYS = frozenset({"cannon", PUMPKINS, THANKSGIVING})
+# The July 4 cannon, the October jack-o'-lanterns and the Thanksgiving harvest display stand on the umbrella's spot, and
+# nobody sits out under Vesuvius's ash.
+BEACH_HOLIDAYS = frozenset({"cannon", PUMPKINS, THANKSGIVING, VESUVIUS})
 # A red and white striped beach umbrella leaning a little right, with "o" the foot of its pole at UMBRELLA_FOOT.
 # R and W are the lit panels, r and w their shaded rim, T the finial and P the pole.
 UMBRELLA_SPRITE = (
@@ -6291,6 +6303,698 @@ def draw_campfire_light(image: Image.Image, palette: Palette, state: tuple[float
     return Image.fromarray(pixels, "RGB")
 
 
+# August 24: the mountain re-enacts the eruption of Vesuvius in AD 79, after Pliny the Younger's letters, compressed into
+# one day on the displayed clock. Steam and ash puff from the summit through the morning, with small blasts that shake the
+# ground; the ground rumbles in the last minute before noon; at noon exactly the vent blasts open and a Plinian column
+# shoots up and spreads into Pliny's "umbrella pine", hurling glowing bombs, flickering with lightning and darkening the
+# sky while pumice rains downwind (white first, then gray, as at Pompeii). Toward evening the column collapses into glowing
+# pyroclastic flows and fires blaze on the flanks ("broad sheets of fire"). Then it dies down, gone before midnight.
+# Phase times are seconds from noon: the morning smoke (first wisps, steady, thickest); the rumble; the column and vent
+# dying down; then (rise, fade) for trapezoid(): the ash darkness, the ash deck spreading over the whole sky, the ash
+# blanket settling on the scene, the flows and the fires.
+VESUVIUS_SMOKE = (-5 * 3600, -4 * 3600, -1800)
+VESUVIUS_RUMBLE_SECONDS = 40
+VESUVIUS_WANE = (8.5 * 3600, 11.9 * 3600)
+VESUVIUS_ASH = ((0, 1.5 * 3600), (8 * 3600, 11 * 3600))
+VESUVIUS_DECK = ((60, 1.5 * 3600), (8.5 * 3600, 11.6 * 3600))
+VESUVIUS_BLANKET = ((0.2 * 3600, 7 * 3600), (10 * 3600, 11.8 * 3600))
+VESUVIUS_FLOWS = ((5 * 3600, 6 * 3600), (9 * 3600, 10.5 * 3600))
+VESUVIUS_FIRES = ((1.5 * 3600, 4.5 * 3600), (9.5 * 3600, 11.8 * 3600))
+# The morning smoke turns from steam to ash over this last stretch before noon.
+VESUVIUS_SMOKE_DARKENS = (-2 * 3600, 0)
+# Pumice falls white at first and gray once the column starts to collapse.
+VESUVIUS_GRAY_PUMICE = (4.5 * 3600, 5.5 * 3600)
+VESUVIUS_VENT = (float(MOUNTAIN_SUMMIT[0]), MOUNTAIN_SUMMIT[1] - 0.5)
+# The smoke and ash column only exist above the vent, so only these top rows are computed.
+VESUVIUS_PLUME_ROWS = math.ceil(VESUVIUS_VENT[1]) + 1
+# The column's top row at full strength, and how fast (seconds) it shoots up there at noon; the umbrella spreads over
+# VESUVIUS_SPREAD_SECONDS and the high winds stretch it up to VESUVIUS_DRIFT pixels downwind (always to the right, like
+# every wind effect) over VESUVIUS_DRIFT_SECONDS.
+VESUVIUS_TOP = 1.5
+VESUVIUS_RISE_SECONDS = 2.2
+VESUVIUS_SPREAD_SECONDS = 20.0
+VESUVIUS_DRIFT = 45
+VESUVIUS_DRIFT_SECONDS = 2 * 3600
+# Billows rise through the column at this many rows a second and roll along the umbrella at VESUVIUS_ROLL.
+VESUVIUS_BILLOW_SPEED = 1.6
+VESUVIUS_ROLL = 0.6
+# The ash deck spreads out from the umbrella, a little upwind and further downwind: VESUVIUS_DECK_REACH (upwind,
+# downwind) columns at full strength. Its lumpy base sinks from VESUVIUS_DECK_BASE rows. It covers a bit over half the
+# sky, so the open sky to the left and above the horizon still shows the weather. After dark its belly glows with the
+# vent and the fires below, over VESUVIUS_DECK_GLOW_REACH columns either side of the vent.
+VESUVIUS_DECK_REACH = (34, 60)
+VESUVIUS_DECK_BASE = (2.5, 7.5)
+VESUVIUS_DECK_GLOW_REACH = 35
+# The ash darkness pulls the sky toward these colors and everything else toward the haze; the sun turns a dim red.
+VESUVIUS_ASH_SKY = ((96, 80, 70), (136, 108, 84), (178, 128, 86))
+VESUVIUS_ASH_HAZE = (58, 52, 48)
+VESUVIUS_ASH_SKY_MIX, VESUVIUS_ASH_LAND_MIX = 0.6, 0.3
+VESUVIUS_ASH_SUN = (200, 118, 84)
+# Plume colors: shaded and sunlit ash, the morning's steam, and the vent's incandescence reflected from below.
+VESUVIUS_ASH_SHADE = (52, 47, 46)
+VESUVIUS_ASH_LIT = (178, 166, 152)
+VESUVIUS_STEAM = (214, 212, 206)
+VESUVIUS_HEAT = (255, 104, 28)
+# Ash bursts (morning) and pyroclastic flows (evening) are scheduled per slot and never cross its end; each slot's chance
+# scales with the phase's level when the event starts.
+VESUVIUS_BURST_SLOT, VESUVIUS_BURST_SECONDS, VESUVIUS_BURST_CHANCE = 180.0, 30.0, 0.8
+VESUVIUS_FLOW_SLOT, VESUVIUS_FLOW_SECONDS, VESUVIUS_FLOW_CHANCE = 70.0, 34.0, 0.85
+# A flow's front runs down its path with this time constant; its cloud thickens downhill and fades over its last part.
+VESUVIUS_FLOW_TAU = 3.0
+# Flows run down the skyline either side of the summit, and down the spur on the face toward the viewer.
+VESUVIUS_FLOW_PATHS = (
+    tuple(MOUNTAIN[: MOUNTAIN.index(MOUNTAIN_SUMMIT) + 1][::-1]),
+    tuple(MOUNTAIN[MOUNTAIN.index(MOUNTAIN_SUMMIT) : -1]),
+    (MOUNTAIN_SUMMIT, *MOUNTAIN_EAST_FACE[:-4:-1]),
+)
+VESUVIUS_FLOW_ASH = (150, 138, 126)
+VESUVIUS_FLOW_GLOW = np.array((1.0, 0.5, 0.18), dtype=np.float32)
+# Volcanic lightning in the ash: one chance per slot for a bolt that flickers through a few quick strokes. It crawls
+# through the umbrella and deck, runs up the column, or strikes down to the mountain: (kind, weight).
+VESUVIUS_BOLT_SLOT, VESUVIUS_BOLT_CHANCE = 1.0, 0.55
+VESUVIUS_BOLT_KINDS = (("cloud", 0.45), ("column", 0.25), ("ground", 0.3))
+VESUVIUS_BOLT_STROKES = (2, 4)
+VESUVIUS_BOLT_AFTER = 8.0
+# Glowing bombs: a launch chance per slot from a rate per second (the opening barrage decays to a steady rate), thrown
+# from the vent under screen gravity (px/s²), then cooling where they land on the flank.
+VESUVIUS_BOMB_SLOT = 0.05
+VESUVIUS_BOMB_RATE = (16.0, 3.0)
+VESUVIUS_BOMB_BARRAGE_SECONDS = 40.0
+VESUVIUS_GRAVITY = 9.0
+VESUVIUS_BOMB_RISE = (6.0, 14.5)
+VESUVIUS_BOMB_SIDEWAYS = 7.0
+VESUVIUS_BOMB_MAX_FLIGHT = 4.0
+VESUVIUS_BOMB_EMBER_SECONDS = 3.5
+VESUVIUS_BOMB_HOT = np.array((1.0, 0.8, 0.45), dtype=np.float32)
+VESUVIUS_BOMB_TRAIL = np.array((0.85, 0.3, 0.06), dtype=np.float32)
+VESUVIUS_BOMB_EMBER = np.array((0.8, 0.2, 0.04), dtype=np.float32)
+VESUVIUS_VENT_GLOW = np.array((1.0, 0.72, 0.3), dtype=np.float32)
+VESUVIUS_FIRE = np.array((1.0, 0.5, 0.15), dtype=np.float32)
+VESUVIUS_FLAME_TIP = np.array((1.0, 0.78, 0.3), dtype=np.float32)
+# Fires catch on the mountain's face first, then spread down to the hills and the tree line before it.
+VESUVIUS_FIRE_SPOTS = (14, 10)
+# A fountain of glowing spatter keeps leaping from the crater while the column stands: (particles, launch speeds px/s).
+VESUVIUS_FOUNTAIN = (14, (10.0, 18.0))
+# Each fire spot lights a small patch of the flank around it.
+VESUVIUS_FIRE_HALO = np.exp(-(np.arange(-2, 3)[:, None] ** 2 + np.arange(-2, 3)[None, :] ** 2) / 1.3).astype(np.float32) * 0.9
+# At noon: a flash and a shock ring racing out through the air; the scene shakes (amplitude in pixels) through the rumble,
+# the blast and each morning burst's first moments.
+VESUVIUS_FLASH_SECONDS = 2.0
+VESUVIUS_FLASH = np.array((1.0, 0.93, 0.8), dtype=np.float32)
+VESUVIUS_RING_SECONDS, VESUVIUS_RING_SPEED = 1.0, 70.0
+VESUVIUS_RING = np.array((0.85, 0.88, 0.95), dtype=np.float32)
+VESUVIUS_SHAKE = {"rumble": 1.0, "blast": 2.0, "burst": 1.0}
+VESUVIUS_BLAST_SHAKE_SECONDS, VESUVIUS_BURST_SHAKE_SECONDS = 15.0, 1.2
+# Falling pumice drifts down and right of the vent's column; (x, y, pace, phase).
+VESUVIUS_ASHFALL = tuple((grain(i, 41) / 97 * 140, grain(i, 43) / 97 * 36, 0.6 + grain(i, 47) / 97 * 0.8, grain(i, 53)) for i in range(110))
+# The fall starts this far left, under the umbrella, and spreads upwind with the deck.
+VESUVIUS_ASHFALL_LEFT = 64
+VESUVIUS_PUMICE = ((226, 220, 204), (126, 122, 118))
+VESUVIUS_NOISE = (wrapping_noise(CAMPFIRE_NOISE_SIZE, 4, 501), wrapping_noise(CAMPFIRE_NOISE_SIZE, 2, 502), wrapping_noise(CAMPFIRE_NOISE_SIZE, 8, 503))
+# The eruption shows on the sky and the mountain only: the hills, the hut and the trees stand in front of it.
+VESUVIUS_SKY = np.asarray(LAND) == 0
+VESUVIUS_BACKDROP = np.isin(np.asarray(LAND), (0, INDEX["far"], INDEX["peak"]))
+# The fires also burn on the hills and the tree line in front of the mountain, but behind the meadow, hut and trees.
+VESUVIUS_FIRE_GROUND = np.isin(np.asarray(LAND), (0, INDEX["far"], INDEX["peak"], INDEX["hill"], INDEX["ridge"]))
+# The settled ash, by the order land layers stand in from back to front: a pixel's top catches ash when the pixel above it
+# is sky or something farther back. Windows and the door stay clear.
+VESUVIUS_LAYER_RANKS = {"far": 1, "peak": 1, "hill": 2, "ridge": 3, "field": 4, "water": 5, "leaf": 7, "leaf_dark": 7, "foreground": 8, "grass": 8}
+VESUVIUS_LAYER_DEFAULT_RANK = 6
+VESUVIUS_BARE = ("glass", "door")
+# Ash settles grain by grain: (first threshold, spread, opacity) of the blanket level at which each pixel of a kind turns
+# gray. Exposed tops come first, then a second row beneath them, then a dusting over the open ground, pond and mountain.
+VESUVIUS_SETTLE = {"top": (0.0, 0.45, 0.85), "under": (0.45, 0.35, 0.7), "dust": (0.3, 1.1, 0.45)}
+VESUVIUS_DUST = ("field", "foreground", "grass", "water", "far", "peak", "hill")
+VESUVIUS_SETTLED = (164, 158, 150)
+
+
+@dataclass(frozen=True)
+class Eruption:
+    # Seconds from noon on the displayed clock; negative in the morning.
+    age: float
+    smoke: float
+    column: float
+    ash: float
+    flows: float
+    fires: float
+    deck: float
+    blanket: float
+
+
+def vesuvius_levels(age: float) -> Eruption:
+    """Each phase's strength (0-1) `age` seconds from noon."""
+    first, steady, thickest = VESUVIUS_SMOKE
+    smoke = smoothstep(first, steady, age) * (0.35 + 0.65 * smoothstep(steady, thickest, age)) if age < 0 else 0.0
+    column = 1 - smoothstep(*VESUVIUS_WANE, age) if age >= 0 else 0.0
+    return Eruption(age, smoke, column, trapezoid(age, *VESUVIUS_ASH), trapezoid(age, *VESUVIUS_FLOWS), trapezoid(age, *VESUVIUS_FIRES), trapezoid(age, *VESUVIUS_DECK), trapezoid(age, *VESUVIUS_BLANKET))
+
+
+def vesuvius_state(environment: "OutsideEnvironment") -> Eruption | None:
+    """The eruption on August 24 at the displayed moment, or None."""
+    moment = environment.moment
+    if moment is None or VESUVIUS not in holiday_features(environment):
+        return None
+    # Noon as an absolute time, so the blast lands on it exactly.
+    return vesuvius_levels(moment.timestamp() - datetime(moment.year, moment.month, moment.day, 12, tzinfo=moment.tzinfo).timestamp())
+
+
+def vesuvius_ash(environment: "OutsideEnvironment") -> float:
+    eruption = vesuvius_state(environment)
+    return 0.0 if eruption is None else eruption.ash
+
+
+@lru_cache(maxsize=64)
+def vesuvius_burst_plan(slot: int, seed: int) -> tuple[float, float]:
+    rng = random.Random(seed * 17 + slot * 6151 + 1)
+    return rng.random(), rng.uniform(0, VESUVIUS_BURST_SLOT - VESUVIUS_BURST_SECONDS)
+
+
+def vesuvius_burst(eruption: Eruption | None, elapsed: float, seed: int) -> float | None:
+    """Seconds into the morning ash burst under way, or None. Bursts end before the rumble."""
+    if eruption is None:
+        return None
+    slot, into = divmod(elapsed, VESUVIUS_BURST_SLOT)
+    roll, start = vesuvius_burst_plan(int(slot), seed)
+    if not start <= into < start + VESUVIUS_BURST_SECONDS:
+        return None
+    age = into - start
+    began = eruption.age - age
+    if began + VESUVIUS_BURST_SECONDS > -VESUVIUS_RUMBLE_SECONDS or roll >= VESUVIUS_BURST_CHANCE * vesuvius_levels(began).smoke:
+        return None
+    return age
+
+
+@lru_cache(maxsize=64)
+def vesuvius_flow_plan(slot: int, seed: int) -> tuple[float, float, tuple[tuple[int, float], ...]]:
+    """(chance roll, start in the slot, ((path, delay), ...)): a collapse sends flows down one or two paths."""
+    rng = random.Random(seed * 23 + slot * 7393 + 2)
+    roll, start = rng.random(), rng.uniform(0, VESUVIUS_FLOW_SLOT - VESUVIUS_FLOW_SECONDS - 3)
+    paths = rng.sample(range(len(VESUVIUS_FLOW_PATHS)), 2 if rng.random() < 0.5 else 1)
+    return roll, start, tuple((path, 0.0 if index == 0 else rng.uniform(0.5, 3.0)) for index, path in enumerate(paths))
+
+
+def vesuvius_flows(eruption: Eruption | None, elapsed: float, seed: int) -> tuple[tuple[int, float], ...]:
+    """(path, seconds since its flow started) for each pyroclastic flow under way."""
+    if eruption is None or eruption.age < 0:
+        return ()
+    slot, into = divmod(elapsed, VESUVIUS_FLOW_SLOT)
+    roll, start, paths = vesuvius_flow_plan(int(slot), seed)
+    if not start <= into or roll >= VESUVIUS_FLOW_CHANCE * vesuvius_levels(eruption.age - (into - start)).flows:
+        return ()
+    return tuple((path, into - start - delay) for path, delay in paths if 0 <= into - start - delay < VESUVIUS_FLOW_SECONDS)
+
+
+@lru_cache(maxsize=1)
+def vesuvius_flow_geometry() -> tuple[tuple[np.ndarray, np.ndarray, float], ...]:
+    """For each flow path: per pixel, the distance along the path to its nearest point and the distance from it, and the
+    path's length."""
+    geometry = []
+    for path in VESUVIUS_FLOW_PATHS:
+        points, lengths, total = [], [], 0.0
+        for (x0, y0), (x1, y1) in pairwise(path):
+            length = math.hypot(x1 - x0, y1 - y0)
+            steps = max(1, math.ceil(length * 4))
+            for step in range(steps):
+                points.append((x0 + (x1 - x0) * step / steps, y0 + (y1 - y0) * step / steps))
+                lengths.append(total + length * step / steps)
+            total += length
+        points.append(path[-1])
+        lengths.append(total)
+        xs, ys = (np.array(values, dtype=np.float32) for values in zip(*points))
+        distance = np.hypot(FIREWORK_X[..., None] - xs, FIREWORK_Y[..., None] - ys)
+        geometry.append((np.array(lengths, dtype=np.float32)[distance.argmin(axis=-1)], distance.min(axis=-1), total))
+    return tuple(geometry)
+
+
+@dataclass(frozen=True)
+class VolcanicBolt:
+    roll: float
+    # Seconds into the slot.
+    start: float
+    kind: str
+    # Where along the cloud or column it starts (0-1); a ground strike's side of the vent.
+    anchor: float
+    # The jagged channel and a fork leaving it at step `fork`, as offsets from the start.
+    steps: tuple[tuple[int, int], ...]
+    fork: int
+    branch: tuple[tuple[int, int], ...]
+    # (start, end) of each stroke, seconds after the bolt starts.
+    strokes: tuple[tuple[float, float], ...]
+
+
+def jagged(rng: random.Random, count: int, across: tuple[int, ...], down: tuple[int, int]) -> tuple[tuple[int, int], ...]:
+    x = y = 0
+    steps = [(0, 0)]
+    for _ in range(count):
+        x, y = x + rng.choice(across), y + rng.randint(*down)
+        steps.append((x, y))
+    return tuple(steps)
+
+
+@lru_cache(maxsize=256)
+def vesuvius_bolt_plan(slot: int, seed: int) -> VolcanicBolt:
+    rng = random.Random(seed * 29 + slot * 104729 + 3)
+    roll, anchor = rng.random(), rng.random()
+    kind = rng.choices([kind for kind, _ in VESUVIUS_BOLT_KINDS], [weight for _, weight in VESUVIUS_BOLT_KINDS])[0]
+    if kind == "ground":
+        lean = 1 if anchor >= 0.5 else -1
+        # Strikes reach out from the cloud to the flanks rather than running down the column.
+        steps = jagged(rng, 16, (-lean, 0, 2 * lean, 2 * lean, 3 * lean), (1, 2))
+    elif kind == "column":
+        steps = jagged(rng, rng.randint(5, 8), (-2, -1, 1, 2), (-2, -1))
+    else:
+        steps = jagged(rng, rng.randint(6, 10), (-3, -2, 2, 3, 3), (-1, 1))
+    fork = rng.randint(1, max(1, len(steps) // 2))
+    branch = jagged(rng, rng.randint(2, 4), (-2, -1, 1, 2), (0, 2))
+    strokes, at = [], 0.0
+    for _ in range(rng.randint(*VESUVIUS_BOLT_STROKES)):
+        length = rng.uniform(0.05, 0.08)
+        strokes.append((at, at + length))
+        at += length + rng.uniform(0.04, 0.12)
+    return VolcanicBolt(roll, rng.uniform(0, VESUVIUS_BOLT_SLOT - at), kind, anchor, steps, fork, branch, tuple(strokes))
+
+
+def vesuvius_bolt(eruption: Eruption | None, elapsed: float, seed: int) -> tuple[VolcanicBolt, float] | None:
+    """(plan, seconds since it struck) for the volcanic lightning bolt under way, or None."""
+    if eruption is None or eruption.age < VESUVIUS_BOLT_AFTER or eruption.column < 0.3:
+        return None
+    slot, into = divmod(elapsed, VESUVIUS_BOLT_SLOT)
+    bolt = vesuvius_bolt_plan(int(slot), seed)
+    if bolt.roll >= VESUVIUS_BOLT_CHANCE * eruption.column or not bolt.start <= into < bolt.start + bolt.strokes[-1][1]:
+        return None
+    return bolt, into - bolt.start
+
+
+def vesuvius_ground(x: float) -> float:
+    """The mountain's skyline row at column `x`, or the hills' top where there is no mountain."""
+    column = round(x)
+    ridge = mountain_ridge()[column] if 0 <= column < WIDTH else math.inf
+    return ridge if math.isfinite(ridge) else 22.0
+
+
+@lru_cache(maxsize=4096)
+def vesuvius_bomb(slot: int, seed: int) -> tuple[float, float, float, float, float]:
+    """(chance roll, sideways speed, upward speed, flight seconds, landing depth) of the bomb that may launch in `slot`."""
+    rng = random.Random(seed * 31 + slot * 7919 + 5)
+    roll, vx, vy, depth = rng.random(), rng.uniform(-VESUVIUS_BOMB_SIDEWAYS, VESUVIUS_BOMB_SIDEWAYS), -rng.uniform(*VESUVIUS_BOMB_RISE), rng.uniform(0.5, 3.0)
+    x0, y0 = VESUVIUS_VENT
+    flight = 0.1
+    while flight < VESUVIUS_BOMB_MAX_FLIGHT:
+        if vy + VESUVIUS_GRAVITY * flight > 0 and y0 + vy * flight + VESUVIUS_GRAVITY * flight * flight / 2 >= vesuvius_ground(x0 + vx * flight) + depth:
+            break
+        flight += 0.02
+    return roll, vx, vy, flight, depth
+
+
+def vesuvius_bombs(light: np.ndarray, eruption: Eruption, elapsed: float, seed: int):
+    """Glowing bombs arc out of the vent, trailing sparks, and cool where they land on the flank."""
+    x0, y0 = VESUVIUS_VENT
+    xs, ys, colors, weights = [], [], [], []
+    newest = math.floor(elapsed / VESUVIUS_BOMB_SLOT)
+    for slot in range(newest - math.ceil((VESUVIUS_BOMB_MAX_FLIGHT + VESUVIUS_BOMB_EMBER_SECONDS) / VESUVIUS_BOMB_SLOT), newest + 1):
+        age = elapsed - slot * VESUVIUS_BOMB_SLOT
+        launched = eruption.age - age
+        if age < 0 or launched < 0:
+            continue
+        roll, vx, vy, flight, _ = vesuvius_bomb(slot, seed)
+        rate = (1 - smoothstep(*VESUVIUS_WANE, launched)) * (VESUVIUS_BOMB_RATE[0] * math.exp(-launched / VESUVIUS_BOMB_BARRAGE_SECONDS) + VESUVIUS_BOMB_RATE[1])
+        if roll >= rate * VESUVIUS_BOMB_SLOT:
+            continue
+        if age < flight:
+            for lag, color, weight in ((0.0, VESUVIUS_BOMB_HOT, 1.0), (0.05, VESUVIUS_BOMB_TRAIL, 0.6), (0.1, VESUVIUS_BOMB_TRAIL, 0.3)):
+                t = max(0.0, age - lag)
+                xs.append(x0 + vx * t)
+                ys.append(y0 + vy * t + VESUVIUS_GRAVITY * t * t / 2)
+                colors.append(color)
+                weights.append(weight * (1 - 0.4 * age / flight))
+        elif age < flight + VESUVIUS_BOMB_EMBER_SECONDS:
+            xs.append(x0 + vx * flight)
+            ys.append(y0 + vy * flight + VESUVIUS_GRAVITY * flight * flight / 2)
+            colors.append(VESUVIUS_BOMB_EMBER)
+            weights.append(0.7 * (1 - (age - flight) / VESUVIUS_BOMB_EMBER_SECONDS) ** 1.5)
+    if xs:
+        splat(light, np.array(xs, dtype=np.float32), np.array(ys, dtype=np.float32), np.array(colors), np.array(weights, dtype=np.float32))
+
+
+@lru_cache(maxsize=1)
+def vesuvius_fire_spots() -> tuple[tuple[int, int], ...]:
+    """Spots that catch fire, in the order they light, a few pixels apart: on the mountain's face below the skyline, then
+    on the hills and the tree line before it, with room above each for its flames."""
+    land = np.asarray(LAND)
+    mountain = (INDEX["far"], INDEX["peak"])
+    lowland = (INDEX["hill"], INDEX["ridge"])
+    groups = (
+        sorted((grain(x, y, 71), x, y) for y in range(15, 22) for x in range(64, 105) if land[y, x] in mountain and land[y - 2, x] in mountain),
+        sorted((grain(x, y, 73), x, y) for y in range(21, 25) for x in range(44, 112) if land[y, x] in lowland and VESUVIUS_FIRE_GROUND[y - 2, x]),
+    )
+    spots: list[tuple[int, int]] = []
+    for candidates, count in zip(groups, VESUVIUS_FIRE_SPOTS):
+        placed = 0
+        for _, x, y in candidates:
+            if placed < count and all(max(abs(x - sx), abs(y - sy)) >= 4 for sx, sy in spots):
+                spots.append((x, y))
+                placed += 1
+    return tuple(spots)
+
+
+@lru_cache(maxsize=2)
+def vesuvius_settling(foliage: bool) -> tuple[np.ndarray, ...]:
+    """(rows, columns, threshold, opacity, tone) of the pixels Vesuvius's ash settles on, on the land or the tree's
+    foliage: exposed tops, the row beneath them, and (on the land) a dusting over open ground, the pond and the mountain."""
+    names = {value: name for name, value in INDEX.items()}
+    mask = np.asarray(TREE_FOLIAGE if foliage else LAND)
+
+    def rank(value: int) -> int:
+        if value == 0:
+            return 0
+        return 1 if foliage else VESUVIUS_LAYER_RANKS.get(names[value], VESUVIUS_LAYER_DEFAULT_RANK)
+
+    kinds: dict[tuple[int, int], str] = {}
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            value = int(mask[y, x])
+            if value == 0 or names[value] in VESUVIUS_BARE or rank(int(mask[y - 1, x]) if y > 0 else 0) >= rank(value):
+                continue
+            kinds[x, y] = "top"
+            if y + 1 < HEIGHT and mask[y + 1, x] == value:
+                kinds.setdefault((x, y + 1), "under")
+    if not foliage:
+        dust = [INDEX[name] for name in VESUVIUS_DUST]
+        for y, x in zip(*np.nonzero(np.isin(mask, dust))):
+            kinds.setdefault((int(x), int(y)), "dust")
+    cells = sorted(kinds.items())
+    settle = [VESUVIUS_SETTLE[kind] for _, kind in cells]
+    return (
+        np.array([y for (_, y), _ in cells]),
+        np.array([x for (x, _), _ in cells]),
+        # Smooth noise with a little grain: ash gathers in patches that spread, with ragged edges, rather than as specks.
+        np.array([first + spread * (0.75 * VESUVIUS_NOISE[0][y * 2 % CAMPFIRE_NOISE_SIZE, x % CAMPFIRE_NOISE_SIZE] + 0.25 * grain(x, y, 83) / 97) for ((x, y), _), (first, spread, _) in zip(cells, settle)], dtype=np.float32),
+        np.array([opacity for _, _, opacity in settle], dtype=np.float32),
+        np.array([0.85 + 0.25 * grain(x, y, 89) / 97 for (x, y), _ in cells], dtype=np.float32),
+    )
+
+
+@lru_cache(maxsize=96)
+def vesuvius_blanket_overlay(level: int, brightness: int, foliage: bool) -> Image.Image | None:
+    """The settled ash as an RGBA layer, for a blanket level in 32nds and a brightness in 16ths."""
+    rows, columns, thresholds, opacities, tones = vesuvius_settling(foliage)
+    alpha = opacities * np.clip((level / 32 - thresholds) / 0.06, 0, 1)
+    if not alpha.any():
+        return None
+    pixels = np.zeros((HEIGHT, WIDTH, 4), dtype=np.uint8)
+    pixels[rows, columns, :3] = np.clip(np.array(VESUVIUS_SETTLED, dtype=np.float32) * (brightness / 16) * tones[:, None], 0, 255).astype(np.uint8)
+    pixels[rows, columns, 3] = np.round(alpha * 255).astype(np.uint8)
+    return Image.fromarray(pixels, "RGBA")
+
+
+def vesuvius_blanket(palette: Palette, eruption: Eruption | None, foliage: bool) -> Image.Image | None:
+    """The ash that has settled so far, grain by grain, in steps so the layers stay cached; dim at night."""
+    if eruption is None or eruption.blanket <= 0:
+        return None
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    return vesuvius_blanket_overlay(round(eruption.blanket * 32), round((0.3 + 0.7 * illumination) * 16), foliage)
+
+
+def vesuvius_fountain(light: np.ndarray, glow: float, elapsed: float):
+    """Glowing spatter leaping a few rows above the crater and falling back, each blob on its own beat."""
+    count, (slow, fast) = VESUVIUS_FOUNTAIN
+    vx, vy = VESUVIUS_VENT
+    xs, ys, weights = [], [], []
+    for index in range(count):
+        speed = slow + (fast - slow) * grain(index, 61) / 97
+        flight = 2 * speed / VESUVIUS_GRAVITY / 2.2
+        t = (elapsed + grain(index, 67) / 97 * flight) % flight
+        # A stronger pull than the bombs' keeps the spatter low and quick.
+        xs.append(vx + (grain(index, 59) / 97 - 0.5) * 4 * t)
+        ys.append(vy - speed * t + VESUVIUS_GRAVITY * 2.2 * t * t / 2)
+        weights.append(glow * (1 - 0.5 * t / flight))
+    splat(light, np.array(xs, dtype=np.float32), np.array(ys, dtype=np.float32), np.repeat(VESUVIUS_BOMB_HOT[None, :], count, axis=0), np.array(weights, dtype=np.float32))
+
+
+def vesuvius_plume(eruption: Eruption, wind: float, elapsed: float, burst: float | None) -> tuple[np.ndarray, np.ndarray, float, float, float] | None:
+    """(density, how ashy rather than steamy, the column's top row, its top column, the ash cloud's (left, right) ends) of
+    the morning smoke or the eruption column with its umbrella and the ash deck, or None when there is none. The arrays
+    cover the top VESUVIUS_PLUME_ROWS rows."""
+    vx, vy = VESUVIUS_VENT
+    X, Y = FIREWORK_X[:VESUVIUS_PLUME_ROWS], FIREWORK_Y[:VESUVIUS_PLUME_ROWS]
+    height_above = np.clip(vy - Y, 0, None)
+    billow = 0.6 * sample_noise(VESUVIUS_NOISE[0], X * 0.8 + 7, Y + elapsed * VESUVIUS_BILLOW_SPEED) + 0.4 * sample_noise(VESUVIUS_NOISE[1], X + 3, Y + elapsed * VESUVIUS_BILLOW_SPEED * 1.3)
+    wind = min(30.0, wind)
+    if eruption.age < 0:
+        boost = 0.0 if burst is None else smoothstep(0, 2, burst) * (1 - smoothstep(VESUVIUS_BURST_SECONDS * 0.3, VESUVIUS_BURST_SECONDS, burst))
+        if eruption.smoke <= 0 and boost <= 0:
+            return None
+        height = 4 + 7 * eruption.smoke + 4 * boost
+        bend = 0.04 + wind * 0.012
+        center = vx + bend * height_above**1.4
+        half = (0.6 + 0.4 * boost + (0.18 + 0.1 * boost) * height_above) * (0.7 + 0.6 * billow)
+        # The smoke thins out as it rises instead of ending in a hard top.
+        density = np.clip(half + 0.5 - np.abs(X - center), 0, 1) * np.clip(1 - height_above / height, 0, 1) ** 0.8 * (Y <= vy + 0.5)
+        density *= min(1.0, 0.35 + 0.45 * eruption.smoke + 0.25 * boost)
+        ashy = 0.6 * smoothstep(*VESUVIUS_SMOKE_DARKENS, eruption.age) + 0.4 * boost
+        return density.astype(np.float32), np.full_like(density, ashy, dtype=np.float32), vy - height, vx + bend * height**1.4, (vx, vx)
+    column = eruption.column
+    if column <= 0:
+        return None
+    rise = 1 - math.exp(-eruption.age / VESUVIUS_RISE_SECONDS)
+    top = vy - (vy - VESUVIUS_TOP) * rise * column**0.6
+    bend = wind * 0.004
+    center = vx + bend * height_above**1.4
+    half = (1.3 + 0.7 * column + 0.25 * height_above) * (0.75 + 0.5 * billow)
+    # The jet's head swells into a cauliflower cap as it shoots up.
+    half = half + 2.2 * np.exp(-((Y - top - 1.5) ** 2) / 3) * (1 - smoothstep(2, 10, eruption.age))
+    shaft = np.clip(half + 0.5 - np.abs(X - center), 0, 1) * np.clip(Y - top + 0.5 + (billow - 0.5) * 1.5, 0, 1) * (Y <= vy + 0.5)
+    # The umbrella: a rounded upwind end and a long tail that the high winds stretch downwind and thin out.
+    spread = (1 - math.exp(-max(0.0, eruption.age - 1.5) / VESUVIUS_SPREAD_SECONDS)) * column**0.5
+    ux = vx + bend * (vy - top) ** 1.4
+    left = ux - 3 - 13 * spread
+    right = ux + 3 + 16 * spread + VESUVIUS_DRIFT * smoothstep(0, VESUVIUS_DRIFT_SECONDS, eruption.age) * column
+    middle = top + 1.3 + 0.8 * spread
+    thickness = 1.0 + 1.6 * spread
+    across = np.where(X < ux, (ux - X) / (ux - left), (X - ux) / (right - ux))
+    taper = np.sqrt(np.clip(1 - np.where(X < ux, across**2, across**3), 0, 1))
+    roll = X * 0.7 - elapsed * VESUVIUS_ROLL
+    bottom = middle + thickness * taper * (0.7 + 0.7 * sample_noise(VESUVIUS_NOISE[0], roll, Y * 0.8 + 11))
+    ceiling = middle - thickness * taper * (0.6 + 0.5 * sample_noise(VESUVIUS_NOISE[1], roll + 5, Y * 0.5 + 3))
+    canopy = np.clip(bottom - Y + 0.5, 0, 1) * np.clip(Y - ceiling + 0.5, 0, 1) * (taper > 0) * (1 - 0.45 * np.clip(across, 0, 1) * (X > ux))
+    density = np.maximum(shaft, canopy) * min(1.0, 0.97 * column * 1.5)
+    if eruption.deck > 0:
+        # The umbrella spreads into a deck that takes over the sky, its lumpy base sagging over the column and sinking
+        # as the afternoon wears on; it rolls slowly downwind.
+        upwind, downwind = (12 + reach * eruption.deck for reach in VESUVIUS_DECK_REACH)
+        drift = X * 0.5 - elapsed * VESUVIUS_ROLL
+        lumps = sample_noise(VESUVIUS_NOISE[0], drift, Y * 0.6 + 29)
+        swells = sample_noise(VESUVIUS_NOISE[2], X * 0.6 - elapsed * VESUVIUS_ROLL * 0.7, 17)
+        edge = np.clip((np.where(X < ux, upwind, downwind) * (0.85 + 0.3 * lumps) - np.abs(X - ux)) / 4, 0, 1)
+        low, high = VESUVIUS_DECK_BASE
+        # Broad swells and smaller lumps hang from its base, so it rolls like a storm front instead of a flat ceiling.
+        base = low + (high - low) * eruption.deck + 1.6 * np.exp(-np.abs(X - ux) / 18) + 4.0 * (swells - 0.5) + 1.8 * (lumps - 0.5)
+        sheet = np.clip(base - Y + 0.5, 0, 1) * edge * (0.8 + 0.2 * sample_noise(VESUVIUS_NOISE[1], drift + 9, Y * 0.9)) * min(1.0, eruption.deck * 1.6)
+        density = np.maximum(density, sheet)
+        left, right = max(0.0, min(left, ux - upwind)), min(float(WIDTH), max(right, ux + downwind))
+    return density.astype(np.float32), np.ones_like(density, dtype=np.float32), top, ux, (left, right)
+
+
+def draw_vesuvius_plume(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", eruption: Eruption, plume, elapsed: float) -> Image.Image:
+    """The ash in the sky, behind the land: lit from above by day, and from below by the vent after dark."""
+    density, ashy, _, _, _ = plume
+    vx, vy = VESUVIUS_VENT
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    rows = VESUVIUS_PLUME_ROWS
+    X, Y = FIREWORK_X[:rows], FIREWORK_Y[:rows]
+    texture = sample_noise(VESUVIUS_NOISE[1], X * 1.1 + 13, Y * 1.1 + elapsed * VESUVIUS_BILLOW_SPEED * 1.2)
+    above = np.vstack([np.zeros((1, WIDTH), dtype=np.float32), density[:-1]])
+    below = np.vstack([density[1:], np.zeros((1, WIDTH), dtype=np.float32)])
+    # Big billows shade the ash broadly, so a sky full of it still has rolling forms.
+    billows = sample_noise(VESUVIUS_NOISE[2], X * 0.9 - elapsed * VESUVIUS_ROLL * 0.8 + 21, Y * 1.2 + 5)
+    tone = np.clip(0.45 + 0.6 * (texture - 0.5) + 0.7 * (billows - 0.5) + 0.55 * np.clip(density - above, 0, 1) - 0.35 * np.clip(density - below, 0, 1), 0, 1)[..., None]
+    shade, lit, steam = (np.array(color, dtype=np.float32) for color in (VESUVIUS_ASH_SHADE, VESUVIUS_ASH_LIT, VESUVIUS_STEAM))
+    colors = shade + (lit - shade) * tone
+    colors = colors + (steam * (0.8 + 0.2 * tone) - colors) * (1 - ashy[..., None])
+    colors = colors * (0.22 + 0.78 * illumination)
+    glow = eruption.column if eruption.age >= 0 else 0.25 * smoothstep(-3600, 0, eruption.age)
+    if glow > 0:
+        night = holiday_darkness(environment)
+        heat = glow * (0.9 * np.exp(-np.hypot(X - vx, (Y - vy) * 0.8) / 2.0) + 0.55 * night * np.exp(-np.clip(vy - Y, 0, None) / 4.5))
+        # After dark the vent and the fires below light the ash deck's belly, reddening the whole sky over the volcano.
+        heat = heat + max(glow, eruption.fires) * night * 0.45 * np.exp(-np.abs(X - vx) / VESUVIUS_DECK_GLOW_REACH) * np.clip((Y - 1) / 9, 0, 1)
+        colors = colors + (np.array(VESUVIUS_HEAT, dtype=np.float32) - colors) * np.clip(heat, 0, 1)[..., None]
+    pixels = np.array(image)
+    region = pixels[:rows].astype(np.float32)
+    pixels[:rows] = np.round(np.clip(region + (colors - region) * density[..., None], 0, 255)).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def draw_vesuvius_mountain(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", eruption: Eruption, plume, elapsed: float, seed: int) -> Image.Image:
+    """In front of the mountain but behind the hills: pyroclastic flows, flank fires, the glowing vent, bombs, volcanic
+    lightning inside the ash and the noon shock ring."""
+    night = holiday_darkness(environment)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    flows = vesuvius_flows(eruption, elapsed, seed)
+    if flows:
+        pixels = np.asarray(image, dtype=np.float32)
+        ash = np.array(VESUVIUS_FLOW_ASH, dtype=np.float32) * (0.25 + 0.75 * illumination)
+        for path, age in flows:
+            along, away, length = vesuvius_flow_geometry()[path]
+            reach = length * min(1.0, (1 - math.exp(-age / VESUVIUS_FLOW_TAU)) * 1.12)
+            billow = sample_noise(VESUVIUS_NOISE[0], FIREWORK_X * 0.8 + 17 * path, FIREWORK_Y * 0.8 + age * 0.9)
+            head = 1.8 * np.exp(-(((along - reach) / 2.2) ** 2))
+            thickness = ((0.6 + 0.09 * along) * (0.7 + 0.05 * age) + head) * (0.65 + 0.7 * billow)
+            front = np.clip(reach - along + 1.0, 0, 1)
+            fade = 1 - smoothstep(VESUVIUS_FLOW_SECONDS * 0.4, VESUVIUS_FLOW_SECONDS, age)
+            cover = np.clip(thickness + 0.5 - away, 0, 1) * front * fade * VESUVIUS_BACKDROP
+            tone = (0.75 + 0.5 * (billow - 0.5))[..., None]
+            pixels = pixels + (ash * tone - pixels) * cover[..., None]
+            # The avalanche glows while it is hot, its base brightest, and most of all after dark.
+            hot = 1 - smoothstep(6, VESUVIUS_FLOW_SECONDS * 0.8, age)
+            core = 0.75 * np.clip(2.0 - away, 0, 1) + 0.3 * cover
+            light += (core * front * hot * (0.35 + 0.65 * night) * VESUVIUS_BACKDROP)[..., None] * VESUVIUS_FLOW_GLOW
+        image = Image.fromarray(np.round(np.clip(pixels, 0, 255)).astype(np.uint8), "RGB")
+    fire = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    if eruption.fires > 0:
+        strength = eruption.fires * (0.4 + 0.6 * night)
+        spots = vesuvius_fire_spots()
+        for index, (x, y) in enumerate(spots):
+            level = min(1.0, max(0.0, eruption.fires * len(spots) - index)) * strength
+            if level <= 0:
+                break
+            flicker = 0.55 + 0.25 * math.sin(elapsed * (4.1 + index * 0.37) + index * 1.9) + 0.2 * math.sin(elapsed * (9.3 + index * 0.53) + index)
+            fire[y - 2 : y + 3, x - 2 : x + 3] += VESUVIUS_FIRE_HALO[..., None] * VESUVIUS_FIRE * flicker * level
+            fire[y - 1, x] += VESUVIUS_FLAME_TIP * max(0.0, flicker - 0.55) * 2 * level
+            # Leaping flames: now and then a tongue reaches a second row up.
+            fire[y - 2, x] += VESUVIUS_FLAME_TIP * max(0.0, flicker - 0.85) * 3 * level
+    vx, vy = VESUVIUS_VENT
+    glow = eruption.column if eruption.age >= 0 else 0.25 * smoothstep(-3600, 0, eruption.age)
+    if glow > 0:
+        pulse = 0.8 + 0.12 * math.sin(elapsed * 5.3) + 0.08 * math.sin(elapsed * 11.7 + 0.7)
+        light += (np.exp(-((FIREWORK_X - vx) ** 2 + ((FIREWORK_Y - vy - 0.5) * 1.6) ** 2) / 2.2) * glow * pulse * 1.3)[..., None] * VESUVIUS_VENT_GLOW
+    if eruption.age >= 0:
+        vesuvius_fountain(light, glow, elapsed)
+        vesuvius_bombs(light, eruption, elapsed, seed)
+    bolt = vesuvius_bolt(eruption, elapsed, seed)
+    if bolt is not None and plume is not None:
+        draw_volcanic_bolt(light, *bolt, plume, eruption)
+    if 0 <= eruption.age < VESUVIUS_RING_SECONDS:
+        radius = VESUVIUS_RING_SPEED * eruption.age**0.8
+        ring = np.exp(-((np.hypot(FIREWORK_X - vx, FIREWORK_Y - vy) - radius) ** 2) / 1.2) * 0.6 * (1 - eruption.age / VESUVIUS_RING_SECONDS) ** 1.5
+        light += (ring * VESUVIUS_SKY)[..., None] * VESUVIUS_RING
+    light = light * VESUVIUS_BACKDROP[..., None] + fire * VESUVIUS_FIRE_GROUND[..., None]
+    if not light.any():
+        return image
+    return composite_light(image, light)
+
+
+def draw_volcanic_bolt(light: np.ndarray, bolt: VolcanicBolt, age: float, plume, eruption: Eruption):
+    """A volcanic lightning bolt as light: a white-hot forked channel with a violet halo that flickers through its strokes,
+    lighting the ash around it and the whole cloud with each stroke; a ground strike flares where it hits the mountain."""
+    density, _, top, ux, (left, right) = plume
+    vy = VESUVIUS_VENT[1]
+    rows = VESUVIUS_PLUME_ROWS
+    if bolt.kind == "column":
+        start = (round(ux), round(vy - 1 - bolt.anchor * 2))
+    elif bolt.kind == "ground":
+        start = (round(ux + (bolt.anchor - 0.5) * 16), round(top + 3))
+    else:
+        first, last = max(2.0, min(ux - 8, left + 4)), min(WIDTH - 3.0, max(ux + 24, right - 4))
+        start = (round(first + bolt.anchor * (last - first)), round(top + 1.5 + 4 * eruption.deck * bolt.anchor))
+    points = [(start[0] + dx, start[1] + dy) for dx, dy in bolt.steps]
+    if bolt.kind == "ground":
+        # It runs down through the clear air until it meets the mountain (or the hills beyond it).
+        end = next((index for index, (x, y) in enumerate(points) if y >= vesuvius_ground(x)), len(points) - 1)
+        points = points[: end + 1]
+        if points[-1][1] < vesuvius_ground(points[-1][0]):
+            return
+        channel = trace(points)
+    else:
+        channel = [(x, y) for x, y in trace(points) if y < rows and density[y, x] > 0.25]
+    if not channel:
+        return
+    fx, fy = points[min(bolt.fork, len(points) - 1)]
+    branch = [(x, y) for x, y in trace([(fx + dx, fy + dy) for dx, dy in bolt.branch]) if bolt.kind == "ground" or (y < rows and density[y, x] > 0.25)]
+    stroke = 1.0 if any(first <= age < last for first, last in bolt.strokes) else 0.2
+    glow, core, fork = (np.array(color, dtype=np.float32) / 255 for color in (LIGHTNING_GLOW, LIGHTNING_CORE, LIGHTNING_BRANCH))
+    # Each stroke lights the ash around the channel brightly and the whole cloud faintly.
+    ax, ay = channel[len(channel) // 2]
+    light[:rows] += (stroke * density * (0.12 + 0.55 * np.exp(-np.hypot(FIREWORK_X[:rows] - ax, FIREWORK_Y[:rows] - ay) / 5)))[..., None] * glow
+    on_channel = set(channel)
+    for x, y in {(x + dx, y + dy) for x, y in channel for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))} - on_channel:
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+            light[y, x] += glow * 0.5 * stroke
+    for x, y in branch:
+        light[y, x] += fork * 0.8 * stroke
+    for x, y in channel:
+        light[y, x] += core * stroke
+    if bolt.kind == "ground" and stroke == 1.0:
+        sx, sy = channel[-1]
+        light += (np.exp(-((FIREWORK_X - sx) ** 2 + (FIREWORK_Y - sy) ** 2) / 3) * 0.8)[..., None] * fork
+
+
+def draw_vesuvius_ashfall(image: Image.Image, palette: Palette, eruption: Eruption, wind: float, elapsed: float):
+    """Pumice and ash rain down downwind of the column, white at first and gray once the column starts to collapse."""
+    count = round(len(VESUVIUS_ASHFALL) * eruption.ash)
+    if count == 0:
+        return
+    d = ImageDraw.Draw(image)
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    color = mix(*VESUVIUS_PUMICE, smoothstep(*VESUVIUS_GRAY_PUMICE, eruption.age))
+    color = tuple(round(value * (0.3 + 0.7 * illumination)) for value in color)
+    left = VESUVIUS_ASHFALL_LEFT - VESUVIUS_DECK_REACH[0] * 0.7 * eruption.deck
+    span = WIDTH + 6 - left
+    for x0, y0, pace, phase in VESUVIUS_ASHFALL[:count]:
+        y = int((y0 + elapsed * 2.2 * pace) % 36) - 2
+        x = left + (x0 + elapsed * (1.2 + min(wind, 30) * 0.04) + math.sin(elapsed * 0.9 + phase) * 1.0) % span
+        if 0 <= y < HEIGHT and 0 <= x < WIDTH:
+            # Flakes fade in at the fall's upwind edge, so wrapping around never pops one into view.
+            d.point((int(x), y), fill=mix(image.getpixel((int(x), y)), color, 0.7 * smoothstep(left, left + 10, x)))
+
+
+def vesuvius_shake(eruption: Eruption | None, burst: float | None) -> float:
+    """How far (pixels) the ground shakes: through the rumble, the blast and the start of each morning burst."""
+    if eruption is None:
+        return 0.0
+    if -VESUVIUS_RUMBLE_SECONDS <= eruption.age < 0:
+        return VESUVIUS_SHAKE["rumble"] * smoothstep(-VESUVIUS_RUMBLE_SECONDS, -3, eruption.age)
+    if 0 <= eruption.age < VESUVIUS_BLAST_SHAKE_SECONDS:
+        return VESUVIUS_SHAKE["blast"] * (1 - eruption.age / VESUVIUS_BLAST_SHAKE_SECONDS) ** 1.5
+    if burst is not None and burst < VESUVIUS_BURST_SHAKE_SECONDS:
+        return VESUVIUS_SHAKE["burst"]
+    return 0.0
+
+
+def vesuvius_finish(image: Image.Image, eruption: Eruption, burst: float | None, elapsed: float) -> Image.Image:
+    """The noon flash over the whole scene, then the shaking ground, which moves everything but the corner labels."""
+    if 0 <= eruption.age < VESUVIUS_FLASH_SECONDS:
+        vx, vy = VESUVIUS_VENT
+        peak = math.exp(-eruption.age / 0.35)
+        image = composite_light(image, (peak * (0.9 * np.exp(-np.hypot(FIREWORK_X - vx, FIREWORK_Y - vy) / 10) + 0.25))[..., None] * VESUVIUS_FLASH)
+    amplitude = vesuvius_shake(eruption, burst)
+    if amplitude <= 0:
+        return image
+    dx = round(amplitude * math.sin(elapsed * 41.0) * (0.6 + 0.4 * math.sin(elapsed * 13.7)))
+    dy = round(amplitude * 0.6 * math.sin(elapsed * 33.0 + 1.3))
+    if dx == 0 and dy == 0:
+        return image
+    pixels = np.asarray(image)
+    padded = np.pad(pixels, ((abs(dy), abs(dy)), (abs(dx), abs(dx)), (0, 0)), mode="edge")
+    return Image.fromarray(np.ascontiguousarray(padded[abs(dy) - dy : abs(dy) - dy + HEIGHT, abs(dx) - dx : abs(dx) - dx + WIDTH]), "RGB")
+
+
+def ash_burst_allowed(environment: "OutsideEnvironment") -> bool:
+    eruption = vesuvius_state(environment)
+    return eruption is not None and eruption.smoke > 0 and eruption.age < -VESUVIUS_RUMBLE_SECONDS - VESUVIUS_BURST_SECONDS
+
+
+def pyroclastic_flow_allowed(environment: "OutsideEnvironment") -> bool:
+    eruption = vesuvius_state(environment)
+    return eruption is not None and eruption.flows > 0
+
+
+def volcanic_lightning_allowed(environment: "OutsideEnvironment") -> bool:
+    eruption = vesuvius_state(environment)
+    return eruption is not None and eruption.age >= VESUVIUS_BOLT_AFTER and eruption.column >= 0.3
+
+
 @dataclass(frozen=True)
 class Summon:
     """An occasional event the lab can call up: it jumps the animation clock to the event's next natural start."""
@@ -6315,16 +7019,16 @@ def halloween_only(environment: "OutsideEnvironment") -> bool:
 
 # Every scheduled visitor and sky event the lab can summon. Add new occasional events here so they stay testable.
 SUMMONS = {
-    "owl": Summon("Owl", "Owls come out after dark in dry, calm weather, but not on Halloween or while ornaments hang on the tree.", owl_allowed, lambda e, t, s: owl_state(e, t, s) is not None, 1.0, 0.5),
-    "eagle": Summon("Eagle", "The eagle hunts by day in fair, dry, calm weather above freezing, with good visibility and not on Halloween.", eagle_allowed, lambda e, t, s: eagle_state(e, t, s) is not None, 1.0, 0.5),
-    "dog": Summon("Dog", "The dog goes out in dry daylight, but not on Halloween.", dog_allowed, lambda e, t, s: dog_state(e, t, s)[0] > 0, 0.5, 0.25),
-    "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween and Thanksgiving, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
+    "owl": Summon("Owl", "Owls come out after dark in dry, calm weather, but not on Halloween, July 4 or Vesuvius day or while ornaments hang on the tree.", owl_allowed, lambda e, t, s: owl_state(e, t, s) is not None, 1.0, 0.5),
+    "eagle": Summon("Eagle", "The eagle hunts by day in fair, dry, calm weather above freezing, with good visibility and not on Halloween, July 4 or Vesuvius day.", eagle_allowed, lambda e, t, s: eagle_state(e, t, s) is not None, 1.0, 0.5),
+    "dog": Summon("Dog", "The dog goes out in dry daylight, but not on Halloween or Vesuvius day.", dog_allowed, lambda e, t, s: dog_state(e, t, s)[0] > 0, 0.5, 0.25),
+    "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween, Thanksgiving, July 4 and Vesuvius day, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
-    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve or fireworks days. In October a witch flies instead.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
+    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve, fireworks days or Vesuvius day. In October a witch flies instead.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
     "abduction": Summon(
         "Alien abduction",
-        "A saucer beams up a deer at 11:11 PM, 12:12, 1:11, 2:22, 3:33, 4:44 and 5:55 AM while the sun is down, in fair weather without fog or a gale, but not on Halloween, Thanksgiving or July 4 or while the campfire burns. Summoning moves the lab clock to the next one.",
+        "A saucer beams up a deer at 11:11 PM, 12:12, 1:11, 2:22, 3:33, 4:44 and 5:55 AM while the sun is down, in fair weather without fog or a gale, but not on Halloween, Thanksgiving, July 4 or Vesuvius day or while the campfire burns. Summoning moves the lab clock to the next one.",
         abduction_allowed,
         lambda e, t, s: abduction_state(e) is not None,
         -ABDUCTION_DEER_ARRIVE + 1,
@@ -6333,13 +7037,16 @@ SUMMONS = {
     ),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
     "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
-    "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
+    "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm or on Vesuvius day.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
     "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(e, t, s) is not None, 0.5, 0.25),
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(e, t, s) is not None, 0.5, 0.25),
     "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
     "skeleton": Summon("Skeleton", "The skeleton only dances in October, and not in a downpour or heavy snow.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
+    "ash_burst": Summon("Vesuvius ash burst", "Vesuvius puffs out ash bursts on the morning of August 24, before the rumble ahead of the noon eruption.", ash_burst_allowed, lambda e, t, s: vesuvius_burst(vesuvius_state(e), t, s) is not None, 1.0, 1.0),
+    "pyroclastic_flow": Summon("Pyroclastic flow", "Vesuvius's column collapses into pyroclastic flows on the evening of August 24, from about 5 to 10:30 PM.", pyroclastic_flow_allowed, lambda e, t, s: bool(vesuvius_flows(vesuvius_state(e), t, s)), 0.5, 0.5),
+    "volcanic_lightning": Summon("Volcanic lightning", "Lightning flickers in Vesuvius's ash column on August 24, from just after noon until it dies down late in the evening.", volcanic_lightning_allowed, lambda e, t, s: vesuvius_bolt(vesuvius_state(e), t, s) is not None, 0.3, 0.05),
     "leaves": Summon("Falling leaves", "Leaves fall in autumn and blossom petals in spring, in dry weather with a known wind, but not on Halloween.", leaves_allowed, lambda e, t, s: bool(leaf_particles(e, t, s)), 0.5, 0.5),
 }
 SUMMON_HORIZON_SECONDS = 3600
@@ -6389,11 +7096,23 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         draw_santa(image, environment, elapsed, seed)
     # The skywriter flies high, in front of the clouds but behind the land.
     image = draw_skywriter(image, palette, environment, elapsed, seed)
+    # Vesuvius's smoke and ash column rise from behind the summit; the land hides their base.
+    eruption = vesuvius_state(environment)
+    burst = vesuvius_burst(eruption, elapsed, seed)
+    plume = vesuvius_plume(eruption, environment.weather.wind or 0, elapsed, burst) if eruption is not None else None
+    if plume is not None:
+        image = draw_vesuvius_plume(image, palette, environment, eruption, plume, elapsed)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
     land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0, mountain_faces(palette, environment), window_light(environment, elapsed, seed))
     image.paste(land, (0, 0), land)
+    # Vesuvius's ash settles on the land, under the flows and fires.
+    blanket = vesuvius_blanket(palette, eruption, False)
+    if blanket is not None:
+        image.paste(blanket, (0, 0), blanket)
+    if eruption is not None:
+        image = draw_vesuvius_mountain(image, palette, environment, eruption, plume, elapsed, seed)
     # Christmas candles stand in the dark windows; anything outside passes in front of them.
     candles = window_candles(environment)
     if candles is not None:
@@ -6467,6 +7186,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     sway = tree_sway(elapsed, wind)
     if foliage is not None:
         image.paste(foliage, (sway, 0), foliage)
+        blanket = vesuvius_blanket(palette, eruption, True)
+        if blanket is not None:
+            image.paste(blanket, (sway, 0), blanket)
     d = ImageDraw.Draw(image)
     if environment.season == "spring":
         for dx, dy in TREE_BLOSSOMS:
@@ -6495,6 +7217,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
             x = int((x0 + min(wind, 25) * elapsed * 0.035 + math.sin(elapsed * 0.7 + phase) * 2) % 128)
             if 0 <= y < HEIGHT:
                 d.point((x, y), fill=mix(image.getpixel((x, y)), (234, 235, 225), 0.65 + (phase % 5) * 0.025))
+    if eruption is not None:
+        draw_vesuvius_ashfall(image, palette, eruption, wind, elapsed)
     lamp = halloween_lamp(night, elapsed, seed) if halloween else lamp_level(environment)
     if lamp > 0:
         image = draw_lamp_light(image, lamp)
@@ -6522,6 +7246,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         if age >= 0 and event.intensity(age) > 0.01:
             image = flash_scene(image, event, event.intensity(age), clouds)
         draw_lightning(image, event, age)
+    if eruption is not None:
+        image = vesuvius_finish(image, eruption, burst, elapsed)
     return grade_frame(image)
 
 
