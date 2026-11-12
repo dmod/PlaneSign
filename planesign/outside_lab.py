@@ -115,6 +115,7 @@ WEATHER_PRESETS = (
     ("Sleet", {"code": 611, "clouds": 100, "wind": 10, "rain": 1, "snow": 0.5, "temp": 33, "dew_point": 31, "visibility": 4000}),
     ("Fog", {"code": 741, "clouds": 70, "wind": 2, "rain": 0, "snow": 0, "temp": 50, "dew_point": 50, "visibility": 300}),
     ("Windy", {"code": 801, "clouds": 15, "wind": 28, "rain": 0, "snow": 0, "temp": 65, "dew_point": 45, "visibility": 10000}),
+    ("Gale", {"code": 802, "clouds": 45, "wind": 45, "rain": 0, "snow": 0, "temp": 58, "dew_point": 40, "visibility": 10000}),
     ("Freezing and clear", {"code": 800, "clouds": 0, "wind": 4, "rain": 0, "snow": 0, "temp": 20, "dew_point": 8, "visibility": 10000}),
     # Clear, cold, dry and calm: after sunset it lights the campfire.
     ("Crisp night", {"code": 800, "clouds": 5, "wind": 3, "rain": 0, "snow": 0, "temp": 38, "dew_point": 24, "visibility": 10000}),

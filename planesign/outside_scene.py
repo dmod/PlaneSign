@@ -2361,9 +2361,11 @@ def draw_fireflies(image: Image.Image, glows: list[tuple[float, float, float]]):
 
 LEAF_SLOT_SECONDS = 45
 LEAF_GUST_CHANCE = 0.72
-LEAF_GUST_SIZE = 4
+LEAF_GUST_SIZE = 6
+# More of a gust's leaves come down in a breeze, a strong wind and a gale.
 LEAF_BREEZE_MPH = 8
 LEAF_GUST_MPH = 16
+LEAF_GALE_MPH = 30
 # A leaf fades in on the front of the canopy and trembles there before it lets go.
 LEAF_HANG_SECONDS = 0.9
 LEAF_TREMBLE_RATE = 3.2
@@ -2421,52 +2423,84 @@ def smoothstep(edge0: float, edge1: float, value: float) -> float:
     return t * t * (3 - 2 * t)
 
 
-# The canopy rustles lobe by lobe: the core holds still while each outer lobe leans downwind on its own rhythm, up to
-# TREE_LOBE_LEAN px once the wind reaches TREE_RUSTLE_WIND mph, and the top lobes dip a row. Gusts swell and ease it.
-TREE_RUSTLE_WIND = 12
-TREE_LOBE_LEAN = 1.45
-TREE_LOBE_DIP = 0.6
-TREE_DIPPING_LOBES = (1, 2, 9)
-# Once a lobe leans past TREE_TWIST_ONSET of its swing its leaves twist: half show their pale undersides, the other
-# half turn edge-on into shadow, and which half drifts at TREE_TWIST_RATE rad/s.
-TREE_TWIST_ONSET = 0.55
-TREE_TWIST_AMOUNT = 0.3
+# The canopy rustles lobe by lobe in the gusting wind (`canopy_wind`), and each wind speed has its own character, set
+# by these (mph, value) keyframes. Light air stirs a lobe now and then; a breeze swings each lobe about a pixel; a fresh
+# wind swings them further and faster and starts to hold them downwind; from about 30 mph the whole crown bends over
+# while the lobes thrash and flutter.
+# How far an outer lobe swings, in pixels.
+RUSTLE_SWING = ((0, 0), (3, 0.75), (8, 1.0), (14, 1.45), (22, 1.9), (30, 2.3), (45, 2.7))
+# The share of that swing held downwind instead of swinging back.
+RUSTLE_HOLD = ((16, 0), (24, 0.3), (32, 0.5), (45, 0.65))
+# How far the whole crown, the core included, bends downwind, in pixels.
+RUSTLE_BEND = ((20, 0), (28, 0.6), (36, 1.0), (50, 1.4))
+# Quick flicks of each lobe on top of its swing, in pixels, at RUSTLE_FLUTTER_HZ.
+RUSTLE_FLUTTER = ((20, 0), (30, 0.6), (45, 1.0))
+RUSTLE_FLUTTER_HZ = 3.2
+# How far the top lobes dip, in pixels.
+RUSTLE_DIP = ((0, 0), (10, 0.6), (30, 1.0), (45, 1.4))
+# How strongly pushed leaves twist (half show pale undersides, half turn edge-on into shadow), and how far through
+# its swing a lobe must be pushed before they do: a strong wind twists leaves through most of every swing.
+RUSTLE_TWIST = ((0, 0), (4, 0.08), (12, 0.3), (20, 0.4), (30, 0.55), (45, 0.7))
+RUSTLE_TWIST_ONSET = ((12, 0.55), (30, 0.3), (45, 0.15))
+# Paces read at the steady wind, never the gusting one, so a gust cannot jump a phase: the lobes' swing (a multiple of
+# their base rhythm) and how fast twisting leaves change, in rad/s.
+RUSTLE_PACE = ((0, 0.7), (12, 1.0), (25, 1.5), (35, 2.1), (50, 2.6))
+RUSTLE_TWIST_RATE = ((0, 1.0), (12, 1.3), (30, 3.5), (45, 5.0))
+# Gusts swing the wind between RUSTLE_LULL and RUSTLE_GUST times its reading.
+RUSTLE_LULL, RUSTLE_GUST = 0.4, 1.1
+RUSTLE_DIPPING_LOBES = (1, 2, 9)
 TREE_TWIST_SHADOW = 0.45
-TREE_TWIST_RATE = 1.3
 TREE_TWIST_SOFTNESS = 0.3
 LEAF_UNDERSIDE = (214, 222, 190)
-# The still core shows this much darker in the gap a leaning lobe leaves.
+# The core's old place shows this much darker in the gap a leaning lobe leaves.
 TREE_CORE_SHADE = 0.72
 
 
-def canopy_rustle(elapsed: float, wind: float) -> tuple[float, tuple[float, ...]]:
-    """(strength 0-1, lean 0-1 of each foliage clump); the core, clump 0, never leans."""
-    strength = min(1, wind / TREE_RUSTLE_WIND) * (0.675 + 0.325 * math.sin(elapsed * 0.37) * math.sin(elapsed * 0.13 + 1))
-    return strength, (0.0, *(0.5 + 0.5 * math.sin(elapsed * (0.9 + 0.11 * clump) + clump * 2.1) for clump in range(1, len(TREE_CLUMPS))))
+@dataclass(frozen=True)
+class CanopyWind:
+    # The gusting wind, mph.
+    gusting: float
+    # Whole-pixel (dx, dy) of each foliage clump.
+    offsets: tuple[tuple[int, int], ...]
+    # How hard each clump is pushed, 0-1; it sets how many of its leaves twist.
+    push: tuple[float, ...]
+
+
+def canopy_wind(elapsed: float, wind: float) -> CanopyWind:
+    """How the wind moves each foliage clump. Lobes swing right and dip down, never up, so none climbs into the
+    temperature label's rows; the core (clump 0) only moves when the whole crown bends."""
+    swell = 0.8 * math.sin(elapsed * 0.37) * math.sin(elapsed * 0.13 + 1) + 0.2 * math.sin(elapsed * 1.7 + 0.5)
+    gusting = wind * (RUSTLE_LULL + (RUSTLE_GUST - RUSTLE_LULL) * (0.5 + 0.5 * swell))
+    pace = keyframes(RUSTLE_PACE, wind)
+    swing, hold, bend = keyframes(RUSTLE_SWING, gusting), keyframes(RUSTLE_HOLD, gusting), keyframes(RUSTLE_BEND, gusting)
+    flutter, dip = keyframes(RUSTLE_FLUTTER, gusting), keyframes(RUSTLE_DIP, gusting)
+    offsets, push = [(round(bend), 0)], [hold]
+    for clump in range(1, len(TREE_CLUMPS)):
+        rhythm = elapsed * (0.9 + 0.11 * clump) * pace + clump * 2.1
+        lean = hold + (1 - hold) * (0.5 + 0.5 * math.sin(rhythm))
+        flick = flutter * math.sin(elapsed * math.tau * RUSTLE_FLUTTER_HZ * (0.8 + 0.05 * clump) + clump * 1.3)
+        drop = round(dip * (0.5 + 0.5 * math.sin(rhythm * 1.7))) if clump in RUSTLE_DIPPING_LOBES else 0
+        offsets.append((max(0, round(swing * lean + bend + flick)), drop))
+        push.append(lean)
+    return CanopyWind(gusting, tuple(offsets), tuple(push))
 
 
 def lobe_offsets(elapsed: float, wind: float) -> tuple[tuple[int, int], ...]:
-    """Whole-pixel (dx, dy) of each foliage clump. Lobes only lean right and dip down, so none climbs into the
-    temperature label's rows."""
-    strength, leans = canopy_rustle(elapsed, wind)
-    offsets = []
-    for clump, lean in enumerate(leans):
-        dip = 0.5 + 0.5 * math.sin(elapsed * (0.9 + 0.11 * clump) * 1.7 + clump * 2.1)
-        offsets.append((round(strength * TREE_LOBE_LEAN * lean), round(strength * TREE_LOBE_DIP * dip) if clump in TREE_DIPPING_LOBES else 0))
-    return tuple(offsets)
+    return canopy_wind(elapsed, wind).offsets
 
 
 def rustle_canopy(leaves: Image.Image, elapsed: float, wind: float, light: float) -> Image.Image:
-    """The leaf layer with each lobe moved by `lobe_offsets` and its leaves twisting; `light` (daylight) scales the
+    """The leaf layer with each lobe moved by `canopy_wind` and its leaves twisting; `light` (daylight) scales the
     twist, so leaves never flash pale in the dark."""
-    strength, leans = canopy_rustle(elapsed, wind)
-    if strength <= 0:
+    if wind <= 0:
         return leaves
+    moving = canopy_wind(elapsed, wind)
     layer = np.asarray(leaves)
     present = layer[MAPLE_YS, MAPLE_XS, 3] > 0
     original = layer[MAPLE_YS, MAPLE_XS, :3].astype(float)
-    twist = np.clip((np.array(leans)[MAPLE_CLUMPS] - TREE_TWIST_ONSET) / (0.95 - TREE_TWIST_ONSET), 0, 1) * TREE_TWIST_AMOUNT * strength * light
-    turn = np.sin(MAPLE_TWIST_PHASE + elapsed * TREE_TWIST_RATE)
+    onset = keyframes(RUSTLE_TWIST_ONSET, moving.gusting)
+    twist = np.clip((np.array(moving.push)[MAPLE_CLUMPS] - onset) / (0.95 - onset), 0, 1) * keyframes(RUSTLE_TWIST, moving.gusting) * light
+    turn = np.sin(MAPLE_TWIST_PHASE + elapsed * keyframes(RUSTLE_TWIST_RATE, wind))
     colors = original * (1 - TREE_TWIST_SHADOW * twist * np.clip(-turn / TREE_TWIST_SOFTNESS, 0, 1))[:, None]
     colors += (np.array(LEAF_UNDERSIDE, float) - colors) * (twist * np.clip(turn / TREE_TWIST_SOFTNESS, 0, 1))[:, None]
     colors = np.rint(colors).astype(np.uint8)
@@ -2475,7 +2509,7 @@ def rustle_canopy(leaves: Image.Image, elapsed: float, wind: float, light: float
     out[MAPLE_YS[core], MAPLE_XS[core], :3] = np.rint(original[core] * TREE_CORE_SHADE).astype(np.uint8)
     out[MAPLE_YS[core], MAPLE_XS[core], 3] = 255
     # Back to front, one clump at a time, so front lobes cover the ones behind them.
-    for clump, (dx, dy) in enumerate(lobe_offsets(elapsed, wind)):
+    for clump, (dx, dy) in enumerate(moving.offsets):
         moved = present & (MAPLE_CLUMPS == clump) & (MAPLE_XS + dx < WIDTH) & (MAPLE_YS + dy < HEIGHT)
         out[MAPLE_YS[moved] + dy, MAPLE_XS[moved] + dx, :3] = colors[moved]
         out[MAPLE_YS[moved] + dy, MAPLE_XS[moved] + dx, 3] = 255
@@ -2607,11 +2641,11 @@ def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int)
     if not leaves_allowed(environment):
         return []
     wind = min(30, environment.weather.wind)
-    count = 2 + (wind >= LEAF_BREEZE_MPH) + (wind >= LEAF_GUST_MPH)
+    count = 2 + (wind >= LEAF_BREEZE_MPH) + (wind >= LEAF_GUST_MPH) + 2 * (wind >= LEAF_GALE_MPH)
     spring = environment.season == "spring"
     if not spring:
         # Fewer leaves are left to fall from a thinning tree.
-        count = min(count, 1 + math.ceil(foliage_state(environment).cover * 4))
+        count = min(count, 1 + math.ceil(foliage_state(environment).cover * (LEAF_GUST_SIZE - 1)))
     particles = []
     for leaf in leaf_gust(math.floor(elapsed / LEAF_SLOT_SECONDS), seed, spring)[:count]:
         age = elapsed - leaf.release
