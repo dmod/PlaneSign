@@ -16,7 +16,7 @@ import numpy as np
 import shared_config
 from emulated_matrix import graphics as bitmap_graphics
 from emulated_matrix.core import Canvas
-from PIL import Image, ImageDraw, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 if TYPE_CHECKING:
     from outside import OutsideEnvironment
@@ -647,6 +647,19 @@ def maple_leaves() -> tuple[np.ndarray, ...]:
 
 
 MAPLE_XS, MAPLE_YS, MAPLE_SHADES, MAPLE_DROP, MAPLE_TURN_AT, MAPLE_FALL = maple_leaves()
+MAPLE_CLUMPS = np.array([index for _, _, _, index in MAPLE_LEAF_PIXELS])
+# Leaves in the crown's core, which holds still and shows behind a lobe that leans away.
+MAPLE_CORE = ((MAPLE_XS - TREE_CROWN[0]) / TREE_CLUMPS[0][2]) ** 2 + ((MAPLE_YS - TREE_CROWN[1]) / TREE_CLUMPS[0][3]) ** 2 < 1
+MAPLE_TWIST_PHASE = np.array([grain(x, y, 83) / 96 * math.tau for x, y in zip(MAPLE_XS, MAPLE_YS)])
+MAPLE_CLUMP_AT = {(x, y): index for x, y, _, index in MAPLE_LEAF_PIXELS}
+
+
+@lru_cache(maxsize=64)
+def clump_at(x: int, y: int) -> int:
+    """The foliage clump at a canopy point, or the nearest leaf's, so things on the canopy move with their lobe."""
+    if (x, y) in MAPLE_CLUMP_AT:
+        return MAPLE_CLUMP_AT[x, y]
+    return int(MAPLE_CLUMPS[np.argmin((MAPLE_XS - x) ** 2 + (MAPLE_YS - y) ** 2)])
 
 
 @lru_cache(maxsize=96)
@@ -2408,9 +2421,65 @@ def smoothstep(edge0: float, edge1: float, value: float) -> float:
     return t * t * (3 - 2 * t)
 
 
-def tree_sway(elapsed: float, wind: float) -> int:
-    """How far the foliage leans in the wind, in whole pixels."""
-    return round(math.sin(elapsed * 0.6) * min(1, wind / 12))
+# The canopy rustles lobe by lobe: the core holds still while each outer lobe leans downwind on its own rhythm, up to
+# TREE_LOBE_LEAN px once the wind reaches TREE_RUSTLE_WIND mph, and the top lobes dip a row. Gusts swell and ease it.
+TREE_RUSTLE_WIND = 12
+TREE_LOBE_LEAN = 1.45
+TREE_LOBE_DIP = 0.6
+TREE_DIPPING_LOBES = (1, 2, 9)
+# Once a lobe leans past TREE_TWIST_ONSET of its swing its leaves twist: half show their pale undersides, the other
+# half turn edge-on into shadow, and which half drifts at TREE_TWIST_RATE rad/s.
+TREE_TWIST_ONSET = 0.55
+TREE_TWIST_AMOUNT = 0.3
+TREE_TWIST_SHADOW = 0.45
+TREE_TWIST_RATE = 1.3
+TREE_TWIST_SOFTNESS = 0.3
+LEAF_UNDERSIDE = (214, 222, 190)
+# The still core shows this much darker in the gap a leaning lobe leaves.
+TREE_CORE_SHADE = 0.72
+
+
+def canopy_rustle(elapsed: float, wind: float) -> tuple[float, tuple[float, ...]]:
+    """(strength 0-1, lean 0-1 of each foliage clump); the core, clump 0, never leans."""
+    strength = min(1, wind / TREE_RUSTLE_WIND) * (0.675 + 0.325 * math.sin(elapsed * 0.37) * math.sin(elapsed * 0.13 + 1))
+    return strength, (0.0, *(0.5 + 0.5 * math.sin(elapsed * (0.9 + 0.11 * clump) + clump * 2.1) for clump in range(1, len(TREE_CLUMPS))))
+
+
+def lobe_offsets(elapsed: float, wind: float) -> tuple[tuple[int, int], ...]:
+    """Whole-pixel (dx, dy) of each foliage clump. Lobes only lean right and dip down, so none climbs into the
+    temperature label's rows."""
+    strength, leans = canopy_rustle(elapsed, wind)
+    offsets = []
+    for clump, lean in enumerate(leans):
+        dip = 0.5 + 0.5 * math.sin(elapsed * (0.9 + 0.11 * clump) * 1.7 + clump * 2.1)
+        offsets.append((round(strength * TREE_LOBE_LEAN * lean), round(strength * TREE_LOBE_DIP * dip) if clump in TREE_DIPPING_LOBES else 0))
+    return tuple(offsets)
+
+
+def rustle_canopy(leaves: Image.Image, elapsed: float, wind: float, light: float) -> Image.Image:
+    """The leaf layer with each lobe moved by `lobe_offsets` and its leaves twisting; `light` (daylight) scales the
+    twist, so leaves never flash pale in the dark."""
+    strength, leans = canopy_rustle(elapsed, wind)
+    if strength <= 0:
+        return leaves
+    layer = np.asarray(leaves)
+    present = layer[MAPLE_YS, MAPLE_XS, 3] > 0
+    original = layer[MAPLE_YS, MAPLE_XS, :3].astype(float)
+    twist = np.clip((np.array(leans)[MAPLE_CLUMPS] - TREE_TWIST_ONSET) / (0.95 - TREE_TWIST_ONSET), 0, 1) * TREE_TWIST_AMOUNT * strength * light
+    turn = np.sin(MAPLE_TWIST_PHASE + elapsed * TREE_TWIST_RATE)
+    colors = original * (1 - TREE_TWIST_SHADOW * twist * np.clip(-turn / TREE_TWIST_SOFTNESS, 0, 1))[:, None]
+    colors += (np.array(LEAF_UNDERSIDE, float) - colors) * (twist * np.clip(turn / TREE_TWIST_SOFTNESS, 0, 1))[:, None]
+    colors = np.rint(colors).astype(np.uint8)
+    out = np.zeros_like(layer)
+    core = present & MAPLE_CORE
+    out[MAPLE_YS[core], MAPLE_XS[core], :3] = np.rint(original[core] * TREE_CORE_SHADE).astype(np.uint8)
+    out[MAPLE_YS[core], MAPLE_XS[core], 3] = 255
+    # Back to front, one clump at a time, so front lobes cover the ones behind them.
+    for clump, (dx, dy) in enumerate(lobe_offsets(elapsed, wind)):
+        moved = present & (MAPLE_CLUMPS == clump) & (MAPLE_XS + dx < WIDTH) & (MAPLE_YS + dy < HEIGHT)
+        out[MAPLE_YS[moved] + dy, MAPLE_XS[moved] + dx, :3] = colors[moved]
+        out[MAPLE_YS[moved] + dy, MAPLE_XS[moved] + dx, 3] = 255
+    return Image.fromarray(out, "RGBA")
 
 
 @dataclass(frozen=True)
@@ -2549,14 +2618,15 @@ def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int)
         if age < -LEAF_HANG_SECONDS:
             continue
         opacity = min(1.0, (age + LEAF_HANG_SECONDS) / 0.3)
+        lobe = clump_at(*leaf.origin)
         if age < 0:
-            # Hanging tip down, it trembles in the swaying foliage.
+            # Hanging tip down, it trembles on its leaning lobe.
             tremble = 1 if math.sin(age * math.tau * LEAF_TREMBLE_RATE + leaf.phase) > 0 else -1
-            particles.append((leaf.origin[0] + tree_sway(elapsed, wind), leaf.origin[1], 4 + tremble, leaf, opacity))
+            particles.append((leaf.origin[0] + lobe_offsets(elapsed, wind)[lobe][0], leaf.origin[1], 4 + tremble, leaf, opacity))
             continue
         # The breeze carries leaves left into the meadow; only strong gusts reach the yard.
         travel = min(leaf.origin[0] - 3, 3 + wind * 4)
-        start_x = leaf.origin[0] + tree_sway(leaf.release, wind)
+        start_x = leaf.origin[0] + lobe_offsets(leaf.release, wind)[lobe][0]
         airborne = leaf.flight_seconds + leaf_loop_seconds(leaf, travel)
         end = airborne + LEAF_REST_SECONDS + LEAF_FADE_SECONDS
         if age >= end:
@@ -7334,19 +7404,24 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image = draw_smoke(image, palette, environment, elapsed, seed)
     image = draw_cannon_smoke(image, palette, cannon, wind)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
-    sway = tree_sway(elapsed, wind)
     if twigs is not None:
         image.paste(twigs, (0, 0), twigs)
     if foliage is not None:
-        image.paste(foliage, (sway, 0), foliage)
+        # Vesuvius's ash settles on the leaves that are there and rustles with them.
         blanket = vesuvius_blanket(palette, eruption, True)
         if blanket is not None:
-            image.paste(blanket, (sway, 0), blanket)
+            blanket = blanket.copy()
+            blanket.putalpha(ImageChops.multiply(blanket.getchannel("A"), foliage.getchannel("A")))
+            foliage = Image.alpha_composite(foliage, blanket)
+        foliage = rustle_canopy(foliage, elapsed, wind, scene_daylight(environment))
+        image.paste(foliage, (0, 0), foliage)
     d = ImageDraw.Draw(image)
-    if environment.season == "spring":
+    if environment.season == "spring" and environment.sun_altitude is not None and environment.sun_altitude > -5:
+        offsets = lobe_offsets(elapsed, wind)
         for dx, dy in TREE_BLOSSOMS:
-            if environment.sun_altitude is not None and environment.sun_altitude > -5:
-                d.point((TREE_X + dx + sway, TREE_CANOPY_Y + dy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
+            x, y = TREE_X + dx, TREE_CANOPY_Y + dy
+            ox, oy = offsets[clump_at(x, y)]
+            d.point((x + ox, y + oy), fill=mix(palette.leaf_light, (239, 186, 182), 0.45))
     image.paste(wood, (0, 0), wood)
     # Leaves let go from the front of the canopy, so they fall in front of the tree.
     draw_leaves(image, palette, environment, elapsed, seed)
