@@ -1,5 +1,6 @@
 """Quiet Valley pixel art. Static geometry is cached; only intended motion changes."""
 
+import calendar
 import math
 import os
 import random
@@ -342,6 +343,33 @@ TREE_CLUMPS = (
 # The temperature label owns rows 1-6; leaves never start above this row.
 TREE_FOLIAGE_TOP = 7
 TREE_BLOSSOMS = ((-8, -3), (-2, -5), (5, 1), (4, 2), (7, -3))
+# The maple's year as (day of the year, value) keyframes, days counted from January 1 = 0 in a non-leap northern
+# year; the south runs six months behind. Cover is the share of leaves on the tree: it leafs out from mid-March,
+# holds until October 10, is mostly bare by mid-November and fully bare by December 1.
+MAPLE_COVER = ((73, 0), (94, 0.15), (114, 0.6), (129, 1), (282, 1), (292, 0.9), (304, 0.62), (315, 0.28), (323, 0.12), (334, 0))
+# How far the leaves have turned: from September 1, outer and upper leaves first, peaking in late October.
+MAPLE_TURN = ((243, 0), (258, 0.15), (273, 0.5), (290, 0.95), (300, 1))
+# The last leaves fade toward russet through November.
+MAPLE_WITHER = ((304, 0), (334, 0.75))
+# Spring's fresh green and pink tint eases in through March and out through May, so summer follows without a jump.
+MAPLE_SPRING = ((59, 0), (80, 1), (129, 1), (150, 0))
+# Each leaf starts turning at its own point along MAPLE_TURN, spread over the first MAPLE_TURN_SPREAD of it, and
+# takes MAPLE_TURN_SPAN of it to reach full color.
+MAPLE_TURN_SPREAD, MAPLE_TURN_SPAN = 0.7, 0.3
+# Fall colors in daylight, before the frame grade, which saturates them a lot (these come out gold, orange, red and
+# crimson; brighter ones all clip to the same flat red): (leaf_dark, leaf, leaf_light) for each stop, from the yellow
+# interior out to the crimson crown. Each leaf takes a color between two neighboring stops.
+MAPLE_AUTUMN = (
+    ((150, 130, 60), (206, 184, 96), (226, 210, 130)),
+    ((160, 104, 58), (212, 146, 84), (230, 176, 110)),
+    ((140, 72, 56), (186, 104, 80), (214, 136, 108)),
+    ((110, 56, 58), (160, 78, 76), (196, 112, 104)),
+)
+# Above 1, more of the canopy takes the yellow and orange stops than the red ones.
+MAPLE_AUTUMN_BIAS = 1.25
+MAPLE_WITHERED = ((84, 60, 40), (128, 88, 58), (160, 120, 84))
+# Twig pixels appear one by one as the cover drops from the first value to the second.
+MAPLE_TWIG_COVER = (0.95, 0.55)
 
 
 def blend_palette(a: Palette, b: Palette, fraction: float) -> Palette:
@@ -376,6 +404,48 @@ def moonlight(environment: "OutsideEnvironment") -> float:
     return fraction * min(1, environment.moon_altitude / 25) * (1 - cloud_cover(environment) * 0.8)
 
 
+def keyframes(points: tuple[tuple[float, float], ...], day: float) -> float:
+    """Linear between (day, value) points, holding the first and last values outside them."""
+    if day <= points[0][0]:
+        return points[0][1]
+    for (d0, v0), (d1, v1) in pairwise(points):
+        if day <= d1:
+            return v0 + (v1 - v0) * (day - d0) / (d1 - d0)
+    return points[-1][1]
+
+
+@dataclass(frozen=True)
+class Foliage:
+    cover: float
+    turn: float
+    wither: float
+    spring: float
+
+
+# Stands in for a missing date: the middle of each season.
+SEASON_MIDDLE_DAY = {"winter": 15, "spring": 105, "summer": 196, "autumn": 288}
+
+
+def foliage_state(environment: "OutsideEnvironment") -> Foliage:
+    """The maple on the displayed date, read along the MAPLE_* keyframes; in steps of a 64th, so its layers stay cached."""
+    shown = environment.local_date
+    if shown is None:
+        day = SEASON_MIDDLE_DAY[environment.season]
+    else:
+        month = shown.month if environment.hemisphere == "north" else (shown.month + 5) % 12 + 1
+        day = date(2001, month, min(shown.day, calendar.monthrange(2001, month)[1])).timetuple().tm_yday - 1
+
+    def step(value: float) -> float:
+        return round(value * 64) / 64
+
+    return Foliage(step(keyframes(MAPLE_COVER, day)), step(keyframes(MAPLE_TURN, day)), step(keyframes(MAPLE_WITHER, day)), step(keyframes(MAPLE_SPRING, day)))
+
+
+def scene_daylight(environment: "OutsideEnvironment") -> float:
+    altitude = 0 if environment.sun_altitude is None else environment.sun_altitude
+    return max(0.12, min(1, (altitude + 10) / 20))
+
+
 def scene_palette(environment: "OutsideEnvironment") -> Palette:
     altitude = environment.sun_altitude
     altitude = 0 if altitude is None else altitude
@@ -383,12 +453,15 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
         palette = blend_palette(NIGHT, DUSK, 1 - altitude / NIGHT_ALTITUDE)
     else:
         palette = blend_palette(DUSK, DAY, altitude / 14)
-    daylight = max(0.12, min(1, (altitude + 10) / 20))
-    if environment.season == "autumn":
-        palette = replace(palette, leaf=mix(palette.leaf, (146, 84, 47), daylight * 0.45), leaf_light=mix(palette.leaf_light, (229, 153, 63), daylight * 0.55), grass=mix(palette.grass, (167, 142, 76), daylight * 0.2))
-    elif environment.season == "spring":
-        palette = replace(palette, leaf=mix(palette.leaf, (112, 145, 82), daylight * 0.5), leaf_light=mix(palette.leaf_light, (210, 176, 169), daylight * 0.65), field=mix(palette.field, (108, 141, 84), daylight * 0.3))
-    elif environment.season == "winter":
+    daylight = scene_daylight(environment)
+    foliage = foliage_state(environment)
+    # The maple takes its own fall colors (maple_layers); the meadow browns along with it.
+    if foliage.turn > 0:
+        palette = replace(palette, grass=mix(palette.grass, (167, 142, 76), daylight * 0.2 * foliage.turn))
+    if foliage.spring > 0:
+        tint = daylight * foliage.spring
+        palette = replace(palette, leaf=mix(palette.leaf, (112, 145, 82), tint * 0.5), leaf_light=mix(palette.leaf_light, (210, 176, 169), tint * 0.65), field=mix(palette.field, (108, 141, 84), tint * 0.3))
+    if environment.season == "winter":
         palette = replace(palette, field=mix(palette.field, (132, 135, 119), daylight * 0.65), foreground=mix(palette.foreground, (77, 92, 92), daylight * 0.55), grass=mix(palette.grass, (153, 150, 121), daylight * 0.5))
     rain, snow = precipitation(environment)
     temperature = environment.weather.temperature
@@ -420,7 +493,7 @@ def grade_frame(image: Image.Image) -> Image.Image:
     return Image.fromarray(from_oklab(lab), "RGB")
 
 
-def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
+def geometry() -> tuple[Image.Image, Image.Image, Image.Image, tuple[tuple[int, int, str, int], ...]]:
     land = Image.new("P", (WIDTH, HEIGHT), 0)
     d = ImageDraw.Draw(land)
 
@@ -514,6 +587,7 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
                 if nx * nx + ny * ny < 1 + (grain(x, y, 12 + index) - 48) / 210:
                     owner[x, y] = (index, nx, ny)
     pixels = leafy.load()
+    leaves = []
     for (x, y), (index, nx, ny) in owner.items():
         n = grain(x, y, 31)
         shade = -(0.55 * nx + 0.85 * ny) + (n - 48) / 160
@@ -526,10 +600,11 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image]:
         if n < 4 and shade < 0.2:
             continue
         pixels[x, y] = INDEX[material]
-    return land, leafy, bare
+        leaves.append((x, y, material, index))
+    return land, leafy, bare, tuple(leaves)
 
 
-LAND, LEAFY_TREE, BARE_TREE = geometry()
+LAND, LEAFY_TREE, BARE_TREE, MAPLE_LEAF_PIXELS = geometry()
 CHIMNEY_MASK = Image.new("L", (WIDTH, HEIGHT), 0)
 ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY, fill=255)
 ImageDraw.Draw(CHIMNEY_MASK).rectangle(CHIMNEY_CAP, fill=255)
@@ -538,6 +613,70 @@ WINDOW_GLASS = {(x, y) for x0, y0, x1, y1 in HUT_WINDOWS for x in range(x0, x1 +
 WINDOW_HALO_PIXELS = tuple(sorted({(x + dx, y + dy) for x, y in WINDOW_GLASS for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)) if y + dy > HUT_ROOF[0][1]} - WINDOW_GLASS))
 TREE_FOLIAGE = LEAFY_TREE.point([value if value in (INDEX["leaf"], INDEX["leaf_light"], INDEX["leaf_dark"]) else 0 for value in range(256)])
 TREE_WOOD = LEAFY_TREE.point([value if value == INDEX["trunk"] else 0 for value in range(256)])
+# The bare tree's twigs and the cover below which each one shows.
+MAPLE_TWIG_YS, MAPLE_TWIG_XS = np.nonzero((np.asarray(BARE_TREE) != 0) & (np.asarray(TREE_WOOD) == 0))
+MAPLE_TWIG_AT = MAPLE_TWIG_COVER[1] + (MAPLE_TWIG_COVER[0] - MAPLE_TWIG_COVER[1]) * np.array([grain(x, y, 71) / 96 for x, y in zip(MAPLE_TWIG_XS, MAPLE_TWIG_YS)])
+
+
+def maple_leaves() -> tuple[np.ndarray, ...]:
+    """Per leaf pixel: column, row, shade (0 dark, 1 mid, 2 light), drop order, turn start and daylight fall color.
+    Outer and upper leaves turn first and fall first, in small clusters; the crown turns red, the interior yellow."""
+    xs = np.array([x for x, _, _, _ in MAPLE_LEAF_PIXELS])
+    ys = np.array([y for _, y, _, _ in MAPLE_LEAF_PIXELS])
+    shades = np.array([("leaf_dark", "leaf", "leaf_light").index(material) for _, _, material, _ in MAPLE_LEAF_PIXELS])
+    clumps = np.array([grain(index, index * 3, 47) / 96 for _, _, _, index in MAPLE_LEAF_PIXELS])
+    cx, cy = TREE_CROWN
+    outer = np.clip(np.hypot((xs - cx) / 14, (ys - cy) / 8.5), 0, 1)
+    upper = np.clip((cy - ys) / 8, -1, 1)
+
+    def noise(seed: int, block: int) -> np.ndarray:
+        return np.array([grain(x // block, y // block, seed) / 96 for x, y in zip(xs, ys)])
+
+    def order(score: np.ndarray) -> np.ndarray:
+        """Each leaf's place, 0 to 1, when sorted by score."""
+        return np.argsort(np.argsort(score, kind="stable"), kind="stable") / len(score)
+
+    drop = order(0.45 * noise(53, 2) + 0.2 * noise(59, 1) + 0.35 * outer)
+    turn_at = (1 - order(0.45 * outer + 0.25 * upper + 0.3 * noise(61, 2))) * MAPLE_TURN_SPREAD
+    stops = np.array(MAPLE_AUTUMN, float)
+    position = order(0.45 * outer + 0.25 * clumps + 0.3 * noise(67, 3)) ** MAPLE_AUTUMN_BIAS * (len(stops) - 1)
+    low = np.minimum(position.astype(int), len(stops) - 2)
+    fraction = (position - low)[:, None]
+    fall = stops[low, shades] * (1 - fraction) + stops[low + 1, shades] * fraction
+    return xs, ys, shades, drop, turn_at, fall
+
+
+MAPLE_XS, MAPLE_YS, MAPLE_SHADES, MAPLE_DROP, MAPLE_TURN_AT, MAPLE_FALL = maple_leaves()
+
+
+@lru_cache(maxsize=96)
+def maple_layers(palette: Palette, foliage: Foliage, daylight: float) -> tuple[Image.Image | None, Image.Image | None]:
+    """(twigs, leaves) as RGBA layers. Twigs appear behind the leaves as the canopy thins. A turned leaf is as bright
+    as the green it replaces and fades back into it as daylight goes, so the colors go out at night."""
+    twigs = None
+    shown = MAPLE_TWIG_AT > foliage.cover
+    if shown.any():
+        rgba = np.zeros((HEIGHT, WIDTH, 4), np.uint8)
+        rgba[MAPLE_TWIG_YS[shown], MAPLE_TWIG_XS[shown]] = (*palette.trunk, 255)
+        twigs = Image.fromarray(rgba, "RGBA")
+    present = MAPLE_DROP < foliage.cover
+    if not present.any():
+        return twigs, None
+    shades = np.array([palette.leaf_dark, palette.leaf, palette.leaf_light], float)
+    day = graded_palette(DAY)
+    reference = np.array([day.leaf_dark, day.leaf, day.leaf_light], float)
+    green = shades[MAPLE_SHADES]
+    fall = MAPLE_FALL + (np.array(MAPLE_WITHERED, float)[MAPLE_SHADES] - MAPLE_FALL) * foliage.wither
+    light = (shades.sum(axis=1) / reference.sum(axis=1))[MAPLE_SHADES][:, None]
+    lit = green + (np.minimum(fall * light, 255) - green) * daylight
+    turned = np.clip((foliage.turn - MAPLE_TURN_AT) / MAPLE_TURN_SPAN, 0, 1)[:, None]
+    colors = np.rint(green + (lit - green) * turned).astype(np.uint8)
+    rgba = np.zeros((HEIGHT, WIDTH, 4), np.uint8)
+    rgba[MAPLE_YS[present], MAPLE_XS[present], :3] = colors[present]
+    rgba[MAPLE_YS[present], MAPLE_XS[present], 3] = 255
+    return twigs, Image.fromarray(rgba, "RGBA")
+
+
 # The Big Dipper (Ursa Major) right of the mountain, projected from the real stars at 0.7 px per degree in its
 # autumn-evening pose (bowl upright, handle to the left), turned 20 degrees to level the handle:
 # (x, y, peak brightness from magnitude, color). Dubhe and Merak, the pointers, form the bowl's right edge.
@@ -748,7 +887,7 @@ def window_light(environment: "OutsideEnvironment", elapsed: float, seed: int) -
 
 
 @lru_cache(maxsize=96)
-def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: MountainFaces, lit: float = 0.0):
+def landscape(palette: Palette, snow: bool, snowcap: bool, faces: MountainFaces, lit: float = 0.0):
     table = [0, 0, 0]
     for name in MATERIALS:
         table.extend(faces.west if name == "far" else getattr(palette, name))
@@ -768,8 +907,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: Mo
         return image
 
     land = colorize(LAND)
-    foliage = None if bare else colorize(TREE_FOLIAGE)
-    wood = colorize(BARE_TREE if bare else TREE_WOOD)
+    wood = colorize(TREE_WOOD)
     if lit > 0:
         pixels = land.load()
         for x, y in WINDOW_HALO_PIXELS:
@@ -794,7 +932,7 @@ def landscape(palette: Palette, bare: bool, snow: bool, snowcap: bool, faces: Mo
                 material = LAND.getpixel((x, y))
                 if material in (INDEX["far"], INDEX["peak"]) and y < summit + 2 + grain(x, y, 4) % 2:
                     d.point((x, y), fill=faces.east_snow if material == INDEX["peak"] else faces.west_snow)
-    return land, foliage, wood
+    return land, wood
 
 
 SET_ALTITUDE = -0.833
@@ -2226,6 +2364,8 @@ LEAF_SETTLE_FROM = 0.72
 LEAF_LOOP_CHANCE = 0.55
 # On landing the tip bounces up twice before the leaf lies flat: (start, end) seconds after touchdown.
 LEAF_PLOP = ((0, 0.14), (0.3, 0.4))
+# Leaves start to fall once the maple has turned this far along MAPLE_TURN (late September).
+LEAF_DROP_TURN = 0.3
 # Leaf centers on the rim of the canopy, so a trembling leaf shows before it falls.
 TREE_LEAF_SPOTS = ((103, 17), (107, 20), (104, 12), (110, 10), (113, 20), (116, 19), (119, 15))
 # 3x3 sprites around the leaf's center with the tip up and up-right; quarter turns give the other six headings.
@@ -2380,10 +2520,15 @@ def leaf_heading(dx: float, dy: float) -> int:
 
 
 def leaves_allowed(environment: "OutsideEnvironment") -> bool:
-    """Dry autumn leaves or spring blossom petals fall in a known wind; the tree holds its leaves on Halloween."""
+    """Dry leaves fall while the maple sheds its turned leaves and blossom petals in spring, in a known wind; the tree
+    holds its leaves on Halloween."""
     weather = environment.weather
-    if environment.season not in ("autumn", "spring") or weather.code is None or weather.wind is None or HALLOWEEN in holiday_features(environment):
+    if weather.code is None or weather.wind is None or HALLOWEEN in holiday_features(environment):
         return False
+    if environment.season != "spring":
+        foliage = foliage_state(environment)
+        if foliage.turn < LEAF_DROP_TURN or foliage.cover == 0:
+            return False
     rain, snow = precipitation(environment)
     return rain == 0 and snow == 0
 
@@ -2394,8 +2539,12 @@ def leaf_particles(environment: "OutsideEnvironment", elapsed: float, seed: int)
         return []
     wind = min(30, environment.weather.wind)
     count = 2 + (wind >= LEAF_BREEZE_MPH) + (wind >= LEAF_GUST_MPH)
+    spring = environment.season == "spring"
+    if not spring:
+        # Fewer leaves are left to fall from a thinning tree.
+        count = min(count, 1 + math.ceil(foliage_state(environment).cover * 4))
     particles = []
-    for leaf in leaf_gust(math.floor(elapsed / LEAF_SLOT_SECONDS), seed, environment.season == "spring")[:count]:
+    for leaf in leaf_gust(math.floor(elapsed / LEAF_SLOT_SECONDS), seed, spring)[:count]:
         age = elapsed - leaf.release
         if age < -LEAF_HANG_SECONDS:
             continue
@@ -7048,7 +7197,7 @@ SUMMONS = {
     "ash_burst": Summon("Vesuvius ash burst", "Vesuvius puffs out ash bursts on the morning of August 24, before the rumble ahead of the noon eruption.", ash_burst_allowed, lambda e, t, s: vesuvius_burst(vesuvius_state(e), t, s) is not None, 1.0, 1.0),
     "pyroclastic_flow": Summon("Pyroclastic flow", "Vesuvius's column collapses into pyroclastic flows on the evening of August 24, from about 5 to 10:30 PM.", pyroclastic_flow_allowed, lambda e, t, s: bool(vesuvius_flows(vesuvius_state(e), t, s)), 0.5, 0.5),
     "volcanic_lightning": Summon("Volcanic lightning", "Lightning flickers in Vesuvius's ash column on August 24, from just after noon until it dies down late in the evening.", volcanic_lightning_allowed, lambda e, t, s: vesuvius_bolt(vesuvius_state(e), t, s) is not None, 0.3, 0.05),
-    "leaves": Summon("Falling leaves", "Leaves fall in autumn and blossom petals in spring, in dry weather with a known wind, but not on Halloween.", leaves_allowed, lambda e, t, s: bool(leaf_particles(e, t, s)), 0.5, 0.5),
+    "leaves": Summon("Falling leaves", "Leaves fall from late September until the maple is bare and blossom petals in spring, in dry weather with a known wind, but not on Halloween.", leaves_allowed, lambda e, t, s: bool(leaf_particles(e, t, s)), 0.5, 0.5),
 }
 SUMMON_HORIZON_SECONDS = 3600
 
@@ -7106,7 +7255,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
-    land, foliage, wood = landscape(palette, winter, snow > 0, winter or snow > 0, mountain_faces(palette, environment), window_light(environment, elapsed, seed))
+    land, wood = landscape(palette, snow > 0, winter or snow > 0, mountain_faces(palette, environment), window_light(environment, elapsed, seed))
+    twigs, foliage = maple_layers(palette, foliage_state(environment), round(scene_daylight(environment) * 16) / 16)
     image.paste(land, (0, 0), land)
     # Vesuvius's ash settles on the land, under the flows and fires.
     blanket = vesuvius_blanket(palette, eruption, False)
@@ -7185,6 +7335,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image = draw_cannon_smoke(image, palette, cannon, wind)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
     sway = tree_sway(elapsed, wind)
+    if twigs is not None:
+        image.paste(twigs, (0, 0), twigs)
     if foliage is not None:
         image.paste(foliage, (sway, 0), foliage)
         blanket = vesuvius_blanket(palette, eruption, True)
