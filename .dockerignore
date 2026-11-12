@@ -11,3 +11,8 @@ sketches
 .vscode
 **/__pycache__
 **/*.pyc
+# Holds API keys; the container gets the host's copy through compose's bind mount.
+sign.conf
+# Mounted from the host, which also keeps the files the app downloads into them (see compose.yaml).
+datafiles
+icons

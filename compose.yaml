@@ -8,6 +8,7 @@ services:
     network_mode: host
     volumes:
       - ./sign.conf:/planesign/sign.conf
+      # The image has no datafiles/ or icons/; the installer seeds both from the repository.
       - ./datafiles:/planesign/datafiles
       - ./sketches:/planesign/sketches
       - ./icons:/planesign/icons

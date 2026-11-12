@@ -13,6 +13,7 @@ RUN apt update && apt -y install --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/
 ENV UV_PYTHON_DOWNLOADS=never
+ENV UV_COMPILE_BYTECODE=1
 
 WORKDIR /planesign
 
@@ -34,29 +35,30 @@ RUN apt update && apt -y install --no-install-recommends \
   && apt clean \
   && rm -rf /var/lib/apt/lists/* /usr/lib/python3.*/test
 
+# Nginx setup comes before the app files so it stays cached across updates. The cache can keep the
+# certificate for a long time, so it gets a long validity; a new key would also void browser exceptions.
+ARG PLANESIGN_ROOT=/planesign
+RUN unlink /etc/nginx/sites-enabled/default \
+  && openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
+COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
+RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_nginx_planesign.conf
+
 WORKDIR /planesign
 
 EXPOSE 80/tcp 443/tcp
 
-# Least to most frequently changed, so a source-only update downloads just the last layer.
-# Any layer after a changed one gets a new digest, even with identical files.
-COPY --from=builder --exclude=**/tests /planesign/.venv /planesign/.venv
-COPY datafiles datafiles
-COPY fonts/4x6.* fonts/5x7.* fonts/6x13.* fonts/9x18B.* fonts/helvR12.* fonts/
-COPY icons icons
+# Any layer after a changed one gets a new digest, even with identical files, so the Pi downloads it
+# again. Large layers that change rarely go first. datafiles/ and icons/ are not in the image: compose
+# mounts the host's copies, which the installer seeds from the repository.
 COPY sounds sounds
-COPY --exclude=datafiles --exclude=fonts --exclude=icons --exclude=sounds . .
-
-# Nginx Setup
-RUN unlink /etc/nginx/sites-enabled/default
-RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/planesign-selfsigned.key -out /etc/ssl/certs/planesign-selfsigned.crt -subj "/C=US"
-
-# Define build argument with default value
-ARG PLANESIGN_ROOT=/planesign
-
-# Copy and substitute nginx config using the build arg directly
-COPY docker_nginx_planesign.conf /etc/nginx/conf.d/
-RUN sed -i "s|\${PLANESIGN_ROOT}|${PLANESIGN_ROOT}|g" /etc/nginx/conf.d/docker_nginx_planesign.conf
+COPY --from=builder --exclude=**/tests /planesign/.venv /planesign/.venv
+COPY fonts/4x6.* fonts/5x7.* fonts/6x13.* fonts/9x18B.* fonts/helvR12.* fonts/
+# The app code changes most, but its bytecode is the largest part of a source update, so files that
+# often change without it (web/, docs, scripts) come after it and do not recompile it.
+COPY planesign planesign
+# uv only compiles the venv (the project is not installed), so compile the app's own sources too.
+RUN .venv/bin/python -m compileall -q planesign
+COPY --exclude=fonts --exclude=sounds --exclude=planesign . .
 
 ARG BUILD_VERSION=argnotset
 RUN echo ${BUILD_VERSION} > version.txt
