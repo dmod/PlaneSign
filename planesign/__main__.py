@@ -108,6 +108,7 @@ import planes
 import plants
 import pong
 import psclock
+import resume_state
 import santa
 import satellite
 import shared_config
@@ -359,15 +360,24 @@ outside_data_process = Process(target=run_worker, name="OutsideData", args=(outs
 
 utilities.read_config()
 
+# sign.conf's startup values first; the state saved before a restart then overrides them.
+shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
 if not shared_config.emulated_display and shared_config.audio_device is not None and shared_config.audio_mixer_control is not None:
     utilities.set_usb_audio_volume(int(shared_config.CONF["DEFAULT_VOLUME"]))
+
+resumed = {} if shared_config.emulated_display else resume_state.take() or {}
+if cli_args.mode:
+    resumed.pop("mode", None)
+if resumed:
+    logging.info(f"Resuming {resumed} from before the restart")
+    resume_state.apply(resumed)
 
 # After read_config, which sets the local timezone that --fake-time values without an offset are read in
 if cli_args.fake_time or cli_args.time_speed != 1:
     psclock.set_clock(psclock.parse_time(cli_args.fake_time) if cli_args.fake_time else psclock.time(), cli_args.time_speed)
     logging.info(f"Clock set to {psclock.describe()}")
 
-startup_mode = cli_args.mode
+startup_mode = cli_args.mode or resumed.get("mode")
 if not startup_mode:
     startup_mode = shared_config.CONF["DEFAULT_MODE"].strip().upper()
     if startup_mode not in startup_mode_names():
@@ -382,7 +392,8 @@ try:
         process.start()
     utilities.preload_geojsons()
     ps = planesign.PlaneSign(defined_mode_handlers)
-    defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
+    if "mode" not in resumed:
+        defined_mode_handlers[DisplayMode.WELCOME](ps, duration=5)
     shared_config.shared_mode.value = DisplayMode[startup_mode].value
     ps.sign_loop()
 except Exception:
@@ -391,6 +402,8 @@ except Exception:
     exit_code = 1
 finally:
     logging.info("Shutting down sign and child processes...")
+    if exit_code == 0 and ps is not None and not shared_config.emulated_display:
+        resume_state.save(ps)
     shared_config.shared_mode.value = DisplayMode.SIGN_OFF.value
     shared_config.shared_shutdown_event.set()
     shared_config.shared_forced_sign_update.set()

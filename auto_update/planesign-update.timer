@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the PlaneSign update every night
+
+[Timer]
+# The Pi's local time, clear of the 02:00-03:00 hour that DST changes skip or repeat.
+# No Persistent=: a night the sign was off is skipped, not run at the next boot.
+OnCalendar=*-*-* 03:30:00
+
+[Install]
+WantedBy=timers.target

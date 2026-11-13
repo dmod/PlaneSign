@@ -19,13 +19,16 @@ HIDE_STARLINK=false
 #checkbox - Disable reading of third-party internet API's (planes, weather, etc.)
 OFFLINE_MODE=false
 
-#select - Startup mode shown after welcome screen (restart required)
+#checkbox - Automatically update PlaneSign overnight
+AUTO_UPDATE=true
+
+#select - Mode shown after the welcome screen at power-on; restarts and updates keep the current mode
 DEFAULT_MODE=PLANES_ALERT
 
-#range min 0 max 100 - Startup brightness (%)
+#range min 0 max 100 - Brightness at power-on (%); restarts and updates keep the current brightness
 DEFAULT_BRIGHTNESS=80
 
-#range min 0 max 100 - Startup audio volume (%)
+#range min 0 max 100 - Audio volume at power-on (%); restarts and updates keep the current volume
 DEFAULT_VOLUME=35
 
 #number min 0 max 100000 - Closest plane altitude limit (feet)

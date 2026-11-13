@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=flagquiz-study-4">
+  <link rel="stylesheet" href="style.css?v=auto-update-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=flagquiz-study-5"></script>
+  <script src="index.js?v=auto-update-2"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -400,6 +400,15 @@
         <button id="submit_config_button" type="submit" class="configline">Update Config</button>
       </span>
     </form>
+
+    <section class="device_info_box update_box" aria-labelledby="update_header">
+      <h2 id="update_header" class="device_info_header">Software Updates</h2>
+      <p id="update_result">No update has run yet.</p>
+      <details ontoggle="this.lastElementChild.scrollTop = this.lastElementChild.scrollHeight">
+        <summary>Update log</summary>
+        <pre id="update_log" class="update_log"></pre>
+      </details>
+    </section>
   </div>
 
   <div id="free_sketch_modal" class="modal_backdrop" hidden aria-hidden="true">

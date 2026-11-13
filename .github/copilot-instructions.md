@@ -22,6 +22,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`planesign/api.py`** — Flask API on port 5055. nginx proxies `/api/` to it.
 - **`planesign/utilities.py`** — Shared drawing and math helpers. Center text with `get_centered_text_x_offset_value(font_width, text)` (the center is x=64).
 - **`planesign/psclock.py`** — The sign's wall clock: real time unless `--fake-time`, `--time-speed` or `/debug/clock` shifts it for testing.
+- **`planesign/resume_state.py`** — Web UI settings that survive a restart (nightly updates restart the sign unattended). New user-set state that a resumed mode needs belongs in its `FIELDS`. Leave out games and test overrides.
 - **`planesign/network.py`** — Offline mode and guarded third-party requests; see "Network And Offline Mode".
 - **`planesign/datasources.py`** — Registry (`SOURCES`) of reference files in `datafiles/` that are downloaded on first use. Add new on-demand files there instead of writing per-mode download code. Do not use Skyfield's `Loader` to download: its `urlopen` has no timeout.
 - **`planesign/emulated_matrix/`** — The `--web` emulator: an RGBMatrix-compatible PIL canvas plus the WebSocket and frame-capture server.

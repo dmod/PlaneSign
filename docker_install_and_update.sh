@@ -30,6 +30,8 @@ PLANESIGN_BRANCH="${PLANESIGN_BRANCH:-main}"
 
 COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
 CONTAINER_NAME=PlaneSignRuntime
+# The latest run's output, shown on the web UI's settings page.
+UPDATE_LOG="$INSTALL_DIR/logs/update.log"
 
 REBOOT_REQUIRED=false
 STOPPED_APT_TIMERS=()
@@ -134,9 +136,24 @@ install_from_clone() {
       "$destination"
 }
 
-remove_existing_planesign_container() {
-  if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-    echo "Removing existing $CONTAINER_NAME container before Compose recreates it..."
+# The settings page shows this last line of logs/update.log as the result.
+log_result() {
+  local code=$?
+  if [ "$code" -eq 0 ]; then
+    echo "PlaneSign update succeeded at $(date '+%F %T')"
+  else
+    echo "PlaneSign update FAILED (exit code $code) at $(date '+%F %T')"
+  fi
+}
+
+# Compose refuses a container name it does not manage (one from an older install's `docker run`),
+# so remove only that. A container Compose manages is left to `compose up`, which recreates it only
+# when the image or compose.yaml changed: the nightly update must not restart an up-to-date sign.
+remove_unmanaged_planesign_container() {
+  local config_files
+  if config_files="$(docker container inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$CONTAINER_NAME" 2>/dev/null)" \
+      && [ "$config_files" != "$COMPOSE_FILE" ]; then
+    echo "Removing $CONTAINER_NAME, which Compose does not manage, before Compose creates it..."
     docker rm --force "$CONTAINER_NAME"
   fi
 }
@@ -147,7 +164,12 @@ main() {
     exit 1
   fi
 
-  echo "PlaneSign install starting..."
+  # tee -p keeps writing the log if the caller stops reading (the Bluetooth service restarting).
+  install -d -o "$RUN_USER" -g "$RUN_GROUP" -m 755 "$INSTALL_DIR" "$INSTALL_DIR/logs"
+  exec > >(tee -p "$UPDATE_LOG") 2>&1
+  trap log_result EXIT
+
+  echo "PlaneSign install starting at $(date '+%F %T')..."
 
   stop_background_apt_jobs
   # Remove the old source before even apt-get --fix-broken reads the conflict.
@@ -269,6 +291,11 @@ main() {
       fi
   done
 
+  install -m 644 "$TEMP_CLONE/auto_update/planesign-update.service" "$TEMP_CLONE/auto_update/planesign-update.timer" /etc/systemd/system/
+  systemctl daemon-reload
+  # Always enabled: AUTO_UPDATE in sign.conf decides each night whether the run does anything.
+  systemctl enable --now planesign-update.timer
+
   rm -rf "$TEMP_CLONE"
 
   systemctl enable bluetooth.service >/dev/null 2>&1 || true
@@ -321,8 +348,8 @@ EOF
 
   docker compose -f "$COMPOSE_FILE" config >/dev/null
   docker compose -f "$COMPOSE_FILE" pull
-  remove_existing_planesign_container
-  docker compose -f "$COMPOSE_FILE" up --detach --force-recreate --remove-orphans
+  remove_unmanaged_planesign_container
+  docker compose -f "$COMPOSE_FILE" up --detach --remove-orphans
 
   echo "Removing unused Docker images..."
   docker image prune --force || echo "Warning: unable to prune unused Docker images"
@@ -351,7 +378,7 @@ EOF
     # transient unit once the installer has exited and reported its result.
     systemd-run --on-active=10 systemctl restart planesign-ble.service \
       || echo "Warning: unable to schedule a restart of planesign-ble.service"
-    echo "Update completed. PlaneSign restarted; no reboot required."
+    echo "Update completed; no reboot required."
   fi
 }
 

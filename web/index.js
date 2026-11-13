@@ -3010,6 +3010,22 @@ function set_countdown() {
 function show_options() {
     read_conf()
     document.getElementById("optionsSidebar").style.display = "block";
+    show_update_log();
+}
+
+// The installer's last line says whether the run succeeded; without it, it is still running or was cut off.
+function show_update_log() {
+    call_endpoint("/update_log", function (log) {
+        var lines = log.trim().split("\n");
+        var last = lines[lines.length - 1];
+        var outcome = /^PlaneSign update (succeeded|FAILED)/.exec(last);
+        var result = document.getElementById("update_result");
+        result.textContent = outcome ? last : "Update in progress (or interrupted)";
+        result.className = outcome && outcome[1] === "FAILED" ? "update_failed" : "";
+        var pre = document.getElementById("update_log");
+        pre.textContent = log;
+        pre.scrollTop = pre.scrollHeight;
+    });
 }
 
 function hide_options() {

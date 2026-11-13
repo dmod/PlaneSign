@@ -1117,6 +1117,26 @@ input[type=number] {
   display: block;
 }
 
+.update_box {
+  max-width: 700px;
+  margin: 30px auto;
+  font-size: 16px;
+}
+
+.update_failed {
+  color: #f87171;
+}
+
+.update_log {
+  max-height: 400px;
+  overflow: auto;
+  padding: 10px;
+  background: #1e1e1e;
+  font-size: 12px;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
 #geolocate_button {
   display: inline-flex;
   align-items: center;

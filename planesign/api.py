@@ -1065,6 +1065,12 @@ def get_version():
     return utilities.get_version()
 
 
+@app.route("/update_log")
+def get_update_log():
+    """Output of the latest install or update, written on the host by docker_install_and_update.sh."""
+    return send_from_directory(os.path.abspath("logs"), "update.log", mimetype="text/plain", max_age=0)
+
+
 @app.route("/device_info")
 def get_device_info():
     import shutil

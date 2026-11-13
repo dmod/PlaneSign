@@ -38,6 +38,7 @@ satdat.txt
 satsup.txt
 resortdata.json
 resortlist.txt
+resume_state.json
 icons/snow/logos/*
 !icons/snow/logos/DEFAULT.png
 icons/favicon

@@ -1,0 +1,13 @@
+[Unit]
+Description=PlaneSign nightly update (skipped when AUTO_UPDATE=false in sign.conf)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Exits 1, skipping the run without failing the unit, when the web UI's checkbox is off.
+ExecCondition=/bin/sh -c '! grep -qi "^AUTO_UPDATE=false" /home/pi/PlaneSign/sign.conf'
+ExecStart=/bin/bash -o pipefail -c 'curl -fsSL --retry 5 --retry-delay 30 --retry-all-errors https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash'
+SyslogIdentifier=planesign-update
+# A normal run takes a few minutes; this only stops one that hangs.
+TimeoutStartSec=1h

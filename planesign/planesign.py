@@ -35,6 +35,7 @@ class PlaneSign:
         self.canvas = self.matrix.CreateFrameCanvas()
 
         self.defined_mode_handlers = defined_mode_handlers
+        self.current_mode = None
 
         self.font57 = graphics.Font()
         self.font46 = graphics.Font()
@@ -47,8 +48,7 @@ class PlaneSign:
         self.fontreallybig.LoadFont(os.path.join(shared_config.font_dir, "9x18B.bdf"))
         self.fontplanesign.LoadFont(os.path.join(shared_config.font_dir, "helvR12.bdf"))
 
-        shared_config.shared_current_brightness.value = int(shared_config.CONF["DEFAULT_BRIGHTNESS"])
-
+        # Set at startup from DEFAULT_BRIGHTNESS or the state resumed after a restart.
         self.canvas.brightness = shared_config.shared_current_brightness.value
 
         self.matrix.brightness = shared_config.shared_current_brightness.value
@@ -98,6 +98,7 @@ class PlaneSign:
                 display_mode = DisplayMode(shared_config.shared_mode.value)  # Convert int to enum
                 if display_mode in self.defined_mode_handlers:
                     logging.info(f"Setting mode to {display_mode.name}")
+                    self.current_mode = display_mode
                     self.defined_mode_handlers[display_mode](self)
                 else:
                     logging.error(f"Mode {display_mode.name} has no handler defined...")
