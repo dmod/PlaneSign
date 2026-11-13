@@ -27,6 +27,9 @@ INSTALL_DIR="$HOME_DIR/PlaneSign"
 # same commit. Override either value to install from a fork or a test branch.
 PLANESIGN_REPO_URL="${PLANESIGN_REPO_URL:-https://github.com/dmod/PlaneSign.git}"
 PLANESIGN_BRANCH="${PLANESIGN_BRANCH:-main}"
+# The nightly planesign-update.service sets this to true, so a container someone stopped (to work on
+# the sign, say) is updated but left stopped. Manual and app-triggered updates start it as before.
+PLANESIGN_KEEP_STOPPED="${PLANESIGN_KEEP_STOPPED:-false}"
 
 COMPOSE_FILE="$INSTALL_DIR/compose.yaml"
 CONTAINER_NAME=PlaneSignRuntime
@@ -156,6 +159,20 @@ remove_unmanaged_planesign_container() {
     echo "Removing $CONTAINER_NAME, which Compose does not manage, before Compose creates it..."
     docker rm --force "$CONTAINER_NAME"
   fi
+}
+
+# Brings the container up to date with the pulled image and compose.yaml.
+update_container() {
+  local up_args=(--detach)
+  # A missing container prints nothing here, so a first install always starts the sign.
+  if [ "$PLANESIGN_KEEP_STOPPED" = true ] \
+      && [ "$(docker container inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null)" = false ]; then
+    echo "$CONTAINER_NAME is stopped; updating it without starting it"
+    # Recreates it on the new image when something changed, so `docker start` runs the current version.
+    up_args=(--no-start)
+  fi
+  remove_unmanaged_planesign_container
+  docker compose -f "$COMPOSE_FILE" up "${up_args[@]}" --remove-orphans
 }
 
 main() {
@@ -348,8 +365,7 @@ EOF
 
   docker compose -f "$COMPOSE_FILE" config >/dev/null
   docker compose -f "$COMPOSE_FILE" pull
-  remove_unmanaged_planesign_container
-  docker compose -f "$COMPOSE_FILE" up --detach --remove-orphans
+  update_container
 
   echo "Removing unused Docker images..."
   docker image prune --force || echo "Warning: unable to prune unused Docker images"

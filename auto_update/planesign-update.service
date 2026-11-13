@@ -9,5 +9,7 @@ Type=oneshot
 ExecCondition=/bin/sh -c '! grep -qi "^AUTO_UPDATE=false" /home/pi/PlaneSign/sign.conf'
 ExecStart=/bin/bash -o pipefail -c 'curl -fsSL --retry 5 --retry-delay 30 --retry-all-errors https://raw.githubusercontent.com/dmod/PlaneSign/main/docker_install_and_update.sh | bash'
 SyslogIdentifier=planesign-update
+# Leaves a container someone stopped stopped (still updated); see docker_install_and_update.sh.
+Environment=PLANESIGN_KEEP_STOPPED=true
 # A normal run takes a few minutes; this only stops one that hangs.
 TimeoutStartSec=1h
