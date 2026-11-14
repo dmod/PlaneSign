@@ -1625,7 +1625,7 @@ SMOKE_MAX_RADIUS = 3.0
 SMOKE_LUMP = 0.2
 # Puffs hold their opacity, then dissolve over their last SMOKE_FADE_SECONDS.
 SMOKE_FADE_SECONDS = 1.2
-# The clock label (as wide as "12:59PM") sits right above the chimney on rows 1-6, so smoke
+# The clock label (as wide as "12:59P") sits right above the chimney on rows 1-6, so smoke
 # thins out over SMOKE_CEILING_FADE rows and is gone by SMOKE_CEILING.
 SMOKE_CEILING = 8
 SMOKE_CEILING_FADE = 2
@@ -7613,7 +7613,7 @@ def draw_notice(image: Image.Image, text: str, left: int, right: int, elapsed: f
 
 
 def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, ...] = (None, None, None)) -> tuple[bool | None, bool | None, bool | None]:
-    clock = moment.strftime("%H:%M" if military_time else "%-I:%M%p")
+    clock = moment.strftime("%H:%M") if military_time else moment.strftime("%-I:%M") + ("P" if moment.hour >= 12 else "A")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
     clock_width, temperature_width = overlay_text_mask(clock).width, overlay_text_mask(temperature_text).width
