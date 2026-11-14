@@ -6659,6 +6659,8 @@ VESUVIUS_RING_SECONDS, VESUVIUS_RING_SPEED = 1.0, 70.0
 VESUVIUS_RING = np.array((0.85, 0.88, 0.95), dtype=np.float32)
 VESUVIUS_SHAKE = {"rumble": 1.0, "blast": 2.0, "burst": 1.0}
 VESUVIUS_BLAST_SHAKE_SECONDS, VESUVIUS_BURST_SHAKE_SECONDS = 15.0, 1.2
+# The corner labels and notice step aside from the start of the rumble until this many seconds after noon.
+VESUVIUS_LABELS_RETURN_SECONDS = 5.0
 # Falling pumice drifts down and right of the vent's column; (x, y, pace, phase).
 VESUVIUS_ASHFALL = tuple((grain(i, 41) / 97 * 140, grain(i, 43) / 97 * 36, 0.6 + grain(i, 47) / 97 * 0.8, grain(i, 53)) for i in range(110))
 # The fall starts this far left, under the umbrella, and spreads upwind with the deck.
@@ -7613,6 +7615,10 @@ def draw_notice(image: Image.Image, text: str, left: int, right: int, elapsed: f
 
 
 def draw_outside_frame(sign, environment: "OutsideEnvironment", elapsed: float, seed: int = 0, *, moment: datetime, military_time: bool, previous_text_styles: tuple[bool | None, ...] = (None, None, None)) -> tuple[bool | None, bool | None, bool | None]:
+    eruption = vesuvius_state(environment)
+    if eruption is not None and -VESUVIUS_RUMBLE_SECONDS <= eruption.age < VESUVIUS_LABELS_RETURN_SECONDS:
+        sign.canvas.SetImage(render_outside_frame(environment, elapsed, seed))
+        return None, None, None
     clock = moment.strftime("%H:%M") if military_time else moment.strftime("%-I:%M") + ("P" if moment.hour >= 12 else "A")
     temperature = environment.weather.temperature
     temperature_text = f"{round(temperature)}°F" if temperature is not None and environment.weather.status in ("LIVE", "CACHED", "FORECAST", "FORECAST_CACHED") else "--°F"
