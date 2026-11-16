@@ -9,6 +9,8 @@
             "program": "${workspaceFolder}/planesign",
             "console": "integratedTerminal",
             "sudo": true,
+            // Keeps root's bytecode out of the workspace; root-owned __pycache__ in .venv breaks `uv sync`.
+            "env": { "PYTHONPYCACHEPREFIX": "/root/.cache/planesign-pycache" },
             "preLaunchTask": "uv sync and start nginx"
         },
         {
@@ -41,7 +43,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
             "console": "integratedTerminal",
-            "sudo": true
+            "sudo": true,
+            "env": { "PYTHONPYCACHEPREFIX": "/root/.cache/planesign-pycache" }
         }
     ]
 }

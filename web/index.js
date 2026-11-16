@@ -201,8 +201,8 @@ async function send_outside_time() {
     try {
         var response = await fetch('api/outside/time', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({offset_minutes: minutes, clear_lab: clear_lab}),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ offset_minutes: minutes, clear_lab: clear_lab }),
             signal: controller.signal
         });
         var data = await response.json();
@@ -236,7 +236,7 @@ async function update_outside_status() {
     var status = document.getElementById('outside_status');
     var version = outside_time_version;
     try {
-        var response = await fetch('api/outside/status', {signal: controller.signal, cache: 'no-store'});
+        var response = await fetch('api/outside/status', { signal: controller.signal, cache: 'no-store' });
         if (!response.ok) {
             throw new Error('HTTP ' + response.status);
         }
@@ -2720,7 +2720,8 @@ var sound_icon_rules = [
     [/zelda|secret|game/, "🎮"],
     [/drum|rimshot/, "🥁"],
     [/bell|ding ?dong|chime/, "🔔"],
-    [/music|theme|song|tune/, "🎵"]
+    [/music|theme|song|tune/, "🎵"],
+    [/ehoh/, "🗣️"]
 ];
 
 function get_sound_icon(name) {
