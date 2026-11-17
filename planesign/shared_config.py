@@ -137,12 +137,11 @@ def config_for_logging(conf):
     return {key: value if key in public_keys else "<set>" if value else "<unset>" for key, value in conf.items()}
 
 
-def load_config_values(*, log_settings=True):
-    """Read configuration without importing a display driver or changing shared state."""
+def load_config_values():
+    """Read configuration without changing shared state."""
     conf = {}
     if not os.path.exists(config_path):
-        if log_settings:
-            logging.warning(f"WARNING! No {config_path} found... using default values from sign.conf.sample")
+        logging.warning(f"WARNING! No {config_path} found... using default values from sign.conf.sample")
     else:
         with open(config_path) as f:
             for line in f:
@@ -154,13 +153,11 @@ def load_config_values(*, log_settings=True):
     defaults, _ = load_config_schema()
     for key, value in defaults.items():
         if key not in conf:
-            if log_settings:
-                logging.warning(f"WARNING! No setting for '{key}' found in {config_path}, using the default from sign.conf.sample")
+            logging.warning(f"WARNING! No setting for '{key}' found in {config_path}, using the default from sign.conf.sample")
             conf[key] = value
 
     if config_overrides:
-        if log_settings:
-            logging.info(f"Overriding config from the command line: {', '.join(config_overrides)}")
+        logging.info(f"Overriding config from the command line: {', '.join(config_overrides)}")
         conf.update(config_overrides)
     return conf
 

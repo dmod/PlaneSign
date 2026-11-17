@@ -6,6 +6,4 @@ requests==2.34.2
 websocket-client==1.9.0
 skyfield==1.51
 shapely==2.1.2
-adafruit-circuitpython-ssd1305>=1.4.4
-RPi.GPIO>=0.7.1
 websockets>=15.0

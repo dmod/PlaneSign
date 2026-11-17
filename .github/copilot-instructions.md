@@ -12,7 +12,6 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 ## Hardware
 - **Display:** Two chained 64x32 RGB LED matrix panels = **128 pixels wide × 32 pixels tall**
 - **Platform:** Raspberry Pi 4, driven by the `rgbmatrix` Python bindings from [dmod/rpi-rgb-led-matrix](https://github.com/dmod/rpi-rgb-led-matrix), a fork of [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) trimmed to the Python bindings and the driver for 64-bit Pis (Pi 2 v1.2, 3, 4, Zero 2). A Pi 1, Zero or Pi 5 refuses to start. The fork drives one chain with direct row addressing on the `regular`, `adafruit-hat` and `adafruit-hat-pwm` mappings; parallel chains, pixel mappers, multiplexed panels and privilege dropping are gone. Make driver or binding changes in the fork, pin the new commit in `pyproject.toml`, and keep `emulated_matrix.core.RGBMatrixOptions` to the same option names.
-- **Alternative display:** Adafruit 2.23" 128x32 monochrome OLED bonnet (SSD1305), selected by `PINOUT_HARDWARE_MAPPING=adafruit-oled`. Any other mapping value selects the native RGB driver. Changing the mapping needs a restart.
 
 ## Architecture
 - **`planesign/`** — Main application. Each display mode is its own module (e.g. `planes.py`, `weather.py`, `moon.py`), registered with the `@planesign_mode_handler(DisplayMode.X)` decorator from `modes.py`. The entry point imports the mode modules to populate the registry.
@@ -26,7 +25,6 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - **`planesign/network.py`** — Offline mode and guarded third-party requests; see "Network And Offline Mode".
 - **`planesign/datasources.py`** — Registry (`SOURCES`) of reference files in `datafiles/` that are downloaded on first use. Add new on-demand files there instead of writing per-mode download code. Do not use Skyfield's `Loader` to download: its `urlopen` has no timeout.
 - **`planesign/emulated_matrix/`** — The `--web` emulator: an RGBMatrix-compatible PIL canvas plus the WebSocket and frame-capture server.
-- **`planesign/oled_matrix.py`** — OLED backend sharing the emulator's canvas. The entry point loads configuration before importing modes so it can select the `rgbmatrix` alias. Non-black pixels become white, except in modes that set fixed luminance thresholds. With `--web`, the preview shows the same conversion.
 - **`planesign/outside.py`, `outside_scene.py`, `outside_lab.py`** — Outside mode and its lab (`/outside/lab`); see `.github/instructions/outside.instructions.md`.
 - **`planesign/snow.py`** — Parses both legacy `__NEXT_DATA__` pages and current Next.js Flight streams. Hourly weather comes from the resort's weather page, not the daily summary on its snow-report page.
 - **`web/`** — Frontend served by nginx; talks to the Flask API through `/api/`.

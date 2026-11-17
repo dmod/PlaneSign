@@ -37,7 +37,7 @@ CLOSEST_HEIGHT_LIMIT=10000
 #number min 0 max 100 - Plane alert radius (miles)
 PLANE_ALERT_RADIUS=2
 
-#text - RGB mapping regular/adafruit-hat/adafruit-oled (restart required)
+#text - RGB mapping regular/adafruit-hat (restart required)
 PINOUT_HARDWARE_MAPPING=adafruit-hat
 
 #number min 0 max 5 step 1 - GPIO slowdown (restart required)

@@ -138,14 +138,10 @@ def _light(frame, x, y, color):
         np.maximum(frame[y, x], color, out=frame[y, x])
 
 
-def _scenery(monochrome):
-    """The backdrop that never moves (sky, banded sun, floor, converging grid lines, horizon) and the sun's mask.
-
-    A monochrome display lights every non-black pixel, so there the sky and floor stay black.
-    """
+def _scenery():
+    """The backdrop that never moves (sky, banded sun, floor, converging grid lines, horizon) and the sun's mask."""
     frame = np.zeros((HEIGHT, WIDTH, 3), np.float32)
-    if not monochrome:
-        frame[:HORIZON] = _gradient(SKY, HORIZON)[:, None, :]
+    frame[:HORIZON] = _gradient(SKY, HORIZON)[:, None, :]
 
     gaps, row = set(), HORIZON - 1
     for solid, gap in SUN_BANDS:
@@ -163,8 +159,7 @@ def _scenery(monochrome):
         frame[y, x0:x1] = _lerp(np.array(SUN_TOP), np.array(SUN_BOTTOM), (y - top) / (SUN_RADIUS - 1))
 
     depth = HEIGHT - 1 - HORIZON
-    if not monochrome:
-        frame[HORIZON + 1 :] = FLOOR
+    frame[HORIZON + 1 :] = FLOOR
     for k in range(-GRID_LINES, GRID_LINES + 1):
         for y in range(HORIZON + 1, HEIGHT):
             brightness = _clamp(0.3 + (y - HORIZON) / depth)
@@ -176,8 +171,8 @@ def _scenery(monochrome):
 class WelcomeScene:
     """Everything about the welcome screen that can be worked out once, plus render() for each frame."""
 
-    def __init__(self, version, monochrome=False):
-        self.background, sun = _scenery(monochrome)
+    def __init__(self, version):
+        self.background, sun = _scenery()
         behind_sun = sun[STAR_Y, STAR_X]
         self.star_x, self.star_y, self.star_phase = STAR_X[~behind_sun], STAR_Y[~behind_sun], STAR_PHASE[~behind_sun]
 
@@ -185,8 +180,6 @@ class WelcomeScene:
         self.title_outline = _outline(self.title)
         self.title_x = (WIDTH - self.title.shape[1]) // 2
         self.chrome = np.repeat(np.array(CHROME, np.float32)[:, None, :], self.title.shape[1], axis=1)
-        if monochrome:  # the chrome's dark horizon row would cut the letters in half
-            self.chrome[:] = 255
         self.title_columns = np.arange(self.title.shape[1])
         # A sweep runs until its trail has left the last column, then pauses before the next one
         self.glint_period = (self.title.shape[1] + GLINT_WIDTH + GLINT_TRAIL) / GLINT_SPEED + GLINT_PAUSE
@@ -198,7 +191,6 @@ class WelcomeScene:
         self.subtitle = _text_mask("4x6.pil", version)
         self.subtitle_outline = _outline(self.subtitle)
         self.subtitle_x = (WIDTH - self.subtitle.shape[1]) // 2
-        self.monochrome = monochrome
 
     def render(self, t):
         """The frame t seconds after the screen started, as a (HEIGHT, WIDTH, 3) uint8 array."""
@@ -206,8 +198,6 @@ class WelcomeScene:
         frame = self.background * fade
 
         twinkle = (0.5 + 0.5 * np.sin(t * 3 + self.star_phase)) * 140 * fade
-        if self.monochrome:  # dim pixels still light up fully, so twinkle by switching stars on and off
-            twinkle = np.where(twinkle > 70, 140, 0)
         stars = twinkle[:, None] * np.array([1, 0.8, 1])
         frame[self.star_y, self.star_x] = np.maximum(frame[self.star_y, self.star_x], stars)
 
@@ -219,10 +209,7 @@ class WelcomeScene:
                 continue
             brightness = _clamp((y - HORIZON) / depth) ** 0.8 * fade
             row = int(y)
-            rows = ((row, 1 - (y - row)), (row + 1, y - row))  # anti-aliased across two rows
-            if self.monochrome:  # anti-aliasing would light both rows, so use one and drop the faint lines near the horizon
-                rows = ((_round(y), 1.0),) if brightness > 0.25 else ()
-            for r, weight in rows:
+            for r, weight in ((row, 1 - (y - row)), (row + 1, y - row)):  # anti-aliased across two rows
                 if HORIZON < r < HEIGHT:
                     np.maximum(frame[r], np.multiply(GRID_H, brightness * weight), out=frame[r])
 
@@ -300,13 +287,13 @@ class WelcomeScene:
 
 
 @cache
-def _scene(version, monochrome):
-    return WelcomeScene(version, monochrome)
+def _scene(version):
+    return WelcomeScene(version)
 
 
 def draw_welcome_frame(sign, elapsed, version):
     """Draw the welcome screen as it looks elapsed seconds after it started."""
-    scene = _scene(version, getattr(sign.matrix, "monochrome", False))
+    scene = _scene(version)
     sign.canvas.SetImage(Image.fromarray(scene.render(elapsed)), 0, 0)
 
 

@@ -10,7 +10,7 @@ multiprocessing.set_start_method("fork")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(prog="planesign", description="Drive the PlaneSign LED matrix or OLED display.")
+    parser = argparse.ArgumentParser(prog="planesign", description="Drive the PlaneSign RGB LED matrix.")
     parser.add_argument("--web", action="store_true", help="emulate the matrix and stream frames to web/display.html instead of driving hardware")
     parser.add_argument("--mode", type=str.upper, metavar="MODE", help="mode to show after the welcome screen, e.g. MOON (default DEFAULT_MODE from the config)")
     parser.add_argument("--fake-time", metavar="ISO_TIME", help="start the clock at this time, e.g. 2026-12-24T18:00; without an offset it is local to the sign's location")
@@ -62,12 +62,7 @@ if cli_args.api_port:
 if cli_args.ws_port:
     shared_config.ws_port = cli_args.ws_port
 
-startup_conf = shared_config.load_config_values(log_settings=False)
-if startup_conf["PINOUT_HARDWARE_MAPPING"] == "adafruit-oled":
-    import oled_matrix
-
-    sys.modules["rgbmatrix"] = oled_matrix
-elif cli_args.web:
+if cli_args.web:
     import emulated_matrix
 
     sys.modules["rgbmatrix"] = emulated_matrix
@@ -417,13 +412,7 @@ finally:
             process.terminate()
             process.join(timeout=2)
 
-    try:
-        if ps is not None:
-            close_display = getattr(ps.matrix, "close", None)
-            if close_display is not None:
-                close_display()
-    finally:
-        stop_log_writer()
+    stop_log_writer()
 
 print("Done.")
 sys.exit(exit_code)

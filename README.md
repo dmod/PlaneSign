@@ -22,17 +22,6 @@
   - #4S flat washers for spacing
 - [Wiring instructions](https://github.com/hzeller/rpi-rgb-led-matrix/blob/master/wiring.md)
 
-### Alternative Matrix: 128x32 OLED Bonnet
-
-The [Adafruit 2.23" Monochrome OLED Bonnet](https://learn.adafruit.com/adafruit-2-23-monochrome-oled-bonnet) can replace the RGB LED panels. Its 128x32 resolution matches the existing display layouts.
-
-1. Enable I2C with `sudo raspi-config` and reboot if needed. `i2cdetect -y 1` should show `3c`.
-2. Set this in `sign.conf` (or the web configuration screen):
-   ```ini
-   PINOUT_HARDWARE_MAPPING=adafruit-oled
-   ```
-3. Restart PlaneSign after changing the hardware mapping.
-
 ## Software Setup
 
 ### Prepare the SD Card
