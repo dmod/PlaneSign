@@ -1022,44 +1022,94 @@ input:checked+.slider:before {
   border-color: #499bfb;
 }
 
-.sidenav {
-  height: 100%;
-  width: 100%;
+html.settings_open,
+html.settings_open body {
+  overflow: hidden;
+}
+
+.settings_dialog {
+  width: calc(100% - 48px);
+  max-width: 760px;
+  max-height: min(820px, calc(100dvh - 64px));
+  margin: auto;
+  padding: 0;
+  border: 3px solid #444;
+  border-radius: 20px;
   background-color: #fff;
-  position: fixed !important;
-  z-index: 999999;
-  overflow: auto;
-  text-align: center;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.settings_dialog[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settings_dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.settings_header {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #ddd;
+}
+
+.settings_header h2 {
+  margin: 0;
+  font-family: 'Permanent Marker';
+  font-size: 30px;
+  font-weight: normal;
+}
+
+.settings_content {
+  min-height: 0;
+  padding: 8px 24px 24px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
 }
 
 #config {
-  padding-top: 25px;
+  padding: 0;
 }
 
 span.configline {
-  width: 100%;
-  padding-top: 5px;
-  text-align: right;
-  height: 60px;
-  font-size: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 69px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e7e7e7;
 }
 
 label.configline {
-  padding-right: 10px;
-  width: 45%;
-  display: inline-block;
-  overflow: hidden;
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 input.configline,
 select.configline {
-  width: 25%;
-  margin-right: 20%;
-  font-size: 40px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px;
+  font: inherit;
+  font-size: 18px;
 }
 
 input[type='checkbox'].configline {
-  height: 40px;
+  justify-self: start;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  accent-color: #7bb9c9;
 }
 
 input::-webkit-outer-spin-button,
@@ -1075,24 +1125,21 @@ input[type=number] {
 }
 
 .closebutton {
-  width: 100%;
-  height: 50px;
-  display: block;
-  padding: 0 16px;
-  text-align: right;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: none;
-  white-space: normal;
-  float: none;
-  outline: 0;
-  overflow: visible;
-  font-size: 40px;
+  border-radius: 5px;
+  background: #e7e7e7;
+  font-size: 32px;
+  cursor: pointer;
 }
 
 #submit_config_button {
   border-radius: 5px;
-  height: 60px;
-  font-size: 40px;
-  margin-top: 5px;
+  min-height: 48px;
+  padding: 8px 20px;
+  font-size: 20px;
 }
 
 #submit_config_button.config-save-success {
@@ -1115,11 +1162,12 @@ input[type=number] {
 
 #config_button_span {
   display: block;
+  padding-top: 20px;
+  text-align: center;
 }
 
 .update_box {
-  max-width: 700px;
-  margin: 30px auto;
+  margin: 24px 0 0;
   font-size: 16px;
 }
 
@@ -1143,9 +1191,9 @@ input[type=number] {
   justify-content: center;
   gap: 8px;
   border-radius: 5px;
-  height: 50px;
-  font-size: 28px;
-  margin-top: 10px;
+  min-height: 44px;
+  font-size: 16px;
+  margin: 8px 0;
   cursor: pointer;
   background-color: #4285f4;
   color: #fff;
@@ -1513,6 +1561,24 @@ input[type=number] {
 }
 
 @media (max-width: 700px) {
+  .settings_dialog {
+    width: calc(100% - 24px);
+    max-height: calc(100dvh - 32px);
+  }
+
+  .settings_header {
+    padding: 10px 16px;
+  }
+
+  .settings_content {
+    padding: 8px 16px 16px;
+  }
+
+  span.configline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
   #lightning_div {
     width: 100%;
   }

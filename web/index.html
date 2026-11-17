@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=auto-update-1">
+  <link rel="stylesheet" href="style.css?v=settings-dialog-1">
   <link rel="stylesheet" href="plane_button.css">
   <link rel="stylesheet" href="mic_button.css">
   <link rel="stylesheet" href="trackaflight.css">
   <link rel="stylesheet" href="finance.css">
   <link rel="stylesheet" href="snow.css">
   <link rel="icon" type="image/png" href="/favicon.png">
-  <script src="index.js?v=auto-update-2"></script>
+  <script src="index.js?v=settings-dialog-1"></script>
   <title>Plane Sign</title>
 </head>
 
@@ -39,7 +39,7 @@
       </label>
     </div>
     <div id="floating">
-      <button type="submit" id="optionsbutton" onclick="show_options(); return false;">
+      <button type="button" id="optionsbutton" onclick="show_options()" aria-label="Settings" aria-haspopup="dialog">
         <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="grey" class="bi bi-gear" viewBox="0 0 16 16">
           <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z" />
           <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z" />
@@ -383,33 +383,38 @@
 
   </div>
 
-  <div class="sidenav" style="display:none" id="optionsSidebar">
-    <button onclick="hide_options()" class="closebutton">&times;</button>
-    <span id="linetemplate" class="configline" style="display:none">
-      <label for="templatename" class="configline"></label><input type="text" class="configline" id="templateid" name="templatename" value="">
-    </span>
-    <button id="geolocate_button" type="button" onclick="fill_location_from_browser()" style="display:none;">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-      </svg>
-      Use My Location
-    </button>
-    <form id="config" name="config" method="post">
-      <span id="config_button_span">
-        <button id="submit_config_button" type="submit" class="configline">Update Config</button>
+  <dialog class="settings_dialog" id="optionsSidebar" aria-labelledby="settings_title" onclose="document.documentElement.classList.remove('settings_open')">
+    <header class="settings_header">
+      <h2 id="settings_title">Settings</h2>
+      <button type="button" onclick="hide_options()" class="closebutton" aria-label="Close settings" autofocus>&times;</button>
+    </header>
+    <div class="settings_content">
+      <span id="linetemplate" class="configline" style="display:none">
+        <label for="templatename" class="configline"></label><input type="text" class="configline" id="templateid" name="templatename" value="">
       </span>
-    </form>
+      <button id="geolocate_button" type="button" onclick="fill_location_from_browser()" style="display:none;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+        </svg>
+        Use My Location
+      </button>
+      <form id="config" name="config" method="post">
+        <span id="config_button_span">
+          <button id="submit_config_button" type="submit" class="configline">Update Config</button>
+        </span>
+      </form>
 
-    <section class="device_info_box update_box" aria-labelledby="update_header">
-      <h2 id="update_header" class="device_info_header">Software Updates</h2>
-      <p id="update_result">No update has run yet.</p>
-      <details ontoggle="this.lastElementChild.scrollTop = this.lastElementChild.scrollHeight">
-        <summary>Update log</summary>
-        <pre id="update_log" class="update_log"></pre>
-      </details>
-    </section>
-  </div>
+      <section class="device_info_box update_box" aria-labelledby="update_header">
+        <h2 id="update_header" class="device_info_header">Software Updates</h2>
+        <p id="update_result">No update has run yet.</p>
+        <details ontoggle="this.lastElementChild.scrollTop = this.lastElementChild.scrollHeight">
+          <summary>Update log</summary>
+          <pre id="update_log" class="update_log"></pre>
+        </details>
+      </section>
+    </div>
+  </dialog>
 
   <div id="free_sketch_modal" class="modal_backdrop" hidden aria-hidden="true">
     <div class="free_sketch_modal" role="dialog" aria-modal="true" aria-labelledby="free_sketch_title">

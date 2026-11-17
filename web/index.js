@@ -3009,8 +3009,9 @@ function set_countdown() {
 }
 
 function show_options() {
-    read_conf()
-    document.getElementById("optionsSidebar").style.display = "block";
+    read_conf();
+    document.getElementById("optionsSidebar").showModal();
+    document.documentElement.classList.add("settings_open");
     show_update_log();
 }
 
@@ -3030,7 +3031,7 @@ function show_update_log() {
 }
 
 function hide_options() {
-    document.getElementById("optionsSidebar").style.display = "none";
+    document.getElementById("optionsSidebar").close();
 }
 
 function fill_location_from_browser() {
@@ -3075,7 +3076,7 @@ function fill_location_from_browser() {
 }
 
 function read_conf() {
-    if (document.getElementById("config").childElementCount == 1 && document.getElementById("optionsSidebar").style.display == "none") {
+    if (document.getElementById("config").childElementCount == 1 && !document.getElementById("optionsSidebar").open) {
         var xhr = new XMLHttpRequest()
         xhr.open("GET", "api/get_config", true);
         xhr.onreadystatechange = function () {
@@ -3103,10 +3104,11 @@ function read_conf() {
                         var form_secret = metadata && metadata.secret === true;
 
                         var cln = itm.cloneNode(true);
+                        cln.removeAttribute("id");
                         cln.removeAttribute("style")
                         cln.title = metadata ? metadata.description : "";
                         cln.childNodes[1].textContent = String(Object.keys(data)[i]).replaceAll('_', ' ') + ": ";
-                        cln.childNodes[1].for = String(Object.keys(data)[i]);
+                        cln.childNodes[1].htmlFor = String(Object.keys(data)[i]);
                         if (form_type == "select") {
                             // Options come from the API (e.g. DEFAULT_MODE lists DisplayMode), so none are hardcoded here.
                             var select = document.createElement("select");
