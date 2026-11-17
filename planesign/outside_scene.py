@@ -3028,6 +3028,7 @@ HOLIDAYS = {
     "cannon": ("Cannon", ((7, 4, 4),)),
     "fountains": ("Fountains", ((7, 4, 4),)),
     "hotdog": ("Hotdog mascot", ((7, 4, 4),)),
+    "fife_drum": ("Fife and drum", ((7, 4, 4),)),
     "pumpkins": ("Pumpkins", ((10, 1, 31),)),
     "skeleton": ("Skeleton", ((10, 1, 31),)),
     "witch": ("Witch", ((10, 1, 31),)),
@@ -5701,8 +5702,9 @@ def draw_thanksgiving_figures(image: Image.Image, palette: Palette, environment:
         draw_standing_sprite(d, rows, x, row, facing, colors)
 
 
-# On July 4 a hotdog mascot in sunglasses now and then walks in along the front of the meadow, dances between the flag
-# and the cannon, and walks off the other side.
+# On July 4 a hotdog mascot in sunglasses now and then walks in along the front of the meadow with a ketchup bottle in
+# one glove and a mustard bottle in the other, performs a routine between the flag and the cannon (a groove, a round of
+# squirting both condiments out to the sides, a headspin) and walks off the other side.
 # Deer, foxes, rabbits, songbirds, the eagle and the owl stay away for the whole July 4 scene.
 HOTDOG = "hotdog"
 HOTDOG_SLOT_SECONDS = 80
@@ -5710,52 +5712,157 @@ HOTDOG_CHANCE = 0.45
 HOTDOG_SPEED = 10
 HOTDOG_FEET_ROW = 31
 HOTDOG_DANCE_COLUMNS = (58, 76)
-HOTDOG_DANCE_SECONDS = (6.0, 10.0)
 HOTDOG_STEP_SECONDS = 0.2
-HOTDOG_BEAT_SECONDS = 0.3
-# Facing the viewer: S sausage, B bun, b bun shade, M mustard, K sunglasses, G their glint, m mouth.
-HOTDOG_BODY = (
-    "....SSS....",
-    "...SSSSS...",
-    "..KKKKKKK..",
-    "...GKSGK...",
-    "...SSSSS...",
-    "..BSmmmSB..",
-    ".bBSSMSSBb.",
-    ".bBSMSSSBb.",
-    ".bBSSMSSBb.",
-    ".bBSSSMSBb.",
-    ".bBSSMSSBb.",
-    ".bBBSSSBBb.",
-    "..bbbbbbb..",
-)
-# l legs, R sneakers; "kick" swings his left leg out.
-HOTDOG_LEGS = {"stand": ("....l.l....", "...RR.RR..."), "stride": ("...l...l...", "..RR...RR.."), "kick": ("....l..lRR.", "...RR......")}
-# a arms ending in W white gloves, as (column, row) overlays on the body.
-HOTDOG_ARMS = {
-    "down": {(0, 7): "a", (0, 8): "W", (10, 7): "a", (10, 8): "W"},
-    "swing_a": {(0, 6): "a", (0, 7): "W", (10, 8): "a", (10, 9): "W"},
-    "swing_b": {(0, 8): "a", (0, 9): "W", (10, 6): "a", (10, 7): "W"},
-    "up": {(1, 5): "a", (0, 4): "a", (0, 3): "W", (9, 5): "a", (10, 4): "a", (10, 3): "W"},
-    "right_up": {(0, 7): "a", (0, 8): "W", (9, 5): "a", (10, 4): "a", (10, 3): "W"},
-    "out": {(0, 6): "W", (10, 6): "W"},
+HOTDOG_TICK_SECONDS = 0.15
+# Facing the viewer: S sausage, B bun, b bun shade, M mustard, K sunglasses, G their glint, m mouth. From behind the
+# bun's hinge hides the sausage; from the side one bun half does, and the mustard shows along his front.
+HOTDOG_BODIES = {
+    "front": (
+        "....SSS....",
+        "...SSSSS...",
+        "..KKKKKKK..",
+        "...GKSGK...",
+        "...SSSSS...",
+        "..BSmmmSB..",
+        ".bBSSMSSBb.",
+        ".bBSMSSSBb.",
+        ".bBSSMSSBb.",
+        ".bBSSSMSBb.",
+        ".bBSSMSSBb.",
+        ".bBBSSSBBb.",
+        "..bbbbbbb..",
+    ),
+    "back": (
+        "....SSS....",
+        "...SSSSS...",
+        "..KSSSSSK..",
+        "...SSSSS...",
+        "...SSSSS...",
+        "..BBSSSBB..",
+        ".bBBBSBBBb.",
+        ".bBBBBBBBb.",
+        ".bBBBBBBBb.",
+        ".bBBBBBBBb.",
+        ".bBBBBBBBb.",
+        ".bBBBBBBBb.",
+        "..bbbbbbb..",
+    ),
+    "side": (
+        "....SSS....",
+        "...SSSSS...",
+        "...SSSKKK..",
+        "...SSSSGK..",
+        "...SSSSS...",
+        "..bBBSSm...",
+        "..bBBSSM...",
+        "..bBBSMS...",
+        "..bBBSSM...",
+        "..bBBSMS...",
+        "..bBBSSM...",
+        "..bBBBSS...",
+        "...bbbb....",
+    ),
 }
-HOTDOG_COLORS = {"S": (210, 74, 48), "B": (240, 184, 100), "b": (178, 116, 56), "M": (255, 222, 30), "K": (10, 10, 14), "G": (180, 220, 255), "m": (92, 20, 20), "a": (178, 116, 56), "W": (246, 246, 240), "l": (52, 36, 30), "R": (224, 28, 40)}
-# The dance, one move per beat: (arms, legs, rows lifted, columns swayed, facing). A mirrored move swaps sides.
-HOTDOG_DANCE = (
-    ("up", "stride", 1, 0, 1),
-    ("down", "stand", 0, 0, 1),
-    ("up", "stride", 1, 0, 1),
-    ("down", "stand", 0, 0, 1),
-    ("right_up", "kick", 0, 1, 1),
-    ("down", "stand", 0, 0, 1),
-    ("right_up", "kick", 0, -1, -1),
-    ("down", "stand", 0, 0, 1),
-    ("out", "stand", 0, 1, 1),
-    ("out", "stand", 0, -1, 1),
-    ("out", "stand", 0, 1, 1),
-    ("out", "stand", 0, -1, 1),
-)
+HOTDOG_BODIES["side_l"] = tuple(row[::-1] for row in HOTDOG_BODIES["side"])
+# l legs, R sneakers. Splits and the squat are one row, so the body drops a row.
+HOTDOG_LEGS = {"stand": ("....l.l....", "...RR.RR..."), "stride": ("...l...l...", "..RR...RR.."), "kick": ("....l..lRR.", "...RR......"), "squat": (".RRl...lRR.",), "split": ("RRlllllllRR",), "side": ("....ll.....", "....RRR...."), "slide": ("...l..l....", "..RR..RR...")}
+HOTDOG_LEGS["kick_l"] = tuple(row[::-1] for row in HOTDOG_LEGS["kick"])
+HOTDOG_LEGS["side_l"] = tuple(row[::-1] for row in HOTDOG_LEGS["side"])
+HOTDOG_LEGS["slide_l"] = tuple(row[::-1] for row in HOTDOG_LEGS["slide"])
+# The left arm as (column, row) overlays on the body: a arm, W glove, then the bottle from the glove out to its cap.
+# The right arm mirrors it. Columns left of the body need the sprite's margin.
+HOTDOG_MARGIN = 3
+HOTDOG_ARMS = {
+    "down": ((0, 7, "a"), (0, 8, "W"), (0, 9, "x"), (0, 10, "x"), (0, 11, "z")),
+    "fwd": ((0, 6, "a"), (0, 7, "W"), (0, 8, "x"), (0, 9, "x"), (0, 10, "z")),
+    "back": ((0, 8, "a"), (0, 9, "W"), (0, 10, "x"), (0, 11, "x"), (0, 12, "z")),
+    "up": ((1, 5, "a"), (0, 4, "a"), (0, 3, "W"), (0, 2, "x"), (0, 1, "x"), (0, 0, "z")),
+    "out": ((0, 6, "W"), (-1, 6, "x"), (-2, 6, "x"), (-3, 6, "z")),
+    "aim": ((1, 5, "a"), (0, 4, "W"), (-1, 3, "x"), (-2, 2, "x"), (-3, 1, "z")),
+    "low": ((0, 7, "a"), (0, 8, "W"), (-1, 9, "x"), (-2, 10, "x"), (-3, 11, "z")),
+}
+# The ketchup is in his right glove (the viewer's left while he faces out): k bottle, c its cap; the mustard bottle y
+# has a red cap r.
+HOTDOG_BOTTLES = {"left": ("k", "c"), "right": ("y", "r")}
+HOTDOG_COLORS = {"S": (210, 74, 48), "B": (240, 184, 100), "b": (178, 116, 56), "M": (255, 222, 30), "K": (10, 10, 14), "G": (180, 220, 255), "m": (92, 20, 20), "a": (178, 116, 56), "W": (246, 246, 240), "l": (52, 36, 30), "R": (224, 28, 40), "k": (196, 18, 22), "c": (246, 246, 240), "y": (255, 214, 24), "r": (224, 28, 40)}
+# What each cap squirts, and where it lands.
+HOTDOG_SAUCES = {"c": (204, 16, 16), "r": (255, 200, 0)}
+HOTDOG_SQUIRT_SPEED = 26
+HOTDOG_SQUIRT_LOFT = 7
+HOTDOG_SQUIRT_GRAVITY = 50
+# A squeezed bottle sends out a drop this often; at the frame rate they join into a stream.
+HOTDOG_SQUIRT_SECONDS = 0.015
+HOTDOG_SPLAT_SECONDS = 1.2
+
+
+def hotdog_move(view, left, right, legs, ticks, lift=0, sway=0, turn=0, squirt=""):
+    """One move of the routine, held for `ticks`; `squirt` names the caps ("c" ketchup, "r" mustard) being squeezed."""
+    return ((view, left, right, legs, lift, sway, turn, squirt), ticks)
+
+
+def hotdog_spin(views, legs, ticks, turn=0, arms=("up", "up"), lift=0):
+    return tuple(hotdog_move(view, *arms, leg, ticks, lift, 0, turn) for view, leg in zip(views, legs))
+
+
+HOTDOG_TURNS = ("front", "side", "back", "side_l")
+# Each act is a list of moves. The groove pumps the bottles overhead, kicks, shimmies, strikes disco points,
+# moonwalks, pirouettes and jumps.
+HOTDOG_ACTS = {
+    "groove": (
+        *(hotdog_move("front", "up", "up", "stride", 2, 1), hotdog_move("front", "down", "down", "stand", 2)) * 2,
+        hotdog_move("front", "down", "up", "kick", 2, 0, 1),
+        hotdog_move("front", "down", "down", "stand", 1),
+        hotdog_move("front", "up", "down", "kick_l", 2, 0, -1),
+        hotdog_move("front", "down", "down", "stand", 1),
+        *(hotdog_move("front", "out", "out", "stand", 1, 0, side) for side in (1, -1) * 4),
+        *(hotdog_move("front", "aim", "low", "kick_l", 3), hotdog_move("front", "low", "aim", "kick", 3)) * 2,
+        *(hotdog_move("side", "down", "down", legs, 1, 0, sway) for sway, legs in zip(range(0, -6, -1), ("side", "slide") * 3)),
+        *(hotdog_move("side_l", "down", "down", legs, 1, 0, sway) for sway, legs in zip(range(-6, 0), ("side_l", "slide_l") * 3)),
+        *hotdog_spin(HOTDOG_TURNS * 2, ("stand", "side", "stand", "side_l") * 2, 1, lift=1),
+        hotdog_move("front", "up", "up", "stand", 2, 1),
+        hotdog_move("front", "down", "down", "squat", 1),
+        hotdog_move("front", "up", "up", "stride", 3, 2),
+        hotdog_move("front", "out", "out", "split", 5),
+        hotdog_move("front", "up", "up", "stand", 3),
+    ),
+    # He whips the bottles out and squirts each to its own side, trades shots faster and faster, sprays both, then
+    # lobs both in high arcs while wiggling.
+    "squirt": (
+        hotdog_move("front", "out", "out", "stand", 3),
+        hotdog_move("front", "out", "out", "kick_l", 4, 0, 0, 0, "c"),
+        hotdog_move("front", "out", "out", "stand", 1),
+        hotdog_move("front", "out", "out", "kick", 4, 0, 0, 0, "r"),
+        hotdog_move("front", "out", "out", "stand", 1),
+        *(hotdog_move("front", "out", "out", legs, 2, 0, 0, 0, cap) for legs, cap in (("kick_l", "c"), ("kick", "r")) * 3),
+        hotdog_move("front", "out", "out", "stride", 6, 0, 0, 0, "cr"),
+        hotdog_move("front", "aim", "aim", "stand", 2),
+        *(hotdog_move("front", "aim", "aim", legs, 2, 0, sway, 0, "cr") for legs, sway in (("stand", 1), ("stride", 0), ("stand", -1), ("stride", 0)) * 2),
+        hotdog_move("front", "up", "up", "stride", 3, 1),
+        hotdog_move("front", "up", "up", "stand", 3),
+    ),
+    # He drops to a squat, tips onto his head and spins, faster and faster, holds a freeze in the splits, then rolls back
+    # up and throws the bottles high.
+    "headspin": (
+        hotdog_move("front", "down", "down", "squat", 3),
+        hotdog_move("front", "out", "out", "squat", 2, 0, 0, 1),
+        hotdog_move("front", "out", "out", "stand", 3, 0, 0, 2),
+        *hotdog_spin(HOTDOG_TURNS * 2, ("stride", "side", "kick", "side_l") * 2, 2, 2, ("out", "out")),
+        *hotdog_spin(HOTDOG_TURNS * 5, ("stride", "side", "kick_l", "side_l", "stride", "side", "kick", "side_l") * 3, 1, 2, ("out", "out")),
+        hotdog_move("front", "out", "out", "split", 7, 0, 0, 2),
+        hotdog_move("front", "out", "out", "squat", 2, 0, 0, 3),
+        hotdog_move("front", "down", "down", "squat", 2),
+        hotdog_move("front", "up", "up", "stride", 2, 2),
+        hotdog_move("front", "up", "up", "stand", 4),
+    ),
+}
+# The routine always opens with the groove; the squirting and the headspin follow in either order.
+HOTDOG_ROUTINES = (("groove", "squirt", "headspin"), ("groove", "headspin", "squirt"))
+
+
+@lru_cache(maxsize=4)
+def hotdog_frames(acts: tuple[str, ...]) -> tuple[tuple, ...]:
+    """The routine as one move per tick."""
+    return tuple(move for act in acts for move, ticks in HOTDOG_ACTS[act] for _ in range(ticks))
 
 
 @dataclass(frozen=True)
@@ -5764,14 +5871,19 @@ class HotdogVisit:
     enter: float
     spot: float
     leave: float
-    dance: float
+    acts: tuple[str, ...]
 
     @property
     def walk_in(self) -> float:
         return abs(self.spot - self.enter) / HOTDOG_SPEED
 
     @property
+    def dance(self) -> float:
+        return len(hotdog_frames(self.acts)) * HOTDOG_TICK_SECONDS
+
+    @property
     def end(self) -> float:
+        # Walking off takes longer than his last squirt takes to land and soak in.
         return self.start + self.walk_in + self.dance + abs(self.leave - self.spot) / HOTDOG_SPEED
 
 
@@ -5779,9 +5891,9 @@ class HotdogVisit:
 class HotdogPose:
     x: float
     lift: int
-    facing: int
-    arms: str
-    legs: str
+    sprite: tuple[str, ...]
+    # Condiment in flight or on the ground: (column, row, color, opacity).
+    drops: tuple[tuple[int, int, Color, float], ...] = ()
 
 
 @lru_cache(maxsize=8)
@@ -5793,7 +5905,7 @@ def hotdog_visit(slot: int, seed: int) -> HotdogVisit | None:
     # He starts and ends just out of frame, half his width past the edge.
     edges = (-6.0, WIDTH + 5.0)
     enter, leave = edges if rng.random() < 0.5 else edges[::-1]
-    visit = HotdogVisit(0.0, enter, rng.uniform(*HOTDOG_DANCE_COLUMNS), leave, rng.uniform(*HOTDOG_DANCE_SECONDS))
+    visit = HotdogVisit(0.0, enter, rng.uniform(*HOTDOG_DANCE_COLUMNS), leave, rng.choice(HOTDOG_ROUTINES))
     duration = visit.end
     return replace(visit, start=slot * HOTDOG_SLOT_SECONDS + rng.uniform(0, HOTDOG_SLOT_SECONDS - duration))
 
@@ -5807,6 +5919,104 @@ def hotdog_visit_shown(environment: "OutsideEnvironment", visit: HotdogVisit, se
     return not dog_allowed(environment) or next(dog_outings_between(seed, visit.start, visit.end), None) is None
 
 
+@lru_cache(maxsize=128)
+def hotdog_sprite(view: str, left: str, right: str, legs: str, turn: int = 0) -> tuple[str, ...]:
+    """The mascot, turned `turn` quarter turns counterclockwise, with blank rows trimmed so whatever is lowest (feet,
+    head or side) rests on the ground. Side views hide the arms and bottles behind the body."""
+    body = HOTDOG_BODIES[view]
+    width = len(body[0])
+    pad = "." * HOTDOG_MARGIN
+    rows = [list(pad + line + pad) for line in (*body, *HOTDOG_LEGS[legs])]
+    if view in ("front", "back"):
+        # From behind, his right glove (the ketchup) is on the viewer's right.
+        sides = (("left", left, False), ("right", right, True)) if view == "front" else (("right", left, False), ("left", right, True))
+        for bottle_side, arm, mirrored in sides:
+            bottle, cap = HOTDOG_BOTTLES[bottle_side]
+            for column, row, char in HOTDOG_ARMS[arm]:
+                column = width - 1 - column if mirrored else column
+                rows[row][HOTDOG_MARGIN + column] = {"x": bottle, "z": cap}.get(char, char)
+    for _ in range(turn % 4):
+        rows = [[line[len(rows[0]) - 1 - r] for line in rows] for r in range(len(rows[0]))]
+    lines = ["".join(line) for line in rows]
+    while lines and set(lines[-1]) == {"."}:
+        lines.pop()
+    while lines and set(lines[0]) == {"."}:
+        lines.pop(0)
+    return tuple(lines)
+
+
+@lru_cache(maxsize=64)
+def hotdog_nozzles(sprite: tuple[str, ...]) -> tuple[tuple[str, int, int, float, float], ...]:
+    """Each bottle cap in the sprite as (cap, column, row, x, y), with (x, y) the unit direction the bottle points."""
+    nozzles = []
+    for row, line in enumerate(sprite):
+        for column, char in enumerate(line):
+            if char not in HOTDOG_SAUCES:
+                continue
+            bottle = HOTDOG_BOTTLES["left" if char == HOTDOG_BOTTLES["left"][1] else "right"][0]
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+                r, c = row - dy, column - dx
+                if 0 <= r < len(sprite) and 0 <= c < len(line) and sprite[r][c] == bottle:
+                    length = math.hypot(dx, dy)
+                    nozzles.append((char, column, row, dx / length, dy / length))
+                    break
+    return tuple(nozzles)
+
+
+def hotdog_frame_pose(visit: HotdogVisit, frame: tuple) -> tuple[float, int, tuple[str, ...]]:
+    view, left, right, legs, lift, sway, turn, _ = frame
+    return visit.spot + sway, lift, hotdog_sprite(view, left, right, legs, turn)
+
+
+@lru_cache(maxsize=4)
+def hotdog_squirts(visit: HotdogVisit) -> dict[str, np.ndarray]:
+    """Every drop the routine squirts, as arrays: when (seconds into the routine) and where it leaves its cap, its
+    velocity, how long it flies before it lands, and its sauce. Each drop leaves its cap on a tick that squeezes it and
+    then flies on its own, so a stream keeps arcing after the squeeze stops and lands as a splat."""
+    frames = hotdog_frames(visit.acts)
+    g = HOTDOG_SQUIRT_GRAVITY
+    drops = []
+    for index in range(round(len(frames) * HOTDOG_TICK_SECONDS / HOTDOG_SQUIRT_SECONDS)):
+        squeezed = index * HOTDOG_SQUIRT_SECONDS
+        frame = frames[min(math.floor(squeezed / HOTDOG_TICK_SECONDS), len(frames) - 1)]
+        if not frame[7]:
+            continue
+        x, lift, sprite = hotdog_frame_pose(visit, frame)
+        left = round(x) - (len(sprite[0]) - 1) // 2
+        top = HOTDOG_FEET_ROW - lift - len(sprite) + 1
+        for cap, column, row, dx, dy in hotdog_nozzles(sprite):
+            if cap not in frame[7]:
+                continue
+            vx, vy = dx * HOTDOG_SQUIRT_SPEED, dy * HOTDOG_SQUIRT_SPEED - HOTDOG_SQUIRT_LOFT
+            # The drop starts a step beyond the cap, so the stream leaves the nozzle.
+            px, py = left + column + dx, top + row + dy
+            # It lands when py + vy t + g t^2 / 2 reaches the ground.
+            landed = (-vy + math.sqrt(vy * vy + 2 * g * max(0.0, HOTDOG_FEET_ROW - py))) / g
+            drops.append((squeezed, px, py, vx, vy, landed, "".join(HOTDOG_SAUCES).index(cap)))
+    columns = np.array(drops, dtype=float).reshape(-1, 7).T
+    return dict(zip(("squeezed", "x", "y", "vx", "vy", "landed", "sauce"), columns))
+
+
+def hotdog_drops(visit: HotdogVisit, dancing: float) -> tuple[tuple[int, int, Color, float], ...]:
+    """The condiment in flight or soaking in `dancing` seconds into the routine."""
+    squirts = hotdog_squirts(visit)
+    age = dancing - squirts["squeezed"]
+    shown = (age > 0) & (age < squirts["landed"] + HOTDOG_SPLAT_SECONDS)
+    if not shown.any():
+        return ()
+    age, landed = age[shown], squirts["landed"][shown]
+    flight = np.minimum(age, landed)
+    xs = np.rint(squirts["x"][shown] + squirts["vx"][shown] * flight).astype(int)
+    ys = np.rint(squirts["y"][shown] + squirts["vy"][shown] * flight + HOTDOG_SQUIRT_GRAVITY * flight * flight / 2).astype(int)
+    opacities = np.where(age < landed, 1.0, 1 - (age - landed) / HOTDOG_SPLAT_SECONDS)
+    sauces = tuple(HOTDOG_SAUCES.values())
+    drops = {}
+    for x, y, opacity, sauce in zip(xs.tolist(), ys.tolist(), opacities.tolist(), squirts["sauce"][shown].astype(int).tolist()):
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and opacity > drops.get((x, y), (None, 0.0))[1]:
+            drops[(x, y)] = (sauces[sauce], opacity)
+    return tuple((x, y, color, opacity) for (x, y), (color, opacity) in drops.items())
+
+
 def hotdog_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> HotdogPose | None:
     """The mascot's pose, or None. He skips any visit that would overlap the dog's time outside."""
     if not hotdog_allowed(environment):
@@ -5816,25 +6026,20 @@ def hotdog_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -
         return None
     age = elapsed - visit.start
     dancing = age - visit.walk_in
+    drops = hotdog_drops(visit, dancing) if dancing >= 0 else ()
     if 0 <= dancing < visit.dance:
-        arms, legs, lift, sway, facing = HOTDOG_DANCE[math.floor(dancing / HOTDOG_BEAT_SECONDS) % len(HOTDOG_DANCE)]
-        return HotdogPose(visit.spot + sway, lift, facing, arms, legs)
+        frames = hotdog_frames(visit.acts)
+        x, lift, sprite = hotdog_frame_pose(visit, frames[min(math.floor(dancing / HOTDOG_TICK_SECONDS), len(frames) - 1)])
+        return HotdogPose(x, lift, sprite, drops)
     if dancing < 0:
         origin, target, walked = visit.enter, visit.spot, age
     else:
         origin, target, walked = visit.spot, visit.leave, dancing - visit.dance
     heading = 1 if target > origin else -1
     step = math.floor(walked / HOTDOG_STEP_SECONDS) % 2
-    # A one-row bob on each stride.
-    return HotdogPose(origin + heading * HOTDOG_SPEED * walked, step, heading, ("swing_a", "swing_b")[step], ("stand", "stride")[step])
-
-
-@lru_cache(maxsize=32)
-def hotdog_sprite(arms: str, legs: str) -> tuple[str, ...]:
-    rows = [list(line) for line in (*HOTDOG_BODY, *HOTDOG_LEGS[legs])]
-    for (column, row), char in HOTDOG_ARMS[arms].items():
-        rows[row][column] = char
-    return tuple("".join(line) for line in rows)
+    # A one-row bob on each stride, swinging the bottles.
+    arms = (("fwd", "back"), ("back", "fwd"))[step]
+    return HotdogPose(origin + heading * HOTDOG_SPEED * walked, step, hotdog_sprite("front", *arms, ("stand", "stride")[step]), drops)
 
 
 def draw_hotdog(image: Image.Image, palette: Palette, pose: HotdogPose | None):
@@ -5844,7 +6049,239 @@ def draw_hotdog(image: Image.Image, palette: Palette, pose: HotdogPose | None):
     # He stays readable after dark, when the fireworks are flying.
     shade = 0.35 + 0.65 * illumination
     colors = {char: tuple(round(value * shade) for value in color) for char, color in HOTDOG_COLORS.items()}
-    draw_standing_sprite(ImageDraw.Draw(image), hotdog_sprite(pose.arms, pose.legs), pose.x, HOTDOG_FEET_ROW - pose.lift, pose.facing, colors)
+    draw_standing_sprite(ImageDraw.Draw(image), pose.sprite, pose.x, HOTDOG_FEET_ROW - pose.lift, 1, colors)
+    for x, y, color, opacity in pose.drops:
+        sauce = tuple(round(value * shade) for value in color)
+        image.putpixel((x, y), sauce if opacity >= 1 else mix(image.getpixel((x, y)), sauce, opacity))
+
+
+# On July 4 a Spirit of '76 fife and drum trio now and then marches along the front of the meadow: a drummer leads, a
+# fifer with a bandaged head plays behind him and a flag bearer brings up the rear with the old thirteen-star flag. They
+# halt between the flag and the cannon to mark time through a drum roll, turn to face the front one at a time, leader
+# first, then turn back the same way and march off the other side. They skip the dog's outings and the hotdog mascot's
+# visits.
+FIFE_DRUM = "fife_drum"
+FIFE_DRUM_SLOT_SECONDS = 110
+FIFE_DRUM_CHANCE = 0.45
+FIFE_DRUM_SPEED = 7
+FIFE_DRUM_FEET_ROW = 31
+# Columns between neighbours in the file.
+FIFE_DRUM_SPACING = 11
+# Where the fifer, in the middle, halts.
+FIFE_DRUM_HALT_COLUMNS = (58, 72)
+# Seconds they mark time on arriving.
+FIFE_DRUM_MARK_SECONDS = (2.0, 4.0)
+# Between one marcher's turn and the next.
+FIFE_DRUM_TURN_SECONDS = 0.4
+# From the last one facing the front to the first one turning back.
+FIFE_DRUM_FRONT_SECONDS = 2.0
+FIFE_DRUM_STEP_SECONDS = 0.25
+FIFE_DRUM_ROLL_SECONDS = 0.08
+FIFE_DRUM_WAVE_SECONDS = 0.15
+FIFE_DRUM_WIDTH = 11
+# Facing right, by row from the top of the head: K tricorn, H hair, S skin, E eye, w bandage, x its bloodstain,
+# W stock, cross-belt and stockings, C coat, c sleeve, V waistcoat, F coat lining, B breeches, L shoes.
+FIFE_DRUM_HEADS = {"hat": ("....KKK....", "..KKKKKKK..", "....HSES...", "....HSSS..."), "bandage": ("....HHH....", "...wxwww...", "....HSES...", "....HSSS...")}
+FIFE_DRUM_TORSO = (".....WW....", "....CCVV...", "....CWVV...", "....CCWV...", "....CCVV...", "...FCCBB...")
+# "lift" raises the front knee to mark time.
+FIFE_DRUM_LEGS = {"stand": (".....BB....", ".....WW....", ".....WW....", ".....LLL..."), "stride": ("....BBBB...", "....W..W...", "...W....W..", "..LL....LL."), "lift": (".....BBBB..", ".....W..W..", ".....W..LL.", ".....LL....")}
+# (column, row, char) overlays, rows counted like the sprite rows above.
+# R hoops, D brass shell, Y its rope; t sticks. The near stick and the far one strike in turn.
+FIFE_DRUM_DRUM = ((7, 7, "R"), (8, 7, "R"), (9, 7, "R"), (10, 7, "R"), (7, 8, "D"), (8, 8, "Y"), (9, 8, "D"), (10, 8, "Y"), (7, 9, "Y"), (8, 9, "D"), (9, 9, "Y"), (10, 9, "D"), (7, 10, "R"), (8, 10, "R"), (9, 10, "R"), (10, 10, "R"))
+FIFE_DRUM_STICKS = {"near": ((5, 6, "c"), (6, 6, "S"), (7, 5, "t"), (8, 4, "t"), (9, 6, "t"), (10, 6, "t")), "far": ((5, 6, "c"), (6, 6, "S"), (7, 6, "t"), (8, 6, "t"), (9, 5, "t"), (10, 4, "t")), "both": ((5, 6, "c"), (6, 5, "S"), (7, 4, "t"), (8, 3, "t"), (9, 4, "t"), (10, 3, "t"))}
+# f fife, held at his mouth.
+FIFE_DRUM_FIFE = ((6, 5, "c"), (7, 4, "S"), (8, 3, "f"), (9, 3, "f"), (10, 3, "f"), (9, 4, "S"))
+# P pole and g its finial; the flag flies behind the pole. b blue canton, s stars, R and W stripes.
+FIFE_DRUM_POLE_COLUMN = 8
+FIFE_DRUM_POLE_TOP = -8
+FIFE_DRUM_BEARER = ((6, 6, "c"), (7, 6, "c"), (8, 6, "S"), (7, 5, "c"), (8, 4, "S"))
+FIFE_DRUM_FLAG = ("RRRRbsb", "WWWWsbs", "RRRRbsb", "WWWWWWW", "RRRRRRR")
+FIFE_DRUM_FLAG_TOP = -7
+# Facing the viewer, with the same rows and overlays. The cross-belts cross on his chest; the drummer's sticks strike
+# in turn ("left", "right") or both go up, the fifer holds his fife out to his right and the bearer holds the pole at
+# his right side, the flag flying downwind.
+FIFE_DRUM_FRONT_HEADS = {"hat": ("....KKK....", "..KKKKKKK..", "...HESEH...", "....SSS...."), "bandage": ("....HHH....", "...wwxww...", "...HESEH...", "....SSS....")}
+FIFE_DRUM_FRONT_TORSO = ("....WWW....", "..CWVVVWC..", "..CCWVWCC..", "..CCVWVCC..", "..CCWVWCC..", "..CCBBBCC..")
+FIFE_DRUM_FRONT_LEGS = ("...BBBBB...", "....W.W....", "....W.W....", "...LL.LL...")
+FIFE_DRUM_FRONT_ARM = {"left": ((1, 5, "c"), (1, 6, "c"), (1, 7, "c"), (1, 8, "c"), (1, 9, "S")), "right": ((9, 5, "c"), (9, 6, "c"), (9, 7, "c"), (9, 8, "c"), (9, 9, "S"))}
+FIFE_DRUM_FRONT_DRUM = tuple((column, row, line[column - 3]) for row, line in zip(range(7, 11), ("RRRRR", "DYDYD", "YDYDY", "RRRRR")) for column in range(3, 8))
+FIFE_DRUM_FRONT_STICKS = {
+    "left": ((1, 5, "c"), (1, 6, "c"), (2, 6, "S"), (2, 5, "t"), (2, 4, "t"), (9, 5, "c"), (9, 6, "c"), (8, 6, "S"), (7, 6, "t"), (6, 6, "t")),
+    "right": ((9, 5, "c"), (9, 6, "c"), (8, 6, "S"), (8, 5, "t"), (8, 4, "t"), (1, 5, "c"), (1, 6, "c"), (2, 6, "S"), (3, 6, "t"), (4, 6, "t")),
+    "up": ((1, 6, "c"), (1, 5, "c"), (1, 4, "S"), (0, 3, "t"), (0, 2, "t"), (9, 6, "c"), (9, 5, "c"), (9, 4, "S"), (10, 3, "t"), (10, 2, "t")),
+}
+FIFE_DRUM_FRONT_FIFE = ((0, 3, "f"), (1, 3, "f"), (2, 3, "f"), (3, 3, "f"), (1, 5, "c"), (1, 4, "S"), (3, 4, "S"), *FIFE_DRUM_FRONT_ARM["right"])
+FIFE_DRUM_FRONT_POLE_COLUMN = 1
+FIFE_DRUM_FRONT_BEARER = ((1, 6, "S"), *FIFE_DRUM_FRONT_ARM["right"])
+FIFE_DRUM_COLORS = {"K": (24, 22, 28), "H": (110, 70, 40), "S": (232, 182, 140), "E": (54, 36, 30), "w": (240, 238, 228), "x": (176, 30, 34), "W": (236, 234, 222), "C": (40, 60, 136), "c": (30, 44, 104), "V": (222, 204, 160), "F": (176, 36, 40), "B": (206, 186, 140), "L": (26, 24, 30), "R": (206, 22, 44), "D": (214, 178, 96), "Y": (240, 238, 228), "t": (214, 170, 110), "f": (196, 150, 90), "P": (150, 110, 70), "g": (255, 204, 70), "b": (28, 46, 150), "s": (246, 246, 240)}
+
+
+@dataclass(frozen=True)
+class FifeDrumVisit:
+    start: float
+    heading: int
+    # The fifer's column where they halt.
+    halt: float
+    # Seconds they mark time before turning to the front.
+    mark: float
+
+    @property
+    def enter(self) -> float:
+        """The fifer's column as the drummer steps in from just out of frame."""
+        return -6.0 - FIFE_DRUM_SPACING if self.heading > 0 else WIDTH + 5.0 + FIFE_DRUM_SPACING
+
+    @property
+    def leave(self) -> float:
+        """The fifer's column as the flag bearer steps out of frame."""
+        return WIDTH + 5.0 + FIFE_DRUM_SPACING if self.heading > 0 else -6.0 - FIFE_DRUM_SPACING
+
+    @property
+    def march_in(self) -> float:
+        return abs(self.halt - self.enter) / FIFE_DRUM_SPEED
+
+    @property
+    def halt_seconds(self) -> float:
+        # Three turns to the front, the pause, three turns back and a beat before stepping off.
+        return self.mark + 5 * FIFE_DRUM_TURN_SECONDS + FIFE_DRUM_FRONT_SECONDS
+
+    def facing_front(self, index: int, halted: float) -> bool:
+        """Whether marcher `index` (0 leads) faces the viewer `halted` seconds into the halt."""
+        turn_in = self.mark + index * FIFE_DRUM_TURN_SECONDS
+        return turn_in <= halted < turn_in + 2 * FIFE_DRUM_TURN_SECONDS + FIFE_DRUM_FRONT_SECONDS
+
+    @property
+    def end(self) -> float:
+        return self.start + self.march_in + self.halt_seconds + abs(self.leave - self.halt) / FIFE_DRUM_SPEED
+
+
+@dataclass(frozen=True)
+class FifeDrumPose:
+    # (column, rows lifted, sprite, facing) for each marcher, front to back.
+    marchers: tuple[tuple[float, int, tuple[str, ...], int], ...]
+
+
+@lru_cache(maxsize=8)
+def fife_drum_visit(slot: int, seed: int) -> FifeDrumVisit | None:
+    """The trio's visit in this slot, if any; it never spans two slots."""
+    rng = random.Random(seed * 7121 + slot * 70003 + 17)
+    if rng.random() >= FIFE_DRUM_CHANCE:
+        return None
+    visit = FifeDrumVisit(0.0, 1 if rng.random() < 0.5 else -1, rng.uniform(*FIFE_DRUM_HALT_COLUMNS), rng.uniform(*FIFE_DRUM_MARK_SECONDS))
+    return replace(visit, start=slot * FIFE_DRUM_SLOT_SECONDS + rng.uniform(0, FIFE_DRUM_SLOT_SECONDS - visit.end))
+
+
+def fife_drum_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return FIFE_DRUM in holiday_features(environment) and rain < 3 and snow < 2
+
+
+def hotdog_visits_between(seed: int, first: float, last: float):
+    for slot in range(math.floor(first / HOTDOG_SLOT_SECONDS), math.floor(last / HOTDOG_SLOT_SECONDS) + 1):
+        visit = hotdog_visit(slot, seed)
+        if visit is not None and visit.start < last and visit.end > first:
+            yield visit
+
+
+def fife_drum_visit_shown(environment: "OutsideEnvironment", visit: FifeDrumVisit, seed: int) -> bool:
+    """Whether a visit goes ahead: not while the dog is out or the hotdog mascot is on the meadow."""
+    if dog_allowed(environment) and next(dog_outings_between(seed, visit.start, visit.end), None) is not None:
+        return False
+    return not hotdog_allowed(environment) or not any(hotdog_visit_shown(environment, other, seed) for other in hotdog_visits_between(seed, visit.start, visit.end))
+
+
+@lru_cache(maxsize=128)
+def fife_drum_sprite(role: str, legs: str, hands: str = "", wave: int = 0, front: bool = False) -> tuple[str, ...]:
+    """A marcher facing right, or the viewer when `front` (standing only): role "drum" (hands names the sticks), "fife"
+    or "flag" (wave is the flag's ripple frame)."""
+    top = FIFE_DRUM_POLE_TOP if role == "flag" else 0
+    heads, torso = (FIFE_DRUM_FRONT_HEADS, FIFE_DRUM_FRONT_TORSO) if front else (FIFE_DRUM_HEADS, FIFE_DRUM_TORSO)
+    lower = FIFE_DRUM_FRONT_LEGS if front else FIFE_DRUM_LEGS[legs]
+    figure = (*heads["bandage" if role == "fife" else "hat"], *torso, *lower)
+    rows = [["."] * FIFE_DRUM_WIDTH for _ in range(top, len(figure))]
+
+    def put(column, row, char):
+        rows[row - top][column] = char
+
+    for row, line in enumerate(figure):
+        for column, char in enumerate(line):
+            if char != ".":
+                put(column, row, char)
+    if role == "drum":
+        overlays = (*FIFE_DRUM_FRONT_DRUM, *FIFE_DRUM_FRONT_STICKS[hands]) if front else (*FIFE_DRUM_DRUM, *FIFE_DRUM_STICKS[hands])
+    elif role == "fife":
+        overlays = FIFE_DRUM_FRONT_FIFE if front else FIFE_DRUM_FIFE
+    else:
+        # Seen from the side the flag flies behind the pole; from the front it flies downwind, to the right.
+        pole, away = (FIFE_DRUM_FRONT_POLE_COLUMN, 1) if front else (FIFE_DRUM_POLE_COLUMN, -1)
+        put(pole, top, "g")
+        for row in range(top + 1, len(heads["hat"]) + len(torso)):
+            put(pole, row, "P")
+        # Ripples run out from the pole, and the fly end flutters a column shorter on alternate frames.
+        cloth = len(FIFE_DRUM_FLAG[0])
+        for distance in range(cloth - wave % 2):
+            drop = 1 if distance >= 2 and (distance - wave) % 4 in (0, 1) else 0
+            for row, line in enumerate(FIFE_DRUM_FLAG):
+                put(pole + away * (1 + distance), FIFE_DRUM_FLAG_TOP + row + drop, line[cloth - 1 - distance])
+        overlays = FIFE_DRUM_FRONT_BEARER if front else FIFE_DRUM_BEARER
+    for column, row, char in overlays:
+        put(column, row, char)
+    return tuple("".join(line) for line in rows)
+
+
+def fife_drum_position(visit: FifeDrumVisit, age: float) -> float:
+    """The fifer's column `age` seconds into the visit."""
+    if age < visit.march_in:
+        return visit.enter + visit.heading * FIFE_DRUM_SPEED * age
+    if age < visit.march_in + visit.halt_seconds:
+        return visit.halt
+    return visit.halt + visit.heading * FIFE_DRUM_SPEED * (age - visit.march_in - visit.halt_seconds)
+
+
+def fife_drum_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> FifeDrumPose | None:
+    if not fife_drum_allowed(environment):
+        return None
+    visit = fife_drum_visit(math.floor(elapsed / FIFE_DRUM_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end or not fife_drum_visit_shown(environment, visit, seed):
+        return None
+    age = elapsed - visit.start
+    halted = age - visit.march_in
+    step = math.floor(age / FIFE_DRUM_STEP_SECONDS) % 2
+    wave = math.floor(age / FIFE_DRUM_WAVE_SECONDS) % 4
+    roll = ("near", "far")[math.floor(halted / FIFE_DRUM_ROLL_SECONDS) % 2]
+    x = fife_drum_position(visit, age)
+    spacing = visit.heading * FIFE_DRUM_SPACING
+    marchers = []
+    for index, role in enumerate(("drum", "fife", "flag")):
+        column = x + (1 - index) * spacing
+        flag_wave = wave if role == "flag" else 0
+        if not 0 <= halted < visit.halt_seconds:
+            # One drum stroke per step, and a one-row bob as the legs pass.
+            legs, sticks, lift, front = ("stand", "stride")[step], ("near", "far")[step], 1 - step, False
+        elif halted < visit.mark:
+            # Marking time through a drum roll.
+            legs, sticks, lift, front = ("stand", "lift")[step], roll, 0, False
+        elif visit.facing_front(index, halted):
+            # The drummer rolls on until halfway through the pause, then holds both sticks up.
+            rolling = halted < visit.mark + 2 * FIFE_DRUM_TURN_SECONDS + FIFE_DRUM_FRONT_SECONDS / 2
+            legs, sticks, lift, front = "stand", ("left", "right")[roll == "far"] if rolling else "up", 0, True
+        else:
+            # Standing at attention, waiting to turn or to step off.
+            legs, sticks, lift, front = "stand", "both", 0, False
+        sprite = fife_drum_sprite(role, legs, sticks if role == "drum" else "", flag_wave, front)
+        marchers.append((column, lift, sprite, 1 if front else visit.heading))
+    return FifeDrumPose(tuple(marchers))
+
+
+def draw_fife_drum(image: Image.Image, palette: Palette, pose: FifeDrumPose | None):
+    if pose is None:
+        return
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    # They stay readable after dark, when the fireworks are flying.
+    shade = 0.35 + 0.65 * illumination
+    colors = {char: tuple(round(value * shade) for value in color) for char, color in FIFE_DRUM_COLORS.items()}
+    d = ImageDraw.Draw(image)
+    for x, lift, sprite, facing in pose.marchers:
+        draw_standing_sprite(d, sprite, x, FIFE_DRUM_FEET_ROW - lift, facing, colors)
 
 
 # Through October a skeleton now and then jigs in along the front of the meadow, stops to dance or breakdance at a few
@@ -7298,6 +7735,7 @@ SUMMONS = {
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(e, t, s) is not None, 0.5, 0.25),
     "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
+    "fife_drum": Summon("Fife and drum trio", "The fife and drum trio only marches on July 4, and not in a downpour or heavy snow.", fife_drum_allowed, lambda e, t, s: fife_drum_state(e, t, s) is not None, 0.5, 0.5),
     "skeleton": Summon("Skeleton", "The skeleton only dances in October, and not in a downpour or heavy snow.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
     "ash_burst": Summon("Vesuvius ash burst", "Vesuvius puffs out ash bursts on the morning of August 24, before the rumble ahead of the noon eruption.", ash_burst_allowed, lambda e, t, s: vesuvius_burst(vesuvius_state(e), t, s) is not None, 1.0, 1.0),
@@ -7463,6 +7901,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_leaves(image, palette, environment, elapsed, seed)
     # The mascot walks along the front of the meadow, in front of everything that stands on it, the tree included.
     draw_hotdog(image, palette, hotdog_state(environment, elapsed, seed))
+    # So does the fife and drum trio.
+    draw_fife_drum(image, palette, fife_drum_state(environment, elapsed, seed))
     # So does the October skeleton.
     draw_skeleton(image, palette, skeleton_state(environment, elapsed, seed), night)
     if tree_ornaments_shown(environment):
