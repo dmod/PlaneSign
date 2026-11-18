@@ -54,6 +54,7 @@ HOLIDAY_NAMES = (
     ("flag", "Independence"),
     ("pumpkins", "Spooky season"),
     ("fireworks", "New Year"),
+    ("st_patricks", "St. Patrick's"),
 )
 # How long a sun event jump waits for the astronomy worker to cover a newly selected day.
 SKY_WAIT_SECONDS = 20

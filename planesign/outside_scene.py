@@ -469,9 +469,15 @@ def scene_palette(environment: "OutsideEnvironment") -> Palette:
         palette = replace(palette, grass=mix(palette.grass, (181, 199, 195), daylight * 0.35), water=mix(palette.water, (131, 168, 180), daylight * 0.25))
     if snow > 0:
         palette = replace(palette, field=mix(palette.field, (207, 218, 226), daylight * 0.85 + 0.1), foreground=mix(palette.foreground, (151, 180, 199), daylight * 0.8 + 0.1), grass=mix(palette.grass, (236, 235, 226), daylight * 0.75))
-    if HALLOWEEN in holiday_features(environment):
+    holidays = holiday_features(environment)
+    if HALLOWEEN in holidays:
         eerie = holiday_darkness(environment)
         palette = replace(palette, top=mix(palette.top, HALLOWEEN_SKY_TOP, eerie * 0.55), middle=mix(palette.middle, HALLOWEEN_SKY_MIDDLE, eerie * 0.45))
+    if ST_PATRICKS in holidays:
+        # The pond is dyed green; the dye keeps the water's brightness, so the pond still darkens at night.
+        dye = tuple(round(value * max(palette.water) / max(DAY.water)) for value in POND_DYE)
+        sheen = tuple(round(value * max(palette.glint) / max(DAY.glint)) for value in POND_DYE_GLINT)
+        palette = replace(palette, water=mix(palette.water, dye, POND_DYE_MIX), glint=mix(palette.glint, sheen, POND_DYE_MIX))
     # Vesuvius's ash darkens the sky and dims the land, in steps so the cached palettes and landscapes are reused.
     ash = round(vesuvius_ash(environment) * 24) / 24
     if ash > 0:
@@ -1351,7 +1357,8 @@ def draw_sky(image: Image.Image, environment: "OutsideEnvironment", palette: Pal
 
 
 # Columns a visiting deer, fox or rabbit stops at (a partner deer stands 12 columns right). While the October pumpkins
-# sit on that spot, they stop on the pond's near bank instead, the partner still clear of the pumpkins.
+# or the St. Patrick's pot of gold sit on that spot, they stop on the pond's near bank instead, the partner still clear of
+# them.
 WILDLIFE_TARGETS = (86, 91, 96)
 WILDLIFE_PUMPKIN_TARGETS = (54, 58, 62)
 
@@ -1373,7 +1380,7 @@ def wildlife_allowed(environment: "OutsideEnvironment") -> bool:
 def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int):
     """Return (species, visit age, duration, target x, pair) for the visit under way, or None. Deer, foxes and rabbits
     stay away whenever their visit would overlap the dog's time outside, an alien abduction, which brings its own deer,
-    or the October skeleton's dance."""
+    the October skeleton's dance or the St. Patrick's leprechaun's visit or conga line."""
     if not wildlife_allowed(environment):
         return None
     slot, age = divmod(elapsed, 100)
@@ -1387,7 +1394,11 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
         return None
     if skeleton_allowed(environment) and any(skeleton_visit_shown(environment, skeleton, seed, elapsed) for skeleton in skeleton_visits_between(seed, visit, visit + duration)):
         return None
-    return species, age - start, duration, (WILDLIFE_PUMPKIN_TARGETS if PUMPKINS in holiday_features(environment) else WILDLIFE_TARGETS)[target], pair
+    if leprechaun_allowed(environment) and any(leprechaun_visit_shown(environment, leprechaun, seed, elapsed) for leprechaun in leprechaun_visits_between(seed, visit, visit + duration)):
+        return None
+    if conga_present(environment, seed, visit, visit + duration, elapsed):
+        return None
+    return species, age - start, duration, (WILDLIFE_PUMPKIN_TARGETS if holiday_features(environment) & NEAR_BANK_HOLIDAYS else WILDLIFE_TARGETS)[target], pair
 
 
 def birds_allowed(environment: "OutsideEnvironment") -> bool:
@@ -3017,6 +3028,7 @@ CHRISTMAS_LAST_DAY = 26
 THANKSGIVING_SPAN = (11, 22, 28, 3)
 # The anniversary of the eruption of Vesuvius in AD 79, the date Pliny the Younger's letters give.
 VESUVIUS = "vesuvius"
+ST_PATRICKS = "st_patricks"
 # Holiday easter eggs, active all day on the displayed local date: feature -> (label, (month, first day, last day[, weekday])
 # spans). A span with a weekday covers only that weekday within its days. The Outside lab builds its holiday shortcuts
 # from this table.
@@ -3036,6 +3048,7 @@ HOLIDAYS = {
     "halloween": ("Halloween", ((10, 31, 31),)),
     "thanksgiving": ("Thanksgiving", (THANKSGIVING_SPAN,)),
     VESUVIUS: ("Vesuvius eruption", ((8, 24, 24),)),
+    ST_PATRICKS: ("St. Patrick's Day", ((3, 17, 17),)),
 }
 # (month, day) of holidays whose whole scene stays up through the following night, until sunrise the next morning.
 HOLIDAY_NIGHTS = frozenset({(7, 4)})
@@ -3573,7 +3586,8 @@ def skywriter_show(slot: int, seed: int, witch: bool = False) -> SkywriterShow |
 
 def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
     """Sunny daylight with a light, known wind. The plane stays away when the sky is already busy: on Christmas Eve while
-    Santa crosses, on fireworks days and on Vesuvius day. On Halloween the witch still flies; the ghost and the spider skip her shows."""
+    Santa crosses, on fireworks days, on Vesuvius day and under the St. Patrick's rainbow. On Halloween the witch still
+    flies; the ghost and the spider skip her shows."""
     w = environment.weather
     rain, snow = precipitation(environment)
     holidays = holiday_features(environment)
@@ -3587,7 +3601,7 @@ def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
         and w.wind is not None
         and w.wind < SKYWRITER_MAX_WIND
         and (w.visibility is None or w.visibility >= SKYWRITER_MIN_VISIBILITY)
-        and not holidays & {"santa", "fireworks", VESUVIUS}
+        and not holidays & {"santa", "fireworks", VESUVIUS, ST_PATRICKS}
     )
 
 
@@ -3788,8 +3802,8 @@ ABDUCTION_SUN_ALTITUDE = SET_ALTITUDE - 0.75
 SUN_MAX_CLIMB = 0.25 / 60
 ABDUCTION_MAX_WIND = 30
 # The abducted deer grazes at one of these columns, so the saucer hovering over it clears the tree; a partner grazes
-# ABDUCTION_PAIR_GAP columns right of it and bolts when the beam comes on. While the October pumpkins sit on that
-# spot, the deer graze on the pond's near bank instead.
+# ABDUCTION_PAIR_GAP columns right of it and bolts when the beam comes on. While the October pumpkins or the St. Patrick's
+# pot of gold sit on that spot, the deer graze on the pond's near bank instead.
 ABDUCTION_TARGETS = (80, 83, 86)
 ABDUCTION_PUMPKIN_TARGETS = (52, 55, 58)
 ABDUCTION_PAIR_CHANCE = 0.6
@@ -3871,7 +3885,7 @@ def abduction_state(environment: "OutsideEnvironment") -> tuple[Abduction, float
     for at in abduction_times(environment.moment, 0, 0):
         if abduction_dark(environment, at):
             target, pair = abduction_plan(round(at))
-            columns = ABDUCTION_PUMPKIN_TARGETS if PUMPKINS in holiday_features(environment) else ABDUCTION_TARGETS
+            columns = ABDUCTION_PUMPKIN_TARGETS if holiday_features(environment) & NEAR_BANK_HOLIDAYS else ABDUCTION_TARGETS
             return Abduction(at, columns[target], pair), environment.moment.timestamp() - at
     return None
 
@@ -6709,6 +6723,713 @@ def draw_skeleton(image: Image.Image, palette: Palette, pose: SkeletonPose | Non
     draw_standing_sprite(ImageDraw.Draw(image), skeleton_sprite(*pose.arms, pose.legs, pose.pop, pose.skull, pose.turn), pose.x, SKELETON_FEET_ROW - pose.lift, 1, colors)
 
 
+# On St. Patrick's Day a rainbow arcs over the valley and comes down in a pot of gold on the pond's right bank (the
+# pumpkins' spot), shamrocks dot the meadow and the pond is dyed green, as Chicago dyes its river. Now and then a
+# leprechaun pops in at the top of the rainbow, slides down it into his pot, hops out to tip his hat, dance a jig, click
+# his heels and flip a coin, then vanishes in a puff of sparkles. With no rainbow up, he pops in beside the pot instead.
+# Holidays whose props stand on the pond's right bank, so visiting deer, foxes and rabbits (and the abduction's deer)
+# stop on its near bank instead.
+NEAR_BANK_HOLIDAYS = frozenset({PUMPKINS, ST_PATRICKS})
+# The pot stands centered on POT_X with its legs on POT_BOTTOM: o/O coins (O catch the light), k black iron, h its sheen.
+POT_OF_GOLD = ("..oOo..", ".oOoOo.", "kkkkkkk", ".hkkkk.", ".hkkkk.", "..kkk..", ".k...k.")
+POT_X, POT_BOTTOM = 89, 31
+POT_TOP = POT_BOTTOM - len(POT_OF_GOLD) + 1
+# The rim's row in the sprite. The rim and the rows below it are the pot's front, which hides a leprechaun inside.
+POT_RIM = 2
+POT_COLORS = {"o": (214, 150, 28), "O": (255, 224, 92), "k": (30, 30, 36), "h": (96, 98, 112)}
+# Each coin pixel flashes pale gold with this chance per tick, at this many ticks a second.
+POT_GLINT = (255, 250, 214)
+POT_GLINT_CHANCE = 0.08
+POT_GLINT_RATE = 4
+# After dark the gold keeps its shine and glows, lighting the grass and anyone beside it.
+POT_GLOW = (255, 196, 60)
+POT_GLOW_REACH = 4.5
+POT_GLOW_STRENGTH = 0.8
+# The rainbow is the arc of a circle centered below the meadow, with one-pixel bands from red outside to violet inside.
+# Its middle band comes down on the pot's coins, in front of the mountain and hills; its left foot sinks behind the
+# hills. The apex stays below the corner labels.
+RAINBOW_COLORS = ((236, 60, 56), (246, 142, 48), (246, 222, 84), (84, 204, 92), (72, 124, 236), (146, 84, 206))
+RAINBOW_RADIUS = 24
+RAINBOW_MIDDLE = RAINBOW_RADIUS - len(RAINBOW_COLORS) / 2
+RAINBOW_CENTER_Y = 30.5
+RAINBOW_CENTER_X = POT_X - math.sqrt(RAINBOW_MIDDLE**2 - (RAINBOW_CENTER_Y - POT_TOP) ** 2)
+# How far down the right side (radians from the apex) the middle band reaches the coins.
+RAINBOW_FOOT_ANGLE = math.acos((RAINBOW_CENTER_Y - POT_TOP) / RAINBOW_MIDDLE)
+RAINBOW_OPACITY = 0.6
+# The rainbow fades in over this many degrees of sun altitude after sunrise and out before sunset, and dims under cloud.
+RAINBOW_FADE_DEGREES = 4
+RAINBOW_CLOUD_DIM = 0.5
+# Under a bright moon a faint, nearly white moonbow shows instead.
+MOONBOW_TINT = 0.75
+MOONBOW_WHITE = (226, 232, 242)
+MOONBOW_OPACITY = 0.3
+MOONBOW_GAIN = 1.5
+# Glints of gold slide down the rainbow into the pot, each taking this many seconds from the apex.
+RAINBOW_GLINTS = 3
+RAINBOW_GLINT_SECONDS = 2.6
+# Clover in the meadow's front rows, clear of the fence, the pond, the pot, the leprechaun's spot and the maple's trunk:
+# (center column, top row). L leaves, D where they meet, s stem.
+SHAMROCK = (".L.", "LDL", ".s.")
+SHAMROCKS = ((44, 29), (49, 29), (96, 29), (102, 29), (106, 27), (118, 29), (124, 28))
+SHAMROCK_COLORS = {"L": (64, 196, 84), "D": (30, 120, 50), "s": (44, 112, 46)}
+# The dye keeps the water's brightness; the glint on the ripples turns pale green with it.
+POND_DYE = (24, 176, 86)
+POND_DYE_GLINT = (150, 236, 170)
+POND_DYE_MIX = 0.8
+LEPRECHAUN_SLOT_SECONDS = 90
+LEPRECHAUN_CHANCE = 0.6
+LEPRECHAUN_TICK = 0.12
+# He appears halfway through the puff he pops in on and is gone halfway through the one he vanishes in.
+LEPRECHAUN_POP_SECONDS = 0.7
+LEPRECHAUN_PERCH_SECONDS = 0.8
+LEPRECHAUN_SLIDE_SECONDS = 1.8
+LEPRECHAUN_SPLASH_SECONDS = 1.7
+LEPRECHAUN_HOP_SECONDS = 0.5
+LEPRECHAUN_HOP_HEIGHT = 5
+LEPRECHAUN_ENTRY_SECONDS = LEPRECHAUN_POP_SECONDS + LEPRECHAUN_PERCH_SECONDS + LEPRECHAUN_SLIDE_SECONDS + LEPRECHAUN_SPLASH_SECONDS + LEPRECHAUN_HOP_SECONDS
+# He slides only while the rainbow or moonbow shows at least this strongly.
+LEPRECHAUN_SLIDE_LEVEL = 0.25
+# He dances just left of the pot, in front of the pond's right end.
+LEPRECHAUN_SPOT = (80, 31)
+# Sunk into the pot up to his beard, bobbing, while coins splash out to either side (px/s up, px/s sideways), each a
+# little after the last, and drop into the grass on this row.
+LEPRECHAUN_POT_FEET = 29
+LEPRECHAUN_SPLASH_COINS = 6
+LEPRECHAUN_SPLASH_SPEED = (18, 24)
+LEPRECHAUN_SPLASH_DRIFT = (6, 12)
+LEPRECHAUN_SPLASH_STAGGER = 0.05
+LEPRECHAUN_SPLASH_GROUND = 30
+COIN_GRAVITY = 44
+# A flipped coin leaves his raised hand at this speed (px/s), spinning, and drops back into it.
+LEPRECHAUN_FLIP_SPEED = 22
+LEPRECHAUN_FLIP_HAND = (-3, -9)
+COIN_SPIN_RATE = 12
+# Facing the viewer: H hat, K hat band, belt and shoes, G gold buckles, B red beard and hair, S skin, E eyes, C green coat
+# and breeches, W white stockings. "tip" lifts his hat off his hair with his left hand and "flip" raises his right hand
+# (the viewer's left, inside the rainbow's arc, so the coin shows against the mountain) to flick a coin; "slide" sits
+# with his arms flung up.
+LEPRECHAUN_SPRITES = {
+    "stand": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", ".BESEB.", ".BSSSB.", "..BBB..", ".CCBCC.", "SCCCCCS", ".KKGKK.", ".CC.CC.", ".W...W.", "KK...KK"),
+    "hips": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", ".BESEB.", ".BSSSB.", "..BBB..", "CCCBCCC", "C.CCC.C", "SKKGKKS", ".CC.CC.", ".W...W.", "KK...KK"),
+    "crouch": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", ".BESEB.", ".BSSSB.", "..BBB..", ".CCBCC.", "SCCCCCS", ".KKGKK.", ".CC.CC.", "KK...KK"),
+    "kick": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", ".BESEB.", ".BSSSB.", "..BBB..", ".CCBCC.", "SCCCCCS", ".KKGKK.", ".CC.CCW", ".W...KK", "KK....."),
+    "click": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", ".BESEB.", ".BSSSB.", "S.BBB.S", "CCCBCCC", ".CCCCC.", ".KKGKK.", "..CCC..", "...WW..", "...KKKK"),
+    "tip": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHS", "..BBB.C", ".BESEBC", ".BSSSBC", "..BBBC.", ".CCBCC.", "SCCCCC.", ".KKGKK.", ".CC.CC.", ".W...W.", "KK...KK"),
+    "flip": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", "SBESEB.", "CBSSSB.", ".CBBB..", ".CCBCC.", ".CCCCCS", ".KKGKK.", ".CC.CC.", ".W...W.", "KK...KK"),
+    "slide": ("..HHH..", "..HHH..", "..KGK..", "HHHHHHH", ".BESEB.", "SBSSSBS", "C.BBB.C", "CCCBCCC", ".KKGKK.", "KWCCCWK"),
+}
+LEPRECHAUN_SPRITES["kick_l"] = tuple(row[::-1] for row in LEPRECHAUN_SPRITES["kick"])
+LEPRECHAUN_COLORS = {"H": (24, 124, 52), "K": (18, 18, 22), "G": (255, 204, 48), "B": (232, 104, 28), "S": (240, 190, 150), "E": (40, 24, 20), "C": (52, 180, 80), "W": (240, 240, 232)}
+# Sparkles of the puff he pops in and out on, swirling outward as they fade.
+LEPRECHAUN_PUFF_COLORS = ((96, 255, 120), (255, 214, 64), (255, 255, 236))
+LEPRECHAUN_PUFF_SPARKS = 10
+LEPRECHAUN_PUFF_RADIUS = 6
+LEPRECHAUN_PUFF_FLASH = (190, 255, 200)
+
+
+def leprechaun_act(name: str) -> tuple[tuple[str, int, int], ...]:
+    """One act of his routine, one (pose, rows lifted, ticks since he flipped a coin or -1) per tick."""
+
+    def hold(pose: str, ticks: int, lift: int = 0) -> list[tuple[str, int, int]]:
+        return [(pose, lift, -1)] * ticks
+
+    if name == "tip":
+        return tuple(hold("stand", 3) + hold("tip", 10) + hold("stand", 3))
+    if name == "jig":
+        # Irish step dancing: arms held stiffly at his sides while his feet fly.
+        return tuple(hold("kick", 2, 1) + hold("stand", 1) + hold("kick_l", 2, 1) + hold("stand", 1)) * 4
+    if name == "click":
+        return tuple(hold("crouch", 2) + [("click", 2, -1), ("click", 3, -1), ("click", 3, -1), ("click", 2, -1)] + hold("crouch", 2) + hold("hips", 4))
+    flight = math.ceil(2 * LEPRECHAUN_FLIP_SPEED / COIN_GRAVITY / LEPRECHAUN_TICK)
+    return tuple(hold("hips", 2) + [("flip", 0, tick) for tick in range(flight)] + hold("hips", 3))
+
+
+LEPRECHAUN_ACTS = {name: leprechaun_act(name) for name in ("tip", "jig", "click", "flip")}
+
+
+@dataclass(frozen=True)
+class LeprechaunVisit:
+    start: float
+    # His routine beside the pot, one (pose, rows lifted, ticks since he flipped a coin or -1) per tick.
+    frames: tuple[tuple[str, int, int], ...]
+
+    @property
+    def end(self) -> float:
+        return self.start + LEPRECHAUN_ENTRY_SECONDS + len(self.frames) * LEPRECHAUN_TICK + LEPRECHAUN_POP_SECONDS
+
+
+@dataclass(frozen=True)
+class LeprechaunPose:
+    # (sprite, center column, feet row), or None while he is hidden in a puff.
+    figure: tuple[str, float, float] | None
+    # Sitting in the pot, so its front hides him below the rim.
+    in_pot: bool
+    # (x, y, seconds into it) of the puff of sparkles he pops in or vanishes in.
+    puff: tuple[float, float, float] | None
+    # (x, y, face showing) of each coin in the air.
+    coins: tuple[tuple[float, float, bool], ...]
+
+
+@lru_cache(maxsize=8)
+def leprechaun_visit(slot: int, seed: int) -> LeprechaunVisit | None:
+    """The leprechaun's visit in this slot, if any. He always tips his hat first and clicks his heels last; it never
+    spans two slots."""
+    rng = random.Random(seed * 7019 + slot * 90001 + 97)
+    if rng.random() >= LEPRECHAUN_CHANCE:
+        return None
+    middle = ["jig", "flip"]
+    rng.shuffle(middle)
+    if rng.random() < 0.5:
+        middle.insert(rng.randint(0, len(middle)), rng.choice(("jig", "click")))
+    frames = tuple(frame for act in ("tip", *middle, "click") for frame in LEPRECHAUN_ACTS[act])
+    visit = LeprechaunVisit(0.0, frames)
+    return replace(visit, start=slot * LEPRECHAUN_SLOT_SECONDS + rng.uniform(0, LEPRECHAUN_SLOT_SECONDS - visit.end))
+
+
+def leprechaun_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return ST_PATRICKS in holiday_features(environment) and rain < 3 and snow < 2
+
+
+def leprechaun_visits_between(seed: int, first: float, last: float):
+    for slot in range(math.floor(first / LEPRECHAUN_SLOT_SECONDS), math.floor(last / LEPRECHAUN_SLOT_SECONDS) + 1):
+        visit = leprechaun_visit(slot, seed)
+        if visit is not None and visit.start < last and visit.end > first:
+            yield visit
+
+
+def leprechaun_visit_shown(environment: "OutsideEnvironment", visit: LeprechaunVisit, seed: int, elapsed: float) -> bool:
+    """Whether a visit goes ahead: he is shy of the dog and of alien abductions, and stays out of the conga line's way
+    (`elapsed` is the animation clock at the displayed moment)."""
+    if dog_allowed(environment) and next(dog_outings_between(seed, visit.start, visit.end), None) is not None:
+        return False
+    if conga_present(environment, seed, visit.start, visit.end, elapsed):
+        return False
+    return not abduction_overlaps(environment, visit.start - elapsed, visit.end - elapsed)
+
+
+def rainbow_point(angle: float) -> tuple[float, float]:
+    """The point on the rainbow's middle band `angle` radians right of its apex."""
+    return RAINBOW_CENTER_X + RAINBOW_MIDDLE * math.sin(angle), RAINBOW_CENTER_Y - RAINBOW_MIDDLE * math.cos(angle)
+
+
+def coin_height(speed: float, age: float) -> float:
+    return speed * age - COIN_GRAVITY * age * age / 2
+
+
+def leprechaun_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> LeprechaunPose | None:
+    if not leprechaun_allowed(environment):
+        return None
+    visit = leprechaun_visit(math.floor(elapsed / LEPRECHAUN_SLOT_SECONDS), seed)
+    if visit is None or not visit.start <= elapsed < visit.end or not leprechaun_visit_shown(environment, visit, seed, elapsed):
+        return None
+    age = elapsed - visit.start
+    spot_x, spot_feet = LEPRECHAUN_SPOT
+    puff_y = spot_feet - len(LEPRECHAUN_SPRITES["stand"]) // 2
+    half_puff = LEPRECHAUN_POP_SECONDS / 2
+    if age < LEPRECHAUN_ENTRY_SECONDS:
+        if max(rainbow_levels(environment)) < LEPRECHAUN_SLIDE_LEVEL:
+            arrive = LEPRECHAUN_ENTRY_SECONDS - LEPRECHAUN_POP_SECONDS
+            if age < arrive:
+                return None
+            return LeprechaunPose(("hips", spot_x, spot_feet) if age - arrive >= half_puff else None, False, (spot_x, puff_y, age - arrive), ())
+        if age < LEPRECHAUN_POP_SECONDS + LEPRECHAUN_PERCH_SECONDS:
+            x, feet = rainbow_point(0)
+            puff = (x, feet - len(LEPRECHAUN_SPRITES["slide"]) // 2, age) if age < LEPRECHAUN_POP_SECONDS else None
+            return LeprechaunPose(("slide", x, feet) if age >= half_puff else None, False, puff, ())
+        age -= LEPRECHAUN_POP_SECONDS + LEPRECHAUN_PERCH_SECONDS
+        if age < LEPRECHAUN_SLIDE_SECONDS:
+            # He gathers speed like a sled on a hill.
+            return LeprechaunPose(("slide", *rainbow_point(RAINBOW_FOOT_ANGLE * (age / LEPRECHAUN_SLIDE_SECONDS) ** 2)), False, None, ())
+        age -= LEPRECHAUN_SLIDE_SECONDS
+        if age < LEPRECHAUN_SPLASH_SECONDS:
+            coins = []
+            for index in range(LEPRECHAUN_SPLASH_COINS):
+                low, high = LEPRECHAUN_SPLASH_SPEED
+                speed = low + (high - low) * unit_hash(seed, round(visit.start), index, 1)
+                side = 1 if index % 2 else -1
+                drift = side * (LEPRECHAUN_SPLASH_DRIFT[0] + (LEPRECHAUN_SPLASH_DRIFT[1] - LEPRECHAUN_SPLASH_DRIFT[0]) * unit_hash(seed, round(visit.start), index, 2))
+                flight = age - index * LEPRECHAUN_SPLASH_STAGGER
+                height = coin_height(speed, flight)
+                if flight > 0 and height >= POT_TOP - LEPRECHAUN_SPLASH_GROUND:
+                    coins.append((POT_X + drift * flight, POT_TOP - height, math.floor(flight * COIN_SPIN_RATE + index) % 2 == 0))
+            bob = math.floor(age * 5) % 2
+            return LeprechaunPose(("slide", POT_X, LEPRECHAUN_POT_FEET - bob), True, None, tuple(coins))
+        progress = (age - LEPRECHAUN_SPLASH_SECONDS) / LEPRECHAUN_HOP_SECONDS
+        x = POT_X + (spot_x - POT_X) * progress
+        feet = LEPRECHAUN_POT_FEET + (spot_feet - LEPRECHAUN_POT_FEET) * progress - LEPRECHAUN_HOP_HEIGHT * 4 * progress * (1 - progress)
+        return LeprechaunPose(("click", x, feet), False, None, ())
+    age -= LEPRECHAUN_ENTRY_SECONDS
+    tick = math.floor(age / LEPRECHAUN_TICK)
+    if tick < len(visit.frames):
+        pose, lift, flipped = visit.frames[tick]
+        coins = ()
+        if flipped >= 0:
+            flight = age - (tick - flipped) * LEPRECHAUN_TICK
+            height = coin_height(LEPRECHAUN_FLIP_SPEED, flight)
+            if height >= 0:
+                hand_x, hand_y = LEPRECHAUN_FLIP_HAND
+                coins = ((spot_x + hand_x, spot_feet + hand_y - height, math.floor(flight * COIN_SPIN_RATE) % 2 == 0),)
+        return LeprechaunPose((pose, spot_x, spot_feet - lift), False, None, coins)
+    gone = age - len(visit.frames) * LEPRECHAUN_TICK
+    return LeprechaunPose(("stand", spot_x, spot_feet) if gone < half_puff else None, False, (spot_x, puff_y, gone), ())
+
+
+def rainbow_levels(environment: "OutsideEnvironment") -> tuple[float, float]:
+    """(rainbow, moonbow) strength, each 0..1, on St. Patrick's Day: the rainbow while the sun is up, dimmed by cloud,
+    and the moonbow under a bright moon after dark."""
+    altitude = environment.sun_altitude
+    if ST_PATRICKS not in holiday_features(environment) or altitude is None:
+        return 0.0, 0.0
+    day = max(0.0, min(1.0, (altitude - SET_ALTITUDE) / RAINBOW_FADE_DEGREES)) * (1 - RAINBOW_CLOUD_DIM * cloud_cover(environment))
+    return day, min(1.0, moonlight(environment) * MOONBOW_GAIN) * holiday_darkness(environment)
+
+
+def rainbow_bands() -> np.ndarray:
+    """Each pixel's band, 0 (red) to 5 (violet), or -1 where the rainbow does not show."""
+    ys, xs = np.mgrid[0:HEIGHT, 0:WIDTH]
+    band = np.floor(RAINBOW_RADIUS - np.hypot(xs - RAINBOW_CENTER_X, ys - RAINBOW_CENTER_Y)).astype(int)
+    # Left of center it shows only against the sky; right of center it comes down in front of the land onto the coins.
+    shown = (band >= 0) & (band < len(RAINBOW_COLORS)) & np.where(xs < RAINBOW_CENTER_X, np.asarray(LAND) == 0, ys < POT_TOP + POT_RIM)
+    return np.where(shown, band, -1)
+
+
+RAINBOW_BANDS = rainbow_bands()
+RAINBOW_ROWS = slice(int(np.flatnonzero((RAINBOW_BANDS >= 0).any(axis=1))[0]), int(np.flatnonzero((RAINBOW_BANDS >= 0).any(axis=1))[-1]) + 1)
+RAINBOW_SHOWN = (RAINBOW_BANDS >= 0)[RAINBOW_ROWS, :, None].astype(np.float32)
+RAINBOW_LAYER = np.array(RAINBOW_COLORS, dtype=np.float32)[RAINBOW_BANDS.clip(0)][RAINBOW_ROWS]
+MOONBOW_LAYER = RAINBOW_LAYER + (np.array(MOONBOW_WHITE, dtype=np.float32) - RAINBOW_LAYER) * MOONBOW_TINT
+
+
+def draw_rainbow(image: Image.Image, levels: tuple[float, float], elapsed: float, seed: int) -> Image.Image:
+    day, moon = levels
+    if day <= 0 and moon <= 0:
+        return image
+    pixels = np.array(image)
+    band = pixels[RAINBOW_ROWS].astype(np.float32)
+    for layer, strength in ((MOONBOW_LAYER, MOONBOW_OPACITY * moon), (RAINBOW_LAYER, RAINBOW_OPACITY * day)):
+        if strength > 0:
+            band += (layer - band) * RAINBOW_SHOWN * strength
+    pixels[RAINBOW_ROWS] = np.round(band).astype(np.uint8)
+    image = Image.fromarray(pixels, "RGB")
+    d = ImageDraw.Draw(image)
+    level = max(day, moon * MOONBOW_OPACITY / RAINBOW_OPACITY)
+    for index in range(RAINBOW_GLINTS):
+        cycle, progress = divmod(elapsed / RAINBOW_GLINT_SECONDS + index / RAINBOW_GLINTS, 1)
+        radius = RAINBOW_RADIUS - 0.5 - math.floor(unit_hash(seed, index, int(cycle), 101) * len(RAINBOW_COLORS))
+        angle = RAINBOW_FOOT_ANGLE * progress**1.6
+        x, y = round(RAINBOW_CENTER_X + radius * math.sin(angle)), round(RAINBOW_CENTER_Y - radius * math.cos(angle))
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and RAINBOW_BANDS[y, x] >= 0:
+            d.point((x, y), fill=mix(image.getpixel((x, y)), POT_GLINT, level * math.sin(math.pi * progress) ** 0.5 * 0.9))
+    return image
+
+
+def shamrock_pixels() -> tuple[tuple[int, int, str], ...]:
+    return tuple((x - 1 + column, top + row, char) for x, top in SHAMROCKS for row, line in enumerate(SHAMROCK) for column, char in enumerate(line) if char != ".")
+
+
+SHAMROCK_PIXELS = shamrock_pixels()
+POT_PIXELS = tuple((POT_X - len(POT_OF_GOLD[0]) // 2 + column, POT_TOP + row, char) for row, line in enumerate(POT_OF_GOLD) for column, char in enumerate(line) if char != ".")
+
+
+def draw_shamrocks(image: Image.Image, palette: Palette):
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    d = ImageDraw.Draw(image)
+    for x, y, char in SHAMROCK_PIXELS:
+        d.point((x, y), fill=tuple(round(value * illumination) for value in SHAMROCK_COLORS[char]))
+
+
+def draw_pot_of_gold(image: Image.Image, palette: Palette, night: float, elapsed: float, front_only: bool = False):
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    tick = math.floor(elapsed * POT_GLINT_RATE)
+    d = ImageDraw.Draw(image)
+    for x, y, char in POT_PIXELS:
+        if front_only and y < POT_TOP + POT_RIM:
+            continue
+        color = POT_COLORS[char]
+        lit = tuple(round(value * illumination) for value in color)
+        if char in "oO":
+            # The gold keeps its shine after dark.
+            lit = mix(lit, color, night * 0.8)
+            if unit_hash(x, y, tick, 103) < POT_GLINT_CHANCE:
+                lit = POT_GLINT
+        d.point((x, y), fill=lit)
+
+
+def pot_glow() -> tuple[int, np.ndarray]:
+    """(first row, mask) of how strongly the gold lights the pixels around it, leaving the pot itself."""
+    mask = candle_glow_mask(POT_X, POT_TOP + 1, POT_GLOW_REACH)
+    for x, y, _ in POT_PIXELS:
+        mask[y, x] = 0
+    top = int(np.flatnonzero((mask > 0.004).any(axis=1))[0])
+    return top, mask[top:]
+
+
+POT_GLOW_ROW, POT_GLOW_MASK = pot_glow()
+
+
+def draw_pot_glow(image: Image.Image, night: float, elapsed: float) -> Image.Image:
+    if night <= 0:
+        return image
+    light = POT_GLOW_MASK * (POT_GLOW_STRENGTH * night * (0.85 + 0.15 * math.sin(elapsed * 1.7)))
+    pixels = np.array(image)
+    band = pixels[POT_GLOW_ROW:].astype(np.float32)
+    band += (np.array(POT_GLOW, dtype=np.float32) - band) * light[..., None]
+    pixels[POT_GLOW_ROW:] = np.round(band).astype(np.uint8)
+    return Image.fromarray(pixels, "RGB")
+
+
+def draw_leprechaun_puff(image: Image.Image, x: float, y: float, age: float):
+    progress = age / LEPRECHAUN_POP_SECONDS
+    if not 0 <= progress < 1:
+        return
+    d = ImageDraw.Draw(image)
+    if progress < 0.4:
+        flash = (1 - progress / 0.4) * 0.8
+        for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
+            px, py = round(x) + dx, round(y) + dy
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=mix(image.getpixel((px, py)), LEPRECHAUN_PUFF_FLASH, flash * (1 if dx == dy == 0 else 0.6)))
+    radius = 1 + (LEPRECHAUN_PUFF_RADIUS - 1) * (1 - (1 - progress) ** 2)
+    for index in range(LEPRECHAUN_PUFF_SPARKS):
+        angle = math.tau * index / LEPRECHAUN_PUFF_SPARKS + progress * 1.5
+        reach = radius * (0.7 + 0.15 * (index % 3))
+        px, py = round(x + math.cos(angle) * reach), round(y + math.sin(angle) * reach * 0.85)
+        twinkle = 0.55 if (index + math.floor(age * 20)) % 3 == 0 else 1.0
+        if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+            d.point((px, py), fill=mix(image.getpixel((px, py)), LEPRECHAUN_PUFF_COLORS[index % len(LEPRECHAUN_PUFF_COLORS)], (1 - progress) * twinkle))
+
+
+def draw_leprechaun(image: Image.Image, palette: Palette, pose: LeprechaunPose | None, night: float, elapsed: float):
+    if pose is None:
+        return
+    d = ImageDraw.Draw(image)
+    if pose.figure is not None:
+        sprite, x, feet = pose.figure
+        illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+        shade = 0.4 + 0.6 * illumination
+        colors = {char: tuple(round(value * shade) for value in color) for char, color in LEPRECHAUN_COLORS.items()}
+        draw_standing_sprite(d, LEPRECHAUN_SPRITES[sprite], x, round(feet), 1, colors)
+        if pose.in_pot:
+            draw_pot_of_gold(image, palette, night, elapsed, front_only=True)
+    for x, y, face in pose.coins:
+        px, py = round(x), round(y)
+        if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+            d.point((px, py), fill=POT_COLORS["O" if face else "o"])
+    if pose.puff is not None:
+        draw_leprechaun_puff(image, *pose.puff)
+
+
+# The leprechauns get so excited on St. Patrick's Day that now and then a whole conga line of them dances in along the
+# front of the meadow, tips onto the frame's right edge and climbs it, crosses the top upside down, comes down the left
+# edge and dances off along the meadow, all doing three steps and a kick together. Each dancer's feet follow the
+# frame's border, so his head always points into the picture; as soon as his nose touches the next edge he tips up onto
+# it (conga_path). Over the top the line passes under the corner labels, which are drawn after it.
+CONGA_SLOT_SECONDS = 150
+CONGA_CHANCE = 0.4
+CONGA_DANCERS = 7
+# Feet to feet along the path; each follower's hands then rest on the back of the dancer ahead.
+CONGA_SPACING = 6
+CONGA_SPEED = 14
+# Rotation steps per quarter turn while tipping around a corner.
+CONGA_TURN_STEPS = 6
+CONGA_BEAT_SECONDS = 0.3
+# The leader enters from beyond the left edge and the last dancer leaves beyond the right one.
+CONGA_ENTRY_X, CONGA_EXIT_X = -5, WIDTH + 4
+# Facing right, in the leprechaun's colors; the feet sit on the bottom row under CONGA_ANCHOR. A follower reaches for the
+# shoulder ahead; the leader pumps a fist. The legs step apart and together, then kick out behind.
+CONGA_HEAD = ("..HHH...", "..HHH...", "..KKG...", ".HHHHH..", "..BSES..", "..BBBS..", "..BBB...")
+CONGA_ARMS = {"reach": ((".CCCCSS.", ".CCCC..."), {}), "up": ((".CCCC...", ".CCCC..."), {0: (6, "S"), 1: (6, "C"), 2: (6, "C"), 3: (6, "C")}), "forward": ((".CCCCC..", ".CCCC..."), {5: (7, "S"), 6: (6, "C")})}
+CONGA_LEGS = {"apart": (".KKGK...", ".CW.CW..", ".K..KK.."), "together": (".KKGK...", "..CW....", "..KKK..."), "kick": ("CKKGK...", "W..CW...", "...KK...")}
+CONGA_ANCHOR = 3
+# One (legs, rows hopped, leader's arm) per beat.
+CONGA_STEPS = (("apart", 0, "up"), ("together", 0, "forward"), ("apart", 0, "up"), ("kick", 1, "up"))
+
+
+@lru_cache(maxsize=8)
+def conga_sprite(arms: str, legs: str) -> tuple[str, ...]:
+    body, hand = CONGA_ARMS[arms]
+    rows = [list(line) for line in (*CONGA_HEAD, *body, *CONGA_LEGS[legs])]
+    for row, (column, char) in hand.items():
+        rows[row][column] = char
+    return tuple("".join(line) for line in rows)
+
+
+# Part order of the color table draw_conga builds.
+CONGA_PARTS = tuple(LEPRECHAUN_COLORS)
+
+
+@lru_cache(maxsize=4 * CONGA_TURN_STEPS * len(CONGA_ARMS) * len(CONGA_LEGS))
+def conga_pixels(arms: str, legs: str, step: int) -> tuple[np.ndarray, np.ndarray]:
+    """(offsets from the feet as (n, 2) x, y, index into CONGA_PARTS) of a dancer turned `step` / CONGA_TURN_STEPS
+    quarter turns counterclockwise on screen. Each screen pixel samples the sprite through the inverse turn, so
+    in-between angles lose no pixels."""
+    rows = conga_sprite(arms, legs)
+    height, width = len(rows), len(rows[0])
+    angle = math.pi / 2 * step / CONGA_TURN_STEPS
+    forward, up = (math.cos(angle), -math.sin(angle)), (-math.sin(angle), -math.cos(angle))
+    reach = max(height, width) + 1
+    pixels = []
+    for dy in range(-reach, reach + 1):
+        for dx in range(-reach, reach + 1):
+            column = math.floor(dx * forward[0] + dy * forward[1] + 0.5) + CONGA_ANCHOR
+            row = height - 1 - math.floor(dx * up[0] + dy * up[1] + 0.5)
+            if 0 <= column < width and 0 <= row < height and rows[row][column] != ".":
+                pixels.append((dx, dy, CONGA_PARTS.index(rows[row][column])))
+    table = np.array(pixels, dtype=int)
+    return table[:, :2], table[:, 2]
+
+
+def conga_path() -> tuple[tuple[float, tuple[float, float], tuple[float, float] | None, int], ...]:
+    """(length, start, pivot, quarter turns) legs of the feet's path. A dancer walks each edge until his nose touches
+    the next one, then tips onto it as a rigid body, turning a quarter counterclockwise about a pivot inside the corner,
+    so he lands with his feet on the new edge and his back against the old one. A leg with no pivot runs straight to the
+    next leg's start."""
+    right, bottom = WIDTH - 1, HEIGHT - 1
+    corners = ((right, bottom), (right, 0), (0, 0), (0, bottom))
+    headings = ((1, 0), (0, -1), (-1, 0), (0, 1), (1, 0))
+    front = len(CONGA_HEAD[0]) - 1 - CONGA_ANCHOR
+    middle = (front + CONGA_ANCHOR) / 2
+    legs, point = [], (float(CONGA_ENTRY_X), float(bottom))
+    for turn, ((cx, cy), (fx, fy), (nx, ny)) in enumerate(zip(corners, headings, headings[1:])):
+        touch = (cx - front * fx, cy - front * fy)
+        legs.append((math.dist(point, touch), point, None, turn))
+        pivot = (cx - middle * fx + middle * nx, cy - middle * fy + middle * ny)
+        legs.append((math.dist(touch, pivot) * math.pi / 2, touch, pivot, turn))
+        point = (cx + CONGA_ANCHOR * nx, cy + CONGA_ANCHOR * ny)
+    legs.append((CONGA_EXIT_X - point[0], point, None, 4))
+    return tuple(legs)
+
+
+CONGA_PATH = conga_path()
+CONGA_LENGTH = sum(leg[0] for leg in CONGA_PATH)
+
+
+def conga_place(distance: float) -> tuple[float, float, float]:
+    """(x, y, quarter turns) of feet `distance` px along the path."""
+    for index, (length, (x0, y0), pivot, turn) in enumerate(CONGA_PATH):
+        if distance <= length:
+            t = distance / length
+            if pivot is None:
+                x1, y1 = CONGA_PATH[index + 1][1] if index + 1 < len(CONGA_PATH) else (CONGA_EXIT_X, HEIGHT - 1)
+                return x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, float(turn)
+            # Turning counterclockwise on screen, where y points down.
+            angle, (px, py) = math.pi / 2 * t, pivot
+            dx, dy = x0 - px, y0 - py
+            return px + dx * math.cos(angle) + dy * math.sin(angle), py - dx * math.sin(angle) + dy * math.cos(angle), turn + t
+        distance -= length
+    return float(CONGA_EXIT_X), float(HEIGHT - 1), 4.0
+
+
+@lru_cache(maxsize=8)
+def conga_visit(slot: int, seed: int) -> tuple[float, float] | None:
+    """(start, end) of the conga line in this slot, if any; it never spans two slots."""
+    rng = random.Random(seed * 6133 + slot * 70913 + 109)
+    if rng.random() >= CONGA_CHANCE:
+        return None
+    duration = (CONGA_LENGTH + (CONGA_DANCERS - 1) * CONGA_SPACING) / CONGA_SPEED
+    start = slot * CONGA_SLOT_SECONDS + rng.uniform(0, CONGA_SLOT_SECONDS - duration)
+    return start, start + duration
+
+
+def conga_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return ST_PATRICKS in holiday_features(environment) and rain < 3 and snow < 2
+
+
+def conga_visits_between(seed: int, first: float, last: float):
+    for slot in range(math.floor(first / CONGA_SLOT_SECONDS), math.floor(last / CONGA_SLOT_SECONDS) + 1):
+        visit = conga_visit(slot, seed)
+        if visit is not None and visit[0] < last and visit[1] > first:
+            yield visit
+
+
+def conga_visit_shown(environment: "OutsideEnvironment", visit: tuple[float, float], seed: int, elapsed: float) -> bool:
+    """Whether the line dances: not while the dog is out or an abduction is on."""
+    start, end = visit
+    if dog_allowed(environment) and next(dog_outings_between(seed, start, end), None) is not None:
+        return False
+    return not abduction_overlaps(environment, start - elapsed, end - elapsed)
+
+
+def conga_present(environment: "OutsideEnvironment", seed: int, first: float, last: float, elapsed: float) -> bool:
+    """Whether a conga line dances at any time in [first, last]; the lone leprechaun and the animals keep out of its way."""
+    return conga_allowed(environment) and any(conga_visit_shown(environment, visit, seed, elapsed) for visit in conga_visits_between(seed, first, last))
+
+
+def conga_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[tuple[int, int, int, str, str], ...] | None:
+    """(x, y, rotation step, arms, legs) of each dancer in view, leader first."""
+    if not conga_allowed(environment):
+        return None
+    visit = conga_visit(math.floor(elapsed / CONGA_SLOT_SECONDS), seed)
+    if visit is None or not visit[0] <= elapsed < visit[1] or not conga_visit_shown(environment, visit, seed, elapsed):
+        return None
+    legs, hop, pump = CONGA_STEPS[math.floor((elapsed - visit[0]) / CONGA_BEAT_SECONDS) % len(CONGA_STEPS)]
+    travelled = (elapsed - visit[0]) * CONGA_SPEED
+    dancers = []
+    for index in range(CONGA_DANCERS):
+        distance = travelled - index * CONGA_SPACING
+        if not 0 <= distance <= CONGA_LENGTH:
+            continue
+        x, y, turns = conga_place(distance)
+        step = round(turns * CONGA_TURN_STEPS)
+        # A hop lifts him off whichever edge he dances on.
+        angle = math.pi / 2 * turns
+        x, y = x - hop * math.sin(angle), y - hop * math.cos(angle)
+        dancers.append((round(x), round(y), step % (4 * CONGA_TURN_STEPS), "up" if index == 0 and pump == "up" else "forward" if index == 0 else "reach", legs))
+    return tuple(dancers)
+
+
+def draw_conga(image: Image.Image, palette: Palette, dancers):
+    if not dancers:
+        return
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    colors = np.round(np.array([LEPRECHAUN_COLORS[part] for part in CONGA_PARTS]) * (0.4 + 0.6 * illumination)).astype(np.uint8)
+    pixels = np.array(image)
+    # Leader first, so each follower's hands land on top of the back ahead of him.
+    for x, y, step, arms, legs in dancers:
+        offsets, parts = conga_pixels(arms, legs, step)
+        xs, ys = offsets[:, 0] + x, offsets[:, 1] + y
+        shown = (xs >= 0) & (xs < WIDTH) & (ys >= 0) & (ys < HEIGHT)
+        pixels[ys[shown], xs[shown]] = colors[parts[shown]]
+    image.paste(Image.fromarray(pixels, "RGB"))
+
+
+# Every so often on St. Patrick's Day a wave of big four-leaf clovers comes rolling along the front of the meadow like
+# wheels, left to right (the way every wind effect blows), bouncing as they go and leaving a trail of lucky gold glints
+# that twinkle out behind them. The fastest leads, so they spread out as they cross. A wave skips the conga line.
+CLOVER_SLOT_SECONDS = 45
+CLOVER_CHANCE = 0.7
+CLOVER_COUNT = 3
+# One leaf, pointing down at the clover's middle from above (L leaf, h sheen, d midrib); the other three are its quarter
+# turns. The stem leaves the middle between the right and bottom leaves: (dx, dy) from the middle. o is the dark rim
+# drawn around the turned clover.
+CLOVER_LEAF = (".LL.LL.", "LhLLLLL", "LLLdLLL", "LLLdLLL", ".LLdLL.", "..LdL..", "...d...")
+CLOVER_STEM = ((2, 2), (3, 3), (4, 4), (5, 5), (5, 6))
+CLOVER_COLORS = {"L": (56, 186, 76), "h": (160, 236, 150), "d": (28, 118, 48), "s": (44, 132, 52), "o": (12, 46, 22)}
+CLOVER_PARTS = tuple(CLOVER_COLORS)
+# Its middle rolls along this row, so the leaf tips brush the meadow's bottom row; it turns one radian per this many px.
+CLOVER_AXLE_ROW = HEIGHT - 1 - len(CLOVER_LEAF)
+CLOVER_RADIUS = len(CLOVER_LEAF) + 0.5
+CLOVER_TURN_STEPS = 32
+# Px/s; each clover after the first sets off this many seconds after the one ahead.
+CLOVER_SPEED = (16, 24)
+CLOVER_LAG = (0.8, 2.0)
+# It bounces up to CLOVER_HOP rows once every CLOVER_HOP_LENGTH px rolled.
+CLOVER_HOP, CLOVER_HOP_LENGTH = 2, 22
+# Gold glints mark spots every CLOVER_GLINT_SPACING px it rolls past and twinkle out over CLOVER_GLINT_TRAIL px behind it.
+CLOVER_GLINT_SPACING = 5
+CLOVER_GLINT_TRAIL = 18
+CLOVER_GLINT_ROWS = (24, 30)
+CLOVER_START_X, CLOVER_END_X = -CLOVER_RADIUS - 1, WIDTH + CLOVER_RADIUS + 1 + CLOVER_GLINT_TRAIL
+
+
+def clover_cells() -> dict[tuple[int, int], str]:
+    cells = {(0, 0): "d"}
+    middle = len(CLOVER_LEAF[0]) // 2
+    for row, line in enumerate(CLOVER_LEAF):
+        for column, char in enumerate(line):
+            if char == ".":
+                continue
+            dx, dy = column - middle, row - len(CLOVER_LEAF)
+            for _ in range(4):
+                cells[dx, dy] = char
+                dx, dy = -dy, dx
+    cells.update(dict.fromkeys(CLOVER_STEM, "s"))
+    return cells
+
+
+CLOVER_CELLS = clover_cells()
+
+
+@lru_cache(maxsize=CLOVER_TURN_STEPS)
+def clover_pixels(step: int) -> tuple[np.ndarray, np.ndarray]:
+    """(offsets from the middle as (n, 2) x, y, index into CLOVER_PARTS), turned `step` / CLOVER_TURN_STEPS of a turn
+    clockwise. Each screen pixel samples the clover through the inverse turn, so no pixel is lost between angles."""
+    angle = math.tau * step / CLOVER_TURN_STEPS
+    cos, sin = math.cos(angle), math.sin(angle)
+    reach = math.ceil(max(math.hypot(*cell) for cell in CLOVER_CELLS)) + 1
+    pixels = []
+    for dy in range(-reach, reach + 1):
+        for dx in range(-reach, reach + 1):
+            cell = (math.floor(dx * cos + dy * sin + 0.5), math.floor(-dx * sin + dy * cos + 0.5))
+            if cell in CLOVER_CELLS:
+                pixels.append((dx, dy, CLOVER_PARTS.index(CLOVER_CELLS[cell])))
+    # A dark rim around the turned silhouette keeps it apart from the green meadow behind it.
+    filled = {(dx, dy) for dx, dy, _ in pixels}
+    rim = {(dx + ox, dy + oy) for dx, dy in filled for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1))} - filled
+    table = np.array([*((dx, dy, CLOVER_PARTS.index("o")) for dx, dy in sorted(rim)), *pixels], dtype=int)
+    return table[:, :2], table[:, 2]
+
+
+@lru_cache(maxsize=8)
+def clover_wave(slot: int, seed: int) -> tuple[tuple[float, float], ...] | None:
+    """(start, speed) of each clover in this slot's wave, if any, fastest first; it never spans two slots."""
+    rng = random.Random(seed * 5701 + slot * 81919 + 113)
+    if rng.random() >= CLOVER_CHANCE:
+        return None
+    speeds = sorted((rng.uniform(*CLOVER_SPEED) for _ in range(CLOVER_COUNT)), reverse=True)
+    lags = [0.0]
+    for _ in range(CLOVER_COUNT - 1):
+        lags.append(lags[-1] + rng.uniform(*CLOVER_LAG))
+    length = max(lag + (CLOVER_END_X - CLOVER_START_X) / speed for lag, speed in zip(lags, speeds))
+    start = slot * CLOVER_SLOT_SECONDS + rng.uniform(0, CLOVER_SLOT_SECONDS - length)
+    return tuple((start + lag, speed) for lag, speed in zip(lags, speeds))
+
+
+def clover_wave_span(wave: tuple[tuple[float, float], ...]) -> tuple[float, float]:
+    return wave[0][0], max(start + (CLOVER_END_X - CLOVER_START_X) / speed for start, speed in wave)
+
+
+def clovers_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    return ST_PATRICKS in holiday_features(environment) and rain < 3 and snow < 2
+
+
+def clover_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[tuple[int, float], ...] | None:
+    """(clover index, distance rolled) of each clover under way, or None between waves."""
+    if not clovers_allowed(environment):
+        return None
+    wave = clover_wave(math.floor(elapsed / CLOVER_SLOT_SECONDS), seed)
+    if wave is None:
+        return None
+    first, last = clover_wave_span(wave)
+    if not first <= elapsed < last or conga_present(environment, seed, first, last, elapsed):
+        return None
+    return tuple((index, (elapsed - start) * speed) for index, (start, speed) in enumerate(wave) if 0 <= (elapsed - start) * speed <= CLOVER_END_X - CLOVER_START_X)
+
+
+def draw_clovers(image: Image.Image, palette: Palette, clovers, elapsed: float, seed: int):
+    if not clovers:
+        return
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    colors = np.round(np.array([CLOVER_COLORS[part] for part in CLOVER_PARTS]) * (0.4 + 0.6 * illumination)).astype(np.uint8)
+    pixels = np.array(image)
+    # Gold glints twinkle out along the trail behind each clover; any clover rolling over them hides them.
+    glints = []
+    low, high = CLOVER_GLINT_ROWS
+    for index, distance in clovers:
+        tail = CLOVER_START_X + distance - CLOVER_RADIUS
+        for spot in range(math.ceil((tail - CLOVER_GLINT_TRAIL) / CLOVER_GLINT_SPACING), math.floor(tail / CLOVER_GLINT_SPACING) + 1):
+            gx = spot * CLOVER_GLINT_SPACING
+            fade = 1 - (tail - gx) / CLOVER_GLINT_TRAIL
+            if 0 <= gx < WIDTH and 0 < fade <= 1:
+                twinkle = 1.0 if unit_hash(seed, index, spot, math.floor(elapsed * 10), 117) < 0.6 else 0.35
+                glints.append((gx, low + math.floor(unit_hash(seed, index, spot, 119) * (high - low + 1)), fade * twinkle))
+    if glints:
+        gx, gy, strength = (np.array(values) for values in zip(*glints))
+        lit = pixels[gy, gx].astype(np.float32)
+        pixels[gy, gx] = np.round(lit + (np.array(POT_GLINT, dtype=np.float32) - lit) * strength[:, None]).astype(np.uint8)
+    for _, distance in clovers:
+        step = round(distance / CLOVER_RADIUS / math.tau * CLOVER_TURN_STEPS) % CLOVER_TURN_STEPS
+        hop = round(CLOVER_HOP * abs(math.sin(math.pi * distance / CLOVER_HOP_LENGTH)))
+        offsets, parts = clover_pixels(step)
+        xs, ys = offsets[:, 0] + round(CLOVER_START_X + distance), offsets[:, 1] + CLOVER_AXLE_ROW - hop
+        shown = (xs >= 0) & (xs < WIDTH) & (ys >= 0) & (ys < HEIGHT)
+        pixels[ys[shown], xs[shown]] = colors[parts[shown]]
+    image.paste(Image.fromarray(pixels, "RGB"))
+
+
 # Geese fly over in a V through the spring and fall migrations, (month, day, month, day) spans per hemisphere, with the
 # south's six months from the north's. On Thanksgiving they come over far more often and replace the songbird flock.
 GEESE_MIGRATIONS = {"north": ((2, 20, 4, 30), (9, 15, 11, 30)), "south": ((3, 15, 5, 31), (8, 20, 10, 31))}
@@ -6811,9 +7532,9 @@ BEACH_WIND, BEACH_WIND_MARGIN = 15, 3
 BEACH_SUN_ALTITUDE, BEACH_SUN_MARGIN = 10, 2
 # Clear, few and scattered clouds; every other condition (drizzle, rain, storms, snow, haze, fog, heavy cloud) keeps it down.
 BEACH_CODES = frozenset({800, 801, 802})
-# The July 4 cannon, the October jack-o'-lanterns and the Thanksgiving harvest display stand on the umbrella's spot, and
-# nobody sits out under Vesuvius's ash.
-BEACH_HOLIDAYS = frozenset({"cannon", PUMPKINS, THANKSGIVING, VESUVIUS})
+# The July 4 cannon, the October jack-o'-lanterns, the Thanksgiving harvest display and the pot of gold stand on the
+# umbrella's spot, and nobody sits out under Vesuvius's ash.
+BEACH_HOLIDAYS = frozenset({"cannon", PUMPKINS, THANKSGIVING, VESUVIUS, ST_PATRICKS})
 # A red and white striped beach umbrella leaning a little right, with "o" the foot of its pole at UMBRELLA_FOOT.
 # R and W are the lit panels, r and w their shaded rim, T the finial and P the pole.
 UMBRELLA_SPRITE = (
@@ -7922,7 +8643,7 @@ SUMMONS = {
     "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween, Thanksgiving, July 4 and Vesuvius day, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
-    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve, fireworks days or Vesuvius day. In October a witch flies instead.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
+    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve, fireworks days, Vesuvius day or St. Patrick's Day. In October a witch flies instead.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
     "abduction": Summon(
         "Alien abduction",
         "A saucer beams up a deer at 11:11 PM, 12:12, 1:11, 2:22, 3:33, 4:44 and 5:55 AM while the sun is down, in fair weather without fog or a gale, but not on Halloween, Thanksgiving, July 4 or Vesuvius day or while the campfire burns. Summoning moves the lab clock to the next one.",
@@ -7942,6 +8663,9 @@ SUMMONS = {
     "fife_drum": Summon("Fife and drum trio", "The fife and drum trio only marches on July 4, and not in a downpour or heavy snow.", fife_drum_allowed, lambda e, t, s: fife_drum_state(e, t, s) is not None, 0.5, 0.5),
     "jet": Summon("Fighter jets", "The fighter jets only fly over on July 4, and not in a thunderstorm, downpour or heavy snow.", jet_allowed, lambda e, t, s: jet_state(e, t, s) is not None, 0.3, 0.25),
     "skeleton": Summon("Skeleton", "The skeleton only dances in October, and not in a downpour or heavy snow.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
+    "leprechaun": Summon("Leprechaun", "The leprechaun only visits his pot of gold on St. Patrick's Day, and not in a downpour or heavy snow.", leprechaun_allowed, lambda e, t, s: leprechaun_state(e, t, s) is not None, 0.5, 0.25),
+    "conga": Summon("Leprechaun conga line", "The leprechauns only dance a conga line on St. Patrick's Day, and not in a downpour or heavy snow.", conga_allowed, lambda e, t, s: conga_state(e, t, s) is not None, 0.5, 0.5),
+    "clovers": Summon("Rolling four-leaf clovers", "Four-leaf clovers only roll by on St. Patrick's Day, and not in a downpour or heavy snow.", clovers_allowed, lambda e, t, s: bool(clover_state(e, t, s)), 0.3, 0.25),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
     "ash_burst": Summon("Vesuvius ash burst", "Vesuvius puffs out ash bursts on the morning of August 24, before the rumble ahead of the noon eruption.", ash_burst_allowed, lambda e, t, s: vesuvius_burst(vesuvius_state(e), t, s) is not None, 1.0, 1.0),
     "pyroclastic_flow": Summon("Pyroclastic flow", "Vesuvius's column collapses into pyroclastic flows on the evening of August 24, from about 5 to 10:30 PM.", pyroclastic_flow_allowed, lambda e, t, s: bool(vesuvius_flows(vesuvius_state(e), t, s)), 0.5, 0.5),
@@ -8013,6 +8737,9 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         image.paste(blanket, (0, 0), blanket)
     if eruption is not None:
         image = draw_vesuvius_mountain(image, palette, environment, eruption, plume, elapsed, seed)
+    # The St. Patrick's rainbow arches over the land: its left foot sinks behind the hills and its right foot comes down
+    # in front of them into the pot of gold.
+    image = draw_rainbow(image, rainbow_levels(environment), elapsed, seed)
     # The July 4 jets fly in front of the mountain; the hills, the hut and everything drawn later hide them.
     image = draw_jets(image, palette, jet_state(environment, elapsed, seed))
     # Christmas candles stand in the dark windows; anything outside passes in front of them.
@@ -8062,6 +8789,10 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     thanksgiving = THANKSGIVING in holidays
     if thanksgiving:
         draw_harvest_display(image, palette, night, elapsed)
+    st_patricks = ST_PATRICKS in holidays
+    if st_patricks:
+        draw_shamrocks(image, palette)
+        draw_pot_of_gold(image, palette, night, elapsed)
     wind = environment.weather.wind or 0
     flood = flag_flood_level(environment) if "flag" in holidays else 0.0
     if "flag" in holidays:
@@ -8080,6 +8811,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image = draw_abduction(image, palette, environment)
     if thanksgiving:
         draw_thanksgiving_figures(image, palette, environment, elapsed, seed)
+    # The leprechaun slides down the rainbow in front of the land; the pot's front hides him while he sits in it.
+    draw_leprechaun(image, palette, leprechaun_state(environment, elapsed, seed), night, elapsed)
     draw_eagle(image, palette, eagle, elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
     image = draw_smoke(image, palette, environment, elapsed, seed)
@@ -8112,6 +8845,10 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_fife_drum(image, palette, fife_drum_state(environment, elapsed, seed))
     # So does the October skeleton.
     draw_skeleton(image, palette, skeleton_state(environment, elapsed, seed), night)
+    # St. Patrick's four-leaf clovers roll along the front of the meadow.
+    draw_clovers(image, palette, clover_state(environment, elapsed, seed), elapsed, seed)
+    # The St. Patrick's conga line dances along the front of the meadow and around the frame's edges, in front of it all.
+    draw_conga(image, palette, conga_state(environment, elapsed, seed))
     if tree_ornaments_shown(environment):
         draw_tree_ornaments(image, night, elapsed)
     # The owl perches on the fixed branch, in front of the swaying foliage.
@@ -8146,6 +8883,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         draw_ghost(image, environment, night, elapsed, seed)
     if thanksgiving:
         image = draw_lantern_glow(image, night, elapsed)
+    if st_patricks:
+        image = draw_pot_glow(image, night, elapsed)
     # The campfire's light warms everything near it; its flames and embers are in front of the tree.
     if campfire is not None:
         image = draw_campfire_light(image, palette, campfire, holiday_darkness(environment), elapsed, seed, wind)
