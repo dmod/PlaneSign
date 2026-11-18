@@ -3029,6 +3029,7 @@ HOLIDAYS = {
     "fountains": ("Fountains", ((7, 4, 4),)),
     "hotdog": ("Hotdog mascot", ((7, 4, 4),)),
     "fife_drum": ("Fife and drum", ((7, 4, 4),)),
+    "jet": ("Fighter jets", ((7, 4, 4),)),
     "pumpkins": ("Pumpkins", ((10, 1, 31),)),
     "skeleton": ("Skeleton", ((10, 1, 31),)),
     "witch": ("Witch", ((10, 1, 31),)),
@@ -6284,6 +6285,209 @@ def draw_fife_drum(image: Image.Image, palette: Palette, pose: FifeDrumPose | No
         draw_standing_sprite(d, sprite, x, FIFE_DRUM_FEET_ROW - lift, facing, colors)
 
 
+# On July 4 a vic of three fighter jets now and then streaks across the sky with their afterburners lit, each firing a
+# burst or two of tracers out ahead. Seen from the side, the leader flies in front with one wingman trailing above it
+# and one below. They fly in front of the mountain but behind the hills, the hut, the flag and the tree, and like every
+# sky visitor they skip skywriting shows (though the plane stays away on fireworks days anyway).
+JET = "jet"
+JET_SLOT_SECONDS = 50
+JET_CHANCE = 0.4
+JET_SPEED = 46
+# The leader's top row; the wingmen then stay below the corner labels and above the treeline.
+JET_ROWS = (11, 12)
+# (columns ahead, rows down, seconds each burst starts late) of each jet from the leader. The wingmen sit far enough
+# apart that their sprites never touch, and fire a beat after the leader so the flashes ripple down the formation.
+JET_FORMATION = ((0, 0, 0.0), (-19, -3, 0.08), (-19, 3, 0.16))
+JET_BURSTS = (1, 2)
+JET_BURST_SECONDS = (0.35, 0.6)
+# The wingmen fire only while their muzzles are over these columns (mirrored on a leftward pass), so every jet's flash
+# is on screen and the tracers have room to fly.
+JET_FIRING_COLUMNS = (14, 92)
+JET_ROUND_SECONDS = 0.05
+# Rounds leave the muzzle this much faster than the jet, spreading up or down by up to JET_ROUND_SPREAD px/s.
+JET_ROUND_SPEED = 120
+JET_ROUND_SPREAD = 5
+# Facing right: T tail fin, R W b its flag flash, H fuselage, h its underside, c canopy, C its glint, n nose cone,
+# E nozzle.
+JET_SPRITE = (
+    "TR..............",
+    "TWb.......cC....",
+    "TTHHHHHHHccCH...",
+    "EHHHHHHHHHHHHHHn",
+    ".hhhhhhhhhhhh...",
+)
+JET_COLORS = {"T": (118, 124, 138), "R": (206, 22, 44), "W": (246, 246, 240), "b": (28, 46, 150), "H": (160, 166, 178), "h": (104, 108, 120), "c": (40, 60, 92), "C": (190, 226, 255), "n": (84, 88, 98), "E": (52, 52, 58)}
+# (column, row) in the sprite: the gun's muzzle at the nose, the nozzle at the tail.
+JET_MUZZLE = (15, 3)
+JET_NOZZLE = (0, 3)
+JET_FLAME = ((255, 244, 200), (255, 184, 70), (230, 90, 30))
+JET_FLAME_SECONDS = 0.05
+# Two flash shapes alternate shot by shot, so a burst flickers but never goes dark between frames: (columns ahead of
+# the muzzle, rows down, char).
+JET_FLASH_COLORS = {"W": (255, 255, 236), "Y": (255, 226, 110), "O": (255, 150, 50)}
+JET_FLASHES = (
+    ((0, 0, "W"), (1, 0, "W"), (2, 0, "Y"), (3, 0, "O"), (1, -1, "Y"), (1, 1, "Y"), (2, -2, "O"), (2, 2, "O")),
+    ((0, 0, "W"), (1, 0, "Y"), (2, 0, "O"), (1, -1, "O"), (1, 1, "O")),
+)
+# The flash lights the sky around the muzzle.
+JET_GLOW_RADIUS = 3.5
+JET_GLOW = 0.5
+JET_GLOW_COLOR = (255, 214, 140)
+# (columns ahead of the muzzle, rows down, strength) of each glowing pixel, centered a little ahead of the muzzle.
+JET_GLOW_KERNEL = tuple(
+    (dx, dy, JET_GLOW * (1 - math.hypot(dx - 1.5, dy) / JET_GLOW_RADIUS))
+    for dy in range(-math.ceil(JET_GLOW_RADIUS), math.ceil(JET_GLOW_RADIUS) + 1)
+    for dx in range(-math.ceil(JET_GLOW_RADIUS), math.ceil(JET_GLOW_RADIUS) + 3)
+    if math.hypot(dx - 1.5, dy) < JET_GLOW_RADIUS
+)
+# A tracer's head, then the streak behind it.
+JET_TRACER = ((255, 246, 190), (255, 196, 80), (230, 120, 40), (150, 70, 30))
+# Where the jets show: the sky and the mountain. The hills, the hut and the trees in front of them hide them.
+JET_BACKDROP = Image.fromarray((np.isin(np.asarray(LAND), (0, INDEX["far"], INDEX["peak"])) * 255).astype(np.uint8))
+
+
+@dataclass(frozen=True)
+class JetPass:
+    start: float
+    heading: int
+    row: int
+    # (seconds into the pass, seconds long) of each burst of fire.
+    bursts: tuple[tuple[float, float], ...]
+
+    @property
+    def enter(self) -> float:
+        """The leader's column as he flies in, just out of frame."""
+        return -9.0 if self.heading > 0 else WIDTH + 8.0
+
+    @property
+    def end(self) -> float:
+        """When the trailing wingmen are out of frame."""
+        trail = max(-ahead for ahead, _, _ in JET_FORMATION)
+        return self.start + (WIDTH + 17.0 + trail) / JET_SPEED
+
+    def x(self, age: float, jet: int = 0) -> float:
+        return self.enter + self.heading * (JET_SPEED * age + JET_FORMATION[jet][0])
+
+
+@dataclass(frozen=True)
+class JetPose:
+    heading: int
+    flame: int
+    # (column, top row, flash shape lit at the muzzle or None) of each jet.
+    jets: tuple[tuple[float, int, int | None], ...]
+    # (column, row) of each tracer's head.
+    tracers: tuple[tuple[float, float], ...]
+
+
+def jet_column(x: float, column: int, heading: int) -> int:
+    """The scene column of sprite column `column` with the sprite centered on `x`, as draw_standing_sprite places it."""
+    width = len(JET_SPRITE[0])
+    left = round(x) - (width - 1) // 2
+    return left + (column if heading > 0 else width - 1 - column)
+
+
+@lru_cache(maxsize=8)
+def jet_pass(slot: int, seed: int) -> JetPass | None:
+    """The formation's pass in this slot, if any; it never spans two slots."""
+    rng = random.Random(seed * 3943 + slot * 50021 + 71)
+    if rng.random() >= JET_CHANCE:
+        return None
+    heading = 1 if rng.random() < 0.5 else -1
+    flight = JetPass(0.0, heading, rng.randint(*JET_ROWS), ())
+    # When the wingmen's muzzles cross the firing span, which the bursts then split between them.
+    muzzle = JET_MUZZLE[0] - (len(JET_SPRITE[0]) - 1) // 2 + min(ahead for ahead, _, _ in JET_FORMATION)
+    first, last = JET_FIRING_COLUMNS if heading > 0 else (WIDTH - 1 - JET_FIRING_COLUMNS[0], WIDTH - 1 - JET_FIRING_COLUMNS[1])
+    opens, closes = ((column - muzzle * heading - flight.enter) / (heading * JET_SPEED) for column in (first, last))
+    count = rng.randint(*JET_BURSTS)
+    share = (closes - opens) / count
+    bursts = []
+    for index in range(count):
+        length = rng.uniform(*JET_BURST_SECONDS)
+        bursts.append((opens + index * share + rng.uniform(0, max(0.0, share - length)), length))
+    flight = replace(flight, bursts=tuple(bursts))
+    return replace(flight, start=slot * JET_SLOT_SECONDS + rng.uniform(0, JET_SLOT_SECONDS - flight.end))
+
+
+def jet_allowed(environment: "OutsideEnvironment") -> bool:
+    rain, snow = precipitation(environment)
+    code = environment.weather.code
+    return JET in holiday_features(environment) and rain < 3 and snow < 2 and not (code is not None and 200 <= code < 300)
+
+
+def jet_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> JetPose | None:
+    if not jet_allowed(environment):
+        return None
+    flight = jet_pass(math.floor(elapsed / JET_SLOT_SECONDS), seed)
+    if flight is None or not flight.start <= elapsed < flight.end or next(skywriter_shows_present(environment, seed, flight.start, flight.end), None) is not None:
+        return None
+    age = elapsed - flight.start
+    muzzle = JET_MUZZLE[0] - (len(JET_SPRITE[0]) - 1) // 2
+    jets = []
+    tracers = []
+    for jet, (_, down, delay) in enumerate(JET_FORMATION):
+        row = flight.row + down
+        flash = None
+        for burst, (opens, length) in enumerate(flight.bursts):
+            opens += delay
+            rounds = math.floor(length / JET_ROUND_SECONDS) + 1
+            if opens <= age < opens + rounds * JET_ROUND_SECONDS:
+                flash = math.floor((age - opens) / JET_ROUND_SECONDS) % len(JET_FLASHES)
+            for index in range(rounds):
+                fired = opens + index * JET_ROUND_SECONDS
+                if fired >= age:
+                    break
+                flight_time = age - fired
+                spread = (unit_hash(seed, round(flight.start * 10), jet, burst * 97 + index) * 2 - 1) * JET_ROUND_SPREAD
+                x = flight.x(fired, jet) + flight.heading * (muzzle + (JET_SPEED + JET_ROUND_SPEED) * flight_time)
+                if -len(JET_TRACER) <= x < WIDTH + len(JET_TRACER):
+                    tracers.append((x, row + JET_MUZZLE[1] + spread * flight_time))
+        jets.append((flight.x(age, jet), row, flash))
+    return JetPose(flight.heading, math.floor(age / JET_FLAME_SECONDS), tuple(jets), tuple(tracers))
+
+
+def draw_jets(image: Image.Image, palette: Palette, pose: JetPose | None) -> Image.Image:
+    if pose is None:
+        return image
+    layer = image.copy()
+    d = ImageDraw.Draw(layer)
+    heading = pose.heading
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    shade = 0.3 + 0.7 * illumination
+    colors = {char: tuple(round(value * shade) for value in color) for char, color in JET_COLORS.items()}
+    pixels = layer.load()
+    for jet, (x, row, flash) in enumerate(pose.jets):
+        muzzle_x, muzzle_y = jet_column(x, JET_MUZZLE[0], heading), row + JET_MUZZLE[1]
+        if flash is not None:
+            for ahead, down, strength in JET_GLOW_KERNEL:
+                gx, gy = muzzle_x + heading * ahead, muzzle_y + down
+                if 0 <= gx < WIDTH and 0 <= gy < HEIGHT:
+                    pixels[gx, gy] = mix(pixels[gx, gy], JET_GLOW_COLOR, strength)
+        draw_standing_sprite(d, JET_SPRITE, x, row + len(JET_SPRITE) - 1, heading, colors)
+        # The afterburner flickers between two and three pixels long, each jet on its own beat.
+        flame = pose.flame + jet
+        nozzle_x = jet_column(x, JET_NOZZLE[0], heading)
+        for step in range(2 + int(unit_hash(flame, 7, 11) < 0.5)):
+            column = nozzle_x - heading * (step + 1)
+            if 0 <= column < WIDTH:
+                d.point((column, row + JET_NOZZLE[1]), fill=JET_FLAME[min(step + flame % 2, len(JET_FLAME) - 1)])
+    for x, y in pose.tracers:
+        head, row = round(x), round(y)
+        for step, color in enumerate(JET_TRACER):
+            column = head - heading * step
+            if 0 <= column < WIDTH and 0 <= row < HEIGHT:
+                d.point((column, row), fill=color)
+    # The flashes go on last, so no tracer or neighbour hides them.
+    for x, row, flash in pose.jets:
+        if flash is None:
+            continue
+        muzzle_x, muzzle_y = jet_column(x, JET_MUZZLE[0], heading), row + JET_MUZZLE[1]
+        for ahead, down, char in JET_FLASHES[flash]:
+            fx, fy = muzzle_x + heading * (1 + ahead), muzzle_y + down
+            if 0 <= fx < WIDTH and 0 <= fy < HEIGHT:
+                d.point((fx, fy), fill=JET_FLASH_COLORS[char])
+    return Image.composite(layer, image, JET_BACKDROP)
+
+
 # Through October a skeleton now and then jigs in along the front of the meadow, stops to dance or breakdance at a few
 # spots across the valley and jigs off the other side. It skips the dog's outings and alien abductions, and deer, foxes
 # and rabbits skip its visits.
@@ -7736,6 +7940,7 @@ SUMMONS = {
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(e, t, s) is not None, 0.5, 0.25),
     "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
     "fife_drum": Summon("Fife and drum trio", "The fife and drum trio only marches on July 4, and not in a downpour or heavy snow.", fife_drum_allowed, lambda e, t, s: fife_drum_state(e, t, s) is not None, 0.5, 0.5),
+    "jet": Summon("Fighter jets", "The fighter jets only fly over on July 4, and not in a thunderstorm, downpour or heavy snow.", jet_allowed, lambda e, t, s: jet_state(e, t, s) is not None, 0.3, 0.25),
     "skeleton": Summon("Skeleton", "The skeleton only dances in October, and not in a downpour or heavy snow.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
     "ash_burst": Summon("Vesuvius ash burst", "Vesuvius puffs out ash bursts on the morning of August 24, before the rumble ahead of the noon eruption.", ash_burst_allowed, lambda e, t, s: vesuvius_burst(vesuvius_state(e), t, s) is not None, 1.0, 1.0),
@@ -7808,6 +8013,8 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         image.paste(blanket, (0, 0), blanket)
     if eruption is not None:
         image = draw_vesuvius_mountain(image, palette, environment, eruption, plume, elapsed, seed)
+    # The July 4 jets fly in front of the mountain; the hills, the hut and everything drawn later hide them.
+    image = draw_jets(image, palette, jet_state(environment, elapsed, seed))
     # Christmas candles stand in the dark windows; anything outside passes in front of them.
     candles = window_candles(environment)
     if candles is not None:
