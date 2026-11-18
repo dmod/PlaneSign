@@ -87,7 +87,7 @@ PlaneSign is a Raspberry Pi 4-powered RGB LED matrix display that shows real-tim
 - The container runs with `--network host` (no port mapping; host interfaces such as `wlan0` are directly accessible). Install and update with `docker_install_and_update.sh`. nginx (`docker_nginx_planesign.conf`) serves `web/` on 80/443 and proxies `/api/` to 5055. Image and installer details are in `.github/instructions/docker.instructions.md`.
 
 ## Web Interface
-- The interface is `web/index.html` with `web/style.css` and `web/index.js`. Bump the stylesheet and script query-string versions in the HTML to invalidate browser caches.
+- Use unversioned URLs for local frontend assets. Both nginx installs send `Cache-Control: no-store` so updates don't depend on query-string version bumps.
 
 ## Dev Environment
 - The VS Code devcontainer (`.devcontainer/devcontainer.json`) is built from the project `Dockerfile` and runs with `--privileged` and `--network=host`.
