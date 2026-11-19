@@ -62,6 +62,10 @@ var flagquiz_seen_answer_pulses = new Set();
 var flagquiz_drawing_round_id = null;
 var flagquiz_drawing_is_painting = false;
 var flagquiz_drawing_last_pixel = null;
+var flagquiz_drawing_tool = "brush";
+var flagquiz_drawing_drag_tool = null;
+var flagquiz_drawing_shape_start = null;
+var flagquiz_drawing_shape_filled = false;
 var flagquiz_drawing_color = "#ff0000";
 var flagquiz_drawing_sync_timer = null;
 var flagquiz_drawing_sync_in_progress = false;
@@ -1208,25 +1212,65 @@ function setup_flagquiz_drawing() {
         if (!flagquiz_drawing_enabled()) {
             return;
         }
+        var pixel = get_flagquiz_drawing_pixel(event);
+        if (!pixel) {
+            return;
+        }
         event.preventDefault();
+        if (flagquiz_drawing_tool === "fill") {
+            fill_flagquiz_drawing(pixel);
+            return;
+        }
         flagquiz_drawing_is_painting = true;
+        flagquiz_drawing_drag_tool = flagquiz_drawing_tool;
+        flagquiz_drawing_shape_start = pixel;
         flagquiz_drawing_last_pixel = null;
         canvas.setPointerCapture(event.pointerId);
-        paint_flagquiz_drawing(event);
-    });
-    canvas.addEventListener("pointermove", function (event) {
-        if (flagquiz_drawing_is_painting) {
+        if (flagquiz_drawing_drag_tool === "rectangle" || flagquiz_drawing_drag_tool === "circle") {
+            preview_flagquiz_drawing_shape(pixel);
+        } else {
             paint_flagquiz_drawing(event);
         }
     });
-    canvas.addEventListener("pointerup", function () {
+    canvas.addEventListener("pointermove", function (event) {
+        if (flagquiz_drawing_is_painting) {
+            if (flagquiz_drawing_drag_tool === "rectangle" || flagquiz_drawing_drag_tool === "circle") {
+                var pixel = get_flagquiz_drawing_pixel(event, true);
+                if (pixel) {
+                    preview_flagquiz_drawing_shape(pixel);
+                }
+            } else {
+                paint_flagquiz_drawing(event);
+            }
+        }
+    });
+    canvas.addEventListener("pointerup", function (event) {
+        var hadGesture = flagquiz_drawing_is_painting;
+        if (hadGesture) {
+            if (flagquiz_drawing_drag_tool === "rectangle" || flagquiz_drawing_drag_tool === "circle") {
+                var pixel = get_flagquiz_drawing_pixel(event, true);
+                if (pixel) {
+                    draw_flagquiz_shape(flagquiz_drawing_drag_tool, flagquiz_drawing_shape_start, pixel, flagquiz_drawing_shape_filled);
+                }
+            } else {
+                paint_flagquiz_drawing(event);
+            }
+        }
         flagquiz_drawing_is_painting = false;
         flagquiz_drawing_last_pixel = null;
-        schedule_flagquiz_drawing_sync(true);
+        flagquiz_drawing_drag_tool = null;
+        flagquiz_drawing_shape_start = null;
+        clear_flagquiz_drawing_preview();
+        if (hadGesture) {
+            schedule_flagquiz_drawing_sync(true);
+        }
     });
     canvas.addEventListener("pointercancel", function () {
         flagquiz_drawing_is_painting = false;
         flagquiz_drawing_last_pixel = null;
+        flagquiz_drawing_drag_tool = null;
+        flagquiz_drawing_shape_start = null;
+        clear_flagquiz_drawing_preview();
     });
 }
 
@@ -1248,6 +1292,9 @@ function configure_flagquiz_drawing(width, height, roundId) {
     if (newRound || canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
+        var previewCanvas = document.getElementById("flagquiz_drawing_preview");
+        previewCanvas.width = width;
+        previewCanvas.height = height;
         var context = canvas.getContext("2d");
         context.imageSmoothingEnabled = false;
         context.fillStyle = "#000000";
@@ -1255,6 +1302,8 @@ function configure_flagquiz_drawing(width, height, roundId) {
         flagquiz_drawing_round_id = roundId;
         flagquiz_drawing_is_painting = false;
         flagquiz_drawing_last_pixel = null;
+        flagquiz_drawing_drag_tool = null;
+        flagquiz_drawing_shape_start = null;
         clearTimeout(flagquiz_drawing_sync_timer);
         flagquiz_drawing_sync_timer = null;
         flagquiz_drawing_sync_pending = false;
@@ -1275,11 +1324,17 @@ function set_flagquiz_drawing_color(color) {
     }
 }
 
-function get_flagquiz_drawing_pixel(event) {
+function get_flagquiz_drawing_pixel(event, clampToCanvas) {
     var canvas = document.getElementById("flagquiz_drawing_canvas");
     var rect = canvas.getBoundingClientRect();
     var x = Math.floor((event.clientX - rect.left) * canvas.width / rect.width);
     var y = Math.floor((event.clientY - rect.top) * canvas.height / rect.height);
+    if (clampToCanvas) {
+        return {
+            x: Math.max(0, Math.min(canvas.width - 1, x)),
+            y: Math.max(0, Math.min(canvas.height - 1, y))
+        };
+    }
     if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
         return null;
     }
@@ -1304,6 +1359,137 @@ function paint_flagquiz_drawing(event) {
     });
     flagquiz_drawing_last_pixel = pixel;
     schedule_flagquiz_drawing_sync(false);
+}
+
+function select_flagquiz_drawing_tool(tool) {
+    if (["brush", "fill", "rectangle", "circle"].indexOf(tool) === -1) {
+        return;
+    }
+    flagquiz_drawing_tool = tool;
+    document.querySelectorAll("[data-flagquiz-tool]").forEach(function (button) {
+        var selected = button.dataset.flagquizTool === tool;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+    });
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    if (canvas) {
+        canvas.style.cursor = tool === "fill" ? "cell" : "crosshair";
+    }
+}
+
+function set_flagquiz_drawing_shape_filled(filled) {
+    flagquiz_drawing_shape_filled = Boolean(filled);
+    [
+        ["flagquiz_shape_outline", !flagquiz_drawing_shape_filled],
+        ["flagquiz_shape_filled", flagquiz_drawing_shape_filled]
+    ].forEach(function (item) {
+        var button = document.getElementById(item[0]);
+        button.classList.toggle("active", item[1]);
+        button.setAttribute("aria-pressed", item[1] ? "true" : "false");
+    });
+}
+
+function fill_flagquiz_drawing(start) {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    var context = canvas.getContext("2d");
+    var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    var data = imageData.data;
+    var startIndex = (start.y * canvas.width + start.x) * 4;
+    var source = [data[startIndex], data[startIndex + 1], data[startIndex + 2]];
+    var target = [
+        parseInt(flagquiz_drawing_color.slice(1, 3), 16),
+        parseInt(flagquiz_drawing_color.slice(3, 5), 16),
+        parseInt(flagquiz_drawing_color.slice(5, 7), 16)
+    ];
+    if (source[0] === target[0] && source[1] === target[1] && source[2] === target[2]) {
+        return;
+    }
+
+    var stack = [start.y * canvas.width + start.x];
+    while (stack.length) {
+        var pixelIndex = stack.pop();
+        var dataIndex = pixelIndex * 4;
+        if (data[dataIndex] !== source[0] || data[dataIndex + 1] !== source[1] || data[dataIndex + 2] !== source[2]) {
+            continue;
+        }
+        data[dataIndex] = target[0];
+        data[dataIndex + 1] = target[1];
+        data[dataIndex + 2] = target[2];
+        data[dataIndex + 3] = 255;
+        var x = pixelIndex % canvas.width;
+        var y = Math.floor(pixelIndex / canvas.width);
+        if (x > 0) stack.push(pixelIndex - 1);
+        if (x < canvas.width - 1) stack.push(pixelIndex + 1);
+        if (y > 0) stack.push(pixelIndex - canvas.width);
+        if (y < canvas.height - 1) stack.push(pixelIndex + canvas.width);
+    }
+    context.putImageData(imageData, 0, 0);
+    schedule_flagquiz_drawing_sync(true);
+}
+
+function get_flagquiz_shape_pixels(tool, start, end, filled) {
+    var pixels = [];
+    if (tool === "rectangle") {
+        var left = Math.min(start.x, end.x);
+        var right = Math.max(start.x, end.x);
+        var top = Math.min(start.y, end.y);
+        var bottom = Math.max(start.y, end.y);
+        for (var y = top; y <= bottom; y++) {
+            for (var x = left; x <= right; x++) {
+                if (filled || x === left || x === right || y === top || y === bottom) {
+                    pixels.push({ x: x, y: y });
+                }
+            }
+        }
+    } else {
+        var canvas = document.getElementById("flagquiz_drawing_canvas");
+        var radius = Math.round(Math.hypot(end.x - start.x, end.y - start.y));
+        var radiusSquared = radius * radius;
+        var innerRadius = Math.max(0, radius - 1);
+        var innerRadiusSquared = innerRadius * innerRadius;
+        for (var circleY = Math.max(0, start.y - radius); circleY <= Math.min(canvas.height - 1, start.y + radius); circleY++) {
+            for (var circleX = Math.max(0, start.x - radius); circleX <= Math.min(canvas.width - 1, start.x + radius); circleX++) {
+                var distanceSquared = (circleX - start.x) ** 2 + (circleY - start.y) ** 2;
+                if (distanceSquared <= radiusSquared && (filled || distanceSquared > innerRadiusSquared)) {
+                    pixels.push({ x: circleX, y: circleY });
+                }
+            }
+        }
+    }
+    return pixels;
+}
+
+function preview_flagquiz_drawing_shape(end) {
+    var previewCanvas = document.getElementById("flagquiz_drawing_preview");
+    var context = previewCanvas.getContext("2d");
+    context.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    context.fillStyle = flagquiz_drawing_color;
+    context.globalAlpha = 0.65;
+    get_flagquiz_shape_pixels(
+        flagquiz_drawing_drag_tool,
+        flagquiz_drawing_shape_start,
+        end,
+        flagquiz_drawing_shape_filled
+    ).forEach(function (pixel) {
+        context.fillRect(pixel.x, pixel.y, 1, 1);
+    });
+    context.globalAlpha = 1;
+}
+
+function draw_flagquiz_shape(tool, start, end, filled) {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    var context = canvas.getContext("2d");
+    context.fillStyle = flagquiz_drawing_color;
+    get_flagquiz_shape_pixels(tool, start, end, filled).forEach(function (pixel) {
+        context.fillRect(pixel.x, pixel.y, 1, 1);
+    });
+}
+
+function clear_flagquiz_drawing_preview() {
+    var previewCanvas = document.getElementById("flagquiz_drawing_preview");
+    if (previewCanvas) {
+        previewCanvas.getContext("2d").clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
 }
 
 function clear_flagquiz_drawing() {

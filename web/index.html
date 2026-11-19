@@ -153,6 +153,17 @@
               <p id="flagquiz_drawing_prompt" class="flagquiz_drawing_prompt"></p>
               <div id="flagquiz_drawing_wrap" class="flagquiz_drawing_wrap">
                 <canvas id="flagquiz_drawing_canvas" width="40" height="20" aria-label="Draw the flag pixel by pixel"></canvas>
+                <canvas id="flagquiz_drawing_preview" aria-hidden="true"></canvas>
+              </div>
+              <div class="flagquiz_drawing_tools" role="group" aria-label="Drawing tools">
+                <button type="button" class="flagquiz_drawing_tool active" data-flagquiz-tool="brush" aria-pressed="true" onclick="select_flagquiz_drawing_tool('brush')">Brush</button>
+                <button type="button" class="flagquiz_drawing_tool" data-flagquiz-tool="fill" aria-pressed="false" onclick="select_flagquiz_drawing_tool('fill')">Fill</button>
+                <button type="button" class="flagquiz_drawing_tool" data-flagquiz-tool="rectangle" aria-pressed="false" onclick="select_flagquiz_drawing_tool('rectangle')">Rectangle</button>
+                <button type="button" class="flagquiz_drawing_tool" data-flagquiz-tool="circle" aria-pressed="false" onclick="select_flagquiz_drawing_tool('circle')">Circle</button>
+              </div>
+              <div class="flagquiz_drawing_tools" role="group" aria-label="Shape fill style">
+                <button type="button" id="flagquiz_shape_outline" class="flagquiz_drawing_tool active" aria-pressed="true" onclick="set_flagquiz_drawing_shape_filled(false)">Outline</button>
+                <button type="button" id="flagquiz_shape_filled" class="flagquiz_drawing_tool" aria-pressed="false" onclick="set_flagquiz_drawing_shape_filled(true)">Filled</button>
               </div>
               <div class="flagquiz_drawing_controls" role="group" aria-label="Drawing colors">
                 <button type="button" class="flagquiz_drawing_swatch" style="background:#000000" onclick="set_flagquiz_drawing_color('#000000')" aria-label="Black"></button>

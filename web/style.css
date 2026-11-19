@@ -347,6 +347,7 @@ body {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 2;
   pointer-events: none;
   background-image:
     repeating-linear-gradient(to right,
@@ -363,12 +364,47 @@ body {
 
 #flagquiz_drawing_canvas {
   display: block;
+  position: relative;
+  z-index: 0;
   width: 100%;
   height: 100%;
   background: #000;
   image-rendering: pixelated;
   touch-action: none;
   cursor: crosshair;
+}
+
+#flagquiz_drawing_preview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.flagquiz_drawing_tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.flagquiz_drawing_tool {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid #7bb9c9;
+  border-radius: 4px;
+  background: #202a30;
+  color: #fff;
+  cursor: pointer;
+}
+
+.flagquiz_drawing_tool.active {
+  background: #267c91;
+  border-color: #b6edf7;
 }
 
 .flagquiz_drawing_controls {
