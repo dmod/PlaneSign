@@ -27,6 +27,12 @@ STUDY_FLAG_SECONDS = 3
 VEXILLOLOGIST_TIME_UP_SECONDS = 1.5
 VEXILLOLOGIST_COMPARISON_SECONDS = 5
 VEXILLOLOGIST_QUESTION_PAUSE_SECONDS = 1.5
+DRAWING_PIXEL_WEIGHT = 0.8
+DRAWING_COLOR_WEIGHT = 0.1
+DRAWING_SHAPE_WEIGHT = 0.1
+DRAWING_COLOR_CLUSTER_DELTA_E = 12
+DRAWING_COLOR_MATCH_DELTA_E = 32
+DRAWING_SHAPE_EDGE_DELTA_E = 12
 WIDTH = 128
 HEIGHT = 32
 FIREWORK_SLOT_SECONDS = 0.7
@@ -980,11 +986,77 @@ def _srgb_to_lab(rgb):
     ), axis=-1)
 
 
+def _color_coverage_score(target_lab, drawing_lab):
+    target_colors, target_counts = np.unique(target_lab.reshape((-1, 3)), axis=0, return_counts=True)
+    centers = []
+    for index in np.argsort(target_counts)[::-1]:
+        if not centers or np.min(np.linalg.norm(target_colors[index] - centers, axis=1)) > DRAWING_COLOR_CLUSTER_DELTA_E:
+            centers.append(target_colors[index])
+
+    centers = np.asarray(centers)
+    target_distances = np.linalg.norm(target_colors[:, None, :] - centers[None, :, :], axis=2)
+    target_labels = np.argmin(target_distances, axis=1)
+    target_histogram = np.bincount(target_labels, weights=target_counts, minlength=len(centers))
+
+    drawing_pixels = drawing_lab.reshape((-1, 3))
+    drawing_distances = np.linalg.norm(drawing_pixels[:, None, :] - centers[None, :, :], axis=2)
+    drawing_labels = np.argmin(drawing_distances, axis=1)
+    drawing_labels[drawing_distances[np.arange(len(drawing_pixels)), drawing_labels] > DRAWING_COLOR_MATCH_DELTA_E] = len(centers)
+    drawing_histogram = np.bincount(drawing_labels, minlength=len(centers) + 1)
+
+    pixel_count = target_lab.shape[0] * target_lab.shape[1]
+    target_histogram = target_histogram / pixel_count
+    drawing_histogram = drawing_histogram / pixel_count
+    return float(np.minimum(target_histogram, drawing_histogram[:-1]).sum())
+
+
+def _color_edges(lab, threshold=DRAWING_SHAPE_EDGE_DELTA_E):
+    height, width = lab.shape[:2]
+    edges = np.zeros((height, width), dtype=bool)
+    horizontal = np.linalg.norm(lab[:, 1:] - lab[:, :-1], axis=2) >= threshold
+    vertical = np.linalg.norm(lab[1:, :] - lab[:-1, :], axis=2) >= threshold
+    edges[:, 1:] |= horizontal
+    edges[:, :-1] |= horizontal
+    edges[1:, :] |= vertical
+    edges[:-1, :] |= vertical
+    return edges
+
+
+def _dilate_mask(mask):
+    height, width = mask.shape
+    padded = np.pad(mask, 1, mode="constant")
+    dilated = np.zeros_like(mask)
+    for y in range(3):
+        for x in range(3):
+            dilated |= padded[y : y + height, x : x + width]
+    return dilated
+
+
+def _shape_score(target_lab, drawing_lab):
+    target_edges = _color_edges(target_lab)
+    drawing_edges = _color_edges(drawing_lab)
+    target_count = np.count_nonzero(target_edges)
+    drawing_count = np.count_nonzero(drawing_edges)
+    if not target_count or not drawing_count:
+        return float(target_count == drawing_count)
+
+    target_matches = np.count_nonzero(target_edges & _dilate_mask(drawing_edges))
+    drawing_matches = np.count_nonzero(drawing_edges & _dilate_mask(target_edges))
+    precision = drawing_matches / drawing_count
+    recall = target_matches / target_count
+    return 2 * precision * recall / (precision + recall)
+
+
 def _score_drawing(code, pixels, width, height):
     target = np.asarray(_raw_flag_image(code), dtype=np.float32) / 255
     drawing = np.asarray(pixels, dtype=np.uint8).reshape((height, width, 3)).astype(np.float32) / 255
-    delta_e = np.linalg.norm(_srgb_to_lab(target) - _srgb_to_lab(drawing), axis=-1)
-    score = max(0.0, min(20.0, 20.0 * (1.0 - float(delta_e.mean()) / 100.0)))
+    target_lab = _srgb_to_lab(target)
+    drawing_lab = _srgb_to_lab(drawing)
+    delta_e = np.linalg.norm(target_lab - drawing_lab, axis=-1)
+    pixel_score = max(0.0, 1.0 - float(delta_e.mean()) / 100.0)
+    color_score = _color_coverage_score(target_lab, drawing_lab)
+    shape_score = _shape_score(target_lab, drawing_lab)
+    score = 20 * (DRAWING_PIXEL_WEIGHT * pixel_score + DRAWING_COLOR_WEIGHT * color_score + DRAWING_SHAPE_WEIGHT * shape_score)
     return math.floor(score + 0.5)
 
 
