@@ -59,6 +59,13 @@ var flagquiz_suggestion_timer = null;
 var flagquiz_study_suggestion_timer = null;
 var flagquiz_selected_difficulty = null;
 var flagquiz_seen_answer_pulses = new Set();
+var flagquiz_drawing_round_id = null;
+var flagquiz_drawing_is_painting = false;
+var flagquiz_drawing_last_pixel = null;
+var flagquiz_drawing_color = "#ff0000";
+var flagquiz_drawing_sync_timer = null;
+var flagquiz_drawing_sync_in_progress = false;
+var flagquiz_drawing_sync_pending = false;
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
 
@@ -274,6 +281,7 @@ window.onload = function () {
     get_audio_support();
     setup_matrix_preview();
     setup_free_sketch();
+    setup_flagquiz_drawing();
 
     recordButton = document.getElementById('mic_button');
 
@@ -857,6 +865,8 @@ function render_flagquiz_state(state) {
     endButton.textContent = state.end_requested ? "Ending After This Question" : "End Game";
 
     var current = state.current;
+    var isVexillologist = state.difficulty === "vexillologist";
+    var drawingActive = isVexillologist && current && state.vexillologist_phase === "question";
     var progress;
     if (state.study && state.study.active && !state.in_progress) {
         progress = state.study.cycling
@@ -868,6 +878,12 @@ function render_flagquiz_state(state) {
         progress = "Starting in " + state.countdown + "...";
     } else if (state.sudden_death_notice) {
         progress = "Sudden death begins in " + state.notice_seconds + "s · tied scores";
+    } else if (state.difficulty === "vexillologist" && state.vexillologist_phase === "time_up") {
+        progress = "Time's up! Drawings are being revealed.";
+    } else if (state.difficulty === "vexillologist" && state.vexillologist_phase === "comparison") {
+        progress = "Reviewing drawings · Question " + state.question_number + " / " + state.total;
+    } else if (state.difficulty === "vexillologist" && state.vexillologist_phase === "question_pause") {
+        progress = "Question " + state.question_number + " / " + state.total;
     } else if (state.complete) {
         progress = state.tie
             ? "It's a tie! · " + state.question_number + " questions"
@@ -880,9 +896,10 @@ function render_flagquiz_state(state) {
     document.getElementById("flagquiz_question_progress").textContent = progress;
     var flag = document.getElementById("flagquiz_flag");
     var studyVisible = Boolean(state.study && state.study.active && !state.in_progress);
-    var displayCountry = current || (studyVisible ? state.study : null);
+    var displayCountry = isVexillologist ? (studyVisible ? state.study : null) : current || (studyVisible ? state.study : null);
     var comparison = studyVisible ? state.study.comparison : null;
     var flagDisplay = document.getElementById("flagquiz_flag_display");
+    flagDisplay.hidden = (isVexillologist && !studyVisible) || !displayCountry;
     flagDisplay.classList.toggle("is-comparing", Boolean(comparison));
     flag.hidden = !displayCountry;
     if (!displayCountry) {
@@ -908,6 +925,15 @@ function render_flagquiz_state(state) {
         compareFlag.alt = comparison.name + " flag";
     }
 
+    var drawingPanel = document.getElementById("flagquiz_vexillologist");
+    drawingPanel.hidden = !drawingActive;
+    var drawingCanvas = document.getElementById("flagquiz_drawing_canvas");
+    drawingCanvas.style.pointerEvents = drawingActive ? "auto" : "none";
+    if (drawingActive) {
+        document.getElementById("flagquiz_drawing_prompt").textContent = current.name;
+        configure_flagquiz_drawing(current.width, current.height, state.round_id);
+    }
+
     var feedback = document.getElementById("flagquiz_feedback");
     var gameResult = document.getElementById("flagquiz_game_result");
     gameResult.textContent = "";
@@ -915,6 +941,12 @@ function render_flagquiz_state(state) {
         feedback.textContent = comparison
             ? state.study.name + " vs " + comparison.name
             : state.study.name;
+    } else if (isVexillologist && state.your_vexillologist_score !== null &&
+        state.vexillologist_phase !== "question" && state.last_result &&
+        state.last_result.round_id === state.round_id) {
+        feedback.textContent = "Your drawing scored +" + state.your_vexillologist_score + "/20.";
+    } else if (isVexillologist && state.vexillologist_phase && state.vexillologist_phase !== "question") {
+        feedback.textContent = "Your drawing is being scored.";
     } else if (!state.difficulty) {
         feedback.textContent = "";
     } else if (state.your_answer) {
@@ -945,7 +977,7 @@ function render_flagquiz_state(state) {
     var answers = document.getElementById("flagquiz_answers");
     var expert = document.getElementById("flagquiz_expert");
     var isExpert = state.difficulty === "expert";
-    answers.hidden = isExpert || !current;
+    answers.hidden = isExpert || isVexillologist || !current;
     expert.hidden = !isExpert || !current;
     var sameRound = flagquiz_round_id === state.round_id;
     if (!sameRound) {
@@ -956,7 +988,7 @@ function render_flagquiz_state(state) {
 
     if (!sameRound || !flagquiz_answer_in_progress) {
         answers.replaceChildren();
-        if (current && !isExpert) {
+        if (current && !isExpert && !isVexillologist) {
             state.current.options.forEach(function (option) {
                 var button = document.createElement("button");
                 button.type = "button";
@@ -1164,6 +1196,168 @@ function setup_free_sketch() {
 
     // Initialize with default state
     update_undo_button_state();
+}
+
+function setup_flagquiz_drawing() {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    if (!canvas) {
+        return;
+    }
+    canvas.getContext("2d").imageSmoothingEnabled = false;
+    canvas.addEventListener("pointerdown", function (event) {
+        if (!flagquiz_drawing_enabled()) {
+            return;
+        }
+        event.preventDefault();
+        flagquiz_drawing_is_painting = true;
+        flagquiz_drawing_last_pixel = null;
+        canvas.setPointerCapture(event.pointerId);
+        paint_flagquiz_drawing(event);
+    });
+    canvas.addEventListener("pointermove", function (event) {
+        if (flagquiz_drawing_is_painting) {
+            paint_flagquiz_drawing(event);
+        }
+    });
+    canvas.addEventListener("pointerup", function () {
+        flagquiz_drawing_is_painting = false;
+        flagquiz_drawing_last_pixel = null;
+        schedule_flagquiz_drawing_sync(true);
+    });
+    canvas.addEventListener("pointercancel", function () {
+        flagquiz_drawing_is_painting = false;
+        flagquiz_drawing_last_pixel = null;
+    });
+}
+
+function flagquiz_drawing_enabled() {
+    return Boolean(
+        flagquiz_latest_state &&
+        flagquiz_latest_state.difficulty === "vexillologist" &&
+        flagquiz_latest_state.current &&
+        flagquiz_latest_state.vexillologist_phase === "question"
+    );
+}
+
+function configure_flagquiz_drawing(width, height, roundId) {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    if (!canvas || !width || !height || !roundId) {
+        return;
+    }
+    var newRound = flagquiz_drawing_round_id !== roundId;
+    if (newRound || canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        var context = canvas.getContext("2d");
+        context.imageSmoothingEnabled = false;
+        context.fillStyle = "#000000";
+        context.fillRect(0, 0, width, height);
+        flagquiz_drawing_round_id = roundId;
+        flagquiz_drawing_is_painting = false;
+        flagquiz_drawing_last_pixel = null;
+        clearTimeout(flagquiz_drawing_sync_timer);
+        flagquiz_drawing_sync_timer = null;
+        flagquiz_drawing_sync_pending = false;
+    }
+    var wrap = document.getElementById("flagquiz_drawing_wrap");
+    var availableWidth = wrap.parentElement.clientWidth || 520;
+    wrap.style.width = Math.min(520, availableWidth, 320 * width / height) + "px";
+    wrap.style.setProperty("--flagquiz-drawing-width", width);
+    wrap.style.setProperty("--flagquiz-drawing-height", height);
+    wrap.style.setProperty("--flagquiz-drawing-ratio", width + " / " + height);
+}
+
+function set_flagquiz_drawing_color(color) {
+    flagquiz_drawing_color = color;
+    var input = document.getElementById("flagquiz_drawing_color");
+    if (input && input.value !== color) {
+        input.value = color;
+    }
+}
+
+function get_flagquiz_drawing_pixel(event) {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.floor((event.clientX - rect.left) * canvas.width / rect.width);
+    var y = Math.floor((event.clientY - rect.top) * canvas.height / rect.height);
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+        return null;
+    }
+    return { x: x, y: y };
+}
+
+function paint_flagquiz_drawing(event) {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    var pixel = get_flagquiz_drawing_pixel(event);
+    if (!pixel) {
+        return;
+    }
+    var context = canvas.getContext("2d");
+    context.fillStyle = flagquiz_drawing_color;
+    var points = flagquiz_drawing_last_pixel
+        ? bresenham_line(flagquiz_drawing_last_pixel.x, flagquiz_drawing_last_pixel.y, pixel.x, pixel.y)
+        : [pixel];
+    var size = Number(document.getElementById("flagquiz_drawing_brush").value);
+    var offset = Math.floor((size - 1) / 2);
+    points.forEach(function (point) {
+        context.fillRect(point.x - offset, point.y - offset, size, size);
+    });
+    flagquiz_drawing_last_pixel = pixel;
+    schedule_flagquiz_drawing_sync(false);
+}
+
+function clear_flagquiz_drawing() {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    if (!canvas || !flagquiz_drawing_enabled()) {
+        return;
+    }
+    var context = canvas.getContext("2d");
+    context.fillStyle = "#000000";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    schedule_flagquiz_drawing_sync(true);
+}
+
+function schedule_flagquiz_drawing_sync(immediate) {
+    if (!immediate && flagquiz_drawing_sync_timer !== null) {
+        return;
+    }
+    clearTimeout(flagquiz_drawing_sync_timer);
+    flagquiz_drawing_sync_timer = setTimeout(function () {
+        flagquiz_drawing_sync_timer = null;
+        sync_flagquiz_drawing();
+    }, immediate ? 0 : 180);
+}
+
+function sync_flagquiz_drawing() {
+    if (!flagquiz_drawing_enabled()) {
+        return;
+    }
+    if (flagquiz_drawing_sync_in_progress) {
+        flagquiz_drawing_sync_pending = true;
+        return;
+    }
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    var imageData = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+    var pixels = [];
+    for (var index = 0; index < imageData.data.length; index += 4) {
+        pixels.push(imageData.data[index], imageData.data[index + 1], imageData.data[index + 2]);
+    }
+    flagquiz_drawing_sync_in_progress = true;
+    flagquiz_request("/games/flagquiz/drawing", {
+        player_id: get_game_player_id(),
+        round_id: flagquiz_drawing_round_id,
+        width: canvas.width,
+        height: canvas.height,
+        pixels: pixels
+    }).catch(function (error) {
+        flagquiz_error(error.message);
+    }).finally(function () {
+        flagquiz_drawing_sync_in_progress = false;
+        if (flagquiz_drawing_sync_pending) {
+            flagquiz_drawing_sync_pending = false;
+            schedule_flagquiz_drawing_sync(true);
+        }
+    });
 }
 
 function open_free_sketch_modal() {

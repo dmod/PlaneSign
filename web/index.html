@@ -100,9 +100,10 @@
         <div id="flagquiz_div" class="flagquiz_controls" hidden>
           <p>Select a difficulty, then start when everyone is ready.</p>
           <div class="flagquiz_difficulties">
-            <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="easy" aria-pressed="false" onclick="select_flagquiz_difficulty('easy')">Easy · 3 choices</button>
-            <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="hard" aria-pressed="false" onclick="select_flagquiz_difficulty('hard')">Hard · 4 choices</button>
+            <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="easy" aria-pressed="false" onclick="select_flagquiz_difficulty('easy')">Easy</button>
+            <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="hard" aria-pressed="false" onclick="select_flagquiz_difficulty('hard')">Hard</button>
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="expert" aria-pressed="false" onclick="select_flagquiz_difficulty('expert')">Expert</button>
+            <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="vexillologist" aria-pressed="false" onclick="select_flagquiz_difficulty('vexillologist')">Vexillologist</button>
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-study aria-pressed="false" onclick="select_flagquiz_study()">Study</button>
           </div>
           <div id="flagquiz_study_panel" class="flagquiz_expert" hidden>
@@ -147,6 +148,29 @@
             <div id="flagquiz_flag_display" class="flagquiz_flag_display">
               <img id="flagquiz_flag" class="flagquiz_flag" alt="Current quiz flag">
               <img id="flagquiz_compare_flag" class="flagquiz_flag flagquiz_compare_flag" alt="" hidden>
+            </div>
+            <div id="flagquiz_vexillologist" class="flagquiz_vexillologist" hidden>
+              <p id="flagquiz_drawing_prompt" class="flagquiz_drawing_prompt"></p>
+              <div id="flagquiz_drawing_wrap" class="flagquiz_drawing_wrap">
+                <canvas id="flagquiz_drawing_canvas" width="40" height="20" aria-label="Draw the flag pixel by pixel"></canvas>
+              </div>
+              <div class="flagquiz_drawing_controls" role="group" aria-label="Drawing colors">
+                <button type="button" class="flagquiz_drawing_swatch" style="background:#000000" onclick="set_flagquiz_drawing_color('#000000')" aria-label="Black"></button>
+                <button type="button" class="flagquiz_drawing_swatch" style="background:#ffffff" onclick="set_flagquiz_drawing_color('#ffffff')" aria-label="White"></button>
+                <button type="button" class="flagquiz_drawing_swatch" style="background:#ff0000" onclick="set_flagquiz_drawing_color('#ff0000')" aria-label="Red"></button>
+                <button type="button" class="flagquiz_drawing_swatch" style="background:#0000ff" onclick="set_flagquiz_drawing_color('#0000ff')" aria-label="Blue"></button>
+                <button type="button" class="flagquiz_drawing_swatch" style="background:#00aa00" onclick="set_flagquiz_drawing_color('#00aa00')" aria-label="Green"></button>
+                <button type="button" class="flagquiz_drawing_swatch" style="background:#ffff00" onclick="set_flagquiz_drawing_color('#ffff00')" aria-label="Yellow"></button>
+                <label for="flagquiz_drawing_color">Custom</label>
+                <input id="flagquiz_drawing_color" type="color" value="#ff0000" oninput="set_flagquiz_drawing_color(this.value)">
+                <label for="flagquiz_drawing_brush">Brush</label>
+                <select id="flagquiz_drawing_brush" aria-label="Brush size">
+                  <option value="1">1 px</option>
+                  <option value="2">2 px</option>
+                  <option value="3">3 px</option>
+                </select>
+                <button type="button" onclick="clear_flagquiz_drawing()">Clear</button>
+              </div>
             </div>
             <div id="flagquiz_answers" class="flagquiz_answers" role="group" aria-label="Flag quiz answers"></div>
             <div id="flagquiz_expert" class="flagquiz_expert" hidden>

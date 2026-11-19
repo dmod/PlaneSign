@@ -18,10 +18,15 @@ from utilities import fix_black, rainbow_pen_color
 
 ROUND_SECONDS = 10
 EXPERT_ROUND_SECONDS = 20
+VEXILLOLOGIST_ROUND_SECONDS = 60
 QUESTION_LIMIT = 25
+VEXILLOLOGIST_QUESTION_LIMIT = 5
 SUDDEN_DEATH_NOTICE_SECONDS = 3
 START_COUNTDOWN_SECONDS = 3
 STUDY_FLAG_SECONDS = 3
+VEXILLOLOGIST_TIME_UP_SECONDS = 1.5
+VEXILLOLOGIST_COMPARISON_SECONDS = 5
+VEXILLOLOGIST_QUESTION_PAUSE_SECONDS = 1.5
 WIDTH = 128
 HEIGHT = 32
 FIREWORK_SLOT_SECONDS = 0.7
@@ -37,8 +42,8 @@ FIREWORK_GLITTER = (255, 244, 210)
 FIREWORK_ROCKET = (255, 214, 150)
 FLAG_GAME_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datafiles", "flag_game.csv")
 FLAG_IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "flags")
-DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0}
-DIFFICULTY_LEVELS = {"easy": 0, "hard": 1, "expert": 2}
+DIFFICULTIES = {"easy": 3, "hard": 4, "expert": 0, "vexillologist": 0}
+DIFFICULTY_LEVELS = {"easy": 0, "hard": 1, "expert": 2, "vexillologist": 0}
 LOADING_FLAG_HEIGHT = 10
 FIREWORK_X, FIREWORK_Y = np.meshgrid(np.arange(WIDTH, dtype=np.float32), np.arange(HEIGHT, dtype=np.float32))
 
@@ -78,7 +83,7 @@ def load_flag_entries():
             difficulty = difficulty.casefold()
             if not code or not name or code in seen_codes:
                 raise ValueError(f"Invalid or duplicate flag quiz entry on row {line}")
-            if difficulty not in DIFFICULTY_LEVELS and difficulty != "none":
+            if difficulty not in ("easy", "hard", "expert", "none"):
                 raise ValueError(f"Invalid flag quiz difficulty on row {line}: expected Easy, Hard, Expert, or None")
             if not os.path.isfile(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")):
                 raise FileNotFoundError(f"Flag image not found for {code} (CSV row {line})")
@@ -135,7 +140,9 @@ def get_country_suggestions(query, limit=20):
 
 def _country_pool(difficulty):
     if difficulty not in DIFFICULTIES:
-        raise ValueError("difficulty must be easy, hard, or expert")
+        raise ValueError("difficulty must be easy, hard, expert, or vexillologist")
+    if difficulty == "vexillologist":
+        return tuple(country for country in load_countries() if country["difficulty"] == "easy")
     max_level = DIFFICULTY_LEVELS[difficulty]
     return tuple(country for country in load_countries() if DIFFICULTY_LEVELS[country["difficulty"]] <= max_level)
 
@@ -168,12 +175,14 @@ def _make_question(code, difficulty, pool):
 
 
 def _round_seconds(difficulty):
+    if difficulty == "vexillologist":
+        return VEXILLOLOGIST_ROUND_SECONDS
     return EXPERT_ROUND_SECONDS if difficulty == "expert" else ROUND_SECONDS
 
 
 def select_difficulty(difficulty):
     if not isinstance(difficulty, str) or difficulty.casefold() not in DIFFICULTIES:
-        raise ValueError("difficulty must be easy, hard, or expert")
+        raise ValueError("difficulty must be easy, hard, expert, or vexillologist")
     difficulty = difficulty.casefold()
     with shared_config.shared_games_lock:
         shared_config.data_dict["flagquiz_selected_difficulty"] = difficulty
@@ -342,7 +351,8 @@ def start_game(difficulty, player_id):
     player = games.register_player(player_id)
     question_codes = [country["code"] for country in pool]
     random.shuffle(question_codes)
-    regular_question_count = min(QUESTION_LIMIT, len(question_codes))
+    question_limit = VEXILLOLOGIST_QUESTION_LIMIT if difficulty == "vexillologist" else QUESTION_LIMIT
+    regular_question_count = min(question_limit, len(question_codes))
     now = time.monotonic()
     players = games.get_players()
     scores = {pid: 0 for pid, record in players.items() if now - record["last_seen"] < games.ACTIVE_PLAYER_SECONDS}
@@ -365,6 +375,11 @@ def start_game(difficulty, player_id):
         "scores": scores,
         "attempts": {player_id: 0 for player_id in scores},
         "last_result": None,
+        "vexillologist_phase": None,
+        "vexillologist_phase_until": None,
+        "vexillologist_submissions": {},
+        "vexillologist_comparisons": [],
+        "vexillologist_comparison_index": 0,
         "sudden_death": False,
         "sudden_death_notice_until": None,
         "winner_id": None,
@@ -396,6 +411,8 @@ def _finish_game(state):
     state["deadline"] = None
     state["round_id"] = None
     state["sudden_death_notice_until"] = None
+    state["vexillologist_phase"] = None
+    state["vexillologist_phase_until"] = None
     state["winner_id"] = _unique_leader_id(state["scores"])
     state["tie"] = state["winner_id"] is None
 
@@ -409,6 +426,8 @@ def _start_first_question(state, now):
         state["difficulty"],
         _country_pool(state["difficulty"]),
     )
+    if state["difficulty"] == "vexillologist":
+        _reset_vexillologist_question(state)
 
 
 def _start_next_question(state, now):
@@ -428,6 +447,116 @@ def _start_next_question(state, now):
         _country_pool(state["difficulty"]),
     )
     state["sudden_death_notice_until"] = None
+    if state["difficulty"] == "vexillologist":
+        _reset_vexillologist_question(state)
+
+
+def _reset_vexillologist_question(state):
+    state["vexillologist_phase"] = "question"
+    state["vexillologist_phase_until"] = None
+    state["vexillologist_submissions"] = {}
+    state["vexillologist_comparisons"] = []
+    state["vexillologist_comparison_index"] = 0
+
+
+def _finish_vexillologist_question(state, players, now):
+    current = state["current"]
+    width, height = _raw_flag_image(current["code"]).size
+    black_pixels = [0] * (width * height * 3)
+    comparisons = []
+    answers = []
+    for player_id in state["scores"]:
+        player = players.get(player_id, {})
+        submission = state["vexillologist_submissions"].get(player_id)
+        pixels = submission["pixels"] if submission else black_pixels
+        score = _score_drawing(current["code"], pixels, width, height)
+        state["scores"][player_id] += score
+        state["attempts"][player_id] = state["attempts"].get(player_id, 0) + 1
+        name = player.get("name", "Player")
+        answers.append({
+            "id": player_id,
+            "name": name,
+            "correct": score == 20,
+            "answered": submission is not None,
+            "score": score,
+        })
+        comparisons.append({
+            "id": player_id,
+            "name": name,
+            "score": score,
+            "width": width,
+            "height": height,
+            "pixels": pixels,
+        })
+
+    comparisons.sort(key=lambda result: (result["name"].casefold(), result["id"]))
+    answers.sort(key=lambda answer: (answer["name"].casefold(), answer["id"]))
+    state["last_result"] = {
+        "question_number": state["index"] + 1,
+        "round_id": state["round_id"],
+        "code": current["code"],
+        "correct_name": current["name"],
+        "timed_out": True,
+        "answers": answers,
+    }
+    state["vexillologist_comparisons"] = comparisons
+    state["vexillologist_comparison_index"] = 0
+    state["vexillologist_phase"] = "time_up"
+    state["vexillologist_phase_until"] = now + VEXILLOLOGIST_TIME_UP_SECONDS
+    state["deadline"] = None
+
+
+def _advance_vexillologist(state, players, now):
+    phase = state.get("vexillologist_phase")
+    phase_until = state.get("vexillologist_phase_until")
+    if phase == "question":
+        if now >= state["deadline"]:
+            _finish_vexillologist_question(state, players, now)
+            return True
+        return False
+    if phase_until is None or now < phase_until:
+        return False
+    if phase == "time_up":
+        if state["vexillologist_comparisons"]:
+            state["vexillologist_phase"] = "comparison"
+            state["vexillologist_phase_until"] = now + VEXILLOLOGIST_COMPARISON_SECONDS
+        else:
+            state["vexillologist_phase"] = "question_pause"
+            state["vexillologist_phase_until"] = now + VEXILLOLOGIST_QUESTION_PAUSE_SECONDS
+        return True
+    if phase == "comparison":
+        state["vexillologist_comparison_index"] += 1
+        if state["vexillologist_comparison_index"] < len(state["vexillologist_comparisons"]):
+            state["vexillologist_phase_until"] = now + VEXILLOLOGIST_COMPARISON_SECONDS
+        else:
+            state["vexillologist_phase"] = "question_pause"
+            state["vexillologist_phase_until"] = now + VEXILLOLOGIST_QUESTION_PAUSE_SECONDS
+        return True
+    if phase == "question_pause":
+        state["index"] += 1
+        if state.get("end_requested"):
+            _finish_game(state)
+            return True
+        if state["index"] >= state["regular_question_count"]:
+            leader_id = _unique_leader_id(state["scores"])
+            if leader_id is not None:
+                _finish_game(state)
+                return True
+            if state["index"] >= len(state["question_codes"]):
+                state["current"] = None
+                state["tie"] = True
+                state["vexillologist_phase"] = None
+                return True
+            state["sudden_death"] = True
+            state["sudden_death_notice_until"] = now + SUDDEN_DEATH_NOTICE_SECONDS
+            state["current"] = None
+            state["round_id"] = None
+            state["vexillologist_phase"] = None
+            state["vexillologist_phase_until"] = None
+            return True
+        _start_next_question(state, now)
+        return True
+    return False
 
 
 def _advance(state, now, players, active_ids, timed_out):
@@ -502,6 +631,9 @@ def _advance_if_ready(state, players, now):
             return True
         return False
 
+    if state["difficulty"] == "vexillologist":
+        return _advance_vexillologist(state, players, now)
+
     active_ids = [
         player_id for player_id in state["scores"]
         if player_id in players and now - players[player_id]["last_seen"] < games.ACTIVE_PLAYER_SECONDS
@@ -535,10 +667,15 @@ def _public_status(state, player_id, players, now):
     seconds_left = 0
     if current is not None:
         current_public = {
-            "code": current["code"],
             "options": [{"key": option["key"], "name": option["name"]} for option in current["options"]],
         }
-        seconds_left = max(0, math.ceil(state["deadline"] - now))
+        if state["difficulty"] == "vexillologist":
+            width, height = _raw_flag_image(current["code"]).size
+            current_public.update({"name": current["name"], "width": width, "height": height})
+        else:
+            current_public["code"] = current["code"]
+        if state["deadline"] is not None:
+            seconds_left = max(0, math.ceil(state["deadline"] - now))
     notice_until = state.get("sudden_death_notice_until")
     notice_seconds = max(0, math.ceil(notice_until - now)) if notice_until is not None else 0
     countdown_until = state.get("countdown_until")
@@ -563,7 +700,16 @@ def _public_status(state, player_id, players, now):
         "tie": state["tie"],
         "winner": winner,
         "current": current_public,
+        "vexillologist_phase": state.get("vexillologist_phase"),
         "your_answer": answers.get(player_id),
+        "your_vexillologist_score": (
+            next(
+                (answer["score"] for answer in state["last_result"]["answers"] if answer["id"] == player_id),
+                None,
+            )
+            if state["last_result"] and state["difficulty"] == "vexillologist"
+            else None
+        ),
         "round_answers": [
             {"id": answer_id, "correct": answer["correct"]}
             for answer_id, answer in answers.items()
@@ -585,7 +731,7 @@ def _winner_summary(state, players, now):
         "name": player.get("name", "Player"),
         "score": score,
         "active": winner_id in players and now - players[winner_id]["last_seen"] < games.ACTIVE_PLAYER_SECONDS,
-        "accuracy": round(score * 100 / attempts) if attempts else 0,
+        "accuracy": round(score * 100 / (attempts * 20 if state["difficulty"] == "vexillologist" else attempts)) if attempts else 0,
     }
 
 
@@ -699,6 +845,54 @@ def submit_answer(player_id, round_id, answer):
         return {"ok": True, "correct": correct, "question_number": state["index"] + (1 if state["current"] else 0)}
 
 
+def submit_drawing(player_id, round_id, width, height, pixels):
+    player = games.register_player(player_id)
+    if not isinstance(round_id, str):
+        raise TypeError("round_id must be a string")
+    if isinstance(width, bool) or not isinstance(width, int) or isinstance(height, bool) or not isinstance(height, int):
+        raise TypeError("drawing dimensions must be integers")
+    if not isinstance(pixels, list):
+        raise TypeError("drawing pixels must be an array")
+    if any(isinstance(channel, bool) or not isinstance(channel, int) for channel in pixels):
+        raise TypeError("drawing pixels must contain integers")
+    if any(not 0 <= channel <= 255 for channel in pixels):
+        raise ValueError("drawing pixels must be RGB values from 0 to 255")
+
+    now = time.monotonic()
+    with shared_config.shared_games_lock:
+        players = dict(shared_config.data_dict.get("game_players", {}))
+        state = shared_config.data_dict.get("flagquiz_state")
+        if state is None or state["current"] is None or state["difficulty"] != "vexillologist":
+            raise FlagQuizConflict("There is no active Vexillologist question")
+
+        state = dict(state)
+        state["scores"] = dict(state["scores"])
+        state["answers"] = dict(state["answers"])
+        state["attempts"] = dict(state.get("attempts", {}))
+        _advance_if_ready(state, players, now)
+        if round_id != state["round_id"] or state.get("vexillologist_phase") != "question":
+            shared_config.data_dict["flagquiz_state"] = state
+            raise FlagQuizConflict("This question has ended; load the current question and try again")
+
+        expected_width, expected_height = _raw_flag_image(state["current"]["code"]).size
+        if (width, height) != (expected_width, expected_height):
+            raise ValueError("drawing dimensions do not match the flag")
+        if len(pixels) != width * height * 3:
+            raise ValueError("drawing pixel count does not match its dimensions")
+
+        state["scores"].setdefault(player["id"], 0)
+        state["attempts"].setdefault(player["id"], 0)
+        submissions = dict(state.get("vexillologist_submissions", {}))
+        submissions[player["id"]] = {
+            "width": width,
+            "height": height,
+            "pixels": pixels,
+        }
+        state["vexillologist_submissions"] = submissions
+        shared_config.data_dict["flagquiz_state"] = state
+        return {"ok": True}
+
+
 def get_sign_state():
     now = time.monotonic()
     with shared_config.shared_games_lock:
@@ -731,6 +925,13 @@ def get_sign_state():
             "question_number": state["index"] + 1 if state["current"] is not None else state["index"],
             "total": state["regular_question_count"],
             "current": state["current"],
+            "vexillologist_phase": state.get("vexillologist_phase"),
+            "vexillologist_comparison": (
+                state.get("vexillologist_comparisons", [])[state.get("vexillologist_comparison_index", 0)]
+                if state.get("vexillologist_phase") == "comparison"
+                and state.get("vexillologist_comparison_index", 0) < len(state.get("vexillologist_comparisons", []))
+                else None
+            ),
             "time_remaining_fraction": (
                 max(0.0, min(1.0, (state["deadline"] - now) / _round_seconds(state["difficulty"])))
                 if state["current"] is not None and state["deadline"] is not None
@@ -747,6 +948,44 @@ def get_sign_state():
             "firework_seed": state.get("firework_seed", 0),
             "victory_flag_codes": state["victory_flag_codes"],
         }
+
+
+@lru_cache(maxsize=256)
+def _raw_flag_image(code):
+    with Image.open(os.path.join(FLAG_IMAGE_DIR, f"{code}.png")) as source:
+        rgba = source.convert("RGBA")
+        image = Image.new("RGB", rgba.size, (0, 0, 0))
+        image.paste(rgba, (0, 0), rgba.getchannel("A"))
+        return image
+
+
+def _srgb_to_lab(rgb):
+    linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    xyz = linear @ np.array([
+        [0.4124564, 0.3575761, 0.1804375],
+        [0.2126729, 0.7151522, 0.0721750],
+        [0.0193339, 0.1191920, 0.9503041],
+    ], dtype=np.float32).T
+    xyz /= np.array((0.95047, 1.0, 1.08883), dtype=np.float32)
+    delta = 6 / 29
+    transformed = np.where(
+        xyz > delta**3,
+        np.cbrt(xyz),
+        xyz / (3 * delta**2) + 4 / 29,
+    )
+    return np.stack((
+        116 * transformed[..., 1] - 16,
+        500 * (transformed[..., 0] - transformed[..., 1]),
+        200 * (transformed[..., 1] - transformed[..., 2]),
+    ), axis=-1)
+
+
+def _score_drawing(code, pixels, width, height):
+    target = np.asarray(_raw_flag_image(code), dtype=np.float32) / 255
+    drawing = np.asarray(pixels, dtype=np.uint8).reshape((height, width, 3)).astype(np.float32) / 255
+    delta_e = np.linalg.norm(_srgb_to_lab(target) - _srgb_to_lab(drawing), axis=-1)
+    score = max(0.0, min(20.0, 20.0 * (1.0 - float(delta_e.mean()) / 100.0)))
+    return math.floor(score + 0.5)
 
 
 @lru_cache(maxsize=1)
@@ -1198,6 +1437,9 @@ def _draw_question_timer(sign, time_remaining_fraction):
 
 def _draw_question(sign, state, elapsed=0.0):
     sign.canvas.Clear()
+    if state.get("difficulty") == "vexillologist" and state["current"] is not None:
+        _draw_vexillologist_question(sign, state)
+        return
     if state["current"] is None:
         if state.get("sudden_death_notice"):
             _draw_sudden_death_notice(sign)
@@ -1243,6 +1485,72 @@ def _draw_question(sign, state, elapsed=0.0):
         label = _fit_option(f"{option['key']}. {option['name']}")
         graphics.DrawText(sign.canvas, sign.font46, 48, baseline, graphics.Color(255, 255, 255), label)
     _draw_question_timer(sign, state["time_remaining_fraction"])
+
+
+def _draw_vexillologist_question(sign, state):
+    phase = state.get("vexillologist_phase")
+    current = state.get("current")
+    if phase == "time_up":
+        text = "TIME'S UP!"
+        x = (WIDTH - len(text) * 6) // 2
+        _draw_outlined_text(sign, sign.fontbig, text, x, 20, graphics.Color(255, 225, 90))
+        return
+    if phase == "question_pause":
+        text = f"QUESTION {state['question_number']}/{state['total']}"
+        x = (WIDTH - len(text) * 4) // 2
+        _draw_outlined_text(sign, sign.font46, text, x, 18, graphics.Color(46, 210, 255))
+        return
+    if phase == "comparison":
+        result = state.get("vexillologist_comparison")
+        if result:
+            _draw_vexillologist_comparison(sign, current, result)
+        return
+    if not current:
+        return
+
+    question_number = state["question_number"]
+    header = f"SUDDEN DEATH Q{question_number}" if state.get("sudden_death") else f"Q {question_number}/{state['total']}"
+    header_x = (WIDTH - len(header) * 4) // 2
+    graphics.DrawText(sign.canvas, sign.font46, header_x, 8, graphics.Color(220, 230, 255), header)
+    name_lines = _study_name_lines(current["name"], WIDTH // 4)
+    if len(name_lines) == 1:
+        baselines = (21,)
+    else:
+        name_lines = name_lines[:2]
+        baselines = (17, 24)
+    for line, baseline in zip(name_lines, baselines):
+        x = (WIDTH - len(line) * 4) // 2
+        graphics.DrawText(sign.canvas, sign.font46, x, baseline, graphics.Color(46, 210, 255), line)
+    _draw_question_timer(sign, state["time_remaining_fraction"])
+
+
+def _draw_vexillologist_comparison(sign, current, result):
+    submission = Image.frombytes("RGB", (result["width"], result["height"]), bytes(result["pixels"]))
+    solution = _raw_flag_image(current["code"]).copy()
+    submission.thumbnail((42, 12), Image.Resampling.NEAREST)
+    solution.thumbnail((42, 12), Image.Resampling.NEAREST)
+    image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
+    image.paste(submission, (0, 12 + (12 - submission.height) // 2))
+    image.paste(solution, (WIDTH - solution.width, 12 + (12 - solution.height) // 2))
+    sign.canvas.SetImage(image, 0, 0)
+
+    name_lines = _study_name_lines(current["name"], WIDTH // 4)
+    for index, line in enumerate(name_lines[:2]):
+        x = (WIDTH - len(line) * 4) // 2
+        graphics.DrawText(sign.canvas, sign.font46, x, 5 + index * 5, graphics.Color(255, 255, 255), line)
+
+    score_text = f"+{result['score']}/20"
+    score_x = (WIDTH - len(score_text) * 4) // 2
+    score_color = (
+        graphics.Color(255, 70, 70) if result["score"] < 6
+        else graphics.Color(255, 160, 50) if result["score"] < 11
+        else graphics.Color(255, 225, 70) if result["score"] < 16
+        else graphics.Color(100, 255, 130)
+    )
+    _draw_outlined_text(sign, sign.font46, score_text, score_x, 21, score_color)
+    player_name = _fit_option(result["name"], WIDTH // 4)
+    player_x = (WIDTH - len(player_name) * 4) // 2
+    graphics.DrawText(sign.canvas, sign.font46, player_x, 30, graphics.Color(255, 255, 255), player_name)
 
 
 @planesign_mode_handler(DisplayMode.FLAGQUIZ)

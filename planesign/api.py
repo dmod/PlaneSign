@@ -12,6 +12,8 @@ import threading
 import wave
 from datetime import datetime
 
+import flagquiz
+import games
 import lightning
 import mlb
 import network
@@ -22,8 +24,6 @@ import planes
 import psclock
 import shared_config
 import utilities
-import games
-import flagquiz
 from finance import get_tickers
 from flask import Flask, jsonify, request, send_from_directory
 from modes import DisplayMode, startup_mode_names
@@ -578,7 +578,7 @@ def start_flagquiz():
         return jsonify({"ok": False, "error": "JSON request data is required"}), 400
     difficulty = data.get("difficulty")
     if not isinstance(difficulty, str) or difficulty.casefold() not in flagquiz.DIFFICULTIES:
-        return jsonify({"ok": False, "error": "difficulty must be easy, hard, or expert"}), 400
+        return jsonify({"ok": False, "error": "difficulty must be easy, hard, expert, or vexillologist"}), 400
     if "player_id" not in data:
         return jsonify({"ok": False, "error": "player_id is required"}), 400
     try:
@@ -653,6 +653,23 @@ def submit_flagquiz_answer():
         result = flagquiz.submit_answer(player_id, data.get("round_id"), data.get("answer"))
     except flagquiz.FlagQuizConflict as error:
         return jsonify({"ok": False, "error": str(error)}), 409
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    return jsonify(result)
+
+
+@app.route("/games/flagquiz/drawing", methods=["POST"])
+def submit_flagquiz_drawing():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "JSON request data is required"}), 400
+    try:
+        player_id = games.normalize_player_id(data.get("player_id"))
+        result = flagquiz.submit_drawing(player_id, data.get("round_id"), data.get("width"), data.get("height"), data.get("pixels"))
+    except flagquiz.FlagQuizConflict as error:
+        return jsonify({"ok": False, "error": str(error)}), 409
+    except TypeError as error:
+        return bad_request(str(error))
     except ValueError as error:
         return jsonify({"ok": False, "error": str(error)}), 400
     return jsonify(result)
