@@ -66,7 +66,11 @@ var flagquiz_drawing_tool = "brush";
 var flagquiz_drawing_drag_tool = null;
 var flagquiz_drawing_shape_start = null;
 var flagquiz_drawing_shape_filled = false;
+var flagquiz_drawing_undo_stack = [];
+var flagquiz_drawing_max_undo = 20;
 var flagquiz_drawing_color = "#ff0000";
+var flagquiz_drawing_recent_colors = [];
+var flagquiz_drawing_max_recent_colors = 6;
 var flagquiz_drawing_sync_timer = null;
 var flagquiz_drawing_sync_in_progress = false;
 var flagquiz_drawing_sync_pending = false;
@@ -1208,6 +1212,8 @@ function setup_flagquiz_drawing() {
         return;
     }
     canvas.getContext("2d").imageSmoothingEnabled = false;
+    load_flagquiz_drawing_recent_colors();
+    update_flagquiz_drawing_undo_button();
     canvas.addEventListener("pointerdown", function (event) {
         if (!flagquiz_drawing_enabled()) {
             return;
@@ -1225,6 +1231,9 @@ function setup_flagquiz_drawing() {
         flagquiz_drawing_drag_tool = flagquiz_drawing_tool;
         flagquiz_drawing_shape_start = pixel;
         flagquiz_drawing_last_pixel = null;
+        if (flagquiz_drawing_drag_tool === "brush") {
+            save_flagquiz_drawing_undo_state();
+        }
         canvas.setPointerCapture(event.pointerId);
         if (flagquiz_drawing_drag_tool === "rectangle" || flagquiz_drawing_drag_tool === "circle") {
             preview_flagquiz_drawing_shape(pixel);
@@ -1250,6 +1259,7 @@ function setup_flagquiz_drawing() {
             if (flagquiz_drawing_drag_tool === "rectangle" || flagquiz_drawing_drag_tool === "circle") {
                 var pixel = get_flagquiz_drawing_pixel(event, true);
                 if (pixel) {
+                    save_flagquiz_drawing_undo_state();
                     draw_flagquiz_shape(flagquiz_drawing_drag_tool, flagquiz_drawing_shape_start, pixel, flagquiz_drawing_shape_filled);
                 }
             } else {
@@ -1304,6 +1314,8 @@ function configure_flagquiz_drawing(width, height, roundId) {
         flagquiz_drawing_last_pixel = null;
         flagquiz_drawing_drag_tool = null;
         flagquiz_drawing_shape_start = null;
+        flagquiz_drawing_undo_stack = [];
+        update_flagquiz_drawing_undo_button();
         clearTimeout(flagquiz_drawing_sync_timer);
         flagquiz_drawing_sync_timer = null;
         flagquiz_drawing_sync_pending = false;
@@ -1321,6 +1333,80 @@ function set_flagquiz_drawing_color(color) {
     var input = document.getElementById("flagquiz_drawing_color");
     if (input && input.value !== color) {
         input.value = color;
+    }
+}
+
+function add_flagquiz_drawing_recent_color(color) {
+    color = color.toLowerCase();
+    var index = flagquiz_drawing_recent_colors.indexOf(color);
+    if (index !== -1) {
+        flagquiz_drawing_recent_colors.splice(index, 1);
+    }
+    flagquiz_drawing_recent_colors.unshift(color);
+    flagquiz_drawing_recent_colors = flagquiz_drawing_recent_colors.slice(0, flagquiz_drawing_max_recent_colors);
+    localStorage.setItem("flagquiz_drawing_recent_colors", JSON.stringify(flagquiz_drawing_recent_colors));
+    update_flagquiz_drawing_recent_colors();
+}
+
+function load_flagquiz_drawing_recent_colors() {
+    var stored = localStorage.getItem("flagquiz_drawing_recent_colors");
+    if (stored) {
+        try {
+            flagquiz_drawing_recent_colors = JSON.parse(stored).filter(function (color) {
+                return typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color);
+            }).slice(0, flagquiz_drawing_max_recent_colors);
+        } catch (error) {
+            flagquiz_drawing_recent_colors = [];
+        }
+    }
+    update_flagquiz_drawing_recent_colors();
+}
+
+function update_flagquiz_drawing_recent_colors() {
+    var container = document.getElementById("flagquiz_drawing_recent_colors");
+    if (!container) {
+        return;
+    }
+    container.innerHTML = "";
+    flagquiz_drawing_recent_colors.forEach(function (color) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "flagquiz_drawing_swatch";
+        button.style.backgroundColor = color;
+        button.title = color;
+        button.setAttribute("aria-label", "Select custom color " + color);
+        button.onclick = function () {
+            set_flagquiz_drawing_color(color);
+        };
+        container.appendChild(button);
+    });
+}
+
+function save_flagquiz_drawing_undo_state() {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    var context = canvas.getContext("2d");
+    flagquiz_drawing_undo_stack.push(context.getImageData(0, 0, canvas.width, canvas.height));
+    if (flagquiz_drawing_undo_stack.length > flagquiz_drawing_max_undo) {
+        flagquiz_drawing_undo_stack.shift();
+    }
+    update_flagquiz_drawing_undo_button();
+}
+
+function undo_flagquiz_drawing() {
+    var canvas = document.getElementById("flagquiz_drawing_canvas");
+    if (!canvas || !flagquiz_drawing_enabled() || flagquiz_drawing_undo_stack.length === 0) {
+        return;
+    }
+    canvas.getContext("2d").putImageData(flagquiz_drawing_undo_stack.pop(), 0, 0);
+    clear_flagquiz_drawing_preview();
+    update_flagquiz_drawing_undo_button();
+    schedule_flagquiz_drawing_sync(true);
+}
+
+function update_flagquiz_drawing_undo_button() {
+    var button = document.getElementById("flagquiz_drawing_undo");
+    if (button) {
+        button.disabled = flagquiz_drawing_undo_stack.length === 0;
     }
 }
 
@@ -1405,6 +1491,7 @@ function fill_flagquiz_drawing(start) {
         return;
     }
 
+    save_flagquiz_drawing_undo_state();
     var stack = [start.y * canvas.width + start.x];
     while (stack.length) {
         var pixelIndex = stack.pop();
@@ -1497,6 +1584,7 @@ function clear_flagquiz_drawing() {
     if (!canvas || !flagquiz_drawing_enabled()) {
         return;
     }
+    save_flagquiz_drawing_undo_state();
     var context = canvas.getContext("2d");
     context.fillStyle = "#000000";
     context.fillRect(0, 0, canvas.width, canvas.height);

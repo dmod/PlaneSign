@@ -416,6 +416,26 @@ body {
   margin: 10px 0;
 }
 
+.flagquiz_drawing_palette {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.flagquiz_drawing_default_colors,
+.flagquiz_drawing_recent_colors {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.flagquiz_drawing_recent_colors:empty {
+  display: none;
+}
+
 .flagquiz_drawing_swatch {
   width: 28px;
   height: 28px;
@@ -431,6 +451,7 @@ body {
 }
 
 .flagquiz_drawing_controls select,
+.flagquiz_drawing_controls #flagquiz_drawing_undo,
 .flagquiz_drawing_controls > button:last-child {
   min-height: 30px;
 }

@@ -166,20 +166,26 @@
                 <button type="button" id="flagquiz_shape_filled" class="flagquiz_drawing_tool" aria-pressed="false" onclick="set_flagquiz_drawing_shape_filled(true)">Filled</button>
               </div>
               <div class="flagquiz_drawing_controls" role="group" aria-label="Drawing colors">
-                <button type="button" class="flagquiz_drawing_swatch" style="background:#000000" onclick="set_flagquiz_drawing_color('#000000')" aria-label="Black"></button>
-                <button type="button" class="flagquiz_drawing_swatch" style="background:#ffffff" onclick="set_flagquiz_drawing_color('#ffffff')" aria-label="White"></button>
-                <button type="button" class="flagquiz_drawing_swatch" style="background:#ff0000" onclick="set_flagquiz_drawing_color('#ff0000')" aria-label="Red"></button>
-                <button type="button" class="flagquiz_drawing_swatch" style="background:#0000ff" onclick="set_flagquiz_drawing_color('#0000ff')" aria-label="Blue"></button>
-                <button type="button" class="flagquiz_drawing_swatch" style="background:#00aa00" onclick="set_flagquiz_drawing_color('#00aa00')" aria-label="Green"></button>
-                <button type="button" class="flagquiz_drawing_swatch" style="background:#ffff00" onclick="set_flagquiz_drawing_color('#ffff00')" aria-label="Yellow"></button>
+                <div class="flagquiz_drawing_palette">
+                  <div class="flagquiz_drawing_default_colors">
+                    <button type="button" class="flagquiz_drawing_swatch" style="background:#000000" onclick="set_flagquiz_drawing_color('#000000')" aria-label="Black"></button>
+                    <button type="button" class="flagquiz_drawing_swatch" style="background:#ffffff" onclick="set_flagquiz_drawing_color('#ffffff')" aria-label="White"></button>
+                    <button type="button" class="flagquiz_drawing_swatch" style="background:#ff0000" onclick="set_flagquiz_drawing_color('#ff0000')" aria-label="Red"></button>
+                    <button type="button" class="flagquiz_drawing_swatch" style="background:#0000ff" onclick="set_flagquiz_drawing_color('#0000ff')" aria-label="Blue"></button>
+                    <button type="button" class="flagquiz_drawing_swatch" style="background:#00aa00" onclick="set_flagquiz_drawing_color('#00aa00')" aria-label="Green"></button>
+                    <button type="button" class="flagquiz_drawing_swatch" style="background:#ffff00" onclick="set_flagquiz_drawing_color('#ffff00')" aria-label="Yellow"></button>
+                  </div>
+                  <div id="flagquiz_drawing_recent_colors" class="flagquiz_drawing_recent_colors" role="group" aria-label="Recent custom colors"></div>
+                </div>
                 <label for="flagquiz_drawing_color">Custom</label>
-                <input id="flagquiz_drawing_color" type="color" value="#ff0000" oninput="set_flagquiz_drawing_color(this.value)">
+                <input id="flagquiz_drawing_color" type="color" value="#ff0000" oninput="set_flagquiz_drawing_color(this.value)" onchange="add_flagquiz_drawing_recent_color(this.value)">
                 <label for="flagquiz_drawing_brush">Brush</label>
                 <select id="flagquiz_drawing_brush" aria-label="Brush size">
                   <option value="1">1 px</option>
                   <option value="2">2 px</option>
                   <option value="3">3 px</option>
                 </select>
+                <button type="button" id="flagquiz_drawing_undo" onclick="undo_flagquiz_drawing()" disabled>Undo</button>
                 <button type="button" onclick="clear_flagquiz_drawing()">Clear</button>
               </div>
             </div>

@@ -1048,8 +1048,11 @@ def _shape_score(target_lab, drawing_lab):
 
 
 def _score_drawing(code, pixels, width, height):
+    drawing_pixels = np.asarray(pixels, dtype=np.uint8).reshape((height, width, 3))
+    if not np.any(drawing_pixels):
+        return 0
+    drawing = drawing_pixels.astype(np.float32) / 255
     target = np.asarray(_raw_flag_image(code), dtype=np.float32) / 255
-    drawing = np.asarray(pixels, dtype=np.uint8).reshape((height, width, 3)).astype(np.float32) / 255
     target_lab = _srgb_to_lab(target)
     drawing_lab = _srgb_to_lab(drawing)
     delta_e = np.linalg.norm(target_lab - drawing_lab, axis=-1)
