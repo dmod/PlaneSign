@@ -35,6 +35,7 @@ DRAWING_COLOR_MATCH_DELTA_E = 32
 DRAWING_SHAPE_EDGE_DELTA_E = 12
 WIDTH = 128
 HEIGHT = 32
+VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT = 20
 FIREWORK_SLOT_SECONDS = 0.7
 FIREWORK_CHANCE = 0.9
 FIREWORK_FINALE_PERIOD = 75
@@ -1394,7 +1395,7 @@ def _resized_winner_submission(width, height, pixels):
     return source.resize((resized_width, 10), Image.Resampling.LANCZOS)
 
 
-def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, submissions=None):
+def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, submissions=()):
     pole_x = 3
     pole_color = (212, 164, 52) if ornate else (150, 150, 165)
     draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=pole_color)
@@ -1411,22 +1412,18 @@ def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, submissions=None
         draw.point((pole_x - 1, 0), fill=(245, 205, 75))
         draw.point((pole_x + 1, 0), fill=(245, 205, 75))
 
-    if submissions is not None:
-        if submissions:
-            flag_index = int(elapsed / 2.5) % len(submissions)
-            flag = _resized_winner_submission(*submissions[flag_index])
-        else:
-            flag = None
+    if submissions:
+        flag_index = int(elapsed / 2.5) % len(submissions)
+        flag = _resized_winner_submission(*submissions[flag_index])
     else:
         flag_index = int(elapsed / 2.5) % len(flag_codes)
         flag = _resized_winner_flag(flag_codes[flag_index])
-    if flag is not None:
-        rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
-        top = HEIGHT - flag.height - rise
-        for x in range(flag.width):
-            wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
-            for y in range(flag.height):
-                draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
+    rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
+    top = HEIGHT - flag.height - rise
+    for x in range(flag.width):
+        wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
+        for y in range(flag.height):
+            draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
 
 
 def _draw_perfect_crown(draw, x, y, elapsed):
@@ -1477,11 +1474,7 @@ def _draw_victory(sign, state, elapsed):
         elapsed,
         state["victory_flag_codes"],
         perfect,
-        (
-            state.get("victory_flag_submissions", [])
-            if state["difficulty"] == "vexillologist"
-            else None
-        ),
+        state.get("victory_flag_submissions", ()),
     )
     message = winner["name"] + " WINS!" if winner and winner["accuracy"] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
     message_x = (WIDTH - len(message) * 4) // 2 + 3
@@ -1643,17 +1636,26 @@ def _draw_vexillologist_question(sign, state):
 def _draw_vexillologist_comparison(sign, current, result):
     submission = Image.frombytes("RGB", (result["width"], result["height"]), bytes(result["pixels"]))
     solution = _raw_flag_image(current["code"]).copy()
-    submission.thumbnail((42, 12), Image.Resampling.NEAREST)
-    solution.thumbnail((42, 12), Image.Resampling.NEAREST)
+    if submission.height != VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT:
+        width = round(submission.width * VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT / submission.height)
+        submission = submission.resize((width, VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT), Image.Resampling.NEAREST)
+    if solution.height != VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT:
+        width = round(solution.width * VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT / solution.height)
+        solution = solution.resize((width, VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT), Image.Resampling.NEAREST)
+
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-    image.paste(submission, (0, 12 + (12 - submission.height) // 2))
-    image.paste(solution, (WIDTH - solution.width, 12 + (12 - solution.height) // 2))
+    image.paste(submission, (0, 0))
+    image.paste(solution, (WIDTH - solution.width, 0))
     sign.canvas.SetImage(image, 0, 0)
 
-    name_lines = _study_name_lines(current["name"], WIDTH // 4)
-    for index, line in enumerate(name_lines[:2]):
+    font_width = sign.font46.CharacterWidth(ord("A"))
+    name_width = (WIDTH - submission.width - solution.width) // font_width
+    name = _fit_option(current["name"], name_width * 4)
+    name_lines = _study_name_lines(name, name_width)[:4]
+    first_baseline = 5 + (VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT - len(name_lines) * 5) // 2
+    for index, line in enumerate(name_lines):
         x = (WIDTH - len(line) * 4) // 2
-        graphics.DrawText(sign.canvas, sign.font46, x, 5 + index * 5, graphics.Color(255, 255, 255), line)
+        graphics.DrawText(sign.canvas, sign.font46, x, first_baseline + index * 5, graphics.Color(255, 255, 255), line)
 
     score_text = f"+{result['score']}/20"
     score_x = (WIDTH - len(score_text) * 4) // 2
@@ -1663,10 +1665,10 @@ def _draw_vexillologist_comparison(sign, current, result):
         else graphics.Color(255, 225, 70) if result["score"] < 16
         else graphics.Color(100, 255, 130)
     )
-    _draw_outlined_text(sign, sign.font46, score_text, score_x, 21, score_color)
+    _draw_outlined_text(sign, sign.font46, score_text, score_x, 26, score_color)
     player_name = _fit_option(result["name"], WIDTH // 4)
     player_x = (WIDTH - len(player_name) * 4) // 2
-    graphics.DrawText(sign.canvas, sign.font46, player_x, 30, graphics.Color(255, 255, 255), player_name)
+    graphics.DrawText(sign.canvas, sign.font46, player_x, 31, graphics.Color(255, 255, 255), player_name)
 
 
 @planesign_mode_handler(DisplayMode.FLAGQUIZ)
