@@ -425,6 +425,7 @@ body {
 }
 
 .flagquiz_drawing_default_colors,
+.flagquiz_drawing_common_colors,
 .flagquiz_drawing_recent_colors {
   display: flex;
   flex-wrap: wrap;
