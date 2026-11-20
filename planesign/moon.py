@@ -1,7 +1,11 @@
+"""North Margin: local lunar observations beside an ecliptic-north orbital chart."""
+
 import logging
-import random
+import math
 import time
-from datetime import UTC, timedelta
+from contextlib import ExitStack
+from datetime import UTC, datetime
+from pathlib import Path
 
 import datasources
 import network
@@ -10,533 +14,127 @@ import psclock
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from PIL import Image, ImageChops, ImageDraw
+from moon_scene import MoonScene, MoonView, orbit_layout
+from PIL import Image
+from requests import RequestException
 from rgbmatrix import graphics
-from satellite import Star
 from skyfield import almanac
 from skyfield.api import PlanetaryConstants, wgs84
-from skyfield.constants import ERAD
-from skyfield.framelib import ecliptic_frame
-from skyfield.functions import angle_between, length_of
+from skyfield.framelib import ecliptic_J2000_frame
 from skyfield.trigonometry import position_angle_of
 
 
-def log_load_error(error, filename):
-    logging.error("Error loading %s: %s", datasources.path(filename), error)
-    logging.error("Try manually downloading %s into %s.", datasources.source_url(filename), shared_config.datafiles_dir)
+def phase_name(degrees):
+    # Give each instantaneous principal phase a small display window.
+    for angle, name in ((0, "New Moon"), (90, "First Quarter"), (180, "Full Moon"), (270, "Last Quarter")):
+        if abs((degrees - angle + 180) % 360 - 180) < 6:
+            return name
+    return ("Waxing Crescent", "Waxing Gibbous", "Waning Gibbous", "Waning Crescent")[int(degrees // 90)]
+
+
+class MoonSky:
+    def __init__(self, resources, latitude, longitude, zone):
+        self.eph = datasources.load_ephemeris()
+        resources.callback(self.eph.close)
+        self.ts = datasources.timescale()
+        self.zone = zone
+        self.sun, self.earth, self.moon = (self.eph[name] for name in ("sun", "earth", "moon"))
+        self.observer = self.earth + wgs84.latlon(latitude, longitude)
+        self.annual = self.earth - self.sun
+        self.lunar = self.moon - self.earth
+        pc = PlanetaryConstants()
+        for name in ("moon_080317.tf", "pck00008.tpc"):
+            with open(datasources.ensure(name), "rb") as kernel:
+                pc.read_text(kernel)
+        pc.read_binary(resources.enter_context(open(datasources.ensure("moon_pa_de421_1900-2050.bpc"), "rb")))  # noqa: SIM115 - read lazily until mode exit
+        self.pole = self.moon + pc.build_latlon_degrees(pc.build_frame_named("MOON_ME_DE421"), 90, 0)
+        self.phases = almanac.moon_phases(self.eph)
+        self.year = None
+        self.full_window = None
+
+    def view(self, now):
+        t = self.ts.from_datetime(now)
+        year = now.astimezone(self.zone).year
+        if year != self.year:
+            start, end = (self.ts.from_datetime(datetime(y, 1, 1, tzinfo=self.zone)) for y in (year, year + 1))
+            samples = self.ts.linspace(start, end, 100)
+            self.year_path = self.annual.at(samples).frame_xyz(ecliptic_J2000_frame).au[:2]
+            self.year = year
+
+        if self.full_window is None or not self.full_window[0] <= t.tt < self.full_window[1].tt:
+            times, kinds = almanac.find_discrete(t, t + 32, self.phases)
+            self.full_window = (t.tt, times[kinds == 2][0])
+
+        earth = self.annual.at(t).frame_xyz(ecliptic_J2000_frame).au[:2]
+        moon = self.lunar.at(t).frame_xyz(ecliptic_J2000_frame).km
+        # A sidereal month's geocentric track, not a circle inferred from today's phase.
+        path = self.lunar.at(t + np.linspace(-27.32166, 0, 80)).frame_xyz(ecliptic_J2000_frame).km[:2]
+        layout = orbit_layout(self.year_path, earth, moon[:2], path)
+
+        observer = self.observer.at(t)
+        apparent = observer.observe(self.moon).apparent()
+        horizon = apparent.altaz()
+        limb = position_angle_of(horizon, observer.observe(self.sun).apparent().altaz()).radians
+        pole = position_angle_of(horizon, observer.observe(self.pole).apparent().altaz()).degrees
+        angle = apparent.phase_angle(self.sun).radians
+        altitude, azimuth, _ = apparent.altaz(temperature_C="standard", pressure_mbar="standard")
+        return MoonView(
+            layout=layout,
+            phase=phase_name(almanac.moon_phase(self.eph, t).degrees),
+            phase_angle=angle,
+            limb_angle=limb,
+            pole_angle=pole,
+            direction=utilities.direction_lookup(azimuth.degrees),
+            altitude=round(altitude.degrees),
+            distance=round(np.linalg.norm(moon)),
+            full_date=self.full_window[1].astimezone(self.zone).strftime("%m/%d"),
+        )
+
+
+def draw_moon_frame(sign, scene, elapsed):
+    sign.canvas.SetImage(scene.frame(elapsed))
+    view = scene.view
+    pale = graphics.Color(220, 220, 204)
+    graphics.DrawText(sign.canvas, sign.font46, 1, 6, pale, view.phase.upper())
+    graphics.DrawText(sign.canvas, sign.font57, 29, 15, graphics.Color(222, 164, 87), f"{(1 + math.cos(view.phase_angle)) / 2:.0%} LIT")
+    graphics.DrawText(sign.canvas, sign.font46, 29, 23, graphics.Color(75, 141, 211), f"{view.distance}km")
+    graphics.DrawText(sign.canvas, sign.font46, 1, 31, graphics.Color(147, 161, 181), f"FULL {view.full_date}")
+    graphics.DrawText(sign.canvas, sign.font46, 44, 31, pale, f"{view.direction} {view.altitude}°")
+
+
+def notice(sign, message):
+    sign.canvas.Clear()
+    graphics.DrawText(sign.canvas, sign.font57, 3, 19, graphics.Color(180, 177, 154), message)
+    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
 
 
 @planesign_mode_handler(DisplayMode.MOON)
 def moon(sign):
-
-    # Fixed radii
-    earth_radius_km = ERAD / 1e3
-    solar_radius_km = 696340.0
-    moon_radius_km = 1737.1
-
-    # Rotation offset to apply to the base Moon images
-    # to align the pole upward. Determined experimentally
-    # by matching other simulated depictions
-    rotoffset = -75.0
-
-    # Moon image dimensions
-    w, h = 300, 300
-
-    # Diameter of Moon in image in pixels
-    major = 250
-
-    # Distance (in km) defining bounds for "Super" and "Micro" moons respectively
-    perigee_dist = 360000
-    apogee_dist = 405000
-
-    sign.canvas.Clear()
-
-    image = Image.open(f"{shared_config.icons_dir}/nightsky.png")
-    sign.canvas.SetImage(image.convert("RGB"), 0, 0)
-    for i in range(-1, 2):
-        for j in range(-1, 2):
-            graphics.DrawText(sign.canvas, sign.fontbig, 3 + i, 28 + j, graphics.Color(0, 0, 0), "Loading...")
-    graphics.DrawText(sign.canvas, sign.fontbig, 3, 28, graphics.Color(110, 110, 150), "Loading...")
-    sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-    sign.canvas.Clear()
-
-    # ---------------------------------------------------------
-    # Load Ephemeris
-    # ---------------------------------------------------------
-    msg = ""
-    try:
-        eph = datasources.load_ephemeris()
-    except Exception as e:
-        if network.is_offline_error(e):
-            raise
-        log_load_error(e, datasources.DE421)
-        msg = "Error getting ephemeris!"
-
-    pc = PlanetaryConstants()
-    kernels = (("moon_080317.tf", "Error getting lunar ref frame!"), ("pck00008.tpc", "Error getting planetary consts!"), ("moon_pa_de421_1900-2050.bpc", "Error getting lunar orient data!"))
-    for filename, error_msg in kernels:
+    notice(sign, "Loading lunar sky...")
+    with ExitStack() as resources:
         try:
-            kernel = datasources.ensure(filename)
-            if filename.endswith(".bpc"):
-                # Skyfield reads binary kernels lazily, so the file stays open.
-                pc.read_binary(open(kernel, "rb"))  # noqa: SIM115
-            else:
-                with open(kernel, "rb") as f:
-                    pc.read_text(f)
-        except Exception as e:
-            if network.is_offline_error(e):
-                raise
-            log_load_error(e, filename)
-            msg = error_msg
-
-    if msg != "":
-        sign.canvas.SetImage(image.convert("RGB"), 0, 0)
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                graphics.DrawText(sign.canvas, sign.font57, 3 + i, 28 + j, graphics.Color(0, 0, 0), msg)
-        graphics.DrawText(sign.canvas, sign.font57, 3, 28, graphics.Color(200, 10, 10), msg)
-        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        return sign.wait_loop(-1)
-
-    # Build lunar reference frame
-    lunar_frame = pc.build_frame_named("MOON_ME_DE421")
-
-    sun, moon, earth = eph["sun"], eph["moon"], eph["earth"]
-
-    # Construct the observer's location
-    observer = earth + wgs84.latlon(float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]))
-
-    # Construct the north pole of the moon which is taken to correspond
-    # to the top center of our moon image.
-    mnp = moon + pc.build_latlon_degrees(lunar_frame, 90.0, 0.0)
-
-    ts = datasources.timescale()
-
-    # ---------------------------------------------------------
-
-    stars = []
-
-    stars.append(Star(sign, random.randint(44, 55), random.randint(18, 24), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(44, 55), random.randint(18, 24), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(52, 55), random.randint(8, 17), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(52, 55), random.randint(8, 17), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(87, 97), random.randint(7, 14), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(87, 97), random.randint(7, 14), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(87, 97), random.randint(7, 14), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(0, 10), random.randint(18, 24), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(0, 10), random.randint(18, 24), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(0, 10), random.randint(18, 24), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(0, 50), random.randint(8, 9), random.randint(50, 150), 0))
-    stars.append(Star(sign, random.randint(0, 50), random.randint(8, 9), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(122, 127), random.randint(0, 3), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(125, 127), random.randint(4, 7), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(97, 100), random.randint(27, 31), random.randint(50, 150), 0))
-
-    stars.append(Star(sign, random.randint(122, 127), random.randint(27, 31), random.randint(50, 150), 0))
-
-    lastcalc = None
-
-    blink_tic = 0
-    while shared_config.shared_mode.value == DisplayMode.MOON.value:
-        blink_tic = (blink_tic + 1) % 25
-
-        if lastcalc is None or time.perf_counter() - lastcalc > 5:
-            # ---------------------------------------------------------
-            # Current Barycentric Positions
-            # ---------------------------------------------------------
+            sky = MoonSky(resources, float(shared_config.CONF["SENSOR_LAT"]), float(shared_config.CONF["SENSOR_LON"]), shared_config.local_timezone)
+            with Image.open(Path(shared_config.icons_dir) / "moon/moon.png") as atlas:
+                # The bundled near-side portrait needs -75 degrees to put lunar north up.
+                texture = atlas.convert("L").rotate(-75, Image.Resampling.BICUBIC).crop((25, 25, 275, 275))
 
             now = psclock.now(UTC)
-            t = ts.utc(now.year, now.month, now.day, now.hour, now.minute, now.second)
-
-            e_bary = earth.at(t)
-            s_bary = sun.at(t)
-            m_bary = moon.at(t)
-            obs_bary = observer.at(t)
-            mnp_bary = mnp.at(t)
-
-            # ---------------------------------------------------------
-            # Orbit Phase
-            # ---------------------------------------------------------
-
-            s_geo = s_bary - e_bary
-            m_geo = m_bary - e_bary
-            obs_geo = obs_bary - e_bary
-
-            # Ecliptic frame longitudes are measured on the Earth-Sun orbit plane
-            _, slon, _ = s_geo.frame_latlon(ecliptic_frame)
-            _, mlon, centermoondist = m_geo.frame_latlon(ecliptic_frame)
-
-            # Orbit phase goes from 0 -> 360 each orbit of the Moon around Earth
-            # 0.0 -> ~New (Sun, Moon, and Earth are aligned - in that order)
-            # 90.0 -> ~1st Quarter
-            # 180.0 -> ~Full
-            # 270.0 -> ~3rd Quarter
-            orbit_phase = (mlon.degrees - slon.degrees) % 360.0
-
-            # ---------------------------------------------------------
-            # Illumination Phase, Altitude, and Azimuth
-            # ---------------------------------------------------------
-
-            m_topo = obs_bary.observe(moon)
-            s_topo = obs_bary.observe(sun)
-
-            m_app = m_topo.apparent()
-            s_app = s_topo.apparent()
-
-            # Return the phase (Sun-Moon-Observer) angle.
-            # Phase determines the shape of Moon illumination
-            # (and if we are waxing/waning).
-            # Exactly 0.0 -> Full (also perfectly aligned total lunar eclipse)
-            # Exactly 90.0 -> 3rd Quarter
-            # Exactly 180.0 -> New (also perfectly aligned solar eclipse)
-            # Exactly 270.0 -> 1st Quarter
-            # However, we shift everything + 180.0 (mod 360.0) to align
-            # with the orbit_phase system
-            phase = -m_app.phase_angle(sun).degrees
-            if orbit_phase > 180:
-                phase = -phase
-            phase = (phase + 180.0) % 360.0
-
-            # Moon altitude and azimuth are relative to the observer's local
-            # horizon where azimuth is measured in degrees east of north.
-            # These values are computed using the APPARENT position of the moon (where you would
-            # actually look to see the moon) not where the moon actually is now.
-            moonalt, moonaz, _ = m_app.altaz(temperature_C="standard", pressure_mbar="standard")
-
-            moonangle = position_angle_of(m_app.altaz(), s_app.altaz()).degrees
-
-            percent = 100.0 * m_app.fraction_illuminated(sun)
-
-            if phase > 180:
-                # Waning
-                illumangle = moonangle - 90
-            else:
-                # Waxing
-                illumangle = moonangle + 90
-
-            # ---------------------------------------------------------
-            # Moon Rotation
-            # ---------------------------------------------------------
-
-            # Create coodinate axis where "up_moon" is the Moon's
-            # North pole projected on the viewing plane
-
-            # Axis vector "moon_hat" points from Moon -> Earth
-            moon_hat = -(m_geo.xyz.km)
-            moon_hat /= np.linalg.norm(moon_hat)
-
-            np_moon = (mnp_bary - m_bary).xyz.km
-            np_moon /= np.linalg.norm(np_moon)
-
-            # Project Moon's north pole vector onto the viewing plane
-            up_moon = np_moon - np.dot(np_moon, moon_hat) * moon_hat
-            up_moon /= np.linalg.norm(up_moon)
-
-            east_hat = np.cross(moon_hat, up_moon)
-            east_hat /= np.linalg.norm(east_hat)
-
-            # Project observer's normal direction onto the viewing plane
-            up_obs = obs_geo.xyz.km / np.linalg.norm(obs_geo.xyz.km)
-            up_obs_proj = up_obs - np.dot(up_obs, moon_hat) * moon_hat
-            up_obs_proj /= np.linalg.norm(up_obs_proj)
-
-            # Find the rotation angle between the projected observer's "up" and
-            # the moon's "up" in the viewing plane. This is rotation at which the
-            # observer views the Moon!
-            moonorient = np.rad2deg(np.arccos(np.clip(np.dot(up_obs_proj, up_moon), -1, 1)))
-            if np.dot(up_obs_proj, east_hat) > 0:
-                moonorient = -moonorient
-
-            # ---------------------------------------------------------
-            # Phase Name
-            # ---------------------------------------------------------
-
-            moon_phases = almanac.moon_phases(eph)
-
-            def same_event(a, b):
-                return abs(a - b) < 1e-3  # days
-
-            def nearest_phase_event(kind):
-                # The New/Full name windows span at most ~4 days either side of the event
-                times, kinds = almanac.find_discrete(t - timedelta(days=5), t + timedelta(days=5), moon_phases)
-                times = times[kinds == kind]
-                return times[np.argmin(abs(times - t))]
-
-            def is_second_in_local_month(event, kind):
-                month_start = event.astimezone(shared_config.local_timezone).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                next_month_start = (month_start + timedelta(days=32)).replace(day=1)
-                times, kinds = almanac.find_discrete(ts.from_datetime(month_start), ts.from_datetime(next_month_start), moon_phases)
-                times = times[kinds == kind]
-                return len(times) > 1 and same_event(times[1], event)
-
-            def is_third_of_four_in_season(event, kind):
-                # Seasons last at most ~94 days, so +/-100 days always brackets the event
-                tseason, _ = almanac.find_discrete(event - timedelta(days=100), event + timedelta(days=100), almanac.seasons(eph))
-                i = np.searchsorted(tseason.tt, event.tt)
-                times, kinds = almanac.find_discrete(tseason[i - 1], tseason[i], moon_phases)
-                times = times[kinds == kind]
-                return len(times) == 4 and same_event(times[2], event)
-
-            def is_harvest(event):
-                # The Harvest Moon is the full moon closest to the September equinox
-                tseason, yseason = almanac.find_discrete(event - timedelta(days=16), event + timedelta(days=16), almanac.seasons(eph))
-                equinoxes = tseason[yseason == 2]
-                if len(equinoxes) == 0:
-                    return False
-                times, kinds = almanac.find_discrete(equinoxes[0] - timedelta(days=16), equinoxes[0] + timedelta(days=16), moon_phases)
-                fulls = times[kinds == 2]
-                return same_event(fulls[np.argmin(abs(fulls - equinoxes[0]))], event)
-
-            phasename = ""
-            if phase <= 19.948 or phase > 340.052:
-                new_event = nearest_phase_event(0)
-                if is_second_in_local_month(new_event, 0) or is_third_of_four_in_season(new_event, 0):
-                    if centermoondist.km < perigee_dist:
-                        phasename = "Sup. "
-                    elif centermoondist.km > apogee_dist:
-                        phasename = "Mic. "
-                    phasename += "Black Moon"
-                else:
-                    if centermoondist.km < perigee_dist:
-                        phasename = "Super "
-                    elif centermoondist.km > apogee_dist:
-                        phasename = "Micro "
-                    phasename += "New Moon"
-            elif phase <= 84.261:
-                phasename = "Waxing Crescent"
-            elif phase <= 95.739:
-                phasename = "First Quarter"
-            elif phase <= 160.052:
-                phasename = "Waxing Gibbous"
-            elif phase <= 199.948:
-                full_event = nearest_phase_event(2)
-                blue = is_second_in_local_month(full_event, 2) or is_third_of_four_in_season(full_event, 2)
-                if is_harvest(full_event) and not blue:
-                    if centermoondist.km < perigee_dist:
-                        phasename = "S. "
-                    elif centermoondist.km > apogee_dist:
-                        phasename = "M. "
-                    phasename += "Harvest Moon"
-                else:
-                    if centermoondist.km < perigee_dist:
-                        phasename = "Super "
-                    elif centermoondist.km > apogee_dist:
-                        phasename = "Micro "
-                    if blue:
-                        phasename += "Blue Moon"
-                    else:
-                        phasename += "Full Moon"
-            elif phase <= 264.261:
-                phasename = "Waning Gibbous"
-            elif phase <= 275.739:
-                phasename = "Third Quarter"
-            elif phase <= 340.052:
-                phasename = "Waning Crescent"
-
-            # ---------------------------------------------------------
-            # Lunar Eclipse Checks
-            # ---------------------------------------------------------
-
-            draw_eclipse = False
-            if 170 <= phase <= 190:
-                # Eclipse detection algorithms adapted from skyfield.eclipselib
-                earth_to_sun = s_geo.xyz.km
-                earth_to_moon = m_geo.xyz.km
-
-                p_m = earth_radius_km / length_of(earth_to_moon)
-                p_s = earth_radius_km / length_of(earth_to_sun)
-                s_s = solar_radius_km / length_of(earth_to_sun)
-                s_m = np.arcsin(moon_radius_km / length_of(earth_to_moon))
-
-                p_1 = 1.01 * p_m
-                penumbra_radius = p_1 + p_s + s_s
-                umbra_radius = p_1 + p_s - s_s
-
-                eclipse_angle = angle_between(-earth_to_sun, earth_to_moon)
-
-                if eclipse_angle + s_m < umbra_radius:
-                    # Total lunar eclipse
-                    phasename = ""
-                    if centermoondist.km < perigee_dist:
-                        phasename = "Sup. "
-                    elif centermoondist.km > apogee_dist:
-                        phasename = "Mic. "
-                    phasename += "Blood Moon"
-                    draw_eclipse = True
-                elif eclipse_angle - s_m < umbra_radius:
-                    # Partial lunar eclipse
-                    phasename = "Partial Eclipse"
-                    draw_eclipse = True
-                elif eclipse_angle - s_m < penumbra_radius:
-                    # Penumbral lunar eclipse
-                    phasename = "Penumb. Eclipse"
-                    draw_eclipse = True
-
-            # ---------------------------------------------------------
-            # Draw Moon Illumination
-            # ---------------------------------------------------------
-
-            angle = np.deg2rad(phase)
-            minor = major * abs(np.cos(angle))
-
-            bg = Image.open(f"{shared_config.icons_dir}/moon/moonbg.png").convert("RGBA").rotate(rotoffset, resample=Image.BICUBIC)
-            moonim = Image.open(f"{shared_config.icons_dir}/moon/moon.png").convert("RGBA").rotate(rotoffset, resample=Image.BICUBIC)
-            moonmask = moonim.getchannel("A")
-
-            mask = Image.open(f"{shared_config.icons_dir}/moon/moonmaskright.png" if angle < np.pi else f"{shared_config.icons_dir}/moon/moonmaskleft.png").convert("L")
-
-            maskdraw = ImageDraw.Draw(mask)
-            maskdraw.ellipse([(w / 2 - minor / 2, h / 2 - major / 2), (w / 2 + minor / 2, h / 2 + major / 2)], fill=0 if angle < np.pi / 2 or angle > 3 * np.pi / 2 else 255)
-            # Rotate the ilumination mask to the computed illumination angle
-            mask.rotate(illumangle, resample=Image.BICUBIC)
-
-            moonim.putalpha(mask)
-            bg.paste(moonim, (0, 0), mask)
-
-            # ---------------------------------------------------------
-            # Draw Eclipse Shadow
-            # ---------------------------------------------------------
-
-            if draw_eclipse:
-                # Anti-solar shadow axis
-                shadow_hat = -s_geo.xyz.km
-                shadow_hat /= np.linalg.norm(shadow_hat)
-
-                # Earth-Moon vector
-                moon_hat = m_geo.xyz.km
-
-                # Angular Moon–shadow separation
-                theta_sep = angle_between(shadow_hat, moon_hat)
-
-                # Project shadow's center the viewing plane of the Moon
-                shadow_proj = shadow_hat - np.dot(shadow_hat, moon_hat) * moon_hat
-                shadow_proj /= np.linalg.norm(shadow_proj)
-
-                # Shadow's rotation in viewing plane
-                shadow_rot = np.arctan2(np.dot(shadow_proj, -east_hat), np.dot(shadow_proj, up_moon))
-
-                pixels_per_rad = (major / 2) / s_m
-
-                # Compute the x,y location of the shadow's center on the image
-                dx = theta_sep * pixels_per_rad * np.sin(shadow_rot)
-                # Minus sign on dy because PIL designates (0,0) in the top left corner
-                dy = -theta_sep * pixels_per_rad * np.cos(shadow_rot)
-
-                shadow_radius = umbra_radius * pixels_per_rad
-
-                cx = w / 2 + dx
-                cy = h / 2 + dy
-
-                # Draw shadow
-                eclipse = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                draw = ImageDraw.Draw(eclipse)
-                draw.ellipse([(cx - shadow_radius, cy - shadow_radius), (cx + shadow_radius, cy + shadow_radius)], fill=(170, 70, 40, 130))
-
-                # Only put shadow on the Moon
-                eclipse.putalpha(ImageChops.multiply(eclipse.getchannel("A"), moonmask))
-
-                bg.paste(eclipse, (0, 0), eclipse)
-
-            # ---------------------------------------------------------
-            # Rotate Final Moon Image
-            # ---------------------------------------------------------
-
-            bg = bg.rotate(moonorient, resample=Image.BICUBIC)
-
-            local_now = now.astimezone(shared_config.local_timezone)
-            if (local_now.month == 10 and local_now.day == 31) or (local_now.month == 11 and local_now.day == 1 and local_now.hour < 6):
-                if percent >= 70:
-                    pumpkin = Image.open(f"{shared_config.icons_dir}/moon/witch.png").convert("RGBA")
-                    bg.paste(pumpkin, (0, 0), pumpkin)
-                else:
-                    pumpkin = Image.open(f"{shared_config.icons_dir}/moon/pumpkin.png").convert("RGBA")
-                    bg.paste(pumpkin, (0, 0), pumpkin)
-
-            moon_image = bg.resize((36, 36), Image.BICUBIC)
-
-            # Find the next full moon date (find_discrete only returns events after t)
-            keytimes, y = almanac.find_discrete(t, t + timedelta(days=30), almanac.moon_phases(eph))
-            nextfulldate = keytimes[y == 2][0].astimezone(shared_config.local_timezone).strftime("%m/%d")
-
-            phaseangle = f"({phase:.0f}°)"
-
-            moondir = utilities.direction_lookup(moonaz.degrees)
-
-            scalestart = 5
-            scaley = 28
-            scalemax = 43
-            scalecolor = graphics.Color(30, 50, 70)
-            scale = scalemax * (centermoondist.km - 356500) / (406700 - 356500)
-            scale = min(max(scale, 0), scalemax)
-            scalepos = scalestart + round(scale)
-
-            lastcalc = time.perf_counter()
-
-        # Draw the moon
-        sign.canvas.SetImage(moon_image.convert("RGB"), 94, -2)
-
-        for s in stars:
-            s.draw()
-
-        graphics.DrawText(sign.canvas, sign.font57, 1, 6, graphics.Color(200, 10, 10), phasename)  # 110, 110, 150
-        graphics.DrawText(sign.canvas, sign.font46, 89 - 2 * len(phaseangle), 6, graphics.Color(110, 110, 150), phaseangle)
-
-        graphics.DrawText(sign.canvas, sign.font57, 1, 17, graphics.Color(60, 60, 160), "Full:")
-        graphics.DrawText(sign.canvas, sign.font57, 27, 17, graphics.Color(60, 60, 160), f"{nextfulldate}")
-
-        graphics.DrawText(sign.canvas, sign.font57, 57, 14, graphics.Color(20, 160, 60), "Dir:")
-        graphics.DrawText(sign.canvas, sign.font57, 77, 14, graphics.Color(20, 160, 60), moondir)
-
-        graphics.DrawText(sign.canvas, sign.font57, 57, 22, graphics.Color(160, 160, 200), "Alt:")
-        graphics.DrawText(sign.canvas, sign.font57, 77, 22, graphics.Color(160, 160, 200), f"{moonalt.degrees:.0f}°")
-
-        graphics.DrawText(sign.canvas, sign.font57, 56, 30, graphics.Color(20, 20, 210), "Il:")
-        if percent >= 99.95:
-            graphics.DrawText(sign.canvas, sign.font57, 72, 30, graphics.Color(20, 20, 210), "100%")
-        else:
-            graphics.DrawText(sign.canvas, sign.font57, 72, 30, graphics.Color(20, 20, 210), f"{percent:.1f}%")
-
-        # Perigee/Apogee indicator scale
-        graphics.DrawLine(sign.canvas, scalestart, scaley, scalestart + scalemax, scaley, scalecolor)
-        graphics.DrawLine(sign.canvas, scalestart, scaley - 2, scalestart, scaley + 2, scalecolor)
-        graphics.DrawLine(sign.canvas, scalestart + scalemax, scaley - 2, scalestart + scalemax, scaley + 2, scalecolor)
-
-        graphics.DrawText(sign.canvas, sign.font46, scalestart - 5, scaley + 3, graphics.Color(142, 140, 68), "P")
-        graphics.DrawText(sign.canvas, sign.font46, scalestart + scalemax + 3, scaley + 3, graphics.Color(142, 140, 68), "A")
-        graphics.DrawText(sign.canvas, sign.font46, 12, scaley - 4, graphics.Color(142, 140, 68), f"{centermoondist.km:.0f}km")  # 110, 90, 0
-
-        if blink_tic < 20:
-            # Blinking moon for perigee/apogee indicator
-            moonx = scalepos - 1
-            moony = scaley - 2
-
-            sign.canvas.SetPixel(moonx + 1, moony, 92, 99, 103)
-            sign.canvas.SetPixel(moonx + 2, moony, 103, 111, 116)
-            sign.canvas.SetPixel(moonx + 3, moony, 31, 33, 34)
-            sign.canvas.SetPixel(moonx, moony + 1, 92, 99, 103)
-            sign.canvas.SetPixel(moonx + 1, moony + 1, 113, 122, 116)
-            sign.canvas.SetPixel(moonx + 2, moony + 1, 31, 33, 35)
-            sign.canvas.SetPixel(moonx, moony + 2, 113, 122, 127)
-            sign.canvas.SetPixel(moonx + 1, moony + 2, 113, 122, 127)
-            sign.canvas.SetPixel(moonx + 2, moony + 2, 18, 19, 20)
-            sign.canvas.SetPixel(moonx, moony + 3, 92, 99, 103)
-            sign.canvas.SetPixel(moonx + 1, moony + 3, 113, 122, 127)
-            sign.canvas.SetPixel(moonx + 2, moony + 3, 81, 87, 91)
-            sign.canvas.SetPixel(moonx + 1, moony + 4, 92, 100, 104)
-            sign.canvas.SetPixel(moonx + 2, moony + 4, 113, 122, 127)
-            sign.canvas.SetPixel(moonx + 3, moony + 4, 92, 100, 104)
-
-        sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
-        sign.canvas.Clear()
-
-        breakout = sign.wait_loop(0.1)
-
-        if breakout:
-            return
+            scene = MoonScene(sky.view(now), texture)
+            last_sample = now
+            start = deadline = time.monotonic()
+            while shared_config.shared_mode.value == DisplayMode.MOON.value:
+                now = psclock.now(UTC)
+                if abs((now - last_sample).total_seconds()) >= 5:
+                    scene = MoonScene(sky.view(now), texture)
+                    last_sample = now
+                draw_moon_frame(sign, scene, time.monotonic() - start)
+                sign.canvas = sign.matrix.SwapOnVSync(sign.canvas)
+                deadline = max(deadline + 0.1, time.monotonic())
+                if sign.wait_loop(max(0, deadline - time.monotonic())):
+                    return
+        except (OSError, ValueError, RequestException) as error:
+            if network.is_offline_error(error):
+                raise
+            logging.exception("Moon mode could not load or compute the lunar sky")
+            notice(sign, "Lunar data unavailable")
+            sign.wait_loop(30)
