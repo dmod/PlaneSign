@@ -27,12 +27,13 @@ STUDY_FLAG_SECONDS = 3
 VEXILLOLOGIST_TIME_UP_SECONDS = 1.5
 VEXILLOLOGIST_COMPARISON_SECONDS = 5
 VEXILLOLOGIST_QUESTION_PAUSE_SECONDS = 1.5
-DRAWING_PIXEL_WEIGHT = 0.8
 DRAWING_COLOR_WEIGHT = 0.1
-DRAWING_SHAPE_WEIGHT = 0.1
+DRAWING_SHAPE_WEIGHT = 0.2
 DRAWING_COLOR_CLUSTER_DELTA_E = 12
-DRAWING_COLOR_MATCH_DELTA_E = 32
+DRAWING_COLOR_MATCH_DELTA_E = 36
 DRAWING_SHAPE_EDGE_DELTA_E = 12
+DRAWING_SHAPE_EDGE_TOLERANCE = 2
+DRAWING_PIXEL_DELTA_E_SCALE = 110
 WIDTH = 128
 HEIGHT = 32
 VEXILLOLOGIST_COMPARISON_FLAG_HEIGHT = 20
@@ -1003,7 +1004,14 @@ def _srgb_to_lab(rgb):
     ), axis=-1)
 
 
+def _pixel_score(target_lab, drawing_lab):
+    """Score average Lab pixel error: 1 for exact, linearly falling to 0 at mean ΔE 110; always [0, 1]."""
+    delta_e = np.linalg.norm(target_lab - drawing_lab, axis=-1)
+    return float(np.clip(1.0 - float(delta_e.mean()) / DRAWING_PIXEL_DELTA_E_SCALE, 0.0, 1.0))
+
+
 def _color_coverage_score(target_lab, drawing_lab):
+    """Cluster target Lab colors, match drawing pixels to centers within the ΔE limit, then sum each cluster's smaller pixel share; result is [0, 1]."""
     target_colors, target_counts = np.unique(target_lab.reshape((-1, 3)), axis=0, return_counts=True)
     centers = []
     for index in np.argsort(target_counts)[::-1]:
@@ -1024,7 +1032,7 @@ def _color_coverage_score(target_lab, drawing_lab):
     pixel_count = target_lab.shape[0] * target_lab.shape[1]
     target_histogram = target_histogram / pixel_count
     drawing_histogram = drawing_histogram / pixel_count
-    return float(np.minimum(target_histogram, drawing_histogram[:-1]).sum())
+    return float(np.clip(np.minimum(target_histogram, drawing_histogram[:-1]).sum(), 0.0, 1.0))
 
 
 def _color_edges(lab, threshold=DRAWING_SHAPE_EDGE_DELTA_E):
@@ -1039,17 +1047,18 @@ def _color_edges(lab, threshold=DRAWING_SHAPE_EDGE_DELTA_E):
     return edges
 
 
-def _dilate_mask(mask):
+def _dilate_mask(mask, radius=DRAWING_SHAPE_EDGE_TOLERANCE):
     height, width = mask.shape
-    padded = np.pad(mask, 1, mode="constant")
+    padded = np.pad(mask, radius, mode="constant")
     dilated = np.zeros_like(mask)
-    for y in range(3):
-        for x in range(3):
+    for y in range(radius * 2 + 1):
+        for x in range(radius * 2 + 1):
             dilated |= padded[y : y + height, x : x + width]
     return dilated
 
 
 def _shape_score(target_lab, drawing_lab):
+    """Detect Lab color boundaries, then score edge precision/recall within the pixel tolerance using their harmonic mean; result is [0, 1]."""
     target_edges = _color_edges(target_lab)
     drawing_edges = _color_edges(drawing_lab)
     target_count = np.count_nonzero(target_edges)
@@ -1061,23 +1070,27 @@ def _shape_score(target_lab, drawing_lab):
     drawing_matches = np.count_nonzero(drawing_edges & _dilate_mask(target_edges))
     precision = drawing_matches / drawing_count
     recall = target_matches / target_count
-    return 2 * precision * recall / (precision + recall)
+    if precision + recall == 0:
+        return 0.0
+    return float(np.clip(2 * precision * recall / (precision + recall), 0.0, 1.0))
 
 
 def _score_drawing(code, pixels, width, height):
     drawing_pixels = np.asarray(pixels, dtype=np.uint8).reshape((height, width, 3))
     if not np.any(drawing_pixels):
         return 0
+    target_pixels = np.asarray(_raw_flag_image(code), dtype=np.uint8)
     drawing = drawing_pixels.astype(np.float32) / 255
-    target = np.asarray(_raw_flag_image(code), dtype=np.float32) / 255
+    target = target_pixels.astype(np.float32) / 255
     target_lab = _srgb_to_lab(target)
     drawing_lab = _srgb_to_lab(drawing)
-    delta_e = np.linalg.norm(target_lab - drawing_lab, axis=-1)
-    pixel_score = max(0.0, 1.0 - float(delta_e.mean()) / 100.0)
-    color_score = _color_coverage_score(target_lab, drawing_lab)
-    shape_score = _shape_score(target_lab, drawing_lab)
-    score = 20 * (DRAWING_PIXEL_WEIGHT * pixel_score + DRAWING_COLOR_WEIGHT * color_score + DRAWING_SHAPE_WEIGHT * shape_score)
-    return math.floor(score + 0.5)
+    pixel_score = _pixel_score(target_lab, drawing_lab)
+    score = 20 * pixel_score
+    if pixel_score < 1.0:
+        color_score = _color_coverage_score(target_lab, drawing_lab)
+        shape_score = _shape_score(target_lab, drawing_lab)
+        score += 20 * (DRAWING_COLOR_WEIGHT * color_score + DRAWING_SHAPE_WEIGHT * shape_score)
+    return math.floor(min(20.0, score) + 0.5)
 
 
 @lru_cache(maxsize=1)
