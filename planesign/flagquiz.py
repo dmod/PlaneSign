@@ -384,6 +384,7 @@ def start_game(difficulty, player_id):
         "vexillologist_phase": None,
         "vexillologist_phase_until": None,
         "vexillologist_submissions": {},
+        "vexillologist_winner_submissions": {},
         "vexillologist_comparisons": [],
         "vexillologist_comparison_index": 0,
         "sudden_death": False,
@@ -471,9 +472,18 @@ def _finish_vexillologist_question(state, players, now):
     black_pixels = [0] * (width * height * 3)
     comparisons = []
     answers = []
+    winner_submissions = dict(state.get("vexillologist_winner_submissions", {}))
     for player_id in state["scores"]:
         player = players.get(player_id, {})
         submission = state["vexillologist_submissions"].get(player_id)
+        if submission is not None:
+            player_submissions = list(winner_submissions.get(player_id, ()))
+            player_submissions.append((
+                submission["width"],
+                submission["height"],
+                bytes(submission["pixels"]),
+            ))
+            winner_submissions[player_id] = player_submissions
         pixels = submission["pixels"] if submission else black_pixels
         score = _score_drawing(current["code"], pixels, width, height)
         state["scores"][player_id] += score
@@ -497,6 +507,7 @@ def _finish_vexillologist_question(state, players, now):
 
     comparisons.sort(key=lambda result: (result["name"].casefold(), result["id"]))
     answers.sort(key=lambda answer: (answer["name"].casefold(), answer["id"]))
+    state["vexillologist_winner_submissions"] = winner_submissions
     state["last_result"] = {
         "question_number": state["index"] + 1,
         "round_id": state["round_id"],
@@ -953,6 +964,11 @@ def get_sign_state():
             "attempts": state["attempts"],
             "firework_seed": state.get("firework_seed", 0),
             "victory_flag_codes": state["victory_flag_codes"],
+            "victory_flag_submissions": (
+                state.get("vexillologist_winner_submissions", {}).get(state.get("winner_id"), [])
+                if state["difficulty"] == "vexillologist" and state.get("winner_id") is not None
+                else []
+            ),
         }
 
 
@@ -1371,7 +1387,14 @@ def _resized_winner_flag(code):
     return source.resize((width, 10), Image.Resampling.LANCZOS)
 
 
-def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False):
+@lru_cache(maxsize=32)
+def _resized_winner_submission(width, height, pixels):
+    source = Image.frombytes("RGB", (width, height), pixels)
+    resized_width = max(1, round(width * 10 / height))
+    return source.resize((resized_width, 10), Image.Resampling.LANCZOS)
+
+
+def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, submissions=None):
     pole_x = 3
     pole_color = (212, 164, 52) if ornate else (150, 150, 165)
     draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=pole_color)
@@ -1388,14 +1411,22 @@ def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False):
         draw.point((pole_x - 1, 0), fill=(245, 205, 75))
         draw.point((pole_x + 1, 0), fill=(245, 205, 75))
 
-    flag_index = int(elapsed / 2.5) % len(flag_codes)
-    flag = _resized_winner_flag(flag_codes[flag_index])
-    rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
-    top = HEIGHT - flag.height - rise
-    for x in range(flag.width):
-        wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
-        for y in range(flag.height):
-            draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
+    if submissions is not None:
+        if submissions:
+            flag_index = int(elapsed / 2.5) % len(submissions)
+            flag = _resized_winner_submission(*submissions[flag_index])
+        else:
+            flag = None
+    else:
+        flag_index = int(elapsed / 2.5) % len(flag_codes)
+        flag = _resized_winner_flag(flag_codes[flag_index])
+    if flag is not None:
+        rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
+        top = HEIGHT - flag.height - rise
+        for x in range(flag.width):
+            wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
+            for y in range(flag.height):
+                draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
 
 
 def _draw_perfect_crown(draw, x, y, elapsed):
@@ -1441,7 +1472,17 @@ def _draw_victory(sign, state, elapsed):
     )
     _draw_fireworks(image, elapsed, state.get("firework_seed", 0), perfect)
     draw = ImageDraw.Draw(image)
-    _draw_raising_flag(draw, elapsed, state["victory_flag_codes"], perfect)
+    _draw_raising_flag(
+        draw,
+        elapsed,
+        state["victory_flag_codes"],
+        perfect,
+        (
+            state.get("victory_flag_submissions", [])
+            if state["difficulty"] == "vexillologist"
+            else None
+        ),
+    )
     message = winner["name"] + " WINS!" if winner and winner["accuracy"] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
     message_x = (WIDTH - len(message) * 4) // 2 + 3
     if perfect:
