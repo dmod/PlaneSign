@@ -949,6 +949,14 @@ function render_flagquiz_state(state) {
         feedback.textContent = comparison
             ? state.study.name + " vs " + comparison.name
             : state.study.name;
+    } else if (isVexillologist && state.your_vexillologist_score !== null && state.last_result &&
+        (!state.vexillologist_phase || state.vexillologist_phase === "question")) {
+        feedback.textContent = "Previous: " + state.last_result.correct_name + " ";
+        var previousScore = document.createElement("span");
+        previousScore.textContent = "+" + state.your_vexillologist_score;
+        previousScore.style.color = get_flagquiz_vexillologist_score_color(state.your_vexillologist_score);
+        feedback.appendChild(previousScore);
+        feedback.appendChild(document.createTextNode(" points"));
     } else if (isVexillologist && state.your_vexillologist_score !== null &&
         state.vexillologist_phase !== "question" && state.last_result &&
         state.last_result.round_id === state.round_id) {
@@ -959,7 +967,7 @@ function render_flagquiz_state(state) {
         feedback.textContent = "";
     } else if (state.your_answer) {
         feedback.textContent = state.your_answer.correct ? "Your answer is correct!" : "Your answer is incorrect.";
-    } else if (state.last_result) {
+    } else if (state.last_result && !isVexillologist) {
         var personalResult = state.last_result.answers.find(function (answer) {
             return answer.id === get_game_player_id();
         });
@@ -1047,6 +1055,19 @@ function render_flagquiz_state(state) {
         item.textContent = player.name + " — " + player.score + (player.active ? " (active)" : " (away)");
         scoreboard.appendChild(item);
     });
+}
+
+function get_flagquiz_vexillologist_score_color(score) {
+    if (score < 6) {
+        return "rgb(255, 70, 70)";
+    }
+    if (score < 11) {
+        return "rgb(255, 160, 50)";
+    }
+    if (score < 16) {
+        return "rgb(255, 225, 70)";
+    }
+    return "rgb(100, 255, 130)";
 }
 
 function submit_flagquiz_answer(answer, clickedButton) {
