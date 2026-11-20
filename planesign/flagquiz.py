@@ -1011,7 +1011,7 @@ def _pixel_score(target_lab, drawing_lab):
 
 
 def _color_coverage_score(target_lab, drawing_lab):
-    """Cluster target Lab colors, match drawing pixels to centers within the ΔE limit, then sum each cluster's smaller pixel share; result is [0, 1]."""
+    """Compare the flag's main colors and their proportions with the drawing."""
     target_colors, target_counts = np.unique(target_lab.reshape((-1, 3)), axis=0, return_counts=True)
     centers = []
     for index in np.argsort(target_counts)[::-1]:
@@ -1058,7 +1058,7 @@ def _dilate_mask(mask, radius=DRAWING_SHAPE_EDGE_TOLERANCE):
 
 
 def _shape_score(target_lab, drawing_lab):
-    """Detect Lab color boundaries, then score edge precision/recall within the pixel tolerance using their harmonic mean; result is [0, 1]."""
+    """Compare the placement of color boundaries in the flag and drawing."""
     target_edges = _color_edges(target_lab)
     drawing_edges = _color_edges(drawing_lab)
     target_count = np.count_nonzero(target_edges)
