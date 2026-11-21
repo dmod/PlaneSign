@@ -263,15 +263,23 @@ body {
 }
 
 .flagquiz_fullscreen_toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+  min-width: 100px;
   min-height: 44px;
   padding: 6px 10px;
   border: 1px solid #7bb9c9;
   border-radius: 4px;
   background: #202a30;
   color: #fff;
+  font: inherit;
+  line-height: 1.2;
   cursor: pointer;
   touch-action: manipulation;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .flagquiz_fullscreen_toggle:hover {

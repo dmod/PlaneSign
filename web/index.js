@@ -1309,7 +1309,11 @@ function setup_flagquiz_drawing() {
 
 function is_flagquiz_in_browser_fullscreen() {
     var panel = document.getElementById("flagquiz_div");
-    return !!(document.fullscreenElement && panel && document.fullscreenElement === panel);
+    var fullscreenElement = document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement;
+    return !!(fullscreenElement && panel && fullscreenElement === panel);
 }
 
 function update_flagquiz_fullscreen_ui(is_fullscreen) {
@@ -1334,34 +1338,64 @@ function sync_flagquiz_fullscreen_state() {
 
 function enter_flagquiz_fullscreen() {
     var panel = document.getElementById("flagquiz_div");
-    if (!panel) {
-        return;
-    }
-
-    if (!panel.hidden && panel.requestFullscreen) {
-        panel.requestFullscreen()
-            .then(function () {
-                update_flagquiz_fullscreen_ui(true);
-            })
-            .catch(function () {
-                update_flagquiz_fullscreen_ui(true);
-            });
+    if (!panel || panel.hidden) {
         return;
     }
 
     update_flagquiz_fullscreen_ui(true);
+
+    var requestFullscreen = panel.requestFullscreen ||
+        panel.webkitRequestFullscreen ||
+        panel.mozRequestFullScreen ||
+        panel.msRequestFullscreen;
+    if (!requestFullscreen) {
+        return;
+    }
+
+    try {
+        var request = requestFullscreen.call(panel);
+        if (request && typeof request.catch === "function") {
+            request.catch(function (error) {
+                console.warn("Native fullscreen was unavailable; using the page fullscreen layout.", error);
+            });
+        }
+    } catch (error) {
+        console.warn("Native fullscreen was unavailable; using the page fullscreen layout.", error);
+    }
 }
 
 function exit_flagquiz_fullscreen() {
     if (is_flagquiz_in_browser_fullscreen() && document.exitFullscreen) {
-        document.exitFullscreen()
-            .then(function () {
-                update_flagquiz_fullscreen_ui(false);
-            })
-            .catch(function () {
-                update_flagquiz_fullscreen_ui(false);
-            });
-        return;
+        try {
+            var request = document.exitFullscreen();
+            if (request && typeof request.then === "function") {
+                request.then(function () {
+                    update_flagquiz_fullscreen_ui(false);
+                }).catch(function (error) {
+                    console.warn("Could not exit native fullscreen.", error);
+                    update_flagquiz_fullscreen_ui(true);
+                });
+                return;
+            }
+        } catch (error) {
+            console.warn("Could not exit native fullscreen.", error);
+            update_flagquiz_fullscreen_ui(true);
+            return;
+        }
+    } else if (is_flagquiz_in_browser_fullscreen()) {
+        var exitFullscreen = document.webkitExitFullscreen ||
+            document.mozCancelFullScreen ||
+            document.msExitFullscreen;
+        if (exitFullscreen) {
+            try {
+                exitFullscreen.call(document);
+                return;
+            } catch (error) {
+                console.warn("Could not exit native fullscreen.", error);
+                update_flagquiz_fullscreen_ui(true);
+                return;
+            }
+        }
     }
 
     update_flagquiz_fullscreen_ui(false);
@@ -1373,6 +1407,10 @@ function toggle_flagquiz_fullscreen() {
     } else {
         enter_flagquiz_fullscreen();
     }
+
+    document.addEventListener("webkitfullscreenchange", sync_flagquiz_fullscreen_state);
+    document.addEventListener("mozfullscreenchange", sync_flagquiz_fullscreen_state);
+    document.addEventListener("MSFullscreenChange", sync_flagquiz_fullscreen_state);
 }
 
 function flagquiz_drawing_enabled() {
