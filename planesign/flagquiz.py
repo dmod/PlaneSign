@@ -367,8 +367,11 @@ def start_game(difficulty, player_id):
     scores[player["id"]] = 0
     countdown_until = now + START_COUNTDOWN_SECONDS
     firework_seed = random.randrange(2**32)
-    victory_flag_codes = [country["code"] for country in load_countries()]
-    random.shuffle(victory_flag_codes)
+    if difficulty == "vexillologist":
+        victory_flag_codes = question_codes[:regular_question_count]
+    else:
+        victory_flag_codes = [country["code"] for country in load_countries()]
+        random.shuffle(victory_flag_codes)
 
     state = {
         "difficulty": difficulty,
@@ -481,6 +484,7 @@ def _finish_vexillologist_question(state, players, now):
         if submission is not None:
             player_submissions = list(winner_submissions.get(player_id, ()))
             player_submissions.append((
+                current["code"],
                 submission["width"],
                 submission["height"],
                 bytes(submission["pixels"]),
@@ -1408,8 +1412,7 @@ def _resized_winner_submission(width, height, pixels):
     return source.resize((resized_width, 10), Image.Resampling.LANCZOS)
 
 
-def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, submissions=()):
-    pole_x = 3
+def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, pole_x=3, flag_code=None, submissions=None):
     pole_color = (212, 164, 52) if ornate else (150, 150, 165)
     draw.line((pole_x, 0, pole_x, HEIGHT - 1), fill=pole_color)
     if ornate:
@@ -1425,18 +1428,22 @@ def _draw_raising_flag(draw, elapsed, flag_codes, ornate=False, submissions=()):
         draw.point((pole_x - 1, 0), fill=(245, 205, 75))
         draw.point((pole_x + 1, 0), fill=(245, 205, 75))
 
-    if submissions:
-        flag_index = int(elapsed / 2.5) % len(submissions)
-        flag = _resized_winner_submission(*submissions[flag_index])
-    else:
+    if flag_code is None:
         flag_index = int(elapsed / 2.5) % len(flag_codes)
-        flag = _resized_winner_flag(flag_codes[flag_index])
-    rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
-    top = HEIGHT - flag.height - rise
-    for x in range(flag.width):
-        wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
-        for y in range(flag.height):
-            draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
+        flag_code = flag_codes[flag_index]
+    if submissions is None:
+        flag = _resized_winner_flag(flag_code)
+    else:
+        submission = submissions.get(flag_code)
+        flag = _resized_winner_submission(*submission) if submission else None
+    if flag is not None:
+        rise = int(min(1.0, elapsed / 1.5) * (HEIGHT - flag.height - 4))
+        top = HEIGHT - flag.height - rise
+        for x in range(flag.width):
+            wave = math.sin(elapsed * 6.5 - x * 0.42) * (x / flag.width) ** 1.3 * 2.0
+            for y in range(flag.height):
+                draw.point((pole_x + 2 + x, round(top + y + wave)), fill=flag.getpixel((x, y)))
+    return flag_code
 
 
 def _draw_perfect_crown(draw, x, y, elapsed):
@@ -1482,13 +1489,27 @@ def _draw_victory(sign, state, elapsed):
     )
     _draw_fireworks(image, elapsed, state.get("firework_seed", 0), perfect)
     draw = ImageDraw.Draw(image)
-    _draw_raising_flag(
+    active_flag_code = _draw_raising_flag(
         draw,
         elapsed,
         state["victory_flag_codes"],
         perfect,
-        state.get("victory_flag_submissions", ()),
     )
+    if state["difficulty"] == "vexillologist":
+        victory_submissions = state.get("victory_flag_submissions", ())
+        if winner and victory_submissions:
+            submission_by_code = {
+                code: (width, height, pixels)
+                for code, width, height, pixels in victory_submissions
+            }
+            _draw_raising_flag(
+                draw,
+                elapsed,
+                state["victory_flag_codes"],
+                pole_x=105,
+                flag_code=active_flag_code,
+                submissions=submission_by_code,
+            )
     message = winner["name"] + " WINS!" if winner and winner["accuracy"] > 0 else "NO WINNER!" if winner else "IT'S A TIE!"
     message_x = (WIDTH - len(message) * 4) // 2 + 3
     if perfect:
