@@ -98,7 +98,10 @@
         </div>
         <button id="FLAGQUIZ" class="mode_button" onclick="set_mode(this.id); document.getElementById('flagquiz_div').hidden = false; poll_flagquiz_state()">Vexillology</button>
         <div id="flagquiz_div" class="flagquiz_controls" hidden>
-          <p>Select a difficulty, then start when everyone is ready.</p>
+          <div class="flagquiz_controls_heading">
+            <p>Select a difficulty, then start when everyone is ready.</p>
+            <button type="button" id="flagquiz_fullscreen_toggle" class="flagquiz_fullscreen_toggle" onclick="toggle_flagquiz_fullscreen()" aria-pressed="false">Full Screen</button>
+          </div>
           <div class="flagquiz_difficulties">
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="easy" aria-pressed="false" onclick="select_flagquiz_difficulty('easy')">Easy</button>
             <button type="button" class="flagquiz_difficulty_button" data-flagquiz-difficulty="hard" aria-pressed="false" onclick="select_flagquiz_difficulty('hard')">Hard</button>
@@ -150,10 +153,7 @@
               <img id="flagquiz_compare_flag" class="flagquiz_flag flagquiz_compare_flag" alt="" hidden>
             </div>
             <div id="flagquiz_vexillologist" class="flagquiz_vexillologist" hidden>
-              <div class="flagquiz_drawing_heading">
-                <p id="flagquiz_drawing_prompt" class="flagquiz_drawing_prompt"></p>
-                <button type="button" id="flagquiz_drawing_fullscreen_toggle" class="flagquiz_drawing_fullscreen_toggle" onclick="toggle_flagquiz_drawing_fullscreen()" aria-pressed="false">Full Screen</button>
-              </div>
+              <p id="flagquiz_drawing_prompt" class="flagquiz_drawing_prompt"></p>
               <div id="flagquiz_drawing_wrap" class="flagquiz_drawing_wrap">
                 <canvas id="flagquiz_drawing_canvas" width="40" height="20" aria-label="Draw the flag pixel by pixel"></canvas>
                 <canvas id="flagquiz_drawing_preview" aria-hidden="true"></canvas>
