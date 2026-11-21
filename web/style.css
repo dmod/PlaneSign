@@ -327,11 +327,55 @@ body {
   margin: 12px 0;
 }
 
+.flagquiz_drawing_heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .flagquiz_drawing_prompt {
+  flex: 1;
   margin: 8px 0;
   font-size: 1.15em;
   font-weight: bold;
   text-align: center;
+}
+
+.flagquiz_drawing_fullscreen_toggle {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #7bb9c9;
+  border-radius: 4px;
+  background: #202a30;
+  color: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.flagquiz_drawing_fullscreen_toggle:hover {
+  background: #267c91;
+}
+
+#flagquiz_vexillologist.flagquiz_drawing_fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  overflow-y: auto;
+  background: #7bb9c9;
+  overscroll-behavior: contain;
+}
+
+#flagquiz_vexillologist.flagquiz_drawing_fullscreen .flagquiz_drawing_wrap {
+  width: min(100%, 960px);
 }
 
 .flagquiz_drawing_wrap {

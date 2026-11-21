@@ -150,7 +150,10 @@
               <img id="flagquiz_compare_flag" class="flagquiz_flag flagquiz_compare_flag" alt="" hidden>
             </div>
             <div id="flagquiz_vexillologist" class="flagquiz_vexillologist" hidden>
-              <p id="flagquiz_drawing_prompt" class="flagquiz_drawing_prompt"></p>
+              <div class="flagquiz_drawing_heading">
+                <p id="flagquiz_drawing_prompt" class="flagquiz_drawing_prompt"></p>
+                <button type="button" id="flagquiz_drawing_fullscreen_toggle" class="flagquiz_drawing_fullscreen_toggle" onclick="toggle_flagquiz_drawing_fullscreen()" aria-pressed="false">Full Screen</button>
+              </div>
               <div id="flagquiz_drawing_wrap" class="flagquiz_drawing_wrap">
                 <canvas id="flagquiz_drawing_canvas" width="40" height="20" aria-label="Draw the flag pixel by pixel"></canvas>
                 <canvas id="flagquiz_drawing_preview" aria-hidden="true"></canvas>

@@ -66,6 +66,7 @@ var flagquiz_drawing_tool = "brush";
 var flagquiz_drawing_drag_tool = null;
 var flagquiz_drawing_shape_start = null;
 var flagquiz_drawing_shape_filled = false;
+var flagquiz_drawing_is_fullscreen = false;
 var flagquiz_drawing_undo_stack = [];
 var flagquiz_drawing_max_undo = 20;
 var flagquiz_drawing_color = "#ff0000";
@@ -76,6 +77,7 @@ var flagquiz_drawing_sync_in_progress = false;
 var flagquiz_drawing_sync_pending = false;
 
 document.addEventListener("fullscreenchange", sync_free_sketch_fullscreen_state);
+document.addEventListener("fullscreenchange", sync_flagquiz_drawing_fullscreen_state);
 
 function set_mode_button_active(mode, is_active) {
     var button = document.getElementById(mode);
@@ -935,6 +937,9 @@ function render_flagquiz_state(state) {
 
     var drawingPanel = document.getElementById("flagquiz_vexillologist");
     drawingPanel.hidden = !drawingActive;
+    if (!drawingActive && flagquiz_drawing_is_fullscreen) {
+        exit_flagquiz_drawing_fullscreen();
+    }
     var drawingCanvas = document.getElementById("flagquiz_drawing_canvas");
     drawingCanvas.style.pointerEvents = drawingActive ? "auto" : "none";
     if (drawingActive) {
@@ -1303,6 +1308,73 @@ function setup_flagquiz_drawing() {
         flagquiz_drawing_shape_start = null;
         clear_flagquiz_drawing_preview();
     });
+}
+
+function is_flagquiz_drawing_in_browser_fullscreen() {
+    var panel = document.getElementById("flagquiz_vexillologist");
+    return !!(document.fullscreenElement && panel && document.fullscreenElement === panel);
+}
+
+function update_flagquiz_drawing_fullscreen_ui(is_fullscreen) {
+    flagquiz_drawing_is_fullscreen = is_fullscreen;
+
+    var panel = document.getElementById("flagquiz_vexillologist");
+    if (panel) {
+        panel.classList.toggle("flagquiz_drawing_fullscreen", is_fullscreen);
+    }
+
+    var toggle = document.getElementById("flagquiz_drawing_fullscreen_toggle");
+    if (toggle) {
+        toggle.textContent = is_fullscreen ? "Exit Full Screen" : "Full Screen";
+        toggle.setAttribute("aria-pressed", is_fullscreen ? "true" : "false");
+    }
+}
+
+function sync_flagquiz_drawing_fullscreen_state() {
+    update_flagquiz_drawing_fullscreen_ui(is_flagquiz_drawing_in_browser_fullscreen());
+}
+
+function enter_flagquiz_drawing_fullscreen() {
+    var panel = document.getElementById("flagquiz_vexillologist");
+    if (!panel) {
+        return;
+    }
+
+    if (!panel.hidden && panel.requestFullscreen) {
+        panel.requestFullscreen()
+            .then(function () {
+                update_flagquiz_drawing_fullscreen_ui(true);
+            })
+            .catch(function () {
+                update_flagquiz_drawing_fullscreen_ui(true);
+            });
+        return;
+    }
+
+    update_flagquiz_drawing_fullscreen_ui(true);
+}
+
+function exit_flagquiz_drawing_fullscreen() {
+    if (is_flagquiz_drawing_in_browser_fullscreen() && document.exitFullscreen) {
+        document.exitFullscreen()
+            .then(function () {
+                update_flagquiz_drawing_fullscreen_ui(false);
+            })
+            .catch(function () {
+                update_flagquiz_drawing_fullscreen_ui(false);
+            });
+        return;
+    }
+
+    update_flagquiz_drawing_fullscreen_ui(false);
+}
+
+function toggle_flagquiz_drawing_fullscreen() {
+    if (is_flagquiz_drawing_in_browser_fullscreen() || flagquiz_drawing_is_fullscreen) {
+        exit_flagquiz_drawing_fullscreen();
+    } else {
+        enter_flagquiz_drawing_fullscreen();
+    }
 }
 
 function flagquiz_drawing_enabled() {
