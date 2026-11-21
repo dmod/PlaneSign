@@ -1480,12 +1480,23 @@ def _draw_victory(sign, state, elapsed):
     image = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
     winner = state.get("winner")
     winner_attempts = state.get("attempts", {}).get(winner["id"], 0) if winner else 0
+    perfect_vexillologist = bool(
+        winner
+        and state["difficulty"] == "vexillologist"
+        and winner_attempts >= VEXILLOLOGIST_QUESTION_LIMIT
+        and winner["score"] == winner_attempts * 20
+    )
     perfect = bool(
         winner
-        and state["difficulty"] == "expert"
-        and winner_attempts
-        and winner["score"] == winner_attempts
-        and winner["score"] >= QUESTION_LIMIT
+        and (
+            (
+                state["difficulty"] == "expert"
+                and winner_attempts
+                and winner["score"] == winner_attempts
+                and winner["score"] >= QUESTION_LIMIT
+            )
+            or perfect_vexillologist
+        )
     )
     _draw_fireworks(image, elapsed, state.get("firework_seed", 0), perfect)
     draw = ImageDraw.Draw(image)
@@ -1506,6 +1517,7 @@ def _draw_victory(sign, state, elapsed):
                 draw,
                 elapsed,
                 state["victory_flag_codes"],
+                ornate=perfect,
                 pole_x=105,
                 flag_code=active_flag_code,
                 submissions=submission_by_code,
