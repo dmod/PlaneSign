@@ -122,7 +122,6 @@ def normalize_country_tokens(value):
         (r"\bsa?int\b|\bst\.(?!\w)", "saint"),
         (r"\brep\.(?!\w)", "republic"),
         (r"\bprin\.(?!\w)", "principality"),
-        (r"\bcabo\b", "cape"),
         (r"\bcote\b", "coast"),
         (r"\b(?:d')?ivoire\b", "ivory"),
     )
