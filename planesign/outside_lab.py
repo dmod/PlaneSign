@@ -39,10 +39,12 @@ HOLIDAY_TIMES = (("Day", clock_time(12)), ("Night", clock_time(21, 30)))
 HOLIDAY_NIGHT_TIME = ("Before dawn", clock_time(3))
 # The Christmas window candles burn from midnight until sunrise on the shown date.
 HOLIDAY_CANDLE_TIME = ("Candles", clock_time(3))
-# Vesuvius day's phases: the morning smoke, the rumble before the noon blast, the fires and flows after dark, and the
-# last of it before midnight. The rumble's shake (outside_scene.vesuvius_shake) ramps up from 40 s before noon but first
-# moves the frame about 20 s before it, so the eruption shortcut lands 3 s before that.
-VESUVIUS_TIMES = (("Smoke", clock_time(10)), ("Eruption", clock_time(11, 59, 37)), ("Flows", clock_time(21)), ("Fading", clock_time(23)))
+# Vesuvius day's phases: the morning smoke, the rumble before the noon blast, Jupiter's arrival, the fires and flows
+# after dark, the Romans rebuilding the hut, their recall and the last of the eruption before midnight. The rumble's
+# shake (outside_scene.vesuvius_shake) ramps up from 40 s before noon but first moves the frame about 20 s before it, so
+# the eruption shortcut lands 3 s before that; the rocks that wreck the hut land about 35 s after it. The Jupiter and
+# recall shortcuts land a few seconds before outside_scene.JUPITER_HOUR and the first recall bolt.
+VESUVIUS_TIMES = (("Smoke", clock_time(10)), ("Eruption", clock_time(11, 59, 37)), ("Jupiter", clock_time(14, 59, 57)), ("Flows", clock_time(21)), ("Rebuilding", clock_time(22, 15)), ("Fading", clock_time(23)), ("Recall", clock_time(23, 49, 50)))
 # Short names for a day's holiday: the first feature here that the day has names it. Days whose features are all
 # missing here fall back to their first feature's HOLIDAYS label.
 HOLIDAY_NAMES = (

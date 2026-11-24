@@ -499,7 +499,8 @@ def grade_frame(image: Image.Image) -> Image.Image:
     return Image.fromarray(from_oklab(lab), "RGB")
 
 
-def geometry() -> tuple[Image.Image, Image.Image, Image.Image, tuple[tuple[int, int, str, int], ...]]:
+def geometry(hut: bool = True) -> tuple[Image.Image, Image.Image, Image.Image, tuple[tuple[int, int, str, int], ...]]:
+    """The land, the leafy and bare tree masks and the maple's leaf pixels; without the hut when `hut` is False."""
     land = Image.new("P", (WIDTH, HEIGHT), 0)
     d = ImageDraw.Draw(land)
 
@@ -517,25 +518,26 @@ def geometry() -> tuple[Image.Image, Image.Image, Image.Image, tuple[tuple[int, 
             d.polygon([(x, 24 - height), (x - 2, 24), (x + 2, 24)], fill=INDEX["ridge"])
     hill([(0, 26), (29, 25), (51, 27), (82, 25), (110, 26), (127, 25)], "field")
     # Wood hut: plank walls with corner posts, a shingled roof, a front door with a knob and a window either side.
-    left, top, right, bottom = HUT_WALLS
-    d.rectangle(HUT_WALLS, fill=INDEX["hut"])
-    for y in range(top + 2, bottom + 1, 2):
-        d.line((left, y, right, y), fill=INDEX["trunk"])
-    d.line((left, top, left, bottom), fill=INDEX["trunk"])
-    d.line((right, top, right, bottom), fill=INDEX["trunk"])
-    d.polygon(HUT_ROOF, fill=INDEX["shingle"])
-    (eave_left, eave), (ridge_left, ridge), _, (eave_right, _) = HUT_ROOF
-    for y in (ridge + 2, ridge + 4):
-        inset = math.ceil((eave - y) * (ridge_left - eave_left) / (eave - ridge))
-        d.line((eave_left + inset, y, eave_right - inset, y), fill=INDEX["trunk"])
-    d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
-    d.line((eave_left, eave, eave_right, eave), fill=INDEX["trunk"])
-    d.rectangle(CHIMNEY, fill=INDEX["chimney"])
-    d.rectangle(CHIMNEY_CAP, fill=INDEX["roof"])
-    for window in HUT_WINDOWS:
-        d.rectangle(window, fill=INDEX["glass"])
-    d.rectangle(HUT_DOOR, fill=INDEX["door"])
-    d.point(HUT_KNOB, fill=INDEX["trim"])
+    if hut:
+        left, top, right, bottom = HUT_WALLS
+        d.rectangle(HUT_WALLS, fill=INDEX["hut"])
+        for y in range(top + 2, bottom + 1, 2):
+            d.line((left, y, right, y), fill=INDEX["trunk"])
+        d.line((left, top, left, bottom), fill=INDEX["trunk"])
+        d.line((right, top, right, bottom), fill=INDEX["trunk"])
+        d.polygon(HUT_ROOF, fill=INDEX["shingle"])
+        (eave_left, eave), (ridge_left, ridge), _, (eave_right, _) = HUT_ROOF
+        for y in (ridge + 2, ridge + 4):
+            inset = math.ceil((eave - y) * (ridge_left - eave_left) / (eave - ridge))
+            d.line((eave_left + inset, y, eave_right - inset, y), fill=INDEX["trunk"])
+        d.line(HUT_ROOF[:2], fill=INDEX["trunk"])
+        d.line((eave_left, eave, eave_right, eave), fill=INDEX["trunk"])
+        d.rectangle(CHIMNEY, fill=INDEX["chimney"])
+        d.rectangle(CHIMNEY_CAP, fill=INDEX["roof"])
+        for window in HUT_WINDOWS:
+            d.rectangle(window, fill=INDEX["glass"])
+        d.rectangle(HUT_DOOR, fill=INDEX["door"])
+        d.point(HUT_KNOB, fill=INDEX["trim"])
     # Yard lamp: a post with an arm reaching toward the hut and a hood that shines down.
     lens_x, lens_y = LAMP_LENS
     d.line((LAMP_POST_X, lens_y - 1, LAMP_POST_X, LAMP_GROUND_Y), fill=INDEX["roof"])
@@ -906,7 +908,8 @@ def window_light(environment: "OutsideEnvironment", elapsed: float, seed: int) -
 
 
 @lru_cache(maxsize=96)
-def landscape(palette: Palette, snow: bool, snowcap: bool, faces: MountainFaces, lit: float = 0.0):
+def land_table(palette: Palette, faces: MountainFaces, lit: float = 0.0) -> tuple[int, ...]:
+    """The land masks' color table: each material index's color under `palette`."""
     table = [0, 0, 0]
     for name in MATERIALS:
         table.extend(faces.west if name == "far" else getattr(palette, name))
@@ -917,13 +920,23 @@ def landscape(palette: Palette, snow: bool, snowcap: bool, faces: MountainFaces,
     glass = mix(mix(mix(palette.middle, palette.top, 0.4), (0, 0, 0), 0.35), WINDOW_LIGHT, lit)
     table.extend(glass)
     table.extend([0] * (768 - len(table)))
+    return tuple(table)
+
+
+def colorize_mask(mask: Image.Image, table: tuple[int, ...]) -> Image.Image:
+    indexed = mask.copy()
+    indexed.putpalette(table)
+    image = indexed.convert("RGBA")
+    image.putalpha(mask.point([0] + [255] * 255, "L"))
+    return image
+
+
+@lru_cache(maxsize=96)
+def landscape(palette: Palette, snow: bool, snowcap: bool, faces: MountainFaces, lit: float = 0.0):
+    table = land_table(palette, faces, lit)
 
     def colorize(mask):
-        indexed = mask.copy()
-        indexed.putpalette(table)
-        image = indexed.convert("RGBA")
-        image.putalpha(mask.point([0] + [255] * 255, "L"))
-        return image
+        return colorize_mask(mask, table)
 
     land = colorize(LAND)
     wood = colorize(TREE_WOOD)
@@ -1659,6 +1672,10 @@ def smoke_puffs(environment: "OutsideEnvironment", elapsed: float, seed: int) ->
     temperature = environment.weather.temperature
     cold = temperature is not None and temperature < SMOKE_MAX_TEMPERATURE
     if not cold and THANKSGIVING not in holiday_features(environment):
+        return []
+    # No fire burns in a wrecked hut.
+    ruin = hut_ruin(environment)
+    if ruin is not None and ruin.wrecked:
         return []
     wind = min(30, environment.weather.wind or 0)
     strength = 0.7 + 0.3 * min(1, (SMOKE_MAX_TEMPERATURE - temperature) / 25) if cold else 0.7
@@ -8057,6 +8074,8 @@ class Eruption:
     fires: float
     deck: float
     blanket: float
+    # How far Jupiter has cleared the sky of the ash and the eruption's sky effects (0-1) while he is there.
+    hush: float = 0.0
 
 
 def vesuvius_levels(age: float) -> Eruption:
@@ -8073,12 +8092,14 @@ def vesuvius_state(environment: "OutsideEnvironment") -> Eruption | None:
     if moment is None or VESUVIUS not in holiday_features(environment):
         return None
     # Noon as an absolute time, so the blast lands on it exactly.
-    return vesuvius_levels(moment.timestamp() - datetime(moment.year, moment.month, moment.day, 12, tzinfo=moment.tzinfo).timestamp())
+    eruption = vesuvius_levels(moment.timestamp() - datetime(moment.year, moment.month, moment.day, 12, tzinfo=moment.tzinfo).timestamp())
+    ruin = hut_ruin(environment)
+    return eruption if ruin is None or ruin.hush <= 0 else replace(eruption, hush=ruin.hush)
 
 
 def vesuvius_ash(environment: "OutsideEnvironment") -> float:
     eruption = vesuvius_state(environment)
-    return 0.0 if eruption is None else eruption.ash
+    return 0.0 if eruption is None else eruption.ash * (1 - eruption.hush)
 
 
 @lru_cache(maxsize=64)
@@ -8194,7 +8215,7 @@ def vesuvius_bolt_plan(slot: int, seed: int) -> VolcanicBolt:
 
 def vesuvius_bolt(eruption: Eruption | None, elapsed: float, seed: int) -> tuple[VolcanicBolt, float] | None:
     """(plan, seconds since it struck) for the volcanic lightning bolt under way, or None."""
-    if eruption is None or eruption.age < VESUVIUS_BOLT_AFTER or eruption.column < 0.3:
+    if eruption is None or eruption.age < VESUVIUS_BOLT_AFTER or eruption.column < 0.3 or eruption.hush > 0:
         return None
     slot, into = divmod(elapsed, VESUVIUS_BOLT_SLOT)
     bolt = vesuvius_bolt_plan(int(slot), seed)
@@ -8275,12 +8296,14 @@ def vesuvius_fire_spots() -> tuple[tuple[int, int], ...]:
     return tuple(spots)
 
 
-@lru_cache(maxsize=2)
-def vesuvius_settling(foliage: bool) -> tuple[np.ndarray, ...]:
-    """(rows, columns, threshold, opacity, tone) of the pixels Vesuvius's ash settles on, on the land or the tree's
-    foliage: exposed tops, the row beneath them, and (on the land) a dusting over open ground, the pond and the mountain."""
+@lru_cache(maxsize=3)
+def vesuvius_settling(surface: str) -> tuple[np.ndarray, ...]:
+    """(rows, columns, threshold, opacity, tone) of the pixels Vesuvius's ash settles on, on the "land", the wrecked hut's
+    land ("wreck") or the tree's "foliage": exposed tops, the row beneath them, and (on the land) a dusting over open
+    ground, the pond and the mountain."""
     names = {value: name for name, value in INDEX.items()}
-    mask = np.asarray(TREE_FOLIAGE if foliage else LAND)
+    foliage = surface == "foliage"
+    mask = np.asarray({"land": LAND, "wreck": LAND_WRECK, "foliage": TREE_FOLIAGE}[surface])
 
     def rank(value: int) -> int:
         if value == 0:
@@ -8313,9 +8336,9 @@ def vesuvius_settling(foliage: bool) -> tuple[np.ndarray, ...]:
 
 
 @lru_cache(maxsize=96)
-def vesuvius_blanket_overlay(level: int, brightness: int, foliage: bool) -> Image.Image | None:
+def vesuvius_blanket_overlay(level: int, brightness: int, surface: str) -> Image.Image | None:
     """The settled ash as an RGBA layer, for a blanket level in 32nds and a brightness in 16ths."""
-    rows, columns, thresholds, opacities, tones = vesuvius_settling(foliage)
+    rows, columns, thresholds, opacities, tones = vesuvius_settling(surface)
     alpha = opacities * np.clip((level / 32 - thresholds) / 0.06, 0, 1)
     if not alpha.any():
         return None
@@ -8325,12 +8348,12 @@ def vesuvius_blanket_overlay(level: int, brightness: int, foliage: bool) -> Imag
     return Image.fromarray(pixels, "RGBA")
 
 
-def vesuvius_blanket(palette: Palette, eruption: Eruption | None, foliage: bool) -> Image.Image | None:
-    """The ash that has settled so far, grain by grain, in steps so the layers stay cached; dim at night."""
-    if eruption is None or eruption.blanket <= 0:
+def vesuvius_blanket(palette: Palette, level: float, surface: str) -> Image.Image | None:
+    """The ash that has settled so far (`level`, 0-1), grain by grain, in steps so the layers stay cached; dim at night."""
+    if level <= 0:
         return None
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
-    return vesuvius_blanket_overlay(round(eruption.blanket * 32), round((0.3 + 0.7 * illumination) * 16), foliage)
+    return vesuvius_blanket_overlay(round(level * 32), round((0.3 + 0.7 * illumination) * 16), surface)
 
 
 def vesuvius_fountain(light: np.ndarray, glow: float, elapsed: float):
@@ -8352,7 +8375,9 @@ def vesuvius_fountain(light: np.ndarray, glow: float, elapsed: float):
 def vesuvius_plume(eruption: Eruption, wind: float, elapsed: float, burst: float | None) -> tuple[np.ndarray, np.ndarray, float, float, float] | None:
     """(density, how ashy rather than steamy, the column's top row, its top column, the ash cloud's (left, right) ends) of
     the morning smoke or the eruption column with its umbrella and the ash deck, or None when there is none. The arrays
-    cover the top VESUVIUS_PLUME_ROWS rows."""
+    cover the top VESUVIUS_PLUME_ROWS rows. Jupiter's hush thins it all away."""
+    if eruption.hush >= 1:
+        return None
     vx, vy = VESUVIUS_VENT
     X, Y = FIREWORK_X[:VESUVIUS_PLUME_ROWS], FIREWORK_Y[:VESUVIUS_PLUME_ROWS]
     height_above = np.clip(vy - Y, 0, None)
@@ -8410,7 +8435,7 @@ def vesuvius_plume(eruption: Eruption, wind: float, elapsed: float, burst: float
         sheet = np.clip(base - Y + 0.5, 0, 1) * edge * (0.8 + 0.2 * sample_noise(VESUVIUS_NOISE[1], drift + 9, Y * 0.9)) * min(1.0, eruption.deck * 1.6)
         density = np.maximum(density, sheet)
         left, right = max(0.0, min(left, ux - upwind)), min(float(WIDTH), max(right, ux + downwind))
-    return density.astype(np.float32), np.ones_like(density, dtype=np.float32), top, ux, (left, right)
+    return (density * (1 - eruption.hush)).astype(np.float32), np.ones_like(density, dtype=np.float32), top, ux, (left, right)
 
 
 def draw_vesuvius_plume(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", eruption: Eruption, plume, elapsed: float) -> Image.Image:
@@ -8488,8 +8513,11 @@ def draw_vesuvius_mountain(image: Image.Image, palette: Palette, environment: "O
         pulse = 0.8 + 0.12 * math.sin(elapsed * 5.3) + 0.08 * math.sin(elapsed * 11.7 + 0.7)
         light += (np.exp(-((FIREWORK_X - vx) ** 2 + ((FIREWORK_Y - vy - 0.5) * 1.6) ** 2) / 2.2) * glow * pulse * 1.3)[..., None] * VESUVIUS_VENT_GLOW
     if eruption.age >= 0:
-        vesuvius_fountain(light, glow, elapsed)
-        vesuvius_bombs(light, eruption, elapsed, seed)
+        # Jupiter's hush clears the spatter and bombs out of the sky with the ash.
+        spray = np.zeros_like(light)
+        vesuvius_fountain(spray, glow, elapsed)
+        vesuvius_bombs(spray, eruption, elapsed, seed)
+        light += spray * (1 - eruption.hush)
     bolt = vesuvius_bolt(eruption, elapsed, seed)
     if bolt is not None and plume is not None:
         draw_volcanic_bolt(light, *bolt, plume, eruption)
@@ -8550,7 +8578,7 @@ def draw_volcanic_bolt(light: np.ndarray, bolt: VolcanicBolt, age: float, plume,
 
 def draw_vesuvius_ashfall(image: Image.Image, palette: Palette, eruption: Eruption, wind: float, elapsed: float):
     """Pumice and ash rain down downwind of the column, white at first and gray once the column starts to collapse."""
-    count = round(len(VESUVIUS_ASHFALL) * eruption.ash)
+    count = round(len(VESUVIUS_ASHFALL) * eruption.ash * (1 - eruption.hush))
     if count == 0:
         return
     d = ImageDraw.Draw(image)
@@ -8580,13 +8608,13 @@ def vesuvius_shake(eruption: Eruption | None, burst: float | None) -> float:
     return 0.0
 
 
-def vesuvius_finish(image: Image.Image, eruption: Eruption, burst: float | None, elapsed: float) -> Image.Image:
+def vesuvius_finish(image: Image.Image, eruption: Eruption, burst: float | None, elapsed: float, ruin: "HutRuin | None" = None) -> Image.Image:
     """The noon flash over the whole scene, then the shaking ground, which moves everything but the corner labels."""
     if 0 <= eruption.age < VESUVIUS_FLASH_SECONDS:
         vx, vy = VESUVIUS_VENT
         peak = math.exp(-eruption.age / 0.35)
         image = composite_light(image, (peak * (0.9 * np.exp(-np.hypot(FIREWORK_X - vx, FIREWORK_Y - vy) / 10) + 0.25))[..., None] * VESUVIUS_FLASH)
-    amplitude = vesuvius_shake(eruption, burst)
+    amplitude = max(vesuvius_shake(eruption, burst), ruin_shake(ruin))
     if amplitude <= 0:
         return image
     dx = round(amplitude * math.sin(elapsed * 41.0) * (0.6 + 0.4 * math.sin(elapsed * 13.7)))
@@ -8611,6 +8639,828 @@ def pyroclastic_flow_allowed(environment: "OutsideEnvironment") -> bool:
 def volcanic_lightning_allowed(environment: "OutsideEnvironment") -> bool:
     eruption = vesuvius_state(environment)
     return eruption is not None and eruption.age >= VESUVIUS_BOLT_AFTER and eruption.column >= 0.3
+
+
+# Vesuvius day's fictional epilogue: the eruption wrecks the hut, and that afternoon Jupiter, furious at the damage,
+# sends a crew of Romans to set it right. Big rocks thrown out at noon come down about 12 s later, the first one smashing
+# the hut into a heap of splintered wood that smolders and gathers ash. At JUPITER_HOUR Jupiter takes the whole sky for
+# JUPITER_SECONDS: the ash and the eruption's sky effects clear away (Eruption.hush), his scowling face and hands fill a
+# storm-dark sky, and each storm of bolts from his outstretched fingers leaves a Roman on the meadow. The crew carries
+# off the rocks and the wreck, sweeps away the ash and rebuilds the hut, then lines up in front of it until bolts from
+# the sky call them home RESTORE_RECALL_BEFORE_MIDNIGHT seconds before midnight, so the scene is whole again when the
+# holiday ends. Like the eruption, every step is read from the displayed clock (`hut_ruin`); only small cycles (strides,
+# hammer swings, flicker) run on `elapsed`.
+#
+# Big rocks lobbed at noon: (launch seconds after noon, flight seconds, landing column, landing row, size). They fly
+# toward the viewer, so their arc is foreshortened: VESUVIUS_ROCK_GRAVITY is far below the flank bombs' screen gravity,
+# which keeps most of a 12 s flight on screen. The first one lands on the hut.
+VESUVIUS_ROCK_GRAVITY = 1.2
+VESUVIUS_ROCKS = ((0.4, 11.6, 27, 22, 2), (0.9, 11.8, 33, 24, 2), (1.3, 11.9, 21, 25, 2), (1.8, 12.1, 45, 27, 2), (2.2, 12.2, 11, 27, 2), (2.7, 12.0, 90, 28, 2), (3.1, 11.8, 62, 30, 1))
+HUT_IMPACT = VESUVIUS_ROCKS[0][0] + VESUVIUS_ROCKS[0][1]
+# Burning cinders fall with the rocks and go out where they land: (launch, flight, column, row).
+VESUVIUS_CINDERS = tuple((0.2 + grain(i, 1, 91) / 97 * 3.4, 11.0 + grain(i, 2, 91) / 97 * 2.2, 2 + grain(i, 3, 91) / 97 * 70, 25 + grain(i, 4, 91) / 97 * 6) for i in range(14))
+# A landed rock cools from white-hot over VESUVIUS_ROCK_COOL seconds; a dull ember lingers for VESUVIUS_ROCK_EMBER.
+VESUVIUS_ROCK_COOL, VESUVIUS_ROCK_EMBER = 40.0, 900.0
+VESUVIUS_ROCK_DARK = (58, 48, 44)
+VESUVIUS_ROCK_HOT = np.array((1.0, 0.55, 0.16), dtype=np.float32)
+VESUVIUS_ROCK_CORE = np.array((1.0, 0.92, 0.66), dtype=np.float32)
+# The pixels of a landed rock around its landing point, by size.
+VESUVIUS_ROCK_SHAPES = {1: ((0, 0), (1, 0)), 2: ((0, -1), (1, -1), (-1, 0), (0, 0), (1, 0))}
+# The smash throws boards and shingles out of the hut under screen gravity (px/s²) and raises a dust cloud; embers
+# smolder in the heap for a while after.
+HUT_SPLINTER_GRAVITY = 16.0
+HUT_SPLINTER_SECONDS = 2.5
+HUT_DUST = ((0, -2, 0.0), (-5, 0, 0.1), (5, 0, 0.15), (-2, -5, 0.25), (3, -4, 0.3), (0, 2, 0.4))
+HUT_DUST_SECONDS = 9.0
+HUT_DUST_COLOR = (150, 138, 124)
+HUT_EMBERS, HUT_EMBER_SECONDS = 9, 1500.0
+HUT_FIRE = np.array((1.0, 0.42, 0.1), dtype=np.float32)
+# The heap's outline: rows of rubble above the ground at its middle, spread over HUT_HEAP_SPAN columns either side.
+HUT_HEAP_HEIGHT, HUT_HEAP_SPAN = 3.6, 10.5
+HUT_HEAP_BOARDS = 18
+
+# Jupiter's visit, in seconds after he arrives: (rise, fade) of the hush that clears the ash from the sky (and of the
+# storm-dark sky he brings), of his face and of his eyes. His hands reach down into place over the first
+# JUPITER_REACH pair and draw back over the second.
+JUPITER_SECONDS = 30.0
+JUPITER_HOUR = 15
+JUPITER_HUSH = ((0.0, 2.0), (JUPITER_SECONDS - 3.0, JUPITER_SECONDS))
+JUPITER_FACE = ((1.5, 4.0), (JUPITER_SECONDS - 5.0, JUPITER_SECONDS - 1.5))
+JUPITER_EYES = ((3.5, 4.5), (JUPITER_SECONDS - 3.5, JUPITER_SECONDS - 1.0))
+JUPITER_REACH = ((4.0, 6.5), (JUPITER_SECONDS - 7.0, JUPITER_SECONDS - 4.0))
+# The storm-dark sky behind him, between its dark and light cloud tones, and how much of the sky it covers.
+JUPITER_STORM = ((12, 9, 30), (50, 40, 84))
+JUPITER_VEIL = 0.92
+# His face (left half; the right mirrors it), by row from the top of his hair. W w v cloud-white hair and beard, light
+# to shadow; L l the gold laurel; S K s skin, mid, light and shade; B his scowling brows; d the shadowed sockets; E his
+# glowing eyes; n nostrils; M his snarling mouth and T its clenched teeth.
+JUPITER_FACE_HALF = (
+    "..........vwwWWWwwWWWWW",
+    "........vwWWWWWWWWWwWWW",
+    ".......vwWWwWWWlWWWlWWl",
+    "......vwWWWwlLlLlLlLlLl",
+    ".....vwWWWwvsSSSSSSSSSS",
+    ".....vWWWwvsSsSSSSSSSsS",
+    "....vwWWwvsBBSSSSSSSSsS",
+    "....vwWWwvsdBBBBSSSSsSS",
+    "....vWWwvssddddBBBBsSSS",
+    "....vWWwvsSdEEEEdBBsSSS",
+    "....vWWwvsSSddddssSSSKS",
+    "....vWwWvsSSSSSSSSSSsKS",
+    "....vWWwvssSSSSSSSSsnSS",
+    "...vwWWwvsSSSWWWWWWWWWW",
+    "...vwWWwWvWWWWwWWWWMMMM",
+    "...vwWWwWWWWWWWWWMTTTTT",
+    "...vwWWWwWWWWWWWMWWWWWW",
+    "....vwWWWwWWWWWWWWwWWWW",
+    "....vwWWWWwWWWWWWWWWwWW",
+    ".....vwWWWWwWWWWwWWWWWW",
+    "......vwWWWWWwWWWWWWwWW",
+    ".......vwwWWWWWwWWWWWWW",
+    ".........vvwWWWWWwWWWWW",
+    "...........vvwwWWWWwWWW",
+)
+JUPITER_FACE_ROWS = tuple(row + row[::-1] for row in JUPITER_FACE_HALF)
+# His left hand (on the viewer's left), thrust out of a cloud-white sleeve with a gold cuff, palm toward the viewer and
+# all five fingers splayed as if reaching out of the screen; the right mirrors it. F marks each fingertip, where his
+# bolts leave from, and f the rest of a foreshortened tip.
+JUPITER_HAND = (
+    "...vwWWWwv...",
+    "...vWWWWWv...",
+    "...lLLLLLl...",
+    "....sSSSs....",
+    "...sSSKSSs...",
+    "..sSSKKKSSs..",
+    ".sSSSSKSSSSs.",
+    "sSsSSSSSSSsSs",
+    "SS.sS.S.Ss.SS",
+    "Ff.SS.S.SS.fF",
+    "...S..S..S...",
+    "..fF..S..Ff..",
+    "......F......",
+)
+JUPITER_COLORS = {
+    "W": (226, 228, 242),
+    "w": (164, 168, 196),
+    "v": (92, 94, 128),
+    "L": (232, 200, 92),
+    "l": (110, 128, 54),
+    "S": (212, 178, 148),
+    "K": (240, 220, 196),
+    "s": (146, 108, 88),
+    "B": (58, 58, 82),
+    "d": (66, 42, 48),
+    "E": (255, 250, 214),
+    "n": (96, 60, 50),
+    "M": (36, 16, 22),
+    "T": (236, 232, 220),
+    "F": (255, 240, 214),
+    "f": (246, 218, 184),
+}
+JUPITER_EYE_GLOW = np.array((1.0, 0.78, 0.3), dtype=np.float32)
+# The face's left column and top row, and each hand's left column and top row once it has reached down: the left one
+# comes out of the storm below the clock label, and the right one down from the top, clear of the mountain. They drop
+# into place by JUPITER_HAND_DROP rows as they fade in, so neither crosses the corner labels.
+JUPITER_FACE_AT = (26, 0)
+JUPITER_HANDS_AT = ((3, 9), (72, 0))
+JUPITER_HAND_DROP = 5
+
+# The crew, in the order Jupiter's bolts set them down: (role, tunic color, the hand that throws the bolt, 0 left).
+ROMAN_CREW = (("centurion", (178, 32, 36), 1), ("hauler", (176, 52, 40), 0), ("builder", (152, 112, 62), 1), ("hauler", (206, 198, 172), 0), ("sweeper", (84, 108, 150), 0))
+# Seconds after Jupiter arrives that each storm of bolts strikes, one bolt from every fingertip of the throwing hand.
+JUPITER_BOLT_TIMES = (7.5, 10.0, 12.5, 15.0, 17.5)
+# A storm's strokes (start, end) in seconds after it strikes; each stroke cracks along fresh channels. Its channels glow
+# for JUPITER_BOLT_AFTERGLOW after the last, and sparks crackle at his fingertips for JUPITER_BOLT_CHARGE before the first.
+JUPITER_BOLT_STROKES = ((0.0, 0.07), (0.11, 0.17), (0.22, 0.3), (0.36, 0.42), (0.5, 0.6))
+JUPITER_BOLT_AFTERGLOW = 0.35
+JUPITER_BOLT_CHARGE = 0.6
+# The whole frame flashes with each stroke: (first stroke, later strokes, between strokes); the channels light the air
+# around them over JUPITER_BOLT_REACH pixels, and the ground jolts by JUPITER_BOLT_SHAKE pixels as each storm lands.
+JUPITER_FLASH = np.array((0.75, 0.78, 1.0), dtype=np.float32)
+JUPITER_FLASH_LEVELS = (0.72, 0.5, 0.08)
+JUPITER_BOLT_REACH = 3.5
+# How far (pixels) each bolt of a storm strays from the straight line between his fingertip and its target.
+JUPITER_BOLT_WANDER = 6.0
+JUPITER_BOLT_SHAKE, JUPITER_BOLT_SHAKE_SECONDS = 1.0, 0.45
+# Facing right, by row from the top: H hair, S skin, E eye, T tunic (its color per Roman), b belt, L sandals; the
+# centurion's C crest, M bronze helmet, A mail and R cloak. Tools: P plank, D rubble, G hammer head, t handle, y broom.
+ROMAN_LEGS = {"stand": ("...S.S...", "...L.L..."), "stride": ("..S...S..", "..L...L..")}
+ROMAN_WORKER = {
+    "stand": ("...HHH...", "...HSES..", "...TTT...", "...TTT...", "...bbS...", "...TTT..."),
+    "salute": ("......S..", "...HHHS..", "...HSES..", "...TTT...", "...TTT...", "...bbb...", "...TTT..."),
+    "lift": (".........", "...HHH...", "...HSES..", "...TTTT..", "...bbbS..", "...TTT..."),
+    "load": ("...HHH...", "...HSES..", "...TTTDD.", "...TTSDD.", "...bbb...", "...TTT..."),
+    "plank": ("...HHH...", "...HSES..", "PPPPPPPPP", "...TTTS..", "...bbb...", "...TTT..."),
+    "hammer_up": ("......G..", "...HHHGt.", "...HSESt.", "...TTTS..", "...TTT...", "...bbb...", "...TTT..."),
+    "hammer_down": ("...HHH...", "...HSES..", "...TTT...", "...TTSttG", "...bbb..G", "...TTT..."),
+    "sweep_a": ("...HHH...", "...HSES..", "...TTTS..", "...TTTt..", "...bbb.t.", "...TTT..t"),
+    "sweep_b": ("...HHH...", "...HSES..", "...TTSt..", "...TTTt..", "...bbbt..", "...TTTt.."),
+}
+# The broom's handle on the legs' top row and the first of its two bristle columns on the bottom row.
+ROMAN_BROOM = {"sweep_a": (8, 7), "sweep_b": (6, 6)}
+ROMAN_CENTURION = {
+    "stand": ("...CCC...", "...MMM...", "...MSES..", "..RAAA...", "..RAAA...", "..RbbS...", "...RRR..."),
+    "salute": ("......S..", "...CCCS..", "...MMMA..", "...MSES..", "..RAAA...", "..RAAA...", "..Rbbb...", "...RRR..."),
+    "point": ("...CCC...", "...MMM...", "...MSES..", "..RAAAASS", "..RAAA...", "..Rbbb...", "...RRR..."),
+}
+ROMAN_COLORS = {
+    "H": (64, 42, 28),
+    "S": (214, 164, 124),
+    "E": (40, 28, 24),
+    "b": (84, 56, 34),
+    "L": (92, 62, 38),
+    "C": (220, 36, 36),
+    "M": (210, 168, 84),
+    "A": (172, 174, 186),
+    "R": (178, 32, 36),
+    "P": (200, 152, 92),
+    "D": (122, 98, 80),
+    "G": (128, 128, 136),
+    "t": (156, 112, 70),
+    "y": (212, 182, 100),
+}
+ROMAN_ARRIVAL_GLOW = (255, 244, 214)
+ROMAN_FEET_ROW, ROMAN_SWEEPER_FEET_ROW = 27, 30
+ROMAN_SPEED = 5.0
+ROMAN_STEP_SECONDS = 0.25
+# Haulers carry the wreck off to the left, out of frame, and bring new boards back: the spot each loads at, its phase
+# in the round trip, and the seconds spent loading and out of frame.
+ROMAN_HAULER_SPOTS = (31.0, 24.0)
+ROMAN_HAULER_PHASES = (0.0, 0.5)
+ROMAN_HAULER_LOAD, ROMAN_HAULER_AWAY = 2.5, 3.0
+ROMAN_OFFSCREEN = -6.0
+# The builder works his way along the heap (center, reach, seconds per pass), then stands at each piece he fits.
+ROMAN_BUILDER_HEAP = (27.5, 6.0, 50.0)
+ROMAN_BUILDER_RANGE = (19.0, 36.0)
+ROMAN_HAMMER_SECONDS = 0.22
+# The sweeper works the front of the meadow between these columns.
+ROMAN_SWEEP_RANGE, ROMAN_SWEEP_SPEED, ROMAN_SWEEP_SECONDS = (4.0, 50.0), 1.6, 0.35
+ROMAN_CENTURION_X = 46.0
+ROMAN_POINT_SLOT, ROMAN_POINT_SECONDS = 7.0, 2.0
+# Where each Roman stands for the lineup in front of the finished hut.
+ROMAN_LINEUP = (45.0, 38.0, 30.0, 22.0, 15.0)
+# The work: the crew starts as Jupiter leaves and works until RESTORE_BUILD ends, then lines up for
+# RESTORE_LINEUP_SECONDS before the recall. Progress (0-1) through the work: the landed rocks are carried off one by one
+# over RESTORE_ROCKS, the wreck over RESTORE_CLEAR, the hut is rebuilt over RESTORE_BUILD and the ash swept over
+# RESTORE_SWEEP.
+RESTORE_RECALL_BEFORE_MIDNIGHT = 600.0
+RESTORE_LINEUP_SECONDS = 120.0
+RESTORE_RECALL_GAP = 2.5
+RESTORE_ROCKS = (0.01, 0.3)
+RESTORE_CLEAR = (0.03, 0.4)
+RESTORE_BUILD = (0.42, 0.97)
+RESTORE_SWEEP = (0.0, 0.9)
+
+
+def ramp(value: float, start: float, end: float) -> float:
+    return max(0.0, min(1.0, (value - start) / (end - start)))
+
+
+@lru_cache(maxsize=1)
+def hut_wreck() -> tuple[tuple[int, int, int], ...]:
+    """The heap of splintered boards, shingles and the chimney's stump left where the hut stood: (x, y, material index),
+    in the order the crew clears it, top first."""
+    rng = random.Random(79)
+    left, _, right, ground = HUT_WALLS
+    center = (left + right) / 2
+
+    def height(x: float) -> float:
+        return max(0.0, HUT_HEAP_HEIGHT * (1 - ((x - center) / HUT_HEAP_SPAN) ** 2))
+
+    cells: dict[tuple[int, int], str] = {}
+    # A bed of broken boards along the ground.
+    for x in range(left - 2, right + 3):
+        for y in range(ground - round(height(x) * 0.5), ground + 1):
+            cells[x, y] = "trunk" if grain(x, y, 61) < 40 else "hut"
+    # Boards and roof pieces thrown across the heap at every angle, some with a pale splintered end.
+    for _ in range(HUT_HEAP_BOARDS):
+        length = rng.randint(3, 7)
+        x = rng.uniform(left - 1, right + 1)
+        top = ground - height(x) - rng.uniform(0, 1.2)
+        slope = rng.choice((-0.8, -0.45, -0.2, 0.2, 0.45, 0.8))
+        material = rng.choices(("hut", "trunk", "shingle"), (5, 3, 2))[0]
+        board = [(round(x + step - length / 2), round(top + slope * (step - length / 2))) for step in range(length)]
+        for column, row in board:
+            if ground - 6 <= row <= ground:
+                cells[column, row] = material
+        if rng.random() < 0.6 and ground - 6 <= board[-1][1] <= ground:
+            cells[board[-1]] = "trim"
+    # The corner posts, snapped off, and the chimney's stump.
+    for y in range(ground - 4, ground + 1):
+        cells[left, y] = "trunk"
+    cells[left, ground - 5] = "trim"
+    for y in range(ground - 2, ground + 1):
+        cells[right, y] = "trunk"
+    cells[right + 1, ground - 3] = "trim"
+    for x in range(CHIMNEY[0], CHIMNEY[2] + 1):
+        for y in range(ground - 2, ground + 1):
+            cells[x, y] = "chimney"
+    cells[CHIMNEY[0], ground - 3] = "chimney"
+    order = sorted(cells, key=lambda cell: (cell[1] + grain(*cell, 67) / 97 * 1.5, cell[0]))
+    return tuple((x, y, INDEX[cells[x, y]]) for x, y in order)
+
+
+def wreck_land() -> Image.Image:
+    land = LAND_BARE.copy()
+    for x, y, material in hut_wreck():
+        land.putpixel((x, y), material)
+    return land
+
+
+def hut_erase_mask() -> np.ndarray:
+    """The pixels the wreck replaces: the hut's own, and the snow line along its roof and chimney cap."""
+    snow = Image.new("L", (WIDTH, HEIGHT), 0)
+    d = ImageDraw.Draw(snow)
+    d.line(HUT_SNOW, fill=255)
+    d.line((CHIMNEY_CAP[0], CHIMNEY_CAP[1] - 1, CHIMNEY_CAP[2], CHIMNEY_CAP[1] - 1), fill=255)
+    return HUT_PIXELS | (np.asarray(snow) > 0)
+
+
+LAND_BARE = geometry(hut=False)[0]
+LAND_WRECK = wreck_land()
+# The hut's own pixels: where the land differs without it.
+HUT_PIXELS = np.asarray(LAND) != np.asarray(LAND_BARE)
+HUT_ERASE = hut_erase_mask()
+
+
+@lru_cache(maxsize=1)
+def hut_build_order() -> tuple[tuple[int, int], ...]:
+    """The hut's pixels in the order the crew puts them back: the walls course by course from the ground up (each course
+    running the other way from the one below), then the roof from the eaves to the ridge, and the chimney last."""
+    chimney = np.asarray(CHIMNEY_MASK) > 0
+    eave = HUT_ROOF[0][1]
+
+    def key(cell: tuple[int, int]) -> tuple[int, int, int]:
+        x, y = cell
+        return (2 if chimney[y, x] else 1 if y <= eave else 0, -y, x if y % 2 else -x)
+
+    ys, xs = np.nonzero(HUT_PIXELS)
+    return tuple(sorted(zip(xs.tolist(), ys.tolist()), key=key))
+
+
+@dataclass(frozen=True)
+class HutRuin:
+    """Where Vesuvius day's wreck and restoration stand, in seconds since noon, since Jupiter arrived, since the crew
+    started work and since the recall began (each negative before it), and the seconds of work before the lineup."""
+
+    age: float
+    arrival: float
+    work: float
+    span: float
+    recall: float
+
+    @property
+    def progress(self) -> float:
+        return max(0.0, min(1.0, self.work / self.span))
+
+    @property
+    def hush(self) -> float:
+        return trapezoid(self.arrival, *JUPITER_HUSH)
+
+    @property
+    def cleared(self) -> int:
+        return round(len(hut_wreck()) * ramp(self.progress, *RESTORE_CLEAR))
+
+    @property
+    def built(self) -> int:
+        return round(len(hut_build_order()) * ramp(self.progress, *RESTORE_BUILD))
+
+    @property
+    def swept(self) -> float:
+        return ramp(self.progress, *RESTORE_SWEEP)
+
+    @property
+    def wrecked(self) -> bool:
+        """The hut is down: smashed and not yet fully rebuilt."""
+        return self.age >= HUT_IMPACT and self.built < len(hut_build_order())
+
+    def rock_left(self, index: int) -> bool:
+        """Whether landed rock `index` still lies where it fell."""
+        launch, flight, *_ = VESUVIUS_ROCKS[index]
+        first, last = RESTORE_ROCKS
+        return self.age >= launch + flight and self.progress < first + (last - first) * index / (len(VESUVIUS_ROCKS) - 1)
+
+
+def hut_ruin(environment: "OutsideEnvironment") -> HutRuin | None:
+    """The wreck and its restoration from noon until midnight on Vesuvius day, or None."""
+    moment = environment.moment
+    if moment is None or environment.until_midnight is None or VESUVIUS not in holiday_features(environment):
+        return None
+    now = moment.timestamp()
+    noon = datetime(moment.year, moment.month, moment.day, 12, tzinfo=moment.tzinfo).timestamp()
+    if now < noon:
+        return None
+    recall = now + environment.until_midnight - RESTORE_RECALL_BEFORE_MIDNIGHT
+    # As absolute times, like noon, so the schedule stays exact on any day.
+    arrival = datetime(moment.year, moment.month, moment.day, JUPITER_HOUR, tzinfo=moment.tzinfo).timestamp()
+    start = arrival + JUPITER_SECONDS
+    return HutRuin(now - noon, now - arrival, now - start, recall - RESTORE_LINEUP_SECONDS - start, now - recall)
+
+
+@lru_cache(maxsize=8)
+def hut_site_land(palette: Palette, snow: bool, snowcap: bool, faces: MountainFaces, lit: float, cleared: int, built: int) -> Image.Image:
+    """The land with the hut wrecked: the heap left after the crew has cleared `cleared` pieces of it, and the first
+    `built` pixels of the hut they rebuild, its windows dark until it is finished."""
+    land, _ = landscape(palette, snow, snowcap, faces, lit)
+    table = land_table(palette, faces, lit)
+    pixels = np.array(land)
+    pixels[HUT_ERASE] = np.asarray(colorize_mask(LAND_BARE, table))[HUT_ERASE]
+    colors = np.array(table, dtype=np.uint8).reshape(-1, 3)
+    for x, y, material in hut_wreck()[cleared:]:
+        pixels[y, x] = (*colors[material], 255)
+    if built:
+        xs, ys = (np.array(values) for values in zip(*hut_build_order()[:built]))
+        pixels[ys, xs] = np.asarray(landscape(palette, snow, snowcap, faces, 0.0)[0])[ys, xs]
+    return Image.fromarray(pixels, "RGBA")
+
+
+@lru_cache(maxsize=8)
+def wreck_blanket_overlay(level: int, brightness: int, cleared: int, built: int) -> Image.Image | None:
+    """The settled ash on the wrecked hut's land, without the pieces the crew has cleared or the hut they rebuild."""
+    overlay = vesuvius_blanket_overlay(level, brightness, "wreck")
+    if overlay is None or (cleared == 0 and built == 0):
+        return overlay
+    pixels = np.array(overlay)
+    for x, y, _ in hut_wreck()[:cleared]:
+        pixels[y, x, 3] = 0
+    for x, y in hut_build_order()[:built]:
+        pixels[y, x, 3] = 0
+    return Image.fromarray(pixels, "RGBA")
+
+
+def rock_position(launch: float, flight: float, x: float, y: float, age: float) -> tuple[float, float]:
+    """Where a rock lobbed from the vent at `launch` (seconds after noon) to land on (x, y) is at `age`."""
+    x0, y0 = VESUVIUS_VENT
+    t = age - launch
+    vx, vy = (x - x0) / flight, (y - y0 - VESUVIUS_ROCK_GRAVITY * flight * flight / 2) / flight
+    return x0 + vx * t, y0 + vy * t + VESUVIUS_ROCK_GRAVITY * t * t / 2
+
+
+@lru_cache(maxsize=1)
+def hut_splinters() -> tuple[tuple[float, float, float, float, str], ...]:
+    """(x, y, vx, vy, material) of each piece the smash throws out of the hut."""
+    rng = random.Random(24079)
+    left, _, right, bottom = HUT_WALLS
+    center = (left + right) / 2
+    pieces = []
+    for _ in range(30):
+        x, y = rng.uniform(left - 1, right + 1), rng.uniform(HUT_ROOF[1][1], bottom - 1)
+        pieces.append((x, y, (x - center) * rng.uniform(0.5, 1.4) + rng.uniform(-3, 3), -rng.uniform(5, 15), rng.choice(("hut", "hut", "trunk", "shingle", "shingle", "trim"))))
+    return tuple(pieces)
+
+
+@lru_cache(maxsize=1)
+def hut_ember_spots() -> tuple[tuple[int, int, int], ...]:
+    """(x, y, heap index) of the embers left smoldering among the top pieces of the heap."""
+    wreck = hut_wreck()
+    tops = [(x, y, index) for index, (x, y, material) in enumerate(wreck) if material != INDEX["chimney"] and LAND_WRECK.getpixel((x, y - 1)) in (0, INDEX["hill"], INDEX["ridge"], INDEX["field"])]
+    return tuple(sorted(tops, key=lambda spot: grain(spot[0], spot[1], 97))[:HUT_EMBERS])
+
+
+def draw_hut_ruin(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", ruin: HutRuin, elapsed: float) -> Image.Image:
+    """The rocks and cinders in flight and where they land, the hut's smash (flying pieces and dust) and the heap's
+    embers."""
+    age = ruin.age
+    if age > HUT_IMPACT + HUT_EMBER_SECONDS * 3 and not any(ruin.rock_left(index) for index in range(len(VESUVIUS_ROCKS))):
+        return image
+    night = holiday_darkness(environment)
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    d = ImageDraw.Draw(image)
+    for index, (launch, flight, x, y, size) in enumerate(VESUVIUS_ROCKS):
+        landed = age - launch - flight
+        if age < launch:
+            continue
+        if landed < 0:
+            # A white-hot head with a trail of sparks, growing as it comes toward the viewer.
+            near = smoothstep(0.55, 1.0, (age - launch) / flight)
+            for lag, color, weight in ((0.0, VESUVIUS_ROCK_CORE, 1.0), (0.08, VESUVIUS_ROCK_HOT, 0.7), (0.16, VESUVIUS_ROCK_HOT, 0.45), (0.24, VESUVIUS_ROCK_HOT, 0.25), (0.32, VESUVIUS_ROCK_HOT, 0.12)):
+                px, py = rock_position(launch, flight, x, y, max(launch, age - lag))
+                splat(light, np.array([px]), np.array([py]), color[None, :], np.array([weight]))
+                if size > 1 and lag == 0.0 and near > 0:
+                    splat(light, np.array([px + 1, px, px + 1]), np.array([py, py + 1, py + 1]), np.tile(VESUVIUS_ROCK_HOT, (3, 1)), np.full(3, near, dtype=np.float32))
+            continue
+        if landed < 0.8:
+            reach = 4.5 if index == 0 else 2.2
+            light += (np.exp(-((FIREWORK_X - x) ** 2 + (FIREWORK_Y - y) ** 2) / (2 * reach**2)) * math.exp(-landed / 0.25) * (1.2 if index == 0 else 0.8))[..., None] * VESUVIUS_ROCK_CORE
+        if not ruin.rock_left(index):
+            continue
+        heat = math.exp(-landed / VESUVIUS_ROCK_COOL)
+        ember = 0.35 * math.exp(-landed / VESUVIUS_ROCK_EMBER)
+        for dx, dy in VESUVIUS_ROCK_SHAPES[size]:
+            px, py = x + dx, y + dy
+            if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                d.point((px, py), fill=mix(mix(VESUVIUS_ROCK_DARK, palette.trunk, 0.3), (255, 140, 50), heat))
+                glow = heat + ember * (0.6 + 0.4 * math.sin(elapsed * 2.3 + px * 1.7 + index))
+                if glow > 0.02:
+                    light[py, px] += VESUVIUS_ROCK_HOT * glow * (0.5 + 0.5 * night)
+        if heat > 0.02:
+            light += (np.exp(-((FIREWORK_X - x) ** 2 + (FIREWORK_Y - y + 0.5) ** 2) / 4.5) * heat * 0.5 * (0.3 + 0.7 * night))[..., None] * VESUVIUS_ROCK_HOT
+    for launch, flight, x, y in VESUVIUS_CINDERS:
+        if not launch <= age < launch + flight + 0.4:
+            continue
+        if age < launch + flight:
+            for lag, weight in ((0.0, 0.8), (0.1, 0.35)):
+                px, py = rock_position(launch, flight, x, y, max(launch, age - lag))
+                splat(light, np.array([px]), np.array([py]), VESUVIUS_ROCK_HOT[None, :], np.array([weight]))
+        else:
+            splat(light, np.array([x]), np.array([y]), VESUVIUS_ROCK_HOT[None, :], np.array([0.8 * (1 - (age - launch - flight) / 0.4)]))
+    since = age - HUT_IMPACT
+    if 0 <= since < HUT_SPLINTER_SECONDS:
+        for x0, y0, vx, vy, material in hut_splinters():
+            px, py = x0 + vx * since, y0 + vy * since + HUT_SPLINTER_GRAVITY * since * since / 2
+            if 0 <= px < WIDTH and 0 <= py < min(HEIGHT, HUT_WALLS[3] + 3):
+                d.point((round(px), round(py)), fill=getattr(palette, material))
+    if 0 <= since < HUT_DUST_SECONDS:
+        illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+        color = np.array(mix(palette.far, HUT_DUST_COLOR, 0.4 + 0.4 * illumination), dtype=np.float32) * (0.4 + 0.6 * illumination)
+        pixels = np.asarray(image, dtype=np.float32).copy()
+        center = (HUT_WALLS[0] + HUT_WALLS[2]) / 2
+        for dx, dy, delay in HUT_DUST:
+            t = since - delay
+            if t < 0:
+                continue
+            radius = 1.5 + 4.5 * (1 - math.exp(-t / 1.5))
+            cx, cy = center + dx * (1 + t * 0.2) + t * 0.4, 22 + dy - 3 * (1 - math.exp(-t / 2.5))
+            cover = np.clip(radius + 0.5 - np.hypot(FIREWORK_X - cx, FIREWORK_Y - cy), 0, 1) * 0.75 * math.exp(-t / 3)
+            pixels += (color - pixels) * cover[..., None]
+        image = Image.fromarray(np.round(pixels).astype(np.uint8), "RGB")
+    if since >= 0:
+        smolder = math.exp(-since / HUT_EMBER_SECONDS)
+        cleared = ruin.cleared
+        for x, y, index in hut_ember_spots():
+            if index < cleared:
+                continue
+            flicker = 0.5 + 0.3 * math.sin(elapsed * (3.1 + index % 5 * 0.7) + index) + 0.2 * math.sin(elapsed * 8.3 + index * 2.1)
+            level = smolder * flicker * (0.6 + 0.4 * night)
+            if level > 0.02:
+                light[y, x] += HUT_FIRE * level
+                if y > 0:
+                    light[y - 1, x] += HUT_FIRE * level * max(0.0, flicker - 0.7) * 2
+    if not light.any():
+        return image
+    return composite_light(image, light)
+
+
+@lru_cache(maxsize=1)
+def jupiter_layers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """(colors, coverage) of his face over the whole frame, then of his hands at their resting place."""
+    layers = []
+    for sprites in ((JUPITER_FACE_ROWS, JUPITER_FACE_AT, 1),), ((JUPITER_HAND, JUPITER_HANDS_AT[0], 1), (JUPITER_HAND, JUPITER_HANDS_AT[1], -1)):
+        colors = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+        cover = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
+        for rows, (left, top), facing in sprites:
+            width = len(rows[0])
+            for row, line in enumerate(rows):
+                for column, char in enumerate(line):
+                    x, y = left + (column if facing > 0 else width - 1 - column), top + row
+                    if char != "." and 0 <= x < WIDTH and 0 <= y < HEIGHT:
+                        colors[y, x] = JUPITER_COLORS[char]
+                        cover[y, x] = 1.0
+        layers.extend((colors, cover))
+    return tuple(layers)
+
+
+@lru_cache(maxsize=1)
+def jupiter_eyes() -> tuple[tuple[int, int], ...]:
+    left, top = JUPITER_FACE_AT
+    return tuple((left + column, top + row) for row, line in enumerate(JUPITER_FACE_ROWS) for column, char in enumerate(line) if char == "E")
+
+
+@lru_cache(maxsize=1)
+def jupiter_fingertips() -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    """Where the bolts leave each fingertip of his left and right hands."""
+    width = len(JUPITER_HAND[0])
+    tips = [(column, row) for row, line in enumerate(JUPITER_HAND) for column, char in enumerate(line) if char == "F"]
+    (left_x, left_y), (right_x, right_y) = JUPITER_HANDS_AT
+    return tuple((left_x + x, left_y + y) for x, y in tips), tuple((right_x + width - 1 - x, right_y + y) for x, y in tips)
+
+
+def jupiter_eye_level(arrival: float) -> float:
+    """His eyes' glow, flaring with each bolt he throws."""
+    flare = sum(math.exp(-(arrival - at) / 0.35) for at in JUPITER_BOLT_TIMES if arrival >= at)
+    return trapezoid(arrival, *JUPITER_EYES) * (1 + 0.6 * min(1.0, flare))
+
+
+def draw_jupiter(image: Image.Image, ruin: HutRuin, elapsed: float) -> Image.Image:
+    """Jupiter fills the sky behind the land: a storm-dark sky, his scowling face with its glowing eyes, and his hands
+    reaching down out of the storm."""
+    arrival = ruin.arrival
+    if not 0 <= arrival < JUPITER_SECONDS:
+        return image
+    pixels = np.asarray(image, dtype=np.float32)
+    storm = sample_noise(VESUVIUS_NOISE[1], FIREWORK_X * 0.6 + elapsed * 1.2, FIREWORK_Y * 0.9 + elapsed * 0.3) * 0.7 + 0.3 * sample_noise(VESUVIUS_NOISE[2], FIREWORK_X * 0.4 - elapsed * 0.5, FIREWORK_Y * 0.6)
+    dark, light = (np.array(color, dtype=np.float32) for color in JUPITER_STORM)
+    sky = dark + (light - dark) * np.clip(storm * 1.3 - 0.25, 0, 1)[..., None] * np.clip(1 - FIREWORK_Y / 26, 0.3, 1)[..., None]
+    pixels = pixels + (sky - pixels) * (ruin.hush * JUPITER_VEIL)
+    face_colors, face_cover, hand_colors, hand_cover = jupiter_layers()
+    face = trapezoid(arrival, *JUPITER_FACE)
+    if face > 0:
+        # He breathes: his face swells a touch brighter and darker, and the scowl never settles.
+        pulse = 0.92 + 0.08 * math.sin(elapsed * 2.6)
+        pixels = pixels + (face_colors * pulse - pixels) * (face_cover * face)[..., None]
+    reach = smoothstep(*JUPITER_REACH[0], arrival) * (1 - smoothstep(*JUPITER_REACH[1], arrival))
+    if reach > 0:
+        shift = -round((1 - reach) * JUPITER_HAND_DROP)
+        colors, cover = np.roll(hand_colors, shift, axis=0), np.roll(hand_cover, shift, axis=0)
+        if shift < 0:
+            cover[shift:] = 0
+        pixels = pixels + (colors - pixels) * (cover * reach * min(1.0, face * 1.5))[..., None]
+    image = Image.fromarray(np.round(np.clip(pixels, 0, 255)).astype(np.uint8), "RGB")
+    eyes = jupiter_eye_level(arrival)
+    if eyes <= 0:
+        return image
+    glow = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    flicker = 0.9 + 0.1 * math.sin(elapsed * 9.0)
+    for x, y in jupiter_eyes():
+        glow += (np.exp(-((FIREWORK_X - x) ** 2 + ((FIREWORK_Y - y) * 1.5) ** 2) / 3.0) * 0.28 * eyes * flicker)[..., None] * JUPITER_EYE_GLOW
+        glow[y, x] += np.array((1.0, 0.97, 0.85), dtype=np.float32) * min(1.0, eyes)
+    return composite_light(image, glow)
+
+
+@lru_cache(maxsize=256)
+def bolt_channel(start: tuple[int, int], end: tuple[int, int], salt: int, wander: float = 2.5) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    """A jagged bolt from `start` to `end`, straying up to `wander` pixels off the straight line, and a short fork off it."""
+    rng = random.Random(salt * 7919 + 13)
+    (x0, y0), (x1, y1) = start, end
+    steps = max(3, round(math.hypot(x1 - x0, y1 - y0) / 3))
+    points = [start]
+    for step in range(1, steps):
+        fraction = step / steps
+        jitter = wander * math.sin(math.pi * fraction)
+        points.append((round(x0 + (x1 - x0) * fraction + rng.uniform(-jitter, jitter)), round(y0 + (y1 - y0) * fraction + rng.uniform(-jitter, jitter) * 0.6)))
+    points.append(end)
+    channel = trace(points)
+    fx, fy = channel[len(channel) // 3]
+    side = rng.choice((-1, 1))
+    fork = trace([(fx, fy), (fx + side * 2, fy + 2), (fx + side * 3, fy + 4)])
+    return tuple(channel), tuple(fork[1:])
+
+
+def bolt_storm(light: np.ndarray, starts: tuple[tuple[int, int], ...], end: tuple[int, int], salt: int, age: float) -> float:
+    """Light a storm of bolts from each of `starts` onto `end`, `age` seconds after it struck: each stroke cracks along
+    fresh channels that light the air around them, sparks crackle at the starts before it, and the strike flares where
+    they meet. Return how hard the whole frame flashes (0 once it has faded)."""
+    strokes = JUPITER_BOLT_STROKES
+    glow, core, branch = (np.array(color, dtype=np.float32) / 255 for color in (LIGHTNING_GLOW, LIGHTNING_CORE, LIGHTNING_BRANCH))
+    if -JUPITER_BOLT_CHARGE <= age < 0:
+        # Sparks jump about the fingertips, faster and brighter as the strike nears.
+        build = 1 + age / JUPITER_BOLT_CHARGE
+        beat = math.floor(age * 25)
+        for index, (x, y) in enumerate(starts):
+            for spark in range(3):
+                angle = unit_hash(salt, index, spark, beat) * math.tau
+                reach = 1 + 2 * unit_hash(salt, index, spark, beat, 1) * build
+                splat(light, np.array([x, x + math.cos(angle) * reach]), np.array([y, y + math.sin(angle) * reach]), np.stack([core, glow]), np.array([0.6 * build, 0.9 * build], dtype=np.float32))
+        return 0.0
+    if not 0 <= age < strokes[-1][1] + JUPITER_BOLT_AFTERGLOW:
+        return 0.0
+    struck = next((index for index, (first, last) in enumerate(strokes) if first <= age < last), None)
+    if struck is None:
+        latest = max(index for index, (first, _) in enumerate(strokes) if first <= age)
+        level = 0.3 * (1 - max(0.0, age - strokes[-1][1]) / JUPITER_BOLT_AFTERGLOW) if latest == len(strokes) - 1 else 0.3
+    else:
+        latest, level = struck, 1.0
+    # Several bolts wander wide of one another, so each crackles on its own before they meet.
+    wander = JUPITER_BOLT_WANDER if len(starts) > 1 else 2.5
+    channels = [bolt_channel(start, end, salt * 31 + latest * 7 + index, wander) for index, start in enumerate(starts)]
+    on_channels = {pixel for channel, _ in channels for pixel in channel}
+    halo = {(x + dx, y) for x, y in on_channels for dx in (1, -1)} - on_channels
+    for x, y in halo:
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+            light[y, x] += glow * 0.7 * level
+    for _, fork in channels:
+        for x, y in fork:
+            if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+                light[y, x] += branch * 0.8 * level
+    for x, y in on_channels:
+        light[y, x] += core * level
+    if struck is None:
+        return JUPITER_FLASH_LEVELS[2] * level / 0.3
+    # The channels light the air around them, and the strike flares where they meet.
+    xs, ys = (np.array(values, dtype=np.float32) for values in zip(*sorted(on_channels)[::3]))
+    air = np.exp(-((FIREWORK_X[..., None] - xs) ** 2 + (FIREWORK_Y[..., None] - ys) ** 2) / (2 * JUPITER_BOLT_REACH**2)).sum(axis=-1)
+    light += np.clip(air * 0.04, 0, 0.3)[..., None] * glow
+    sx, sy = end
+    light += (np.exp(-((FIREWORK_X - sx) ** 2 + (FIREWORK_Y - sy) ** 2) / 12) * 1.1)[..., None] * branch
+    return JUPITER_FLASH_LEVELS[0 if struck == 0 else 1]
+
+
+def draw_jupiter_bolts(image: Image.Image, ruin: HutRuin, elapsed: float) -> Image.Image:
+    """Jupiter's bolts, in front of everything: a storm from every fingertip of a hand onto each Roman's spot as he
+    arrives, and a bolt from the sky onto each Roman at the recall. Each stroke floods the frame with light."""
+    light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    flash = 0.0
+    if 0 <= ruin.arrival < JUPITER_SECONDS:
+        tips = jupiter_fingertips()
+        for index, at in enumerate(JUPITER_BOLT_TIMES):
+            x, feet = roman_spot(index)
+            flash = max(flash, bolt_storm(light, tips[ROMAN_CREW[index][2]], (round(x), feet), index, ruin.arrival - at))
+    if 0 <= ruin.recall < RESTORE_RECALL_GAP * len(ROMAN_CREW) + 1:
+        for index in range(len(ROMAN_CREW)):
+            x, feet, *_ = roman_pose(index, replace(ruin, recall=-1.0), elapsed)
+            # The recall is quieter: a single bolt, and only half the flash.
+            flash = max(flash, 0.5 * bolt_storm(light, ((round(x) + 3, 0),), (round(x), feet - 8), 40 + index, ruin.recall - index * RESTORE_RECALL_GAP))
+    if flash > 0:
+        light += JUPITER_FLASH * flash
+    if not light.any():
+        return image
+    return composite_light(image, light)
+
+
+def hauler_trip(spot: float, t: float) -> tuple[float, int, str]:
+    """(x, facing, stage) of a hauler `t` seconds into his round trips between the hut and beyond the left edge."""
+    walk = (spot - ROMAN_OFFSCREEN) / ROMAN_SPEED
+    period = 2 * walk + ROMAN_HAULER_LOAD + ROMAN_HAULER_AWAY
+    t %= period
+    if t < ROMAN_HAULER_LOAD:
+        return spot, -1, "load"
+    t -= ROMAN_HAULER_LOAD
+    if t < walk:
+        return spot - ROMAN_SPEED * t, -1, "out"
+    t -= walk
+    if t < ROMAN_HAULER_AWAY:
+        return ROMAN_OFFSCREEN, -1, "away"
+    return ROMAN_OFFSCREEN + ROMAN_SPEED * (t - ROMAN_HAULER_AWAY), 1, "back"
+
+
+def hauler_period(spot: float) -> float:
+    return 2 * (spot - ROMAN_OFFSCREEN) / ROMAN_SPEED + ROMAN_HAULER_LOAD + ROMAN_HAULER_AWAY
+
+
+def sweeper_x(t: float) -> tuple[float, int]:
+    """(x, facing) of the sweeper `t` seconds into his work, sweeping back and forth along the front of the meadow."""
+    low, high = ROMAN_SWEEP_RANGE
+    span = high - low
+    # He starts a little in from the left end, heading right.
+    travel = (t * ROMAN_SWEEP_SPEED + 2) % (2 * span)
+    return (low + travel, 1) if travel < span else (high - (travel - span), -1)
+
+
+def builder_heap_x(t: float) -> tuple[float, int]:
+    center, reach, seconds = ROMAN_BUILDER_HEAP
+    phase = t / seconds * math.tau - 0.62
+    return center + reach * math.sin(phase), 1 if math.cos(phase) >= 0 else -1
+
+
+def roman_work(index: int, ruin: HutRuin, elapsed: float) -> tuple[float, int, str]:
+    """(x, facing, pose) of Roman `index` at work, `ruin.work` seconds after starting (never in the lineup)."""
+    role = ROMAN_CREW[index][0]
+    t = max(0.0, ruin.work)
+    progress = ruin.progress
+    step = math.floor(elapsed / ROMAN_STEP_SECONDS) % 2
+    walking = ("stand", "stride")[step]
+    if role == "centurion":
+        slot = math.floor(elapsed / ROMAN_POINT_SLOT)
+        pointing = unit_hash(slot, index, 61) < 0.6 and elapsed - slot * ROMAN_POINT_SLOT < ROMAN_POINT_SECONDS
+        return ROMAN_CENTURION_X, -1, "point" if pointing else "stand"
+    if role == "hauler":
+        haul = [i for i, crew in enumerate(ROMAN_CREW) if crew[0] == "hauler"].index(index)
+        spot = ROMAN_HAULER_SPOTS[haul]
+        x, facing, stage = hauler_trip(spot, t + ROMAN_HAULER_PHASES[haul] * hauler_period(spot))
+        building = progress >= RESTORE_BUILD[0]
+        if stage == "load":
+            return x, 1, "lift" if math.floor(elapsed / 0.6) % 2 else "stand"
+        carrying = (stage == "out") != building
+        item = "plank" if building else "load"
+        return x, facing, f"{item}:{walking}" if carrying else walking
+    if role == "builder":
+        if progress < RESTORE_BUILD[0]:
+            x, facing = builder_heap_x(t)
+            return x, facing, "lift" if math.floor(elapsed / 0.9) % 2 else "stand"
+        order = hut_build_order()
+        x, y = order[min(ruin.built, len(order) - 1)]
+        facing = 1 if y % 2 else -1
+        return max(ROMAN_BUILDER_RANGE[0], min(ROMAN_BUILDER_RANGE[1], x - facing * 2)), facing, ("hammer_up", "hammer_down")[math.floor(elapsed / ROMAN_HAMMER_SECONDS) % 2]
+    # The sweeper rests on his broom once the ash is gone.
+    if progress >= RESTORE_SWEEP[1]:
+        x, facing = sweeper_x(ruin.span * RESTORE_SWEEP[1])
+        return x, facing, "stand"
+    x, facing = sweeper_x(t)
+    return x, facing, ("sweep_a", "sweep_b")[math.floor(elapsed / ROMAN_SWEEP_SECONDS) % 2]
+
+
+def roman_spot(index: int) -> tuple[float, int]:
+    """Where Jupiter's bolt sets Roman `index` down: where his work begins."""
+    x, _, _ = roman_work(index, HutRuin(0, JUPITER_SECONDS, 0, 1, -1), 0.0)
+    return x, ROMAN_SWEEPER_FEET_ROW if ROMAN_CREW[index][0] == "sweeper" else ROMAN_FEET_ROW
+
+
+def roman_pose(index: int, ruin: HutRuin, elapsed: float) -> tuple[float, int, int, str, float] | None:
+    """(x, feet row, facing, pose, arrival glow) of Roman `index`, or None while he is not on the meadow."""
+    arrived = ruin.arrival - JUPITER_BOLT_TIMES[index] - 0.04
+    if arrived < 0 or ruin.recall >= index * RESTORE_RECALL_GAP + 0.1:
+        return None
+    x, feet = roman_spot(index)
+    glow = math.exp(-arrived / 0.5)
+    if ruin.work < 0:
+        # Fresh from the bolt, he looks up at Jupiter and salutes.
+        facing = 1 if x < JUPITER_FACE_AT[0] + len(JUPITER_FACE_ROWS[0]) / 2 else -1
+        return x, feet, facing, "salute" if arrived > 1.0 else "stand", glow
+    lineup = ruin.span * RESTORE_BUILD[1]
+    if ruin.work < lineup:
+        x, facing, pose = roman_work(index, ruin, elapsed)
+        return x, feet, facing, pose, 0.0
+    start, _, _ = roman_work(index, replace(ruin, work=lineup), elapsed)
+    target = ROMAN_LINEUP[index]
+    distance = (ruin.work - lineup) * ROMAN_SPEED
+    if distance >= abs(target - start):
+        return target, feet, 1, "stand", 0.0
+    heading = 1 if target > start else -1
+    return start + heading * distance, feet, heading, ("stand", "stride")[math.floor(elapsed / ROMAN_STEP_SECONDS) % 2], 0.0
+
+
+@lru_cache(maxsize=64)
+def roman_sprite(role: str, pose: str) -> tuple[str, ...]:
+    """A Roman's sprite facing right; `pose` is "item:legs" while carrying, or a pose name (legs "stride" walks empty)."""
+    item, _, legs = pose.partition(":")
+    if pose in ("stand", "stride"):
+        item, legs = "stand", pose
+    legs = legs or "stand"
+    bodies = ROMAN_CENTURION if role == "centurion" else ROMAN_WORKER
+    body = bodies.get(item, bodies["stand"])
+    rows = [*body, *ROMAN_LEGS[legs]]
+    if item in ROMAN_BROOM:
+        handle, bristles = ROMAN_BROOM[item]
+        rows[-2] = rows[-2][:handle] + "t" + rows[-2][handle + 1 :]
+        rows[-1] = rows[-1][:bristles] + "yy" + rows[-1][bristles + 2 :]
+    return tuple(rows)
+
+
+def draw_roman_crew(image: Image.Image, palette: Palette, ruin: HutRuin, elapsed: float):
+    """The Romans at work, front to back by the row each stands on."""
+    if ruin.arrival < JUPITER_BOLT_TIMES[0] or ruin.recall >= RESTORE_RECALL_GAP * len(ROMAN_CREW) + 1:
+        return
+    illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+    shade = 0.45 + 0.55 * illumination
+    d = ImageDraw.Draw(image)
+    poses = [(index, pose) for index in range(len(ROMAN_CREW)) if (pose := roman_pose(index, ruin, elapsed)) is not None]
+    for index, (x, feet, facing, pose, glow) in sorted(poses, key=lambda item: item[1][1]):
+        role, tunic, _ = ROMAN_CREW[index]
+        colors = {char: tuple(round(value * shade) for value in color) for char, color in {**ROMAN_COLORS, "T": tunic}.items()}
+        if glow > 0.01:
+            colors = {char: mix(color, ROMAN_ARRIVAL_GLOW, min(1.0, glow)) for char, color in colors.items()}
+        sprite = roman_sprite(role, pose)
+        draw_standing_sprite(d, sprite, x, feet, facing, colors)
+        if pose.startswith("sweep") and math.floor(elapsed / ROMAN_SWEEP_SECONDS) % 2 == 0:
+            # A puff of swept ash behind the broom.
+            for dx, dy, amount in ((4, 0, 0.5), (5, -1, 0.3)):
+                px, py = round(x) + dx * facing, feet + dy
+                if 0 <= px < WIDTH and 0 <= py < HEIGHT:
+                    d.point((px, py), fill=mix(image.getpixel((px, py)), tuple(round(value * shade) for value in VESUVIUS_SETTLED), amount))
+
+
+def ruin_shake(ruin: HutRuin | None) -> float:
+    """How far (pixels) the ground shakes as each big rock lands, hardest as the hut goes, and as each of Jupiter's
+    storms of bolts strikes."""
+    if ruin is None:
+        return 0.0
+    if any(0 <= ruin.arrival - at < JUPITER_BOLT_SHAKE_SECONDS for at in JUPITER_BOLT_TIMES):
+        return JUPITER_BOLT_SHAKE
+    for index, (launch, flight, *_) in enumerate(VESUVIUS_ROCKS):
+        since = ruin.age - launch - flight
+        if 0 <= since < (0.8 if index == 0 else 0.4):
+            return 2.0 if index == 0 else 1.0
+    return 0.0
 
 
 @dataclass(frozen=True)
@@ -8721,18 +9571,31 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     image = draw_skywriter(image, palette, environment, elapsed, seed)
     # Vesuvius's smoke and ash column rise from behind the summit; the land hides their base.
     eruption = vesuvius_state(environment)
+    ruin = hut_ruin(environment)
     burst = vesuvius_burst(eruption, elapsed, seed)
     plume = vesuvius_plume(eruption, environment.weather.wind or 0, elapsed, burst) if eruption is not None else None
     if plume is not None:
         image = draw_vesuvius_plume(image, palette, environment, eruption, plume, elapsed)
+    # At JUPITER_HOUR Jupiter takes the whole sky, behind the land.
+    if ruin is not None:
+        image = draw_jupiter(image, ruin, elapsed)
     rain, snow = precipitation(environment)
     winter = environment.season == "winter"
     # The mountain keeps its snow all winter, even between snowfalls.
-    land, wood = landscape(palette, snow > 0, winter or snow > 0, mountain_faces(palette, environment), window_light(environment, elapsed, seed))
+    faces = mountain_faces(palette, environment)
+    lit = window_light(environment, elapsed, seed)
+    land, wood = landscape(palette, snow > 0, winter or snow > 0, faces, lit)
+    if ruin is not None and ruin.wrecked:
+        land = hut_site_land(palette, snow > 0, winter or snow > 0, faces, lit, ruin.cleared, ruin.built)
     twigs, foliage = maple_layers(palette, foliage_state(environment), round(scene_daylight(environment) * 16) / 16)
     image.paste(land, (0, 0), land)
-    # Vesuvius's ash settles on the land, under the flows and fires.
-    blanket = vesuvius_blanket(palette, eruption, False)
+    # Vesuvius's ash settles on the land (and on the wrecked hut), under the flows and fires; the Romans sweep it away.
+    ash = 0.0 if eruption is None else eruption.blanket * (1 - (ruin.swept if ruin is not None else 0.0))
+    if ruin is not None and ruin.age >= HUT_IMPACT:
+        illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
+        blanket = wreck_blanket_overlay(round(ash * 32), round((0.3 + 0.7 * illumination) * 16), ruin.cleared, ruin.built) if ash > 0 else None
+    else:
+        blanket = vesuvius_blanket(palette, ash, "land")
     if blanket is not None:
         image.paste(blanket, (0, 0), blanket)
     if eruption is not None:
@@ -8815,6 +9678,10 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
     draw_leprechaun(image, palette, leprechaun_state(environment, elapsed, seed), night, elapsed)
     draw_eagle(image, palette, eagle, elapsed)
     draw_hut_and_dog(image, palette, *dog_state(environment, elapsed, seed), elapsed)
+    # Vesuvius's rocks land in front of the hut's wreck, and Jupiter's Romans work in front of it.
+    if ruin is not None:
+        image = draw_hut_ruin(image, palette, environment, ruin, elapsed)
+        draw_roman_crew(image, palette, ruin, elapsed)
     image = draw_smoke(image, palette, environment, elapsed, seed)
     image = draw_cannon_smoke(image, palette, cannon, wind)
     draw_fireflies(image, firefly_glows(environment, elapsed, seed))
@@ -8822,7 +9689,7 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         image.paste(twigs, (0, 0), twigs)
     if foliage is not None:
         # Vesuvius's ash settles on the leaves that are there and rustles with them.
-        blanket = vesuvius_blanket(palette, eruption, True)
+        blanket = vesuvius_blanket(palette, ash, "foliage")
         if blanket is not None:
             blanket = blanket.copy()
             blanket.putalpha(ImageChops.multiply(blanket.getchannel("A"), foliage.getchannel("A")))
@@ -8896,8 +9763,10 @@ def render_outside_frame(environment: "OutsideEnvironment", elapsed: float, seed
         if age >= 0 and event.intensity(age) > 0.01:
             image = flash_scene(image, event, event.intensity(age), clouds)
         draw_lightning(image, event, age)
+    if ruin is not None:
+        image = draw_jupiter_bolts(image, ruin, elapsed)
     if eruption is not None:
-        image = vesuvius_finish(image, eruption, burst, elapsed)
+        image = vesuvius_finish(image, eruption, burst, elapsed, ruin)
     return grade_frame(image)
 
 
