@@ -8645,10 +8645,10 @@ def volcanic_lightning_allowed(environment: "OutsideEnvironment") -> bool:
 # sends a crew of Romans to set it right. Big rocks thrown out at noon come down about 12 s later, the first one smashing
 # the hut into a heap of splintered wood that smolders and gathers ash. At JUPITER_HOUR Jupiter takes the whole sky for
 # JUPITER_SECONDS: the ash and the eruption's sky effects clear away (Eruption.hush), his scowling face and hands fill a
-# storm-dark sky, and each storm of bolts from his outstretched fingers leaves a Roman on the meadow. The crew carries
-# off the rocks and the wreck, sweeps away the ash and rebuilds the hut, then lines up in front of it until bolts from
-# the sky call them home RESTORE_RECALL_BEFORE_MIDNIGHT seconds before midnight, so the scene is whole again when the
-# holiday ends. Like the eruption, every step is read from the displayed clock (`hut_ruin`); only small cycles (strides,
+# storm-dark sky, and he hurls down the thunderbolts in his fist one by one, each leaving a Roman on the meadow. The
+# crew carries off the rocks and the wreck, sweeps away the ash and rebuilds the hut, then lines up in front of it until
+# bolts from the sky call them home RESTORE_RECALL_BEFORE_MIDNIGHT seconds before midnight, so the scene is whole again
+# when the holiday ends. Like the eruption, every step is read from the displayed clock (`hut_ruin`); only small cycles (strides,
 # hammer swings, flicker) run on `elapsed`.
 #
 # Big rocks lobbed at noon: (launch seconds after noon, flight seconds, landing column, landing row, size). They fly
@@ -8687,7 +8687,7 @@ JUPITER_HOUR = 15
 JUPITER_HUSH = ((0.0, 2.0), (JUPITER_SECONDS - 3.0, JUPITER_SECONDS))
 JUPITER_FACE = ((1.5, 4.0), (JUPITER_SECONDS - 5.0, JUPITER_SECONDS - 1.5))
 JUPITER_EYES = ((3.5, 4.5), (JUPITER_SECONDS - 3.5, JUPITER_SECONDS - 1.0))
-JUPITER_REACH = ((4.0, 6.5), (JUPITER_SECONDS - 7.0, JUPITER_SECONDS - 4.0))
+JUPITER_REACH = ((3.5, 5.5), (JUPITER_SECONDS - 7.0, JUPITER_SECONDS - 4.0))
 # The storm-dark sky behind him, between its dark and light cloud tones, and how much of the sky it covers.
 JUPITER_STORM = ((12, 9, 30), (50, 40, 84))
 JUPITER_VEIL = 0.92
@@ -8721,9 +8721,11 @@ JUPITER_FACE_HALF = (
     "...........vvwwWWWWwWWW",
 )
 JUPITER_FACE_ROWS = tuple(row + row[::-1] for row in JUPITER_FACE_HALF)
-# His left hand (on the viewer's left), thrust out of a cloud-white sleeve with a gold cuff, palm toward the viewer and
-# all five fingers splayed as if reaching out of the screen; the right mirrors it. F marks each fingertip, where his
-# bolts leave from, and f the rest of a foreshortened tip.
+# His right hand (on the viewer's right) reaches down out of a cloud-white sleeve with a gold cuff: open, all five
+# fingers splayed as if reaching out of the screen, until it catches a thunderbolt, and closed around it
+# (JUPITER_FIST) while he winds up and hurls it. His left arm reaches in from the edge below the clock label, its fist
+# (JUPITER_HOLDER) grasping a thunderbolt for every Roman still to come. F marks the fingertips, f the rest of a
+# foreshortened tip.
 JUPITER_HAND = (
     "...vwWWWwv...",
     "...vWWWWWv...",
@@ -8738,6 +8740,23 @@ JUPITER_HAND = (
     "...S..S..S...",
     "..fF..S..Ff..",
     "......F......",
+)
+JUPITER_FIST = (
+    "...vwWWWwv...",
+    "...vWWWWWv...",
+    "...lLLLLLl...",
+    "....sSSSs....",
+    "...sSKSSSs...",
+    "...sSSSSSs...",
+    "...sSsSsSs...",
+    "....sSSSs....",
+)
+JUPITER_HOLDER = (
+    "vwWWWwv......",
+    "wWWWWWWlsSSs.",
+    "wWWwWWWlSKSSs",
+    "wWWWWWWlsSSSs",
+    "vwWWWwv..sss.",
 )
 JUPITER_COLORS = {
     "W": (226, 228, 242),
@@ -8758,19 +8777,42 @@ JUPITER_COLORS = {
     "f": (246, 218, 184),
 }
 JUPITER_EYE_GLOW = np.array((1.0, 0.78, 0.3), dtype=np.float32)
-# The face's left column and top row, and each hand's left column and top row once it has reached down: the left one
-# comes out of the storm below the clock label, and the right one down from the top, clear of the mountain. They drop
-# into place by JUPITER_HAND_DROP rows as they fade in, so neither crosses the corner labels.
+# The face's left column and top row, and where the right hand (open or closed) and the holding left arm sit once they
+# have reached in (left column, top row). The right hand drops into place by
+# JUPITER_HAND_DROP rows and the left arm slides in by as many columns, so neither crosses the corner labels.
 JUPITER_FACE_AT = (26, 0)
-JUPITER_HANDS_AT = ((3, 9), (72, 0))
+JUPITER_THROWER_AT = (72, 0)
+JUPITER_HOLDER_AT = (0, 12)
 JUPITER_HAND_DROP = 5
+# Where each hand grips its thunderbolts, and where a thrown bolt leaves the right hand.
+JUPITER_HOLDER_GRIP = (10, 14)
+JUPITER_THROWER_GRIP = (78, 6)
+JUPITER_RELEASE = (78, 9)
 
-# The crew, in the order Jupiter's bolts set them down: (role, tunic color, the hand that throws the bolt, 0 left).
-ROMAN_CREW = (("centurion", (178, 32, 36), 1), ("hauler", (176, 52, 40), 0), ("builder", (152, 112, 62), 1), ("hauler", (206, 198, 172), 0), ("sweeper", (84, 108, 150), 0))
-# Seconds after Jupiter arrives that each storm of bolts strikes, one bolt from every fingertip of the throwing hand.
-JUPITER_BOLT_TIMES = (7.5, 10.0, 12.5, 15.0, 17.5)
-# A storm's strokes (start, end) in seconds after it strikes; each stroke cracks along fresh channels. Its channels glow
-# for JUPITER_BOLT_AFTERGLOW after the last, and sparks crackle at his fingertips for JUPITER_BOLT_CHARGE before the first.
+# The crew, in the order Jupiter's bolts set them down: (role, the color of the sash over his white toga).
+ROMAN_CREW = (("centurion", (176, 30, 36)), ("hauler", (126, 48, 136)), ("builder", (60, 92, 166)), ("hauler", (176, 134, 40)), ("sweeper", (36, 132, 110)))
+# Seconds after Jupiter arrives that each thrown thunderbolt strikes.
+JUPITER_BOLT_TIMES = (8.0, 11.0, 14.0, 17.0, 20.0)
+# Each throw, in seconds before its strike: the left hand tosses a bolt up over his head (JUPITER_TOSS: leaves, caught),
+# the right hand catches it and winds up (JUPITER_WINDUP: raised by JUPITER_WINDUP_RISE rows from the catch to the
+# first time), then thrusts down JUPITER_THRUST rows as it lets go JUPITER_THROW_FLIGHT before the strike, and settles
+# back over JUPITER_SETTLE seconds after it. The tossed bolt peaks JUPITER_TOSS_HEIGHT rows above a straight line.
+JUPITER_TOSS = (2.0, 1.2)
+JUPITER_TOSS_HEIGHT = 10.0
+JUPITER_WINDUP = 0.6
+JUPITER_WINDUP_RISE, JUPITER_THRUST = 2, 3
+JUPITER_THROW_FLIGHT = 0.2
+JUPITER_SETTLE = 0.8
+# A thunderbolt: a zigzag JUPITER_BOLT_LENGTH pixels either side of its middle, the held ones fanned JUPITER_BUNDLE_FAN
+# radians apart in his left fist.
+JUPITER_BOLT_LENGTH = 6
+JUPITER_BUNDLE_FAN = 0.45
+JUPITER_BOLT_CORE = np.array((1.0, 0.98, 0.84), dtype=np.float32)
+JUPITER_BOLT_GOLD = np.array((1.0, 0.74, 0.22), dtype=np.float32)
+# A thrown bolt bursts into this many strands where it lands. Each stroke (start, end, seconds after it strikes) cracks
+# along fresh channels; they glow for JUPITER_BOLT_AFTERGLOW after the last, and sparks crackle about the bolt in his
+# fist for JUPITER_BOLT_CHARGE before it strikes.
+JUPITER_STRANDS = 4
 JUPITER_BOLT_STROKES = ((0.0, 0.07), (0.11, 0.17), (0.22, 0.3), (0.36, 0.42), (0.5, 0.6))
 JUPITER_BOLT_AFTERGLOW = 0.35
 JUPITER_BOLT_CHARGE = 0.6
@@ -8779,39 +8821,43 @@ JUPITER_BOLT_CHARGE = 0.6
 JUPITER_FLASH = np.array((0.75, 0.78, 1.0), dtype=np.float32)
 JUPITER_FLASH_LEVELS = (0.72, 0.5, 0.08)
 JUPITER_BOLT_REACH = 3.5
-# How far (pixels) each bolt of a storm strays from the straight line between his fingertip and its target.
+# How far (pixels) each strand of a storm strays from the straight line between his hand and its target.
 JUPITER_BOLT_WANDER = 6.0
-JUPITER_BOLT_SHAKE, JUPITER_BOLT_SHAKE_SECONDS = 1.0, 0.45
-# Facing right, by row from the top: H hair, S skin, E eye, T tunic (its color per Roman), b belt, L sandals; the
-# centurion's C crest, M bronze helmet, A mail and R cloak. Tools: P plank, D rubble, G hammer head, t handle, y broom.
+JUPITER_BOLT_SHAKE, JUPITER_BOLT_SHAKE_SECONDS = 2.0, 0.5
+# The shockwave races out along the ground from each strike: (seconds, reach in columns).
+JUPITER_SHOCKWAVE = (0.7, 22.0)
+# Facing right, by row from the top: g laurel wreath, H hair, S skin, E eye, W w the white toga and its folds, X its
+# sash (its color per Roman), L sandals; the centurion's C crest, M bronze helmet and R cloak. Tools: P plank, D rubble,
+# G hammer head, t handle, y broom.
 ROMAN_LEGS = {"stand": ("...S.S...", "...L.L..."), "stride": ("..S...S..", "..L...L..")}
 ROMAN_WORKER = {
-    "stand": ("...HHH...", "...HSES..", "...TTT...", "...TTT...", "...bbS...", "...TTT..."),
-    "salute": ("......S..", "...HHHS..", "...HSES..", "...TTT...", "...TTT...", "...bbb...", "...TTT..."),
-    "lift": (".........", "...HHH...", "...HSES..", "...TTTT..", "...bbbS..", "...TTT..."),
-    "load": ("...HHH...", "...HSES..", "...TTTDD.", "...TTSDD.", "...bbb...", "...TTT..."),
-    "plank": ("...HHH...", "...HSES..", "PPPPPPPPP", "...TTTS..", "...bbb...", "...TTT..."),
-    "hammer_up": ("......G..", "...HHHGt.", "...HSESt.", "...TTTS..", "...TTT...", "...bbb...", "...TTT..."),
-    "hammer_down": ("...HHH...", "...HSES..", "...TTT...", "...TTSttG", "...bbb..G", "...TTT..."),
-    "sweep_a": ("...HHH...", "...HSES..", "...TTTS..", "...TTTt..", "...bbb.t.", "...TTT..t"),
-    "sweep_b": ("...HHH...", "...HSES..", "...TTSt..", "...TTTt..", "...bbbt..", "...TTTt.."),
+    "stand": ("...gHg...", "...HSES..", "...XWW...", "...WXW...", "...wWXS..", "...WWW...", "...wWw..."),
+    "salute": ("......S..", "...gHgS..", "...HSES..", "...XWW...", "...WXW...", "...wWX...", "...WWW...", "...wWw..."),
+    "lift": (".........", "...gHg...", "...HSES..", "...XWWW..", "...WXWS..", "...WWW...", "...wWw..."),
+    "load": ("...gHg...", "...HSES..", "...XWWDD.", "...WXSDD.", "...wWX...", "...WWW...", "...wWw..."),
+    "plank": ("...gHg...", "...HSES..", "PPPPPPPPP", "...WXWS..", "...wWX...", "...WWW...", "...wWw..."),
+    "hammer_up": ("......G..", "...gHgGt.", "...HSESt.", "...XWWS..", "...WXW...", "...wWX...", "...WWW...", "...wWw..."),
+    "hammer_down": ("...gHg...", "...HSES..", "...XWW...", "...WXSttG", "...wWX..G", "...WWW...", "...wWw..."),
+    "sweep_a": ("...gHg...", "...HSES..", "...XWWS..", "...WXWt..", "...wWX.t.", "...WWW..t", "...wWw..t"),
+    "sweep_b": ("...gHg...", "...HSES..", "...XWSt..", "...WXWt..", "...wWXt..", "...WWWt..", "...wWwt.."),
 }
 # The broom's handle on the legs' top row and the first of its two bristle columns on the bottom row.
 ROMAN_BROOM = {"sweep_a": (8, 7), "sweep_b": (6, 6)}
 ROMAN_CENTURION = {
-    "stand": ("...CCC...", "...MMM...", "...MSES..", "..RAAA...", "..RAAA...", "..RbbS...", "...RRR..."),
-    "salute": ("......S..", "...CCCS..", "...MMMA..", "...MSES..", "..RAAA...", "..RAAA...", "..Rbbb...", "...RRR..."),
-    "point": ("...CCC...", "...MMM...", "...MSES..", "..RAAAASS", "..RAAA...", "..Rbbb...", "...RRR..."),
+    "stand": ("...CCC...", "...MMM...", "...MSES..", "..RXWW...", "..RWXW...", "..RwWXS..", "..RWWW...", "...wWw..."),
+    "salute": ("......S..", "...CCCS..", "...MMMW..", "...MSES..", "..RXWW...", "..RWXW...", "..RwWX...", "..RWWW...", "...wWw..."),
+    "point": ("...CCC...", "...MMM...", "...MSES..", "..RXWWWSS", "..RWXW...", "..RwWX...", "..RWWW...", "...wWw..."),
 }
 ROMAN_COLORS = {
+    "g": (92, 150, 58),
     "H": (64, 42, 28),
     "S": (214, 164, 124),
     "E": (40, 28, 24),
-    "b": (84, 56, 34),
+    "W": (238, 236, 226),
+    "w": (176, 174, 168),
     "L": (92, 62, 38),
     "C": (220, 36, 36),
     "M": (210, 168, 84),
-    "A": (172, 174, 186),
     "R": (178, 32, 36),
     "P": (200, 152, 92),
     "D": (122, 98, 80),
@@ -9141,23 +9187,35 @@ def draw_hut_ruin(image: Image.Image, palette: Palette, environment: "OutsideEnv
     return composite_light(image, light)
 
 
+def stamp_sprite(colors: np.ndarray, cover: np.ndarray, rows: tuple[str, ...], left: int, top: int):
+    """Paint one of Jupiter's sprites into (colors, coverage) arrays over the whole frame."""
+    for row, line in enumerate(rows):
+        y = top + row
+        if 0 <= y < HEIGHT:
+            for column, char in enumerate(line):
+                x = left + column
+                if char != "." and 0 <= x < WIDTH:
+                    colors[y, x] = JUPITER_COLORS[char]
+                    cover[y, x] = 1.0
+
+
 @lru_cache(maxsize=1)
-def jupiter_layers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """(colors, coverage) of his face over the whole frame, then of his hands at their resting place."""
-    layers = []
-    for sprites in ((JUPITER_FACE_ROWS, JUPITER_FACE_AT, 1),), ((JUPITER_HAND, JUPITER_HANDS_AT[0], 1), (JUPITER_HAND, JUPITER_HANDS_AT[1], -1)):
-        colors = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
-        cover = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
-        for rows, (left, top), facing in sprites:
-            width = len(rows[0])
-            for row, line in enumerate(rows):
-                for column, char in enumerate(line):
-                    x, y = left + (column if facing > 0 else width - 1 - column), top + row
-                    if char != "." and 0 <= x < WIDTH and 0 <= y < HEIGHT:
-                        colors[y, x] = JUPITER_COLORS[char]
-                        cover[y, x] = 1.0
-        layers.extend((colors, cover))
-    return tuple(layers)
+def jupiter_face_layer() -> tuple[np.ndarray, np.ndarray]:
+    colors = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    cover = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
+    stamp_sprite(colors, cover, JUPITER_FACE_ROWS, *JUPITER_FACE_AT)
+    return colors, cover
+
+
+@lru_cache(maxsize=32)
+def skin_mask(rows: tuple[str, ...], left: int, top: int) -> np.ndarray:
+    """1 where a hand sprite's skin is: a bolt held in the fist passes behind its fingers."""
+    mask = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
+    for row, line in enumerate(rows):
+        for column, char in enumerate(line):
+            if char in "sSK" and 0 <= left + column < WIDTH and 0 <= top + row < HEIGHT:
+                mask[top + row, left + column] = 1.0
+    return mask
 
 
 @lru_cache(maxsize=1)
@@ -9166,24 +9224,58 @@ def jupiter_eyes() -> tuple[tuple[int, int], ...]:
     return tuple((left + column, top + row) for row, line in enumerate(JUPITER_FACE_ROWS) for column, char in enumerate(line) if char == "E")
 
 
-@lru_cache(maxsize=1)
-def jupiter_fingertips() -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
-    """Where the bolts leave each fingertip of his left and right hands."""
-    width = len(JUPITER_HAND[0])
-    tips = [(column, row) for row, line in enumerate(JUPITER_HAND) for column, char in enumerate(line) if char == "F"]
-    (left_x, left_y), (right_x, right_y) = JUPITER_HANDS_AT
-    return tuple((left_x + x, left_y + y) for x, y in tips), tuple((right_x + width - 1 - x, right_y + y) for x, y in tips)
-
-
 def jupiter_eye_level(arrival: float) -> float:
     """His eyes' glow, flaring with each bolt he throws."""
     flare = sum(math.exp(-(arrival - at) / 0.35) for at in JUPITER_BOLT_TIMES if arrival >= at)
     return trapezoid(arrival, *JUPITER_EYES) * (1 + 0.6 * min(1.0, flare))
 
 
+def jupiter_throw(arrival: float) -> tuple[int | None, float]:
+    """(the throw under way, seconds from its strike), from the toss until the right hand has settled; (None, 0)."""
+    for index, at in enumerate(JUPITER_BOLT_TIMES):
+        since = arrival - at
+        if -JUPITER_TOSS[0] <= since < JUPITER_SETTLE:
+            return index, since
+    return None, 0.0
+
+
+def jupiter_thrower(arrival: float) -> tuple[bool, int]:
+    """(whether the right hand is closed around a bolt, how many rows it is thrust down; negative while raised)."""
+    index, since = jupiter_throw(arrival)
+    catch, release = -JUPITER_TOSS[1], -JUPITER_THROW_FLIGHT
+    if index is None or since < catch:
+        return False, 0
+    thrust = release - 0.15
+    if since < thrust:
+        return True, -round(JUPITER_WINDUP_RISE * smoothstep(catch, catch + JUPITER_WINDUP, since))
+    if since < release:
+        return True, round(-JUPITER_WINDUP_RISE + (JUPITER_WINDUP_RISE + JUPITER_THRUST) * smoothstep(thrust, release, since))
+    return False, round(JUPITER_THRUST * (1 - smoothstep(release, JUPITER_SETTLE, since)))
+
+
+def tossed_bolt(arrival: float) -> tuple[float, float, float] | None:
+    """(x, y, tilt) of the bolt tumbling over his head from his left hand to his right, or None."""
+    index, since = jupiter_throw(arrival)
+    if index is None or since >= -JUPITER_TOSS[1]:
+        return None
+    flight = (since + JUPITER_TOSS[0]) / (JUPITER_TOSS[0] - JUPITER_TOSS[1])
+    (x0, y0), (x1, y1) = JUPITER_HOLDER_GRIP, JUPITER_THROWER_GRIP
+    return x0 + (x1 - x0) * flight, y0 + (y1 - y0) * flight - JUPITER_TOSS_HEIGHT * 4 * flight * (1 - flight), flight * 3 * math.pi
+
+
+def thunderbolt_light(light: np.ndarray, x: float, y: float, tilt: float, length: int, level: float):
+    """A golden zigzag thunderbolt centered on (x, y) and tilted `tilt` radians from upright, as light."""
+    t = np.arange(-length, length + 1, dtype=np.float32)
+    zig = np.where(np.floor(t / 2) % 2 == 0, 0.8, -0.8)
+    xs, ys = x + t * math.sin(tilt) + zig * math.cos(tilt), y + t * math.cos(tilt) - zig * math.sin(tilt)
+    splat(light, xs, ys, np.tile(JUPITER_BOLT_CORE, (len(t), 1)), np.full(len(t), level, dtype=np.float32))
+    light += (np.exp(-((FIREWORK_X - x) ** 2 + (FIREWORK_Y - y) ** 2) / (2 * (length * 0.5) ** 2)) * 0.07 * level)[..., None] * JUPITER_BOLT_GOLD
+
+
 def draw_jupiter(image: Image.Image, ruin: HutRuin, elapsed: float) -> Image.Image:
-    """Jupiter fills the sky behind the land: a storm-dark sky, his scowling face with its glowing eyes, and his hands
-    reaching down out of the storm."""
+    """Jupiter fills the sky behind the land: a storm-dark sky, his scowling face with its glowing eyes, his left fist
+    grasping a thunderbolt for every Roman still to come, and his right hand catching each one he tosses it over his
+    head and winding up to hurl it."""
     arrival = ruin.arrival
     if not 0 <= arrival < JUPITER_SECONDS:
         return image
@@ -9192,29 +9284,53 @@ def draw_jupiter(image: Image.Image, ruin: HutRuin, elapsed: float) -> Image.Ima
     dark, light = (np.array(color, dtype=np.float32) for color in JUPITER_STORM)
     sky = dark + (light - dark) * np.clip(storm * 1.3 - 0.25, 0, 1)[..., None] * np.clip(1 - FIREWORK_Y / 26, 0.3, 1)[..., None]
     pixels = pixels + (sky - pixels) * (ruin.hush * JUPITER_VEIL)
-    face_colors, face_cover, hand_colors, hand_cover = jupiter_layers()
+    face_colors, face_cover = jupiter_face_layer()
     face = trapezoid(arrival, *JUPITER_FACE)
     if face > 0:
         # He breathes: his face swells a touch brighter and darker, and the scowl never settles.
         pulse = 0.92 + 0.08 * math.sin(elapsed * 2.6)
         pixels = pixels + (face_colors * pulse - pixels) * (face_cover * face)[..., None]
+    glow = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
     reach = smoothstep(*JUPITER_REACH[0], arrival) * (1 - smoothstep(*JUPITER_REACH[1], arrival))
     if reach > 0:
-        shift = -round((1 - reach) * JUPITER_HAND_DROP)
-        colors, cover = np.roll(hand_colors, shift, axis=0), np.roll(hand_cover, shift, axis=0)
-        if shift < 0:
-            cover[shift:] = 0
-        pixels = pixels + (colors - pixels) * (cover * reach * min(1.0, face * 1.5))[..., None]
+        drop = round((1 - reach) * JUPITER_HAND_DROP)
+        closed, thrust = jupiter_thrower(arrival)
+        hand = JUPITER_FIST if closed else JUPITER_HAND
+        (right_x, right_y), (left_x, left_y) = JUPITER_THROWER_AT, JUPITER_HOLDER_AT
+        right_y, left_x = right_y - drop + thrust, left_x - drop
+        colors = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+        cover = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
+        stamp_sprite(colors, cover, hand, right_x, right_y)
+        stamp_sprite(colors, cover, JUPITER_HOLDER, left_x, left_y)
+        alpha = reach * min(1.0, face * 1.5)
+        pixels = pixels + (colors - pixels) * (cover * alpha)[..., None]
+        flicker = 0.85 + 0.15 * math.sin(elapsed * 23)
+        bolts = np.zeros_like(glow)
+        held = sum(arrival < at - JUPITER_TOSS[0] for at in JUPITER_BOLT_TIMES)
+        grip_x, grip_y = JUPITER_HOLDER_GRIP
+        for index in range(held):
+            thunderbolt_light(bolts, grip_x - drop, grip_y, (index - (held - 1) / 2) * JUPITER_BUNDLE_FAN, JUPITER_BOLT_LENGTH, alpha * flicker)
+        mask = skin_mask(JUPITER_HOLDER, left_x, left_y)
+        if closed:
+            # The caught bolt points where he means to throw it.
+            target_x, target_y = roman_spot(jupiter_throw(arrival)[0])
+            grip_x, grip_y = JUPITER_THROWER_GRIP
+            aim = math.atan2(target_x - grip_x, target_y - grip_y)
+            ahead = JUPITER_BOLT_LENGTH / 2
+            thunderbolt_light(bolts, grip_x + ahead * math.sin(aim), grip_y + thrust + ahead * math.cos(aim), aim, JUPITER_BOLT_LENGTH, alpha * flicker)
+            mask = np.maximum(mask, skin_mask(hand, right_x, right_y))
+        glow += bolts * (1 - mask * 0.85)[..., None]
+        tossed = tossed_bolt(arrival)
+        if tossed is not None:
+            thunderbolt_light(glow, *tossed, JUPITER_BOLT_LENGTH - 1, alpha)
     image = Image.fromarray(np.round(np.clip(pixels, 0, 255)).astype(np.uint8), "RGB")
     eyes = jupiter_eye_level(arrival)
-    if eyes <= 0:
-        return image
-    glow = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
-    flicker = 0.9 + 0.1 * math.sin(elapsed * 9.0)
-    for x, y in jupiter_eyes():
-        glow += (np.exp(-((FIREWORK_X - x) ** 2 + ((FIREWORK_Y - y) * 1.5) ** 2) / 3.0) * 0.28 * eyes * flicker)[..., None] * JUPITER_EYE_GLOW
-        glow[y, x] += np.array((1.0, 0.97, 0.85), dtype=np.float32) * min(1.0, eyes)
-    return composite_light(image, glow)
+    if eyes > 0:
+        flicker = 0.9 + 0.1 * math.sin(elapsed * 9.0)
+        for x, y in jupiter_eyes():
+            glow += (np.exp(-((FIREWORK_X - x) ** 2 + ((FIREWORK_Y - y) * 1.5) ** 2) / 3.0) * 0.28 * eyes * flicker)[..., None] * JUPITER_EYE_GLOW
+            glow[y, x] += np.array((1.0, 0.97, 0.85), dtype=np.float32) * min(1.0, eyes)
+    return composite_light(image, glow) if glow.any() else image
 
 
 @lru_cache(maxsize=256)
@@ -9243,7 +9359,7 @@ def bolt_storm(light: np.ndarray, starts: tuple[tuple[int, int], ...], end: tupl
     strokes = JUPITER_BOLT_STROKES
     glow, core, branch = (np.array(color, dtype=np.float32) / 255 for color in (LIGHTNING_GLOW, LIGHTNING_CORE, LIGHTNING_BRANCH))
     if -JUPITER_BOLT_CHARGE <= age < 0:
-        # Sparks jump about the fingertips, faster and brighter as the strike nears.
+        # Sparks jump about the starts (the bolt in his fist), faster and brighter as the strike nears.
         build = 1 + age / JUPITER_BOLT_CHARGE
         beat = math.floor(age * 25)
         for index, (x, y) in enumerate(starts):
@@ -9286,15 +9402,31 @@ def bolt_storm(light: np.ndarray, starts: tuple[tuple[int, int], ...], end: tupl
 
 
 def draw_jupiter_bolts(image: Image.Image, ruin: HutRuin, elapsed: float) -> Image.Image:
-    """Jupiter's bolts, in front of everything: a storm from every fingertip of a hand onto each Roman's spot as he
-    arrives, and a bolt from the sky onto each Roman at the recall. Each stroke floods the frame with light."""
+    """Jupiter's thunderbolts, in front of everything: each one he hurls streaks down onto a Roman's spot and bursts into
+    a storm of strands that floods the frame with light and sends a shockwave along the ground; at the recall, a bolt
+    from the sky onto each Roman."""
     light = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
     flash = 0.0
     if 0 <= ruin.arrival < JUPITER_SECONDS:
-        tips = jupiter_fingertips()
+        release_x, release_y = JUPITER_RELEASE
         for index, at in enumerate(JUPITER_BOLT_TIMES):
             x, feet = roman_spot(index)
-            flash = max(flash, bolt_storm(light, tips[ROMAN_CREW[index][2]], (round(x), feet), index, ruin.arrival - at))
+            target = (round(x), feet)
+            since = ruin.arrival - at
+            if -JUPITER_THROW_FLIGHT <= since < 0:
+                # The hurled bolt streaks down, white-hot, trailing a long golden tail.
+                done = 1 + since / JUPITER_THROW_FLIGHT
+                dx, dy = target[0] - release_x, target[1] - release_y
+                thunderbolt_light(light, release_x + dx * done, release_y + dy * done, math.atan2(dx, dy), JUPITER_BOLT_LENGTH, 1.0)
+                trail = np.linspace(max(0.0, done - 0.6), done, 14)
+                splat(light, release_x + dx * trail, release_y + dy * trail, np.tile(JUPITER_BOLT_GOLD, (len(trail), 1)), np.linspace(0.1, 0.9, len(trail), dtype=np.float32))
+            flash = max(flash, bolt_storm(light, (JUPITER_RELEASE,) * JUPITER_STRANDS, target, index, since))
+            seconds, reach = JUPITER_SHOCKWAVE
+            if 0 <= since < seconds:
+                done = since / seconds
+                radius = reach * (1 - (1 - done) ** 2)
+                ring = np.exp(-((np.abs(FIREWORK_X - target[0]) - radius) ** 2) / 2.0) * np.exp(-((FIREWORK_Y - target[1]) ** 2) / 1.5) * (1 - done)
+                light += ring[..., None] * JUPITER_BOLT_CORE
     if 0 <= ruin.recall < RESTORE_RECALL_GAP * len(ROMAN_CREW) + 1:
         for index in range(len(ROMAN_CREW)):
             x, feet, *_ = roman_pose(index, replace(ruin, recall=-1.0), elapsed)
@@ -9435,8 +9567,8 @@ def draw_roman_crew(image: Image.Image, palette: Palette, ruin: HutRuin, elapsed
     d = ImageDraw.Draw(image)
     poses = [(index, pose) for index in range(len(ROMAN_CREW)) if (pose := roman_pose(index, ruin, elapsed)) is not None]
     for index, (x, feet, facing, pose, glow) in sorted(poses, key=lambda item: item[1][1]):
-        role, tunic, _ = ROMAN_CREW[index]
-        colors = {char: tuple(round(value * shade) for value in color) for char, color in {**ROMAN_COLORS, "T": tunic}.items()}
+        role, sash = ROMAN_CREW[index]
+        colors = {char: tuple(round(value * shade) for value in color) for char, color in {**ROMAN_COLORS, "X": sash}.items()}
         if glow > 0.01:
             colors = {char: mix(color, ROMAN_ARRIVAL_GLOW, min(1.0, glow)) for char, color in colors.items()}
         sprite = roman_sprite(role, pose)
@@ -9451,11 +9583,13 @@ def draw_roman_crew(image: Image.Image, palette: Palette, ruin: HutRuin, elapsed
 
 def ruin_shake(ruin: HutRuin | None) -> float:
     """How far (pixels) the ground shakes as each big rock lands, hardest as the hut goes, and as each of Jupiter's
-    storms of bolts strikes."""
+    thunderbolts strikes."""
     if ruin is None:
         return 0.0
-    if any(0 <= ruin.arrival - at < JUPITER_BOLT_SHAKE_SECONDS for at in JUPITER_BOLT_TIMES):
-        return JUPITER_BOLT_SHAKE
+    for at in JUPITER_BOLT_TIMES:
+        since = ruin.arrival - at
+        if 0 <= since < JUPITER_BOLT_SHAKE_SECONDS:
+            return JUPITER_BOLT_SHAKE * (1 - since / JUPITER_BOLT_SHAKE_SECONDS) ** 0.5
     for index, (launch, flight, *_) in enumerate(VESUVIUS_ROCKS):
         since = ruin.age - launch - flight
         if 0 <= since < (0.8 if index == 0 else 0.4):
