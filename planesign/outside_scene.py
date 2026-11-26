@@ -1414,15 +1414,19 @@ def wildlife_state(environment: "OutsideEnvironment", elapsed: float, seed: int)
     return species, age - start, duration, (WILDLIFE_PUMPKIN_TARGETS if holiday_features(environment) & NEAR_BANK_HOLIDAYS else WILDLIFE_TARGETS)[target], pair
 
 
+# Songbirds and geese fly only while the sun is above this altitude.
+BIRD_SUN_ALTITUDE = -5
+
+
 def birds_allowed(environment: "OutsideEnvironment") -> bool:
-    """The songbird flock and the geese fly by day in light weather, but not in a thunderstorm, on Halloween, on July 4 or
-    on Vesuvius day."""
+    """The songbird flock and the migrating geese fly by day in light weather, but not in a thunderstorm, on Halloween, on
+    July 4 or on Vesuvius day."""
     rain, snow = precipitation(environment)
     sun_altitude = environment.sun_altitude
     holidays = holiday_features(environment)
     code = environment.weather.code
     thunderstorm = code is not None and 200 <= code < 300
-    return sun_altitude is not None and sun_altitude > -5 and rain < 1.5 and snow < 1 and not thunderstorm and HALLOWEEN not in holidays and HOTDOG not in holidays and VESUVIUS not in holidays
+    return sun_altitude is not None and sun_altitude > BIRD_SUN_ALTITUDE and rain < 1.5 and snow < 1 and not thunderstorm and HALLOWEEN not in holidays and HOTDOG not in holidays and VESUVIUS not in holidays
 
 
 def draw_deer(d: ImageDraw.ImageDraw, px: Callable[[int], int], color: Color, tail: Color, leg: int, grazing: bool, lift: int = 0):
@@ -1478,10 +1482,12 @@ def draw_wildlife(image: Image.Image, palette: Palette, environment: "OutsideEnv
                 d.line((px(0), 30, px(2), 30), fill=c, width=2)
                 d.line((px(2), 29, px(2), 27), fill=c)
                 d.point((px(-1), 30), fill=palette.trim)
+    if thanksgiving:
+        # Thanksgiving's geese fly in any weather and replace the songbirds.
+        draw_geese(image, palette, environment, elapsed, seed)
+        return
     if birds_allowed(environment):
         draw_geese(image, palette, environment, elapsed, seed)
-        if thanksgiving:
-            return
         flock_age = (elapsed + seed % 30) % 85
         flock_start = elapsed - flock_age
         # Small birds keep clear of the sky while an eagle is hunting, geese are passing or the skywriter is up.
@@ -3606,14 +3612,16 @@ def skywriter_show(slot: int, seed: int, witch: bool = False) -> SkywriterShow |
 
 def skywriter_allowed(environment: "OutsideEnvironment") -> bool:
     """Sunny daylight with a light, known wind. The plane stays away when the sky is already busy: on Christmas Eve while
-    Santa crosses, on fireworks days, on Vesuvius day and under the St. Patrick's rainbow. On Halloween the witch still
-    flies; the ghost and the spider skip her shows."""
+    Santa crosses, on fireworks days, on Vesuvius day and under the St. Patrick's rainbow. In October the witch flies in
+    any weather, but only by day; on Halloween the ghost and the spider skip her shows."""
     w = environment.weather
     rain, snow = precipitation(environment)
     holidays = holiday_features(environment)
+    daylight = environment.sun_altitude is not None and environment.sun_altitude > SKYWRITER_SUN_ALTITUDE
+    if WITCH in holidays:
+        return daylight
     return (
-        environment.sun_altitude is not None
-        and environment.sun_altitude > SKYWRITER_SUN_ALTITUDE
+        daylight
         and w.code in (800, 801)
         and cloud_cover(environment) <= SKYWRITER_MAX_COVER
         and rain == 0
@@ -5608,10 +5616,9 @@ def turkey_visit(slot: int, seed: int) -> TurkeyVisit | None:
 
 
 def turkeys_allowed(environment: "OutsideEnvironment") -> bool:
-    """Hens visit in daylight on Thanksgiving until the dinner story starts, in anything short of a downpour or heavy snow."""
-    rain, snow = precipitation(environment)
+    """Hens visit in daylight on Thanksgiving, whatever the weather, until the dinner story starts."""
     age = dinner_seconds(environment)
-    return THANKSGIVING in holiday_features(environment) and (age is None or age < 0) and environment.sun_altitude is not None and environment.sun_altitude > SET_ALTITUDE and rain < 3 and snow < 2
+    return THANKSGIVING in holiday_features(environment) and (age is None or age < 0) and environment.sun_altitude is not None and environment.sun_altitude > SET_ALTITUDE
 
 
 def turkey_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> TurkeyVisit | None:
@@ -5687,16 +5694,15 @@ PILGRIM_GESTURE_LENGTH = (1.2, 2.2)
 
 
 def pilgrims_out(environment: "OutsideEnvironment") -> bool:
-    """Out on Thanksgiving from first light until the yard lamp goes off in the evening, unless it pours or snows hard.
-    Once they carry out the dinner table they stay with it, whatever the weather."""
+    """Out on Thanksgiving, whatever the weather, from first light until the yard lamp goes off in the evening. Once they
+    carry out the dinner table they stay with it."""
     age = dinner_seconds(environment)
     if age is not None and age >= DINNER_CARRY_START:
         return True
     altitude = environment.sun_altitude
     if THANKSGIVING not in holiday_features(environment) or altitude is None:
         return False
-    rain, snow = precipitation(environment)
-    return rain < 3 and snow < 2 and (altitude > NIGHT_ALTITUDE or lamp_level(environment) > 0)
+    return altitude > NIGHT_ALTITUDE or lamp_level(environment) > 0
 
 
 def pilgrim_pose(index: int, elapsed: float, seed: int) -> str:
@@ -6299,8 +6305,7 @@ def hotdog_visit(slot: int, seed: int) -> HotdogVisit | None:
 
 
 def hotdog_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    return HOTDOG in holiday_features(environment) and rain < 3 and snow < 2
+    return HOTDOG in holiday_features(environment)
 
 
 def hotdog_visit_shown(environment: "OutsideEnvironment", visit: HotdogVisit, seed: int) -> bool:
@@ -6559,8 +6564,7 @@ def fife_drum_visit(slot: int, seed: int) -> FifeDrumVisit | None:
 
 
 def fife_drum_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    return FIFE_DRUM in holiday_features(environment) and rain < 3 and snow < 2
+    return FIFE_DRUM in holiday_features(environment)
 
 
 def hotdog_visits_between(seed: int, first: float, last: float):
@@ -6796,9 +6800,7 @@ def jet_pass(slot: int, seed: int) -> JetPass | None:
 
 
 def jet_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    code = environment.weather.code
-    return JET in holiday_features(environment) and rain < 3 and snow < 2 and not (code is not None and 200 <= code < 300)
+    return JET in holiday_features(environment)
 
 
 def jet_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> JetPose | None:
@@ -7015,8 +7017,7 @@ def skeleton_visit(slot: int, seed: int) -> SkeletonVisit | None:
 
 
 def skeleton_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    return SKELETON in holiday_features(environment) and rain < 3 and snow < 2
+    return SKELETON in holiday_features(environment)
 
 
 def skeleton_visits_between(seed: int, first: float, last: float):
@@ -7260,8 +7261,7 @@ def leprechaun_visit(slot: int, seed: int) -> LeprechaunVisit | None:
 
 
 def leprechaun_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    return ST_PATRICKS in holiday_features(environment) and rain < 3 and snow < 2
+    return ST_PATRICKS in holiday_features(environment)
 
 
 def leprechaun_visits_between(seed: int, first: float, last: float):
@@ -7606,8 +7606,7 @@ def conga_visit(slot: int, seed: int) -> tuple[float, float] | None:
 
 
 def conga_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    return ST_PATRICKS in holiday_features(environment) and rain < 3 and snow < 2
+    return ST_PATRICKS in holiday_features(environment)
 
 
 def conga_visits_between(seed: int, first: float, last: float):
@@ -7755,8 +7754,7 @@ def clover_wave_span(wave: tuple[tuple[float, float], ...]) -> tuple[float, floa
 
 
 def clovers_allowed(environment: "OutsideEnvironment") -> bool:
-    rain, snow = precipitation(environment)
-    return ST_PATRICKS in holiday_features(environment) and rain < 3 and snow < 2
+    return ST_PATRICKS in holiday_features(environment)
 
 
 def clover_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> tuple[tuple[int, float], ...] | None:
@@ -7841,12 +7839,13 @@ def geese_migrating(environment: "OutsideEnvironment") -> bool:
 
 
 def geese_chance(environment: "OutsideEnvironment") -> float:
-    """The chance of a crossing per slot: high on Thanksgiving, occasional during a migration, and none otherwise or in
-    weather that grounds the other birds."""
+    """The chance of a crossing per slot: high by day on Thanksgiving whatever the weather, occasional during a migration,
+    and none otherwise or in weather that grounds the other birds."""
+    if THANKSGIVING in holiday_features(environment):
+        altitude = environment.sun_altitude
+        return GEESE_CHANCE if altitude is not None and altitude > BIRD_SUN_ALTITUDE else 0.0
     if not birds_allowed(environment):
         return 0.0
-    if THANKSGIVING in holiday_features(environment):
-        return GEESE_CHANCE
     return GEESE_MIGRATION_CHANCE if geese_migrating(environment) else 0.0
 
 
@@ -9983,7 +9982,7 @@ SUMMONS = {
     "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween, Thanksgiving, July 4 and Vesuvius day, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
     "lightning": Summon("Lightning", "Lightning only strikes in a thunderstorm.", lambda e: e.weather.code is not None and 200 <= e.weather.code < 300, lambda e, t, s: lightning_at(e, t, s) is not None, 0.3, 0.05),
-    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve, fireworks days, Vesuvius day or St. Patrick's Day. In October a witch flies instead.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
+    "skywriter": Summon("Skywriting plane or witch", "The skywriting plane flies in sunny daylight with a light wind, but not on Christmas Eve, fireworks days, Vesuvius day or St. Patrick's Day. In October a witch flies instead, in any weather but only by day.", skywriter_allowed, lambda e, t, s: skywriter_state(e, t, s) is not None, 1.0, 0.5),
     "abduction": Summon(
         "Alien abduction",
         "A saucer beams up a deer at 11:11 PM, 12:12, 1:11, 2:22, 3:33, 4:44 and 5:55 AM while the sun is down, in fair weather without fog or a gale, but not on Halloween, Thanksgiving, July 4 or Vesuvius day or while the campfire burns. Summoning moves the lab clock to the next one.",
@@ -9994,18 +9993,18 @@ SUMMONS = {
         abduction_starts,
     ),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
-    "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving until the 4 PM dinner, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
-    "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm or on Vesuvius day.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
+    "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, in any weather, until the 4 PM dinner.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
+    "geese": Summon("Geese", "Geese fly over by day on Thanksgiving in any weather, and during the spring and fall migrations, but then not in rain, snow or a thunderstorm or on Vesuvius day.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
     "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(e, t, s) is not None, 0.5, 0.25),
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
     "spider": Summon("Spider", "The spider only drops on Halloween.", halloween_only, lambda e, t, s: spider_state(e, t, s) is not None, 0.5, 0.25),
-    "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4, and not in a downpour or heavy snow.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
-    "fife_drum": Summon("Fife and drum trio", "The fife and drum trio only marches on July 4, and not in a downpour or heavy snow.", fife_drum_allowed, lambda e, t, s: fife_drum_state(e, t, s) is not None, 0.5, 0.5),
-    "jet": Summon("Fighter jets", "The fighter jets only fly over on July 4, and not in a thunderstorm, downpour or heavy snow.", jet_allowed, lambda e, t, s: jet_state(e, t, s) is not None, 0.3, 0.25),
-    "skeleton": Summon("Skeleton", "The skeleton only dances in October, and not in a downpour or heavy snow.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
-    "leprechaun": Summon("Leprechaun", "The leprechaun only visits his pot of gold on St. Patrick's Day, and not in a downpour or heavy snow.", leprechaun_allowed, lambda e, t, s: leprechaun_state(e, t, s) is not None, 0.5, 0.25),
-    "conga": Summon("Leprechaun conga line", "The leprechauns only dance a conga line on St. Patrick's Day, and not in a downpour or heavy snow.", conga_allowed, lambda e, t, s: conga_state(e, t, s) is not None, 0.5, 0.5),
-    "clovers": Summon("Rolling four-leaf clovers", "Four-leaf clovers only roll by on St. Patrick's Day, and not in a downpour or heavy snow.", clovers_allowed, lambda e, t, s: bool(clover_state(e, t, s)), 0.3, 0.25),
+    "hotdog": Summon("Hotdog mascot", "The hotdog mascot only dances on July 4.", hotdog_allowed, lambda e, t, s: hotdog_state(e, t, s) is not None, 0.5, 0.5),
+    "fife_drum": Summon("Fife and drum trio", "The fife and drum trio only marches on July 4.", fife_drum_allowed, lambda e, t, s: fife_drum_state(e, t, s) is not None, 0.5, 0.5),
+    "jet": Summon("Fighter jets", "The fighter jets only fly over on July 4.", jet_allowed, lambda e, t, s: jet_state(e, t, s) is not None, 0.3, 0.25),
+    "skeleton": Summon("Skeleton", "The skeleton only dances in October.", skeleton_allowed, lambda e, t, s: skeleton_state(e, t, s) is not None, 0.5, 0.5),
+    "leprechaun": Summon("Leprechaun", "The leprechaun only visits his pot of gold on St. Patrick's Day.", leprechaun_allowed, lambda e, t, s: leprechaun_state(e, t, s) is not None, 0.5, 0.25),
+    "conga": Summon("Leprechaun conga line", "The leprechauns only dance a conga line on St. Patrick's Day.", conga_allowed, lambda e, t, s: conga_state(e, t, s) is not None, 0.5, 0.5),
+    "clovers": Summon("Rolling four-leaf clovers", "Four-leaf clovers only roll by on St. Patrick's Day.", clovers_allowed, lambda e, t, s: bool(clover_state(e, t, s)), 0.3, 0.25),
     "cannon": Summon("Cannon shot", "The cannon only fires on July 4.", lambda e: "cannon" in holiday_features(e), lambda e, t, s: cannon_state(t, s) is not None, 0.5, 0.25),
     "ash_burst": Summon("Vesuvius ash burst", "Vesuvius puffs out ash bursts on the morning of August 24, before the rumble ahead of the noon eruption.", ash_burst_allowed, lambda e, t, s: vesuvius_burst(vesuvius_state(e), t, s) is not None, 1.0, 1.0),
     "pyroclastic_flow": Summon("Pyroclastic flow", "Vesuvius's column collapses into pyroclastic flows on the evening of August 24, from about 5 to 10:30 PM.", pyroclastic_flow_allowed, lambda e, t, s: bool(vesuvius_flows(vesuvius_state(e), t, s)), 0.5, 0.5),
