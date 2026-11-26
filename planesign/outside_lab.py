@@ -20,7 +20,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, VESUVIUS, WEATHER_DESCRIPTIONS, WINDOW_CANDLE_HOLIDAY, holiday_span_start
+from outside_scene import DINNER_HOUR, HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, THANKSGIVING, VESUVIUS, WEATHER_DESCRIPTIONS, WINDOW_CANDLE_HOLIDAY, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -45,6 +45,8 @@ HOLIDAY_CANDLE_TIME = ("Candles", clock_time(3))
 # the eruption shortcut lands 3 s before that; the rocks that wreck the hut land about 35 s after it. The Jupiter and
 # recall shortcuts land a few seconds before outside_scene.JUPITER_HOUR and the first recall bolt.
 VESUVIUS_TIMES = (("Smoke", clock_time(10)), ("Eruption", clock_time(11, 59, 37)), ("Jupiter", clock_time(14, 59, 57)), ("Flows", clock_time(21)), ("Rebuilding", clock_time(22, 15)), ("Fading", clock_time(23)), ("Recall", clock_time(23, 49, 50)))
+# Thanksgiving's dinner story starts at outside_scene.DINNER_HOUR; the shortcut lands a few seconds before it.
+THANKSGIVING_TIMES = (("Dinner", clock_time(DINNER_HOUR - 1, 59, 57)),)
 # Short names for a day's holiday: the first feature here that the day has names it. Days whose features are all
 # missing here fall back to their first feature's HOLIDAYS label.
 HOLIDAY_NAMES = (
@@ -227,6 +229,9 @@ def holiday_shortcuts(year: int):
             times.append((label, datetime.combine(moment, at)))
         if VESUVIUS in features:
             times.extend((label, datetime.combine(moment, at)) for label, at in VESUVIUS_TIMES)
+            times.sort(key=lambda time: time[1])
+        if THANKSGIVING in features:
+            times.extend((label, datetime.combine(moment, at)) for label, at in THANKSGIVING_TIMES)
             times.sort(key=lambda time: time[1])
         shortcuts.append({
             "date": f"{moment:%b} {moment.day}",

@@ -2074,13 +2074,15 @@ def eagle_visits_present(environment: "OutsideEnvironment", seed: int, first: fl
 
 def eagle_allowed(environment: "OutsideEnvironment") -> bool:
     """Daytime fair weather only: clear to broken clouds, dry, not too windy or foggy, and an unfrozen pond. The ghost owns
-    Halloween's sky, and the eagle stays away on July 4 and Vesuvius day."""
+    Halloween's sky, and the eagle stays away on July 4, Vesuvius day and from Thanksgiving's dinner on."""
     w = environment.weather
     rain, snow = precipitation(environment)
+    age = dinner_seconds(environment)
     return (
         environment.sun_altitude is not None
         and environment.sun_altitude > EAGLE_SUN_ALTITUDE
         and not holiday_features(environment) & {HALLOWEEN, HOTDOG, VESUVIUS}
+        and (age is None or age < 0)
         and w.code in (800, 801, 802, 803)
         and cloud_cover(environment) <= 0.75
         and rain == 0
@@ -2112,9 +2114,10 @@ def orbit_view(cosine: float, sine: float) -> str:
 
 
 def eagle_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> EagleState | None:
-    """The eagle and its fish at `elapsed`, or None while no visit is under way."""
+    """The eagle and its fish at `elapsed`, or None while no visit is under way. On Thanksgiving it skips any visit that
+    would still be going when the dinner story starts."""
     visit = next(eagle_visits_present(environment, seed, elapsed, elapsed), None)
-    if visit is None:
+    if visit is None or not before_dinner(environment, elapsed, visit.end):
         return None
     t = elapsed
     fish = None
@@ -5444,14 +5447,14 @@ TURKEY_HENS = (2, 4)
 # T chestnut feathers.
 TURKEY_SPRITES = {
     "tom": {
-        "stand": (".....h..", ".....hk.", ".....r..", "..bbbr..", "tbbibbb.", "tbibibb.", ".bbbbb..", "..l..l.."),
-        "step": (".....h..", ".....hk.", ".....r..", "..bbbr..", "tbbibbb.", "tbibibb.", ".bbbbb..", "...ll..."),
-        "peck": ("........", "........", "........", "..bbb...", "tbbibbr.", "tbibibbr", ".bbbbb.h", "..l..l.k"),
-        "strut": ("...kkkkkkk...", ".kkTTTTTTTkk.", "kTTdddddddTTk", "kTdTTThTTTdTk", "kTdTbbhbbTdTk", ".kdbbbrbbbdk.", "...bbbrbbb...", "....bbbbb....", "....l...l...."),
-        "gobble": ("...kkkkkkk...", ".kkTTTTTTTkk.", "kTTdddhdddTTk", "kTdTTThTTTdTk", "kTdTbbrbbTdTk", ".kdbbbrbbbdk.", "...bbbrbbb...", "....bbbbb....", "....l...l...."),
+        "stand": (".......h..", "......hhk.", "......hr..", "......br..", "...bbbbbb.", ".tbiiiibbb", "tbbiiibbbb", "tbbbbbbbb.", "..bbbbbb..", "...l..l..."),
+        "step": (".......h..", "......hhk.", "......hr..", "......br..", "...bbbbbb.", ".tbiiiibbb", "tbbiiibbbb", "tbbbbbbbb.", "..bbbbbb..", "....ll...."),
+        "peck": ("..........", "..........", "..........", "..........", "...bbbbb..", ".tbiiiibbb", "tbbiiibbbr", "tbbbbbbbbh", "..bbbbbb.h", "...l..l..k"),
+        "strut": ("....kkkkkkk....", "..kkTTTTTTTkk..", ".kTTdddddddTTk.", "kTTdTTTTTTTdTTk", "kTdTTTThTTTTdTk", "kTdTTbbhbbTTdTk", "kTdTiibrbiiTdTk", ".kdbbbbrbbbbdk.", "....bbbrbbb....", ".....l...l....."),
+        "gobble": ("....kkkkkkk....", "..kkTTTTTTTkk..", ".kTTdddhdddTTk.", "kTTdTTThTTTdTTk", "kTdTTTTrTTTTdTk", "kTdTTbbrbbTTdTk", "kTdTiibrbiiTdTk", ".kdbbbbrbbbbdk.", "....bbbrbbb....", ".....l...l....."),
         # Running flat out with his neck stretched forward, wings beating up and down.
-        "run_up": ("..W.W...", "..WiW...", "...ii.hk", "tbbbbbh.", "tbibibr.", ".bbbbb..", "l....l.."),
-        "run_down": ("........", "........", "......hk", "tbbbbbh.", "tWiWibr.", "WiWbbb..", "..ll...."),
+        "run_up": ("..WiWiW...", "...WiWi...", "....iii...", ".....ii.hk", "tbbbbbbbh.", "tbiiiibbr.", "tbbiibbb..", ".bbbbbbb..", "l.......l."),
+        "run_down": ("..........", "..........", "..........", "........hk", "tbbbbbbbh.", "tbiiWiWbr.", "..WiWiWb..", ".bbbbbbb..", "...ll....."),
     },
     "hen": {
         "stand": ("....h..", "....hk.", "...bb..", "tbbbb..", "tbibbb.", ".bbbb..", "..l.l.."),
@@ -5605,17 +5608,19 @@ def turkey_visit(slot: int, seed: int) -> TurkeyVisit | None:
 
 
 def turkeys_allowed(environment: "OutsideEnvironment") -> bool:
-    """Hens visit in daylight on Thanksgiving, in anything short of a downpour or heavy snow."""
+    """Hens visit in daylight on Thanksgiving until the dinner story starts, in anything short of a downpour or heavy snow."""
     rain, snow = precipitation(environment)
-    return THANKSGIVING in holiday_features(environment) and environment.sun_altitude is not None and environment.sun_altitude > SET_ALTITUDE and rain < 3 and snow < 2
+    age = dinner_seconds(environment)
+    return THANKSGIVING in holiday_features(environment) and (age is None or age < 0) and environment.sun_altitude is not None and environment.sun_altitude > SET_ALTITUDE and rain < 3 and snow < 2
 
 
 def turkey_state(environment: "OutsideEnvironment", elapsed: float, seed: int) -> TurkeyVisit | None:
-    """The hens' visit under way, if any. Like the deer, they keep clear of the dog's outings and of the eagle."""
+    """The hens' visit under way, if any. Like the deer, they keep clear of the dog's outings and of the eagle, and they
+    leave before the dinner story starts."""
     if not turkeys_allowed(environment):
         return None
     visit = turkey_visit(math.floor(elapsed / TURKEY_SLOT_SECONDS), seed)
-    if visit is None or not visit.start <= elapsed < visit.end:
+    if visit is None or not visit.start <= elapsed < visit.end or not before_dinner(environment, elapsed, visit.end):
         return None
     if dog_allowed(environment) and next(dog_outings_between(seed, visit.start, visit.end), None) is not None:
         return None
@@ -5682,7 +5687,11 @@ PILGRIM_GESTURE_LENGTH = (1.2, 2.2)
 
 
 def pilgrims_out(environment: "OutsideEnvironment") -> bool:
-    """Out on Thanksgiving from first light until the yard lamp goes off in the evening, unless it pours or snows hard."""
+    """Out on Thanksgiving from first light until the yard lamp goes off in the evening, unless it pours or snows hard.
+    Once they carry out the dinner table they stay with it, whatever the weather."""
+    age = dinner_seconds(environment)
+    if age is not None and age >= DINNER_CARRY_START:
+        return True
     altitude = environment.sun_altitude
     if THANKSGIVING not in holiday_features(environment) or altitude is None:
         return False
@@ -5705,33 +5714,380 @@ def pilgrim_pose(index: int, elapsed: float, seed: int) -> str:
     return "tip"
 
 
+# At DINNER_HOUR on Thanksgiving the pilgrims walk off and carry a table back in over their heads, set it down in the
+# open meadow in front of the pond and stand either side of it. The tom hops up, struts, then spins faster and faster
+# into a blur until, with a poof, he is a roast turkey dinner that steams until midnight. Like the abduction, the story
+# runs on the displayed clock, so the label reads 4:00 PM as the pilgrims set off; the times below are seconds after it.
+DINNER_HOUR = 16
+PILGRIM_WALK_SPEED = 7.0
+DINNER_CARRY_START = 12.0
+DINNER_CARRY_SPEED = 5.0
+# The table on the ground (left column, feet row). c cloth, C its shaded hem, l legs. The pilgrims hold the hem from
+# below, TABLE_GRIPS columns from its left end (woman, man), so its legs hang down beside their heads while it is carried.
+TABLE_LEFT = 50
+TABLE_FEET = 30
+TABLE_SPRITE = ("ccccccccccccccccccc", "CCCCCCCCCCCCCCCCCCC", ".l...............l.", ".l...............l.", ".l...............l.", ".l...............l.")
+TABLE_COLORS = {"c": (236, 228, 206), "C": (186, 172, 146), "l": (112, 74, 44)}
+TABLE_GRIPS = (4, 14)
+TABLE_CENTER = TABLE_LEFT + len(TABLE_SPRITE[0]) // 2
+# The hands' row while the table is overhead (just above the hats) and once it stands on the ground.
+TABLE_CARRY_HANDS = 17
+TABLE_GROUND_HANDS = TABLE_FEET - len(TABLE_SPRITE) + 3
+DINNER_SET = DINNER_CARRY_START + (WIDTH + 1 - TABLE_LEFT) / DINNER_CARRY_SPEED
+DINNER_LOWER_SECONDS = 1.6
+DINNER_STEP_ASIDE = DINNER_SET + DINNER_LOWER_SECONDS + 0.4
+# Where the pilgrims stand once the table is down (woman, man), either side of it.
+DINNER_PILGRIMS = ((44, 30), (73, 31))
+# The tom heads for the front of the table, arriving within TOM_APPROACH_SECONDS, hops up onto it and struts.
+DINNER_TOM = DINNER_STEP_ASIDE + 2.0
+TOM_APPROACH_SECONDS = 4.0
+DINNER_HOP = DINNER_TOM + TOM_APPROACH_SECONDS
+TOM_HOP_SECONDS = 0.9
+TOM_HOP_HEIGHT = 3
+TOM_TABLE_FEET = TABLE_FEET - len(TABLE_SPRITE)
+DINNER_SPIN = DINNER_HOP + TOM_HOP_SECONDS + 3.0
+# The spin speeds up exponentially between these rates (turns a second) and blurs between SPIN_BLUR_RATES.
+SPIN_SECONDS = 12.0
+SPIN_RATES = (0.5, 10.0)
+SPIN_BLUR_RATES = (3.0, 7.0)
+# The blur is this much more opaque than the share of frames covering each pixel, so it reads as a solid whirl
+# rather than a see-through bird. Pale glints sweep SPIN_GLINT_REACH columns either side of center over these rows.
+SPIN_BLUR_DENSITY = 1.6
+SPIN_GLINT = (236, 214, 170)
+SPIN_GLINT_REACH = 5
+SPIN_GLINT_ROWS = (1, 8)
+DINNER_POOF = DINNER_SPIN + SPIN_SECONDS
+POOF_SECONDS = 1.5
+# The poof's cloud is thickest here, hiding the swap from the tom to his dinner.
+DINNER_SERVED = DINNER_POOF + 0.25
+POOF_RADIUS = 8.0
+POOF_PUFFS = 9
+POOF_COLORS = ((250, 250, 246), (196, 196, 206))
+# Spin frames, a quarter turn apart: the strut from the front, his side with the fan seen edge-on (drawn mirrored for
+# the other side), and his back. Parts as TURKEY_SPRITES.
+TOM_SPIN_SPRITES = (
+    TURKEY_SPRITES["tom"]["strut"],
+    ("k......h..", "T.....hhk.", "Td....hr..", "Td....br..", "Tdbbbbbbb.", "Tdbiiiibbb", "Tdbiiibbbb", "Tdbbbbbbb.", ".dbbbbbb..", "...l..l..."),
+    ("....kkkkkkk....", "..kkTTTTTTTkk..", ".kTTdddddddTTk.", "kTTdTTTTTTTdTTk", "kTdTTTTTTTTTdTk", "kTdTTTiiiTTTdTk", "kTdTTiiiiiTTdTk", ".kdTiiiiiiiTdk.", "....bbiiibb....", ".....l...l....."),
+)
+# Roast turkey in profile on a platter, its near drumstick raised: f paper frill, o bone, d drumstick, G golden skin,
+# H highlights, g browned edge, p platter, v parsley, r cranberries.
+DINNER_SPRITE = (
+    ".............f.f.",
+    ".............fff.",
+    "..............o..",
+    "....GGGGGG...oo..",
+    "..GGGHHHGGGGdd...",
+    ".GGHHHGGGGGdddd..",
+    ".GGHGGGGGGddddd..",
+    ".GGGGGGGGGGdddg..",
+    "..gGGGGGGGGGgg...",
+    "...ggggggggggg...",
+    "vrppppppppppppprv",
+)
+# Muted on purpose: the frame grade pushes golden browns to a flat red-orange.
+DINNER_COLORS = {"f": (250, 250, 248), "o": (232, 222, 204), "d": (150, 100, 62), "G": (176, 124, 76), "H": (222, 182, 124), "g": (118, 78, 48), "p": (184, 182, 180), "v": (70, 140, 60), "r": (176, 40, 52)}
+# Steam rises in wisps from the top of the roast's back (column offsets from the table's center), each a chain of
+# drifting puffs starting just above the skin.
+STEAM_WISPS = (-4, -2, 0)
+STEAM_PUFFS = 5
+STEAM_RATE = 0.32
+STEAM_RISE = 10
+STEAM_BASE_ROW = TOM_TABLE_FEET - len(DINNER_SPRITE) + next(row for row, line in enumerate(DINNER_SPRITE) if "G" in line)
+STEAM_OPACITY = 0.55
+STEAM_COLOR = (238, 238, 242)
+
+
+def dinner_seconds(environment: "OutsideEnvironment") -> float | None:
+    """Seconds from DINNER_HOUR on Thanksgiving's displayed date (negative before it), or None on other days."""
+    moment = environment.moment
+    if moment is None or THANKSGIVING not in holiday_features(environment):
+        return None
+    # DINNER_HOUR as an absolute time, so the story starts on it exactly across DST.
+    return moment.timestamp() - datetime(moment.year, moment.month, moment.day, DINNER_HOUR, tzinfo=moment.tzinfo).timestamp()
+
+
+def before_dinner(environment: "OutsideEnvironment", elapsed: float, end: float) -> bool:
+    """Whether something that ends at animation time `end` is over before the dinner story starts. Hens and the eagle
+    use it so nothing wanders through the dinner."""
+    age = dinner_seconds(environment)
+    return age is None or end <= elapsed - age
+
+
+# Walking front-on: the bottom rows of each stride, replacing those of the standing sprite.
+PILGRIM_STRIDES = {"man": ((".WW.WW..", "KKK.KKK."), ("KKK.WW..", "....KKK."), (".WW.KKK.", "KKK.....")), "woman": ((".K...K..",), (".K......",), (".....K..",))}
+# Without their hanging arms, for carrying; the arms are drawn from the shoulder row to wherever the hands are.
+PILGRIM_ARMLESS = {
+    "man": ("..KKK...", "..KGK...", "KKKKKKK.", "..ESE...", "..SSS...", ".WWWWW..", "CCWWWCC.", ".CCCCC..", ".CCGCC..", ".CCCCC..", ".BBBBB..", ".BB.BB..", ".WW.WW..", "KKK.KKK."),
+    "woman": ("..WWW...", ".WWWWW..", ".WESEW..", ".WSSSW..", ".WWWWW..", "DDWWWDD.", ".DDDDD..", ".DWWWD..", ".DWWWD..", ".DWWWD..", "DDWWWDD.", "DDDDDDD.", ".K...K.."),
+}
+# (shoulder row in PILGRIM_ARMLESS, sleeve part) of each pilgrim.
+PILGRIM_SHOULDERS = {"man": (6, "C"), "woman": (5, "D")}
+
+
+def with_legs(rows: tuple[str, ...], kind: str, stride: int) -> tuple[str, ...]:
+    """`rows` with the legs of a stride: standing, one foot up, standing, the other foot up, in turn."""
+    legs = PILGRIM_STRIDES[kind][(0, 1, 0, 2)[stride % 4]]
+    return rows[: len(rows) - len(legs)] + legs
+
+
+@dataclass(frozen=True)
+class DinnerPilgrim:
+    x: float
+    feet: int
+    rows: tuple[str, ...]
+    # The hands' row while they hold the table; None when the arms hang as drawn in `rows`.
+    hands: int | None
+
+
+def dinner_pilgrims(age: float, elapsed: float, seed: int, out: bool) -> list[DinnerPilgrim]:
+    """The pilgrims during the dinner story: walking off (only if they were out), carrying the table in, lowering it,
+    then stepping out either side of it to stand as usual."""
+    pilgrims = []
+    for index, (kind, x, feet) in enumerate(PILGRIMS):
+        grip = TABLE_LEFT + TABLE_GRIPS[index]
+        if age < DINNER_CARRY_START:
+            travelled = PILGRIM_WALK_SPEED * age
+            if out and x + travelled - 4 < WIDTH:
+                pilgrims.append(DinnerPilgrim(x + travelled, feet, with_legs(PILGRIM_SPRITES[kind]["stand"], kind, int(travelled / 2)), None))
+        elif age < DINNER_SET:
+            left = carried_table_left(age)
+            pilgrims.append(DinnerPilgrim(left + TABLE_GRIPS[index], feet, with_legs(PILGRIM_ARMLESS[kind], kind, (WIDTH + 1 - left) // 2), TABLE_CARRY_HANDS))
+        elif age < DINNER_STEP_ASIDE:
+            hands = TABLE_CARRY_HANDS + (TABLE_GROUND_HANDS - TABLE_CARRY_HANDS) * smoothstep(DINNER_SET, DINNER_SET + DINNER_LOWER_SECONDS, age)
+            pilgrims.append(DinnerPilgrim(grip, feet, PILGRIM_ARMLESS[kind], round(hands)))
+        else:
+            target, row = DINNER_PILGRIMS[index]
+            distance = abs(target - grip)
+            travelled = min(distance, PILGRIM_WALK_SPEED * (age - DINNER_STEP_ASIDE))
+            if travelled < distance:
+                rows = with_legs(PILGRIM_SPRITES[kind]["stand"], kind, int(travelled / 2) + 1)
+            else:
+                rows = PILGRIM_SPRITES[kind][pilgrim_pose(index, elapsed, seed)]
+            pilgrims.append(DinnerPilgrim(grip + math.copysign(travelled, target - grip), row, rows, None))
+    return pilgrims
+
+
+def carried_table_left(age: float) -> int:
+    """The carried table's left column, whole so the table and both pilgrims holding it move in step."""
+    return WIDTH + 1 - round(DINNER_CARRY_SPEED * (age - DINNER_CARRY_START))
+
+
+def dinner_table(age: float) -> tuple[int, int] | None:
+    """(left column, hands' row) of the table once the pilgrims bring it in; it rests on their hands."""
+    if age < DINNER_CARRY_START:
+        return None
+    if age < DINNER_SET:
+        return carried_table_left(age), TABLE_CARRY_HANDS
+    if age < DINNER_STEP_ASIDE:
+        return TABLE_LEFT, round(TABLE_CARRY_HANDS + (TABLE_GROUND_HANDS - TABLE_CARRY_HANDS) * smoothstep(DINNER_SET, DINNER_SET + DINNER_LOWER_SECONDS, age))
+    return TABLE_LEFT, TABLE_GROUND_HANDS
+
+
+@dataclass(frozen=True)
+class DinnerTom:
+    x: float
+    feet: float
+    facing: int
+    pose: str
+    # Turns spun so far and how blurred he is (0-1), while he spins.
+    turns: float | None = None
+    blur: float = 0.0
+
+
+def dinner_tom(age: float, elapsed: float, seed: int) -> DinnerTom | None:
+    """The tom's part in the story, from when he heads for the table until he is served; None outside it."""
+    if not DINNER_TOM <= age < DINNER_SERVED:
+        return None
+    # Where he was when he set off, a pure function of the animation clock at that moment.
+    x0, feet0, _, facing, _ = tom_state(elapsed - (age - DINNER_TOM), seed)
+    target = (float(TABLE_CENTER), TURKEY_FEET_ROWS[1])
+    if target[0] != x0:
+        facing = 1 if target[0] > x0 else -1
+    if age < DINNER_HOP:
+        distance = math.dist((x0, feet0), target)
+        speed = max(TURKEY_SPEED, distance / (TOM_APPROACH_SECONDS - 0.5))
+        travelled = min(distance, speed * (age - DINNER_TOM))
+        progress = travelled / distance if distance else 1.0
+        x, feet = x0 + (target[0] - x0) * progress, feet0 + (target[1] - feet0) * progress
+        if travelled >= distance:
+            return DinnerTom(x, target[1], facing, "stand")
+        if speed > 3 * TURKEY_SPEED:
+            up = int(travelled / TOM_RUN_STRIDE) % 2 == 0
+            return DinnerTom(x, round(feet) - int(up), facing, "run_up" if up else "run_down")
+        return DinnerTom(x, round(feet), facing, "step" if int(travelled / 2) % 2 else "stand")
+    if age < DINNER_HOP + TOM_HOP_SECONDS:
+        u = (age - DINNER_HOP) / TOM_HOP_SECONDS
+        feet = target[1] + (TOM_TABLE_FEET - target[1]) * u - TOM_HOP_HEIGHT * math.sin(math.pi * u)
+        return DinnerTom(target[0], feet, facing, "run_up" if int((age - DINNER_HOP) / 0.12) % 2 == 0 else "run_down")
+    if age < DINNER_SPIN:
+        held = age - DINNER_HOP - TOM_HOP_SECONDS
+        return DinnerTom(target[0], TOM_TABLE_FEET, 1, "gobble" if held % TURKEY_GOBBLE_PERIOD > TURKEY_GOBBLE_PERIOD - TURKEY_GOBBLE_SECONDS else "strut")
+    spun = age - DINNER_SPIN
+    slow, fast = SPIN_RATES
+    growth = math.log(fast / slow) / SPIN_SECONDS
+    early = min(spun, SPIN_SECONDS)
+    turns = slow / growth * (math.exp(growth * early) - 1) + fast * (spun - early)
+    rate = slow * math.exp(growth * early)
+    return DinnerTom(target[0], TOM_TABLE_FEET, 1, "spin", turns, smoothstep(*SPIN_BLUR_RATES, rate))
+
+
+def tom_spin_layers() -> tuple[tuple[np.ndarray, ...], np.ndarray]:
+    """Premultiplied RGBA float arrays of the tom's spin frames (front, right, back, left), bottom-aligned and centered
+    on one canvas, and of their blur: each row smeared into bands of its average color, as opaque as the frames cover it."""
+    width, height = max(len(rows[0]) for rows in TOM_SPIN_SPRITES), max(len(rows) for rows in TOM_SPIN_SPRITES)
+    colors = TURKEY_COLORS["tom"]
+    front, side, back = TOM_SPIN_SPRITES
+    frames = []
+    for rows, facing in ((front, 1), (side, 1), (back, 1), (side, -1)):
+        layer = np.zeros((height, width, 4), dtype=np.float32)
+        left = (width - 1) // 2 - (len(rows[0]) - 1) // 2
+        for row, line in enumerate(rows):
+            for column, char in enumerate(line if facing > 0 else line[::-1]):
+                if char != ".":
+                    layer[height - len(rows) + row, left + column] = (*colors[char], 1.0)
+        frames.append(layer)
+    stack = np.stack(frames)
+    band = stack[..., :3].sum(axis=(0, 2)) / np.maximum(stack[..., 3].sum(axis=(0, 2)), 1e-6)[:, None]
+    alpha = np.clip(stack[..., 3].mean(axis=0) * SPIN_BLUR_DENSITY, 0, 1)
+    return tuple(frames), np.concatenate((band[:, None, :] * alpha[..., None], alpha[..., None]), axis=2)
+
+
+TOM_SPIN_FRAMES, TOM_SPIN_BLUR = tom_spin_layers()
+
+
+def draw_spinning_tom(image: Image.Image, tom: DinnerTom, illumination: float):
+    frame = TOM_SPIN_FRAMES[math.floor(tom.turns * 4) % 4]
+    layer = frame + (TOM_SPIN_BLUR - frame) * tom.blur
+    alpha = layer[..., 3:]
+    rgb = np.where(alpha > 0, layer[..., :3] / np.maximum(alpha, 1e-6), 0)
+    height, width = layer.shape[:2]
+    # Glints sweep across the blur as he turns, flickering at full speed.
+    for offset in (0.0, 0.5):
+        column = (width - 1) // 2 + round(SPIN_GLINT_REACH * math.sin(2 * math.pi * (tom.turns + offset)))
+        rows = slice(*SPIN_GLINT_ROWS)
+        rgb[rows, column] += (np.array(SPIN_GLINT, dtype=np.float32) - rgb[rows, column]) * (0.5 * tom.blur * (alpha[rows, column] > 0))
+    rgb *= illumination
+    patch = Image.fromarray(np.round(np.concatenate((rgb, alpha * 255), axis=2)).clip(0, 255).astype(np.uint8), "RGBA")
+    image.paste(patch, (round(tom.x) - (width - 1) // 2, round(tom.feet) - height + 1), patch)
+
+
+def draw_poof(image: Image.Image, age: float, center: tuple[float, float], illumination: float):
+    """A cartoon poof: a bright puff that bursts into a ring of smoke balls, swelling and fading."""
+    u = (age - DINNER_POOF) / POOF_SECONDS
+    if not 0 <= u < 1:
+        return
+    cx, cy = center
+    light, shade = (tuple(round(value * max(illumination, 0.5)) for value in color) for color in POOF_COLORS)
+    overlay = Image.new("RGBA", (WIDTH, HEIGHT))
+    d = ImageDraw.Draw(overlay)
+    fade = round(255 * (1 - u) ** 1.5)
+    spread = 2 + (POOF_RADIUS - 2) * (1 - (1 - u) ** 2)
+    if u < 0.25:
+        core = 5 * (1 - u / 0.25) + 1
+        d.ellipse((cx - core, cy - core, cx + core, cy + core), fill=(*light, fade))
+    for index in range(POOF_PUFFS):
+        angle = 2 * math.pi * (index + 0.3 * unit_hash(index, 71)) / POOF_PUFFS
+        reach = spread * (0.8 + 0.3 * unit_hash(index, 73))
+        x, y = cx + math.cos(angle) * reach, cy + math.sin(angle) * reach * 0.8 - u * 2
+        size = 1.6 + 1.2 * u + 0.6 * unit_hash(index, 79)
+        d.ellipse((x - size, y - size, x + size, y + size), fill=(*(shade if math.sin(angle) > 0.3 else light), fade))
+    image.paste(overlay, (0, 0), overlay)
+
+
+def draw_steam(image: Image.Image, elapsed: float, wind: float, illumination: float):
+    """Wisps of steam curling up off the roast, carried right by the wind and thinning as they rise."""
+    d = ImageDraw.Draw(image)
+    for wisp, offset in enumerate(STEAM_WISPS):
+        for puff in range(STEAM_PUFFS):
+            rise = (elapsed * STEAM_RATE + puff / STEAM_PUFFS + 0.37 * wisp) % 1
+            x = round(TABLE_CENTER + offset + 1.2 * math.sin(rise * 6 + elapsed * 1.3 + wisp * 2) + rise * min(wind, 20) * 0.15)
+            y = round(STEAM_BASE_ROW - rise * STEAM_RISE)
+            opacity = STEAM_OPACITY * math.sin(math.pi * rise) * max(illumination, 0.4)
+            for py in (y, y - 1):
+                if 0 <= x < WIDTH and 0 <= py < HEIGHT:
+                    d.point((x, py), fill=mix(image.getpixel((x, py)), STEAM_COLOR, opacity * (1 if py == y else 0.5)))
+
+
+def draw_carried_pilgrim(d: ImageDraw.ImageDraw, kind: str, pilgrim: DinnerPilgrim, colors: dict[str, Color]):
+    """An armless pilgrim with arms from the shoulders to the hands holding the table, outside the body's columns."""
+    draw_standing_sprite(d, pilgrim.rows, pilgrim.x, pilgrim.feet, 1, colors)
+    shoulder_index, sleeve = PILGRIM_SHOULDERS[kind]
+    shoulder = pilgrim.feet - len(pilgrim.rows) + 1 + shoulder_index
+    hands = pilgrim.hands
+    step = -1 if hands < shoulder else 1
+    for column in (round(pilgrim.x) - 4, round(pilgrim.x) + 4):
+        for y in range(shoulder, hands + step, step):
+            part = "S" if y == hands else "W" if y == hands - step else sleeve
+            if 0 <= column < WIDTH and 0 <= y < HEIGHT:
+                d.point((column, y), fill=colors[part])
+
+
 def draw_thanksgiving_figures(image: Image.Image, palette: Palette, environment: "OutsideEnvironment", elapsed: float, seed: int):
     """The tom, any visiting hens and the pilgrims, back to front by the row each stands on; on a shared row the pilgrims
-    stand behind the birds."""
+    stand behind the birds. From DINNER_HOUR the pilgrims bring out the table and the tom becomes dinner."""
     illumination = min(1.0, max(palette.leaf_light) / max(DAY.leaf_light))
 
     def lit(colors: dict[str, Color]) -> dict[str, Color]:
         return {char: tuple(round(value * illumination) for value in color) for char, color in colors.items()}
 
-    x, feet, lift, facing, pose = tom_state(elapsed, seed)
+    d = ImageDraw.Draw(image)
+
+    def sprite(rows, x, row, facing, colors):
+        return lambda: draw_standing_sprite(d, rows, x, round(row), facing, colors)
+
+    age = dinner_seconds(environment)
+    story = age is not None and age >= 0
+    # (feet row, layer on a shared row, draw): the table sits behind anyone on its row, and what stands on it
+    # (the tom, then his dinner) in front of it.
+    figures = []
+    tom = dinner_tom(age, elapsed, seed) if story else None
     tom_colors = lit(TURKEY_COLORS["tom"])
-    if pose == "gobble":
-        tom_colors["r"] = TURKEY_GOBBLE_WATTLE
-    # (feet row, layer on a shared row, sprite, x, drawn row, facing, colors)
-    figures = [(feet, 1, TURKEY_SPRITES["tom"][pose], x, feet - lift, facing, tom_colors)]
+    if tom is not None:
+        layer = (TABLE_FEET, -0.5) if age >= DINNER_HOP else (round(tom.feet), 1)
+        if tom.pose == "gobble":
+            tom_colors["r"] = TURKEY_GOBBLE_WATTLE
+        if tom.turns is not None:
+            figures.append((*layer, lambda: draw_spinning_tom(image, tom, illumination)))
+        else:
+            figures.append((*layer, sprite(TURKEY_SPRITES["tom"][tom.pose], tom.x, tom.feet, tom.facing, tom_colors)))
+    elif not story or age < DINNER_TOM:
+        x, feet, lift, facing, pose = tom_state(elapsed, seed)
+        if pose == "gobble":
+            tom_colors["r"] = TURKEY_GOBBLE_WATTLE
+        figures.append((feet, 1, sprite(TURKEY_SPRITES["tom"][pose], x, feet - lift, facing, tom_colors)))
     visit = turkey_state(environment, elapsed, seed)
     if visit is not None:
         hen_colors = lit(TURKEY_COLORS["hen"])
         for index in range(len(visit.hens)):
             x, feet, facing, pose = turkey_pose(visit, index, elapsed, seed)
-            figures.append((feet, 1, TURKEY_SPRITES["hen"][pose], x, feet, facing, hen_colors))
-    if pilgrims_out(environment):
-        pilgrim_colors = lit(PILGRIM_COLORS)
+            figures.append((feet, 1, sprite(TURKEY_SPRITES["hen"][pose], x, feet, facing, hen_colors)))
+    pilgrim_colors = lit(PILGRIM_COLORS)
+    if story:
+        table = dinner_table(age)
+        if table is not None:
+            left, hands = table
+            # In front of the pilgrims while they hold it, so it stays in sight as they lower it; behind anyone on its row
+            # once they have stepped clear.
+            layer = (TABLE_FEET + 1, 2) if age < DINNER_TOM else (TABLE_FEET, -1)
+            figures.append((*layer, sprite(TABLE_SPRITE, left + len(TABLE_SPRITE[0]) // 2, hands + len(TABLE_SPRITE) - 3, 1, lit(TABLE_COLORS))))
+        if age >= DINNER_SERVED:
+            figures.append((TABLE_FEET, -0.5, sprite(DINNER_SPRITE, TABLE_CENTER, TOM_TABLE_FEET, 1, lit(DINNER_COLORS))))
+        for index, pilgrim in enumerate(dinner_pilgrims(age, elapsed, seed, pilgrims_out(environment))):
+            kind = PILGRIMS[index][0]
+            if pilgrim.hands is None:
+                figures.append((pilgrim.feet, 0, sprite(pilgrim.rows, pilgrim.x, pilgrim.feet, 1, pilgrim_colors)))
+            else:
+                figures.append((pilgrim.feet, 0, lambda kind=kind, pilgrim=pilgrim: draw_carried_pilgrim(d, kind, pilgrim, pilgrim_colors)))
+    elif pilgrims_out(environment):
         for index, (kind, x, feet) in enumerate(PILGRIMS):
-            figures.append((feet, 0, PILGRIM_SPRITES[kind][pilgrim_pose(index, elapsed, seed)], x, feet, 1, pilgrim_colors))
-    d = ImageDraw.Draw(image)
-    for _, _, rows, x, row, facing, colors in sorted(figures, key=lambda figure: figure[:2]):
-        draw_standing_sprite(d, rows, x, row, facing, colors)
+            figures.append((feet, 0, sprite(PILGRIM_SPRITES[kind][pilgrim_pose(index, elapsed, seed)], x, feet, 1, pilgrim_colors)))
+    for _, _, draw in sorted(figures, key=lambda figure: figure[:2]):
+        draw()
+    if story and age >= DINNER_SERVED:
+        draw_steam(image, elapsed, environment.weather.wind or 0, illumination)
+    if story:
+        draw_poof(image, age, (TABLE_CENTER, TOM_TABLE_FEET - 5), illumination)
 
 
 # On July 4 a hotdog mascot in sunglasses now and then walks in along the front of the meadow with a ketchup bottle in
@@ -9622,7 +9978,7 @@ def halloween_only(environment: "OutsideEnvironment") -> bool:
 # Every scheduled visitor and sky event the lab can summon. Add new occasional events here so they stay testable.
 SUMMONS = {
     "owl": Summon("Owl", "Owls come out after dark in dry, calm weather, but not on Halloween, July 4 or Vesuvius day or while ornaments hang on the tree.", owl_allowed, lambda e, t, s: owl_state(e, t, s) is not None, 1.0, 0.5),
-    "eagle": Summon("Eagle", "The eagle hunts by day in fair, dry, calm weather above freezing, with good visibility and not on Halloween, July 4 or Vesuvius day.", eagle_allowed, lambda e, t, s: eagle_state(e, t, s) is not None, 1.0, 0.5),
+    "eagle": Summon("Eagle", "The eagle hunts by day in fair, dry, calm weather above freezing, with good visibility and not on Halloween, July 4 or Vesuvius day or after 4 PM on Thanksgiving.", eagle_allowed, lambda e, t, s: eagle_state(e, t, s) is not None, 1.0, 0.5),
     "dog": Summon("Dog", "The dog goes out in dry daylight, but not on Halloween or Vesuvius day.", dog_allowed, lambda e, t, s: dog_state(e, t, s)[0] > 0, 0.5, 0.25),
     "wildlife": Summon("Deer, fox or rabbit", "Deer, foxes and rabbits stay away on Halloween, Thanksgiving, July 4 and Vesuvius day, while the campfire burns, and in heavy rain or snow.", wildlife_allowed, lambda e, t, s: wildlife_state(e, t, s) is not None, 0.5, 0.5),
     "shooting_star": Summon("Shooting star", "Shooting stars need a dark night with stars showing through the clouds.", lambda e: starlight(e) >= 0.15, lambda e, t, s: shooting_star_state(t, s) is not None, 1.0, 0.1),
@@ -9638,7 +9994,7 @@ SUMMONS = {
         abduction_starts,
     ),
     "santa": Summon("Santa", "Santa only flies on Christmas Eve.", lambda e: "santa" in holiday_features(e), lambda e, t, s: santa_state(t, s) is not None, 0.5, 0.25),
-    "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
+    "hens": Summon("Turkey hens", "Hens visit by day on Thanksgiving until the 4 PM dinner, short of a downpour or heavy snow.", turkeys_allowed, lambda e, t, s: turkey_state(e, t, s) is not None, 0.5, 0.5),
     "geese": Summon("Geese", "Geese fly over by day during the spring and fall migrations and on Thanksgiving, but not in rain, snow or a thunderstorm or on Vesuvius day.", lambda e: geese_chance(e) > 0, lambda e, t, s: geese_state(e, t, s) is not None, 0.5, 0.5),
     "ghost": Summon("Ghost", "The ghost only haunts on Halloween.", halloween_only, lambda e, t, s: ghost_state(e, t, s) is not None, 0.5, 0.25),
     "shadow": Summon("Shadow figure", "The shadow figure only lurks on Halloween.", halloween_only, lambda e, t, s: shadow_state(t, s) is not None, 0.5, 0.25),
