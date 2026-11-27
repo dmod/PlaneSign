@@ -318,6 +318,8 @@ LAMP_GROUND_Y = 26
 LAMP_WARMUP_SECONDS = 40
 # Sun altitude (degrees) at which the scene palette becomes pure night.
 NIGHT_ALTITUDE = -10
+# Lights start during twilight, independently of the palette and wildlife's nightfall.
+LAMP_ALTITUDE = -5
 LAMP_LIGHT = (255, 200, 120)
 LAMP_GLOW = (255, 236, 190)
 # A full, lobed maple: a 2 px trunk forks into limbs ((points), width) under a shaded core crown
@@ -2743,9 +2745,9 @@ def draw_leaves(image: Image.Image, palette: Palette, environment: "OutsideEnvir
 
 
 def lamp_level(environment: "OutsideEnvironment") -> float:
-    """The yard lamp comes on once the sky is pure night, warming up over 40 s, and switches off at local midnight.
-    Only a nightfall since local noon counts, so a nightfall after midnight (high-latitude summer) leaves it off."""
-    since, left = environment.since_nightfall, environment.until_midnight
+    """The yard lamp comes on at LAMP_ALTITUDE, warming up over 40 s, and switches off at local midnight.
+    Only a lights-on crossing since local noon counts, so one after midnight (high-latitude summer) leaves it off."""
+    since, left = environment.since_lights_on, environment.until_midnight
     if since is None or left is None or not 0 <= since < 12 * 3600 - left:
         return 0.0
     return min(1.0, since / LAMP_WARMUP_SECONDS, left / 20)
@@ -4282,11 +4284,11 @@ def draw_flag(image: Image.Image, palette: Palette, wind: float, elapsed: float,
 
 
 def flag_flood_level(environment: "OutsideEnvironment") -> float:
-    """The floodlight comes on with the yard lamp at nightfall, warming up the same way, and burns until sunrise."""
+    """The floodlight comes on at LAMP_ALTITUDE, warming up like the yard lamp, and burns until sunrise."""
     altitude = environment.sun_altitude
-    if altitude is None or not (altitude < NIGHT_ALTITUDE or environment.before_sunrise):
+    if altitude is None or not (altitude < LAMP_ALTITUDE or environment.before_sunrise):
         return 0.0
-    since = environment.since_nightfall
+    since = environment.since_lights_on
     return min(1.0, since / LAMP_WARMUP_SECONDS) if since is not None and 0 <= since < LAMP_WARMUP_SECONDS else 1.0
 
 

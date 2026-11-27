@@ -18,7 +18,7 @@ import requests
 import shared_config
 import utilities
 from modes import DisplayMode, planesign_mode_handler
-from outside_scene import NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, crisp_weather, draw_outside_frame, holiday_features, summon_start
+from outside_scene import LAMP_ALTITUDE, NIGHT_ALTITUDE, SET_ALTITUDE, SUMMONS, WEATHER_DESCRIPTIONS, SummonUnavailable, beach_weather, crisp_weather, draw_outside_frame, holiday_features, summon_start
 from skyfield import almanac
 from skyfield.api import wgs84
 from skyfield.errors import EphemerisRangeError
@@ -29,7 +29,7 @@ WEATHER_CACHE_SECONDS = 7200
 WEATHER_CODES = frozenset(WEATHER_DESCRIPTIONS)
 SKY_SAMPLE_SECONDS = 60
 SKY_PRELOAD_SECONDS = 26 * 3600
-# Past samples let the scene know when night last fell: the yard lamp burns from a nightfall as early as local noon
+# Past samples let the scene know when lights last came on: the yard lamp burns from a crossing as early as local noon
 # until midnight.
 SKY_HISTORY_SECONDS = 12 * 3600
 SKY_REFRESH_MARGIN_SECONDS = 1800
@@ -83,6 +83,7 @@ class OutsideEnvironment:
     hemisphere: str = "north"
     # The displayed moment in sensor-local time, which times events keyed to the clock (the alien abduction).
     moment: datetime | None = None
+    since_lights_on: float | None = None
 
 
 def reading(value):
@@ -276,10 +277,12 @@ def environment_snapshot(sky, weather, moment: datetime, latitude: float, longit
         return OutsideEnvironment(season, observed, sky["status"] if sky.get("status") in ("UNAVAILABLE", "OFFLINE") else "LOADING", offset_minutes=offset_minutes, local_date=moment.date(), hemisphere=hemisphere, until_midnight=until_midnight, moment=moment)
     passed = [nightfall for nightfall in sky.get("nightfalls", ()) if nightfall <= moment.timestamp()]
     since_nightfall = moment.timestamp() - passed[-1] if passed else None
+    passed = [lights_on for lights_on in sky.get("lights_on", ()) if lights_on <= moment.timestamp()]
+    since_lights_on = moment.timestamp() - passed[-1] if passed else None
     sunrise = next((sunrise for sunrise in sky.get("sunrises", ()) if sunrise > moment.timestamp()), None)
     before_sunrise = sunrise is not None and datetime.fromtimestamp(sunrise, moment.tzinfo).date() == moment.date()
     environment = OutsideEnvironment(
-        season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere, until_midnight=until_midnight, moment=moment
+        season, observed, "READY", positions["sun_altitude"], positions["sun_azimuth"], positions["moon_altitude"], positions["moon_azimuth"], positions["moon_phase"], offset_minutes, since_nightfall, moment.date(), before_sunrise, hemisphere=hemisphere, until_midnight=until_midnight, moment=moment, since_lights_on=since_lights_on
     )
     return lab_moon(environment, moon_override)
 
@@ -314,8 +317,10 @@ def calculate_sky_timeline(ephemeris, timescale, timestamp: float, latitude: flo
     moments = [datetime.fromtimestamp(start + index * SKY_SAMPLE_SECONDS, UTC) for index in range(count)]
     angles = sky_angles(ephemeris, timescale.from_datetimes(moments), latitude, longitude)
     altitude = np.asarray(angles["sun_altitude"])
-    falling = np.nonzero((altitude[:-1] >= NIGHT_ALTITUDE) & (altitude[1:] < NIGHT_ALTITUDE))[0]
-    nightfalls = [float(start + (index + (altitude[index] - NIGHT_ALTITUDE) / (altitude[index] - altitude[index + 1])) * SKY_SAMPLE_SECONDS) for index in falling]
+    events = {}
+    for name, threshold in (("nightfalls", NIGHT_ALTITUDE), ("lights_on", LAMP_ALTITUDE)):
+        falling = np.nonzero((altitude[:-1] >= threshold) & (altitude[1:] < threshold))[0]
+        events[name] = [float(start + (index + (altitude[index] - threshold) / (altitude[index] - altitude[index + 1])) * SKY_SAMPLE_SECONDS) for index in falling]
     rising = np.nonzero((altitude[:-1] < SET_ALTITUDE) & (altitude[1:] >= SET_ALTITUDE))[0]
     sunrises = [float(start + (index + (SET_ALTITUDE - altitude[index]) / (altitude[index + 1] - altitude[index])) * SKY_SAMPLE_SECONDS) for index in rising]
     return {
@@ -323,7 +328,7 @@ def calculate_sky_timeline(ephemeris, timescale, timestamp: float, latitude: flo
         "start": start,
         "end": start + (count - 1) * SKY_SAMPLE_SECONDS,
         "location": [latitude, longitude],
-        "nightfalls": nightfalls,
+        **events,
         "sunrises": sunrises,
         **{field: value.tolist() for field, value in angles.items()},
     }

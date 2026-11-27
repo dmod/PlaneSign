@@ -20,7 +20,7 @@ import psclock
 import shared_config
 from flask import Blueprint, jsonify, render_template, request
 from modes import DisplayMode
-from outside_scene import DINNER_HOUR, HOLIDAY_NIGHTS, HOLIDAYS, NIGHT_ALTITUDE, SUMMONS, THANKSGIVING, VESUVIUS, WEATHER_DESCRIPTIONS, WINDOW_CANDLE_HOLIDAY, holiday_span_start
+from outside_scene import DINNER_HOUR, HOLIDAY_NIGHTS, HOLIDAYS, LAMP_ALTITUDE, NIGHT_ALTITUDE, SUMMONS, THANKSGIVING, VESUVIUS, WEATHER_DESCRIPTIONS, WINDOW_CANDLE_HOLIDAY, holiday_span_start
 
 logger = logging.getLogger(__name__)
 blueprint = Blueprint("outside_lab", __name__, url_prefix="/outside/lab")
@@ -32,7 +32,8 @@ SUN_EVENTS = {
     "sunrise": ("Sunrise", -0.833, True, 15),
     "noon": ("Solar noon", None, None, 0),
     "sunset": ("Sunset", -0.833, False, 20),
-    "nightfall": ("Nightfall (lamp on)", NIGHT_ALTITUDE, False, 1),
+    "lamps_on": ("Lamps on", LAMP_ALTITUDE, False, 1),
+    "nightfall": ("Nightfall", NIGHT_ALTITUDE, False, 1),
 }
 HOLIDAY_TIMES = (("Day", clock_time(12)), ("Night", clock_time(21, 30)))
 # Holidays that last the night also get a shortcut into the small hours of the next morning.
